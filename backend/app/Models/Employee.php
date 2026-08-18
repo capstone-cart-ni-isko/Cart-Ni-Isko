@@ -4,10 +4,12 @@
 
     class Employee extends Model
     {
+        // Define the table name, primary key, and timestamps
         protected $table = 'employee';
         protected $primaryKey = 'emp_id';
         public $timestamps = false;
 
+        // Define the fillable attributes for mass assignment
         protected $fillable = [
             'emp_created',
             'emp_disabled',
@@ -34,6 +36,7 @@
             'emp_instore',
         ];
 
+        // Define the hidden attributes that should not be visible in JSON responses
         protected $hidden = [
             'emp_password',
         ];

@@ -11,9 +11,11 @@
     {
         public function cust_signup(Request $json)
         {
+            // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
             $password = $json->input('password');
 
+            // Check if user provided phone and password
             if (!$phone || !$password) {
                 return response()->json([
                         'success' => false,
@@ -29,6 +31,8 @@
                     ], 409);
             }
 
+            // Inserts user-provided details into database using Models
+            // Some fields have default values if not provided by user
             try {
                 // Create new customer
                 $customer = Customer::create([
@@ -50,6 +54,7 @@
                     'cust_appoints' => 0,
                 ]);
 
+                // Successful signup response
                 return response()->json([
                     'success' => true,
                     'message' => 'Signup successful',
@@ -57,6 +62,7 @@
                 ], 201);
 
             } catch (\Exception $e) {
+                // Error response if signup fails
                 return response()->json([
                     'success' => false,
                     'message' => 'Signup failed',
@@ -67,21 +73,24 @@
 
         public function cust_login(Request $json)
         {
+            // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
             $password = $json->input('password');
 
+            // Check if user provided phone and password
             if (!$phone || !$password) {
                 return response()->json(['success' => false, 'message' => 'Phone and password required'], 400);
             }
 
+            // Find customer and verify password
             try {
-                // Find customer by phone
                 $customer = Customer::where('cust_phone', $phone)->first();
 
                 if (!$customer || !Hash::check($password, $customer->cust_password)) {
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
 
+                // Successful login response
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
@@ -89,6 +98,7 @@
                 ], 200);
 
             } catch (\Exception $e) {
+                // Error response if login fails
                 return response()->json([
                     'success' => false,
                     'message' => 'Login failed',
@@ -99,9 +109,11 @@
 
         public function emp_signup(Request $json)
         {
+            // Get user-provided email and password from JSON
             $email      = $json->input('email');
             $password   = $json->input('password');
 
+            // Check if user provided email and password
             if (!$email || !$password) {
                 return response()->json([
                         'success' => false,
@@ -117,6 +129,7 @@
                     ], 409);
             }
 
+            // Inserts user-provided details into database using Models
             try {
                 // Create new employee
                 $employee = Employee::create([
@@ -139,6 +152,7 @@
                     'emp_instore' => $json->input('instore') ?? 0,
                 ]);
 
+                // Successful signup response
                 return response()->json([
                     'success' => true,
                     'message' => 'Signup successful',
@@ -146,6 +160,7 @@
                 ], 201);
 
             } catch (\Exception $e) {
+                // Error response if signup fails
                 return response()->json([
                     'success' => false,
                     'message' => 'Signup failed',
@@ -156,21 +171,24 @@
 
         public function emp_login(Request $json)
         {
+            // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
             $password = $json->input('password');
 
+            // Check if user provided phone and password
             if (!$phone || !$password) {
                 return response()->json(['success' => false, 'message' => 'Phone and password required'], 400);
             }
 
+            // Find employee and verify password
             try {
-                // Find employee by phone
                 $employee = Employee::where('emp_phone', $phone)->first();
 
                 if (!$employee || !Hash::check($password, $employee->emp_password)) {
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
 
+                // Successful login response
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
@@ -178,6 +196,7 @@
                 ], 200);
 
             } catch (\Exception $e) {
+                // Error response if login fails
                 return response()->json([
                     'success' => false,
                     'message' => 'Login failed',

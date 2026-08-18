@@ -4,10 +4,12 @@
 
     class Customer extends Model
     {
+        // Define the table name, primary key, and timestamps
         protected $table = 'customer';
         protected $primaryKey = 'cust_id';
         public $timestamps = false;
 
+        // Define the fillable attributes for mass assignment
         protected $fillable = [
             'cust_created',
             'cust_disabled',
@@ -33,6 +35,7 @@
             'cust_appoints',
         ];
 
+        // Define the hidden attributes that should not be visible in JSON responses
         protected $hidden = [
             'cust_password',
         ];
