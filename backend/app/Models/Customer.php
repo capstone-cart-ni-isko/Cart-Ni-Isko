@@ -9,8 +9,9 @@
         public $timestamps = false;
 
         protected $fillable = [
-            'cust_email',
-            'cust_phone',
+            'cust_created',
+            'cust_disabled',
+            'cust_deleted',
             'cust_password',
             'cust_nickname',
             'cust_pronoun',
@@ -19,6 +20,8 @@
             'cust_city',
             'cust_province',
             'cust_callcode',
+            'cust_phone',
+            'cust_email',
             'cust_backupcallcode',
             'cust_backupphone',
             'cust_backupemail',
@@ -28,9 +31,6 @@
             'cust_cart',
             'cust_orders',
             'cust_appoints',
-            'cust_created',
-            'cust_disabled',
-            'cust_deleted',
         ];
 
         protected $hidden = [
