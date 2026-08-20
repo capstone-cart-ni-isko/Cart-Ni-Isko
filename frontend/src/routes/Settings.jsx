@@ -14,8 +14,10 @@ import {
   PackageIcon,
   HelpIcon,
   LockIcon,
-  LogOutIcon
+  LogOutIcon,
+  SparklesIcon
 } from '../components/ui/Icons.jsx'
+import { triggerPwaInstall } from '../components/ui/PwaInstallPrompt.jsx'
 
 const settingsAccountItems = [
   { to: '/account', label: 'Edit Profile', icon: <UserIcon className="w-5 h-5 text-gray-450" />, description: 'Update name, email and photo' },
@@ -26,6 +28,7 @@ const settingsAccountItems = [
 const settingsPrefsItems = [
   { to: '/settings/notifications', label: 'Notification Preferences', icon: <BellIcon className="w-5 h-5 text-gray-450" />, description: 'Control alerts and updates' },
   { to: '/orders', label: 'Order History', icon: <PackageIcon className="w-5 h-5 text-gray-450" />, description: 'View past and active orders' },
+  { onClick: triggerPwaInstall, label: 'Install App (PWA)', icon: <SparklesIcon className="w-5 h-5 text-brand-orange" />, description: 'Add to Home Screen for fast access' },
 ]
 
 const settingsSupportItems = [
@@ -38,22 +41,34 @@ function SettingsSection({ title, items }) {
     <div className="space-y-2">
       <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{title}</h2>
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
-        {items.map(({ to, label, icon, description }) => (
-          <Link
-            key={to}
-            to={to}
-            className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors"
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <span className="shrink-0">{icon}</span>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-900">{label}</p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">{description}</p>
+        {items.map(({ to, onClick, label, icon, description }) => {
+          const content = (
+            <div className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors w-full text-left cursor-pointer">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <span className="shrink-0">{icon}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-gray-900">{label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{description}</p>
+                </div>
               </div>
+              <span className="text-gray-300 text-xl ml-3 shrink-0">›</span>
             </div>
-            <span className="text-gray-300 text-xl ml-3 shrink-0">›</span>
-          </Link>
-        ))}
+          )
+
+          if (onClick) {
+            return (
+              <button type="button" key={label} onClick={onClick} className="w-full text-left">
+                {content}
+              </button>
+            )
+          }
+
+          return (
+            <Link key={to} to={to}>
+              {content}
+            </Link>
+          )
+        })}
       </div>
     </div>
   )
