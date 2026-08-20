@@ -1,0 +1,145 @@
+[
+  {
+    "id": "main",
+    "name": "Main Campus",
+    "colleges": [
+      {
+        "id": "ceng",
+        "name": "College of Engineering",
+        "departments": [
+          "Mechanical Engineering",
+          "Civil Engineering",
+          "Electrical Engineering",
+          "Chemical Engineering",
+          "Computer Engineering",
+          "Geodetic Engineering",
+          "Mining Engineering"
+        ]
+      },
+      {
+        "id": "cs",
+        "name": "College of Science",
+        "departments": [
+          "Computer Science",
+          "Information Technology",
+          "Biology",
+          "Chemistry",
+          "Meteorology",
+          "Mathematics"
+        ]
+      },
+      {
+        "id": "cal",
+        "name": "College of Arts and Letters",
+        "departments": [
+          "Communication",
+          "English",
+          "Filipino",
+          "Humanities",
+          "Journalism"
+        ]
+      },
+      {
+        "id": "cbem",
+        "name": "College of Business, Economics and Management",
+        "departments": [
+          "Accountancy",
+          "Business Administration",
+          "Entrepreneurship",
+          "Economics"
+        ]
+      },
+      {
+        "id": "ce",
+        "name": "College of Education",
+        "departments": [
+          "Elementary Education",
+          "Secondary Education",
+          "Physical Education"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "daraga",
+    "name": "Daraga Campus",
+    "colleges": [
+      {
+        "id": "cssp",
+        "name": "College of Social Sciences and Philosophy",
+        "departments": [
+          "Political Science",
+          "Sociology",
+          "Social Work",
+          "Peace Studies"
+        ]
+      },
+      {
+        "id": "cn",
+        "name": "College of Nursing",
+        "departments": [
+          "Nursing"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "east",
+    "name": "East Campus",
+    "colleges": [
+      {
+        "id": "cit",
+        "name": "College of Industrial Technology",
+        "departments": [
+          "Automotive Technology",
+          "Electrical Technology",
+          "Electronics Technology",
+          "Food Service Technology"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "polangui",
+    "name": "Polangui Campus (BUPC)",
+    "colleges": [
+      {
+        "id": "bupc-tech",
+        "name": "BUPC Technology Department",
+        "departments": [
+          "Information Technology (BUPC)",
+          "Computer Engineering (BUPC)"
+        ]
+      },
+      {
+        "id": "bupc-ed",
+        "name": "BUPC Education Department",
+        "departments": [
+          "Secondary Education (BUPC)"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "tabaco",
+    "name": "Tabaco Campus (BUTC)",
+    "colleges": [
+      {
+        "id": "butc-fisheries",
+        "name": "BUTC Fisheries Department",
+        "departments": [
+          "Fisheries",
+          "Aquaculture"
+        ]
+      },
+      {
+        "id": "butc-biz",
+        "name": "BUTC Business & Education",
+        "departments": [
+          "Business Administration (BUTC)",
+          "Secondary Education (BUTC)"
+        ]
+      }
+    ]
+  }
+]
