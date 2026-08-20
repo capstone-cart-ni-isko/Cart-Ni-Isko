@@ -10,6 +10,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons.svg'],
+      devOptions: {
+        enabled: true,
+      },
       manifest: {
         name: 'Tindahan ni Isko',
         short_name: 'Tindahan ni Isko',
