@@ -9,7 +9,10 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons.svg'],
+      includeAssets: ['favicon.svg', 'icons.svg', 'apple-touch-icon.png', 'logo-192x192.png', 'logo-512x512.png'],
+      devOptions: {
+        enabled: true,
+      },
       manifest: {
         name: 'Tindahan ni Isko',
         short_name: 'Tindahan ni Isko',
@@ -22,21 +25,29 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: '/pwa-icon.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
+            src: '/logo-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/pwa-icon.svg',
+            src: '/logo-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/logo-maskable-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
             purpose: 'maskable',
           },
         ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api/],
       },
     }),
   ],

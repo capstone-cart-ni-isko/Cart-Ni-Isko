@@ -1,0 +1,134 @@
+[
+  {
+    "id": "prod-1",
+    "name": "BU Labels 2025 Hoodie",
+    "price": 750,
+    "category": "Hoodie",
+    "sizes": ["S", "M", "L", "XL", "2XL"],
+    "colors": [
+      { "name": "BU Orange", "value": "#F97316" },
+      { "name": "Navy Blue", "value": "#1E3A8A" }
+    ],
+    "description": "BUnique Collection Labels Hoodie. Premium cotton-blend fabric with clean typography styling and front kangaroo pockets.",
+    "images": ["/src/assets/Images/unnamed (1).png", "/src/assets/Branding/Copy of jacket.png"],
+    "preOrder": true,
+    "status": "For Pre-order"
+  },
+  {
+    "id": "prod-2",
+    "name": "Bicol University Hoodie",
+    "price": 750,
+    "category": "Hoodie",
+    "sizes": ["S", "M", "L", "XL", "2XL"],
+    "colors": [
+      { "name": "Off White", "value": "#F9F6EE" },
+      { "name": "Green", "value": "#15803D" }
+    ],
+    "description": "Classic Bicol University Hoodie with collegiate varsity lettering across the chest. Built with double-brushed inner fleece for maximum comfort.",
+    "images": ["/src/assets/Images/unnamed (5).png", "/src/assets/Branding/Copy of jacket.png"],
+    "preOrder": false,
+    "status": "In Stock"
+  },
+  {
+    "id": "prod-3",
+    "name": "BUnique Ringer Tee",
+    "price": 350,
+    "category": "Shirts",
+    "sizes": ["S", "M", "L", "XL"],
+    "colors": [
+      { "name": "White/Navy", "value": "#FFFFFF" }
+    ],
+    "description": "Retro BUnique Ringer Tee shirt featuring contrast collar and cuff ribbing. Soft cotton knit fabric perfect for daily campus wear.",
+    "images": ["/src/assets/Images/unnamed (1).png", "/src/assets/Branding/Copy of shirt.png"],
+    "preOrder": false,
+    "status": "In Stock"
+  },
+  {
+    "id": "prod-4",
+    "name": "BU Varsity Jacket",
+    "price": 1200,
+    "category": "Varsity Jacket",
+    "sizes": ["S", "M", "L", "XL", "2XL"],
+    "colors": [
+      { "name": "Green/White", "value": "#16A34A" },
+      { "name": "Navy/White", "value": "#1E3A8A" }
+    ],
+    "description": "Classic BU Varsity Jacket. Premium fleece body with faux leather contrast sleeves, detailed rib-knit cuffs and hem, and classic letterman patches.",
+    "images": ["/src/assets/Images/unnamed (12).png", "/src/assets/Branding/Copy of jacket.png"],
+    "preOrder": true,
+    "status": "For Pre-order"
+  },
+  {
+    "id": "prod-5",
+    "name": "BUnique BU Labels Cap",
+    "price": 300,
+    "category": "Cap",
+    "sizes": ["One Size"],
+    "colors": [
+      { "name": "Green", "value": "#15803D" },
+      { "name": "Black", "value": "#111827" }
+    ],
+    "description": "BUnique BU Labels Cap. Adjustable 6-panel strapback design with detailed embroidery text on the front panels.",
+    "images": ["/src/assets/Images/unnamed (6).png", "/src/assets/Branding/Copy of cap.png"],
+    "preOrder": false,
+    "status": "In Stock"
+  },
+  {
+    "id": "prod-6",
+    "name": "BUnique Lanyard & Badge",
+    "price": 280,
+    "category": "Accessories",
+    "sizes": ["One Size"],
+    "colors": [
+      { "name": "Black", "value": "#111827" }
+    ],
+    "description": "BUnique Official Campus Lanyard and Pin Badge set. High density woven strap with heavy-duty metal clip.",
+    "images": ["/src/assets/Images/unnamed (6).png", "/src/assets/Branding/Copy of lanyard.png"],
+    "preOrder": false,
+    "status": "In Stock"
+  },
+  {
+    "id": "prod-7",
+    "name": "Insulated Water Bottle",
+    "price": 450,
+    "category": "Accessories",
+    "sizes": ["One Size"],
+    "colors": [
+      { "name": "White", "value": "#FFFFFF" },
+      { "name": "Orange", "value": "#F97316" }
+    ],
+    "description": "Insulated Campus Water Bottle. Double-walled stainless steel keeps drinks ice-cold for 24 hours. Matte powder-coat finish.",
+    "images": ["/src/assets/Images/unnamed (7).png", "/src/assets/Branding/Copy of store.png"],
+    "preOrder": false,
+    "status": "In Stock"
+  },
+  {
+    "id": "prod-8",
+    "name": "University Pin Badge",
+    "price": 180,
+    "category": "Accessories",
+    "sizes": ["One Size"],
+    "colors": [
+      { "name": "Gold", "value": "#D97706" }
+    ],
+    "description": "Official Bicol University Metallic Pin Badge. Enamel filled with butterfly clasp backer.",
+    "images": ["/src/assets/Images/unnamed (9).png", "/src/assets/Branding/Copy of badge.png"],
+    "preOrder": false,
+    "status": "In Stock"
+  },
+  {
+    "id": "prod-9",
+    "name": "BU Polo Shirt",
+    "price": 450,
+    "category": "Shirts",
+    "sizes": ["S", "M", "L", "XL", "2XL"],
+    "colors": [
+      { "name": "Orange", "value": "#FF7A00" },
+      { "name": "Blue", "value": "#1887C7" }
+    ],
+    "description": "Premium Bicol University polo shirt crafted from breathable pique fabric. Features the embroidered BU logo.",
+    "images": ["/src/assets/Images/unnamed (11).png", "/src/assets/Branding/Copy of shirt.png"],
+    "preOrder": false,
+    "status": "In Stock"
+  }
+]
