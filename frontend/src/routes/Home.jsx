@@ -9,6 +9,9 @@ import searchIcon from '../assets/icons/common/search.svg'
 import notificationIcon from '../assets/icons/common/notification.svg'
 import avatarImg from '../assets/avatar.png'
 import heroImg from '../assets/hero.png'
+import carouselImg1 from '../assets/Images/unnamed (1).png'
+import carouselImg2 from '../assets/Images/unnamed (2).png'
+import carouselImg3 from '../assets/Images/unnamed (3).png'
 import {
   UserIcon,
   HeartIcon,
@@ -26,6 +29,7 @@ const carouselSlides = [
     pillText: 'Pre-order Now',
     subtitle: 'Until August 20',
     gradient: 'from-orange-600/90 to-blue-900/90',
+    image: carouselImg1,
   },
   {
     id: 2,
@@ -33,6 +37,7 @@ const carouselSlides = [
     pillText: 'Limited Stock',
     subtitle: 'Get yours today',
     gradient: 'from-blue-600/90 to-orange-500/90',
+    image: carouselImg2,
   },
   {
     id: 3,
@@ -40,6 +45,7 @@ const carouselSlides = [
     pillText: 'Best Sellers',
     subtitle: 'Back in stock',
     gradient: 'from-teal-600/90 to-blue-700/90',
+    image: carouselImg3,
   },
 ]
 
@@ -204,31 +210,41 @@ function Home() {
             {carouselSlides.map((slide, idx) => (
               <div
                 key={slide.id}
-                className={`absolute inset-0 bg-gradient-to-br ${slide.gradient} p-6 flex flex-col justify-between transition-opacity duration-700 ${
+                className={`absolute inset-0 transition-opacity duration-700 ${
                   idx === slideIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'
                 }`}
               >
-                <div>
-                  <span className="inline-block bg-brand-orange text-white text-[9px] font-black uppercase tracking-wider px-3 py-1 rounded-full border border-white/20 shadow-sm mb-3">
-                    {slide.pillText}
-                  </span>
-                  <h2 className="text-white text-2xl font-black max-w-[200px] leading-tight filter drop-shadow-sm">
-                    {slide.title}
-                  </h2>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/80 text-xs font-semibold">{slide.subtitle}</span>
-                  {/* Slide Indicators dot indicators */}
-                  <div className="flex gap-1.5">
-                    {carouselSlides.map((_, dotIdx) => (
-                      <button
-                        key={dotIdx}
-                        onClick={() => setSlideIndex(dotIdx)}
-                        className={`h-1.5 rounded-full transition-all duration-300 ${
-                          dotIdx === slideIndex ? 'w-4.5 bg-brand-orange' : 'w-1.5 bg-white/40'
-                        }`}
-                      />
-                    ))}
+                {/* Slide background image */}
+                <div
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${slide.image})` }}
+                />
+                {/* Gradient overlay */}
+                <div className={`absolute inset-0 bg-gradient-to-br ${slide.gradient}`} />
+
+                <div className="relative z-10 p-6 flex flex-col justify-between h-full">
+                  <div>
+                    <span className="inline-block bg-brand-orange text-white text-[9px] font-black uppercase tracking-wider px-3 py-1 rounded-full border border-white/20 shadow-sm mb-3">
+                      {slide.pillText}
+                    </span>
+                    <h2 className="text-white text-2xl font-black max-w-[200px] leading-tight filter drop-shadow-sm">
+                      {slide.title}
+                    </h2>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-white/80 text-xs font-semibold">{slide.subtitle}</span>
+                    {/* Slide Indicators dot indicators */}
+                    <div className="flex gap-1.5">
+                      {carouselSlides.map((_, dotIdx) => (
+                        <button
+                          key={dotIdx}
+                          onClick={() => setSlideIndex(dotIdx)}
+                          className={`h-1.5 rounded-full transition-all duration-300 ${
+                            dotIdx === slideIndex ? 'w-4.5 bg-brand-orange' : 'w-1.5 bg-white/40'
+                          }`}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -278,34 +294,55 @@ function Home() {
 
         {/* Wide Hero Banner */}
         <div className="mb-12">
-          <div className="h-[420px] w-full bg-slate-900 rounded-3xl overflow-hidden relative shadow-md flex items-center justify-between px-16 text-white">
+          <div className="h-[420px] w-full bg-slate-900 rounded-3xl overflow-hidden relative shadow-md text-white">
             {/* Background elements */}
-            <div className="absolute inset-0 bg-gradient-to-r from-orange-600/90 to-blue-900/90 z-0" />
-            <div
-              className="absolute right-0 bottom-0 top-0 w-1/2 opacity-25 bg-cover bg-center z-0"
-              style={{ backgroundImage: `url(${heroImg})` }}
-            />
             <div className="absolute inset-0 opacity-[0.06] select-none pointer-events-none z-0 flex items-center justify-center overflow-hidden">
               <span className="text-[14rem] font-black text-white tracking-widest rotate-12">BU</span>
             </div>
 
-            <div className="relative z-10 space-y-5 max-w-xl">
-              <span className="inline-block bg-brand-orange text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full border border-white/20 shadow-sm">
-                Pre-order Now
-              </span>
-              <h1 className="text-5xl lg:text-6xl font-black leading-tight tracking-wide drop-shadow-md">
-                New BUnique Collection
-              </h1>
-              <p className="text-white/80 text-sm font-semibold tracking-wide">
-                Get ready to represent. Available for pre-order until August 20
-              </p>
-            </div>
-            
+            {/* Slides container */}
+            {carouselSlides.map((slide, idx) => (
+              <div
+                key={slide.id}
+                className={`absolute inset-0 transition-opacity duration-700 ${
+                  idx === slideIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'
+                }`}
+              >
+                {/* Slide background image */}
+                <div
+                  className="absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url(${slide.image})` }}
+                />
+                {/* Gradient overlay */}
+                <div className={`absolute inset-0 bg-gradient-to-r ${slide.gradient}`} />
+
+                <div className="relative z-10 h-full flex items-center px-16">
+                  <div className="space-y-5 max-w-xl">
+                    <span className="inline-block bg-brand-orange text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full border border-white/20 shadow-sm">
+                      {slide.pillText}
+                    </span>
+                    <h1 className="text-5xl lg:text-6xl font-black leading-tight tracking-wide drop-shadow-md">
+                      {slide.title}
+                    </h1>
+                    <p className="text-white/80 text-sm font-semibold tracking-wide">
+                      {slide.subtitle}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+
             {/* Slide indicators bottom right */}
-            <div className="absolute bottom-8 right-16 flex gap-2">
-              <button className="h-2 w-6 rounded-full bg-brand-orange transition-all" />
-              <button className="h-2 w-2 rounded-full bg-white/40 hover:bg-white transition-colors" />
-              <button className="h-2 w-2 rounded-full bg-white/40 hover:bg-white transition-colors" />
+            <div className="absolute bottom-8 right-16 flex gap-2 z-20">
+              {carouselSlides.map((_, dotIdx) => (
+                <button
+                  key={dotIdx}
+                  onClick={() => setSlideIndex(dotIdx)}
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    dotIdx === slideIndex ? 'w-6 bg-brand-orange' : 'w-2 bg-white/40 hover:bg-white'
+                  }`}
+                />
+              ))}
             </div>
           </div>
         </div>

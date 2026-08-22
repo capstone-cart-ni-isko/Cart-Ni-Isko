@@ -8,6 +8,8 @@ import wishlistIcon from '../../assets/icons/navigation-bar/wishlist.svg'
 import cartIcon from '../../assets/icons/navigation-bar/cart.svg'
 import profileIcon from '../../assets/icons/navigation-bar/profile.svg'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
+import { SparklesIcon } from '../ui/Icons.jsx'
+import { triggerPwaInstall } from '../ui/PwaInstallPrompt.jsx'
 
 function DesktopHeader() {
   const navigate = useNavigate()

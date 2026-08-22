@@ -609,7 +609,7 @@ function SignUp() {
                 <div className="mb-8">
                   <h1 className="text-3xl font-black text-gray-900 leading-tight">Sign Up</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
-                    Access your tasks, notes, and projects anytime, anywhere.
+                    Sign up to get started.
                   </p>
                 </div>
 
@@ -791,34 +791,57 @@ function SignUp() {
                   {form.role === 'Student' && (
                     <>
                       <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Campus</label>
+                        <select
+                          value={form.campus}
+                          onChange={(e) => updateForm({ campus: e.target.value })}
+                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer"
+                          required
+                        >
+                          <option value="">Select Campus</option>
+                          {collegesData.map((c) => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">College/Institute</label>
-                        <input
-                          type="text"
-                          placeholder="Enter your college"
+                        <select
                           value={form.college}
                           onChange={(e) => updateForm({ college: e.target.value })}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                          disabled={!form.campus}
+                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50"
                           required
-                        />
+                        >
+                          <option value="">Select College</option>
+                          {availableColleges.map((col) => (
+                            <option key={col.id} value={col.name}>{col.name}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Department</label>
-                        <input
-                          type="text"
-                          placeholder="Enter your department"
+                        <select
                           value={form.course}
                           onChange={(e) => updateForm({ course: e.target.value })}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                          disabled={!form.college}
+                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50"
                           required
-                        />
+                        >
+                          <option value="">Select Department</option>
+                          {availableDepartments.map((dept, i) => (
+                            <option key={i} value={dept}>{dept}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Year and Block</label>
                         <input
                           type="text"
-                          placeholder="Enter your block"
+                          placeholder="e.g. 3rd Year - Block A"
                           value={desktopYearBlock}
                           onChange={(e) => setDesktopYearBlock(e.target.value)}
                           className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"

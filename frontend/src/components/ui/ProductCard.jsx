@@ -5,6 +5,7 @@ import { useWishlist } from '../../hooks/useWishlist.js'
 import PriceTag from './PriceTag.jsx'
 import LoginPromptModal from './LoginPromptModal.jsx'
 import { ShirtIcon } from './Icons.jsx'
+import { getImageUrl } from '../../utils/imageUtils.js'
 
 function ProductCard({ product }) {
   const { currentUser } = useAuth()
@@ -25,8 +26,9 @@ function ProductCard({ product }) {
     toggleWishlist(product)
   }
 
-  // Fallback image gradient background if image is missing or default
-  const hasValidImage = product.images && product.images[0] && !product.images[0].includes('hero.png')
+  // Resolve image URL via Vite glob
+  const resolvedImage = product.images && product.images[0] ? getImageUrl(product.images[0]) : null
+  const hasValidImage = !!resolvedImage
 
   return (
     <>
@@ -38,7 +40,7 @@ function ProductCard({ product }) {
         <div className="aspect-square w-full bg-gradient-to-br from-orange-50 to-blue-50 relative overflow-hidden flex items-center justify-center">
           {hasValidImage ? (
             <img
-              src={product.images[0]}
+              src={resolvedImage}
               alt={product.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             />
