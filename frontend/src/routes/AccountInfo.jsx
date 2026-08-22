@@ -7,6 +7,13 @@ import { mockUser } from '../data/mockUser.js'
 import collegesData from '../data/colleges.json'
 import avatarImg from '../assets/avatar.png'
 
+const selectStyle = {
+  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
+  backgroundPosition: 'right 16px center',
+  backgroundRepeat: 'no-repeat',
+  backgroundSize: '18px'
+}
+
 const yearLevels = ['1st Year Student', '2nd Year Student', '3rd Year Student', '4th Year Student', '5th Year Student', 'Faculty / Staff', 'Alumni']
 
 function AccountInfo() {
@@ -39,7 +46,7 @@ function AccountInfo() {
   useEffect(() => {
     if (form.college && availableColleges.length > 0) {
       const collegeObj = availableColleges.find((col) => col.name === form.college)
-      setAvailableDepartments(collegeObj ? collegeObj.departments : [])
+      setAvailableDepartments(collegeObj ? collegeObj.programs : [])
     } else {
       setAvailableDepartments([])
     }
@@ -100,7 +107,8 @@ function AccountInfo() {
               name="yearLevel"
               value={form.yearLevel}
               onChange={handleChange}
-              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer"
+              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer transition-all appearance-none"
+              style={selectStyle}
             >
               {yearLevels.map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -115,7 +123,8 @@ function AccountInfo() {
               name="campus"
               value={form.campus}
               onChange={handleChange}
-              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer"
+              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer transition-all appearance-none"
+              style={selectStyle}
             >
               <option value="">Select Campus</option>
               {collegesData.map((c) => (
@@ -132,7 +141,8 @@ function AccountInfo() {
               value={form.college}
               onChange={handleChange}
               disabled={!form.campus}
-              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50"
+              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50 transition-all appearance-none"
+              style={selectStyle}
             >
               <option value="">Select College</option>
               {availableColleges.map((col) => (
@@ -149,7 +159,8 @@ function AccountInfo() {
               value={form.course}
               onChange={handleChange}
               disabled={!form.college}
-              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50"
+              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50 transition-all appearance-none"
+              style={selectStyle}
             >
               <option value="">Select Department / Course</option>
               {availableDepartments.map((dept, i) => (

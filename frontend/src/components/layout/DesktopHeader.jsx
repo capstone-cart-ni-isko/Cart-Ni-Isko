@@ -8,8 +8,6 @@ import wishlistIcon from '../../assets/icons/navigation-bar/wishlist.svg'
 import cartIcon from '../../assets/icons/navigation-bar/cart.svg'
 import profileIcon from '../../assets/icons/navigation-bar/profile.svg'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
-import { SparklesIcon } from '../ui/Icons.jsx'
-import { triggerPwaInstall } from '../ui/PwaInstallPrompt.jsx'
 
 function DesktopHeader() {
   const navigate = useNavigate()
@@ -88,11 +86,9 @@ function DesktopHeader() {
             title="Cart"
           >
             <img src={cartIcon} alt="Cart" className="w-5.5 h-5.5" />
-            {cartCount > 0 && (
-              <span className="absolute top-1 right-1 bg-brand-orange text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
-                {cartCount}
-              </span>
-            )}
+            <span className="absolute top-1 right-1 bg-brand-orange text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
+              {cartCount}
+            </span>
           </Link>
 
           {/* Notifications */}

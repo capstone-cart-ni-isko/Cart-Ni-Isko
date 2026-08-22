@@ -118,7 +118,6 @@ export function AuthProvider({ children }) {
           phone: data.data?.cust_phone || details.phone,
           email: data.data?.cust_email || details.email,
         }
-        setCurrentUser(user)
         return { user, error: null }
       } else if (data.message) {
         return { user: null, error: data.message }
@@ -133,7 +132,6 @@ export function AuthProvider({ children }) {
       ...details,
       fullName,
     }
-    setCurrentUser(user)
     return { user, error: null }
   }
 

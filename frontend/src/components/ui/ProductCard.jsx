@@ -34,10 +34,10 @@ function ProductCard({ product }) {
     <>
       <Link
         to={`/product/${product.id}`}
-        className="block bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-shadow select-none relative group"
+        className="block bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow select-none relative group"
       >
         {/* Product image container */}
-        <div className="aspect-square w-full bg-gradient-to-br from-orange-50 to-blue-50 relative overflow-hidden flex items-center justify-center">
+        <div className="aspect-square w-full bg-white relative overflow-hidden flex items-center justify-center border-b border-gray-200">
           {hasValidImage ? (
             <img
               src={resolvedImage}
@@ -55,15 +55,15 @@ function ProductCard({ product }) {
             </div>
           )}
 
-          {/* Heart toggle bottom-right */}
+          {/* Heart toggle top-right */}
           <button
             type="button"
             onClick={handleWishlistClick}
-            className="absolute bottom-2.5 right-2.5 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-md active:scale-90 transition-transform z-10"
+            className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm border border-gray-200 hover:bg-gray-50 active:scale-90 transition-transform z-10"
           >
             <svg
               viewBox="0 0 24 24"
-              className={`w-4.5 h-4.5 ${isSaved ? 'text-red-500 fill-red-500' : 'text-gray-400'}`}
+              className={`w-4 h-4 ${isSaved ? 'text-red-500 fill-red-500' : 'text-gray-400'}`}
               stroke="currentColor"
               strokeWidth="2.2"
               strokeLinecap="round"

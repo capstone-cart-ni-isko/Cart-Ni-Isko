@@ -15,7 +15,7 @@ import {
   HelpIcon,
   LockIcon,
   LogOutIcon,
-  SparklesIcon
+  DownloadCloudIcon
 } from '../components/ui/Icons.jsx'
 import { triggerPwaInstall } from '../components/ui/PwaInstallPrompt.jsx'
 
@@ -28,7 +28,7 @@ const settingsAccountItems = [
 const settingsPrefsItems = [
   { to: '/settings/notifications', label: 'Notification Preferences', icon: <BellIcon className="w-5 h-5 text-gray-450" />, description: 'Control alerts and updates' },
   { to: '/orders', label: 'Order History', icon: <PackageIcon className="w-5 h-5 text-gray-450" />, description: 'View past and active orders' },
-  { onClick: triggerPwaInstall, label: 'Install App (PWA)', icon: <SparklesIcon className="w-5 h-5 text-brand-orange" />, description: 'Add to Home Screen for fast access' },
+  { onClick: triggerPwaInstall, label: 'Install App (PWA)', icon: <DownloadCloudIcon className="w-5 h-5 text-gray-450" />, description: 'Add to Home Screen for fast access' },
 ]
 
 const settingsSupportItems = [
@@ -40,7 +40,7 @@ function SettingsSection({ title, items }) {
   return (
     <div className="space-y-2">
       <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{title}</h2>
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden divide-y divide-gray-50">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden divide-y divide-gray-50">
         {items.map(({ to, onClick, label, icon, description }) => {
           const content = (
             <div className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors w-full text-left cursor-pointer">
@@ -87,26 +87,36 @@ function Settings() {
   }
 
   return (
-    <AppShell showNav={false}>
-      <PageHeader title="Settings" backTo="/profile" />
+    <AppShell>
+      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in max-w-3xl mx-auto">
+        {/* Desktop Title */}
+        <div className="hidden lg:block mb-8">
+          <h1 className="text-3xl font-black text-gray-900">Settings</h1>
+        </div>
 
-      <div className="px-4 py-4 pb-12 space-y-5 animate-fade-in">
-        <SettingsSection title="Account" items={settingsAccountItems} />
-        <SettingsSection title="Preferences" items={settingsPrefsItems} />
-        <SettingsSection title="Support" items={settingsSupportItems} />
+        {/* Mobile Title */}
+        <div className="lg:hidden -mx-4 -mt-4 mb-4">
+          <PageHeader title="Settings" backTo="/profile" />
+        </div>
 
-        {/* Log Out */}
-        <button
-          type="button"
-          onClick={() => setShowLogoutModal(true)}
-          className="w-full flex items-center justify-between px-5 py-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:bg-red-50 active:bg-red-100 transition-colors"
-        >
-          <div className="flex items-center gap-3.5">
-            <LogOutIcon className="w-5 h-5 text-red-500" />
-            <p className="text-sm font-bold text-red-600">Log Out</p>
-          </div>
-          <span className="text-red-300 text-xl">›</span>
-        </button>
+        <div className="space-y-5">
+          <SettingsSection title="Account" items={settingsAccountItems} />
+          <SettingsSection title="Preferences" items={settingsPrefsItems} />
+          <SettingsSection title="Support" items={settingsSupportItems} />
+
+          {/* Log Out */}
+          <button
+            type="button"
+            onClick={() => setShowLogoutModal(true)}
+            className="w-full flex items-center justify-between px-5 py-4 bg-white rounded-2xl border border-gray-200 shadow-sm hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5">
+              <LogOutIcon className="w-5 h-5 text-red-500" />
+              <p className="text-sm font-bold text-red-600">Log Out</p>
+            </div>
+            <span className="text-red-300 text-xl font-medium">›</span>
+          </button>
+        </div>
       </div>
 
       <ConfirmModal

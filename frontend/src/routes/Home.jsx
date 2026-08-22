@@ -193,7 +193,7 @@ function Home() {
               placeholder="What are you looking for?"
               value={searchVal}
               onChange={(e) => setSearchVal(e.target.value)}
-              className="w-full h-12 pl-11 pr-4 rounded-full bg-white border border-gray-150 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/45 focus:border-brand-orange transition-all shadow-sm"
+              className="w-full h-12 pl-11 pr-4 rounded-full bg-white border border-gray-200 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/45 focus:border-brand-orange transition-all shadow-sm"
             />
           </form>
         </div>
@@ -272,8 +272,8 @@ function Home() {
       {/* ────────────────── DESKTOP HOME PAGE LAYOUT (Image 5) ────────────────── */}
       <div className="hidden md:block pb-16">
         {/* Categories navigation bar */}
-        <nav className="border-b border-gray-150 py-3.5 bg-white -mt-8 mb-6">
-          <div className="max-w-7xl mx-auto px-2 flex gap-8 text-sm font-bold text-gray-500">
+        <nav className="border-b border-gray-200 py-3.5 bg-white md:-mt-8 md:-mx-8 mb-6">
+          <div className="max-w-7xl mx-auto px-8 flex gap-8 text-sm font-bold text-gray-500">
             <Link to="/home" className="text-brand-orange border-b-2 border-brand-orange pb-3.5">
               Home
             </Link>
@@ -314,26 +314,28 @@ function Home() {
                   style={{ backgroundImage: `url(${slide.image})` }}
                 />
                 {/* Gradient overlay */}
-                <div className={`absolute inset-0 bg-gradient-to-r ${slide.gradient}`} />
+                <div className={`absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent`} />
 
-                <div className="relative z-10 h-full flex items-center px-16">
-                  <div className="space-y-5 max-w-xl">
-                    <span className="inline-block bg-brand-orange text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full border border-white/20 shadow-sm">
-                      {slide.pillText}
-                    </span>
+                <div className="relative z-10 h-full flex flex-col justify-end pb-16 px-16">
+                  <div className="space-y-4 max-w-xl">
                     <h1 className="text-5xl lg:text-6xl font-black leading-tight tracking-wide drop-shadow-md">
                       {slide.title}
                     </h1>
-                    <p className="text-white/80 text-sm font-semibold tracking-wide">
-                      {slide.subtitle}
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <span className="inline-block bg-brand-orange text-white text-[11px] font-extrabold px-4.5 py-1.5 rounded-full shadow-sm">
+                        {slide.pillText}
+                      </span>
+                      <span className="inline-block bg-white text-gray-800 text-[11px] font-extrabold px-4.5 py-1.5 rounded-full shadow-sm">
+                        {slide.subtitle}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             ))}
 
-            {/* Slide indicators bottom right */}
-            <div className="absolute bottom-8 right-16 flex gap-2 z-20">
+            {/* Slide indicators bottom center */}
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-20">
               {carouselSlides.map((_, dotIdx) => (
                 <button
                   key={dotIdx}

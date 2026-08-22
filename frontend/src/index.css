@@ -21,7 +21,7 @@ html {
 
 body {
   margin: 0;
-  background: #E5E7EB;
+  background: #F8F9FA;
   color: #111827;
 }
 
@@ -56,11 +56,7 @@ body {
   letter-spacing: 0.05em;
 }
 
-@media (min-width: 1024px) {
-  .app-container {
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.18);
-  }
-}
+
 
 /* ── Animations ── */
 @keyframes fadeIn {

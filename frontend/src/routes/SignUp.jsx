@@ -9,6 +9,13 @@ import OtpInput from '../components/ui/OtpInput.jsx'
 import Button from '../components/ui/Button.jsx'
 import AppShell from '../components/layout/AppShell.jsx'
 
+const selectStyle = {
+  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
+  backgroundPosition: 'right 16px center',
+  backgroundRepeat: 'no-repeat',
+  backgroundSize: '18px'
+}
+
 function SignUp() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -36,19 +43,22 @@ function SignUp() {
   // Initial State from localStorage
   const [form, setForm] = useState(() => {
     const saved = localStorage.getItem('isko_signup_progress')
+    const defaults = {
+      role: 'Student',
+      firstName: '',
+      lastName: '',
+      phone: '',
+      email: '',
+      username: '',
+      campus: '',
+      college: '',
+      course: '',
+      yearLevel: '',
+      block: '',
+    }
     return saved
-      ? JSON.parse(saved)
-      : {
-          role: 'Student',
-          firstName: '',
-          lastName: '',
-          phone: '',
-          email: '',
-          username: '',
-          campus: '',
-          college: '',
-          course: '',
-        }
+      ? { ...defaults, ...JSON.parse(saved) }
+      : defaults
   })
 
   const [password, setPassword] = useState('')
@@ -61,10 +71,6 @@ function SignUp() {
   const [otp, setOtp] = useState('')
   const [timer, setTimer] = useState(59)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  // Desktop specific personalization inputs
-  const [desktopFullName, setDesktopFullName] = useState('')
-  const [desktopYearBlock, setDesktopYearBlock] = useState('')
 
   // Dropdown options for mobile
   const [availableColleges, setAvailableColleges] = useState([])
@@ -102,7 +108,7 @@ function SignUp() {
   useEffect(() => {
     if (form.college && availableColleges.length > 0) {
       const collegeObj = availableColleges.find((col) => col.name === form.college)
-      setAvailableDepartments(collegeObj ? collegeObj.departments : [])
+      setAvailableDepartments(collegeObj ? collegeObj.programs : [])
       setForm((prev) => ({ ...prev, course: '' }))
     } else {
       setAvailableDepartments([])
@@ -179,7 +185,7 @@ function SignUp() {
 
   const handleCollegeNext = (e) => {
     e.preventDefault()
-    if (!form.campus || !form.college || !form.course) {
+    if (!form.campus || !form.college || !form.course || !form.yearLevel) {
       showToast('Please select your academic details', 'error')
       return
     }
@@ -187,18 +193,29 @@ function SignUp() {
   }
 
   const handleCompleteNext = async () => {
-    const { user, error } = await register({
+    const combinedYearLevel = form.role === 'Student'
+      ? (form.block ? `${form.yearLevel} - Block ${form.block}` : form.yearLevel)
+      : 'N/A'
+    const registrationDetails = {
       ...form,
+      yearLevel: combinedYearLevel,
       password,
-    })
+    }
+    if (form.role !== 'Student') {
+      registrationDetails.campus = 'N/A'
+      registrationDetails.college = 'N/A'
+      registrationDetails.course = 'N/A'
+      registrationDetails.yearLevel = 'N/A'
+    }
+    const { user, error } = await register(registrationDetails)
     if (error) {
       showToast(error, 'error')
       return
     }
     localStorage.removeItem('isko_signup_progress')
     localStorage.setItem('isko_device_verified', 'true')
-    showToast('Registration complete! Welcome, Isko!')
-    navigate('/home')
+    showToast('Registration complete! Please sign in.')
+    navigate('/signin')
   }
 
   const formatTime = (secs) => {
@@ -235,28 +252,35 @@ function SignUp() {
 
   const handleDesktopPersonalizeSubmit = async (e) => {
     e.preventDefault()
-    if (!desktopFullName.trim()) {
-      showToast('Please enter your full name', 'error')
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      showToast('Please enter your first and last name', 'error')
       return
     }
 
-    if (form.role === 'Student' && (!form.college || !form.course || !desktopYearBlock.trim())) {
+    if (form.role === 'Student' && (!form.college || !form.course || !form.yearLevel)) {
       showToast('Please fill out all academic details', 'error')
       return
     }
 
-    const parts = desktopFullName.trim().split(' ')
-    const first = parts[0]
-    const last = parts.slice(1).join(' ') || 'User'
+    const combinedYearLevel = form.role === 'Student'
+      ? (form.block ? `${form.yearLevel} - Block ${form.block}` : form.yearLevel)
+      : 'N/A'
 
-    const { user, error } = await register({
+    const registrationDetails = {
       ...form,
-      firstName: first,
-      lastName: last,
-      campus: form.role === 'Student' ? 'Main Campus' : 'N/A',
-      yearLevel: form.role === 'Student' ? desktopYearBlock.trim() : 'N/A',
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      yearLevel: combinedYearLevel,
       password,
-    })
+    }
+    if (form.role !== 'Student') {
+      registrationDetails.campus = 'N/A'
+      registrationDetails.college = 'N/A'
+      registrationDetails.course = 'N/A'
+      registrationDetails.yearLevel = 'N/A'
+    }
+
+    const { user, error } = await register(registrationDetails)
 
     if (error) {
       showToast(error, 'error')
@@ -265,8 +289,8 @@ function SignUp() {
 
     localStorage.removeItem('isko_signup_progress')
     localStorage.setItem('isko_device_verified', 'true')
-    showToast('Registration complete! Welcome, Isko!')
-    navigate('/home')
+    showToast('Registration complete! Please sign in.')
+    navigate('/signin')
   }
 
   return (
@@ -520,20 +544,69 @@ function SignUp() {
                   <button type="button" onClick={() => goToStep(6)} className="text-xs font-black text-gray-400">Skip</button>
                 </div>
                 <div className="space-y-4">
-                  <select value={form.campus} onChange={(e) => updateForm({ campus: e.target.value })} className="w-full h-11 px-3.5 border rounded-xl bg-white">
+                  <select
+                    value={form.campus}
+                    onChange={(e) => updateForm({ campus: e.target.value })}
+                    className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
+                    style={selectStyle}
+                  >
                     <option value="">Select Campus</option>
                     {collegesData.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
                   </select>
-                  <select value={form.college} onChange={(e) => updateForm({ college: e.target.value })} disabled={!form.campus} className="w-full h-11 px-3.5 border rounded-xl bg-white disabled:opacity-50">
+                  <select
+                    value={form.college}
+                    onChange={(e) => updateForm({ college: e.target.value })}
+                    disabled={!form.campus}
+                    className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50 transition-all appearance-none"
+                    style={selectStyle}
+                  >
                     <option value="">Select College</option>
                     {availableColleges.map((col) => <option key={col.id} value={col.name}>{col.name}</option>)}
                   </select>
-                  <select value={form.course} onChange={(e) => updateForm({ course: e.target.value })} disabled={!form.college} className="w-full h-11 px-3.5 border rounded-xl bg-white disabled:opacity-50">
+                  <select
+                    value={form.course}
+                    onChange={(e) => updateForm({ course: e.target.value })}
+                    disabled={!form.college}
+                    className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50 transition-all appearance-none"
+                    style={selectStyle}
+                  >
                     <option value="">Select Course</option>
                     {availableDepartments.map((dept, i) => <option key={i} value={dept}>{dept}</option>)}
                   </select>
+
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <select
+                        value={form.yearLevel}
+                        onChange={(e) => updateForm({ yearLevel: e.target.value })}
+                        className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
+                        style={selectStyle}
+                      >
+                        <option value="">Select Year</option>
+                        <option value="1st Year">1st Year</option>
+                        <option value="2nd Year">2nd Year</option>
+                        <option value="3rd Year">3rd Year</option>
+                        <option value="4th Year">4th Year</option>
+                        <option value="5th Year +">5th Year +</option>
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="Block (Optional)"
+                        value={form.block}
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase();
+                          if (val === '' || /^[A-Z]$/.test(val)) {
+                            updateForm({ block: val });
+                          }
+                        }}
+                        className="w-full h-11 px-3.5 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 bg-white"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <Button type="submit" disabled={!form.campus || !form.college || !form.course} className="w-full h-12 rounded-full font-bold">Next</Button>
+                <Button type="submit" disabled={!form.campus || !form.college || !form.course || !form.yearLevel} className="w-full h-12 rounded-full font-bold">Next</Button>
               </form>
             )}
 
@@ -544,7 +617,7 @@ function SignUp() {
                   <img src={logo} alt="Tindahan ni Isko" className="w-16 animate-bounce" />
                 </div>
                 <h1 className="text-2xl font-black text-gray-900">All Set!</h1>
-                <Button onClick={handleCompleteNext} className="w-full h-12 rounded-full font-bold">Start Shopping</Button>
+                <Button onClick={handleCompleteNext} className="w-full h-12 rounded-full font-bold">Go to Sign In</Button>
               </div>
             )}
           </div>
@@ -774,17 +847,30 @@ function SignUp() {
                 </div>
 
                 <form onSubmit={handleDesktopPersonalizeSubmit} className="space-y-4">
-                  {/* Full Name */}
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Full Name</label>
-                    <input
-                      type="text"
-                      placeholder="Enter your full name"
-                      value={desktopFullName}
-                      onChange={(e) => setDesktopFullName(e.target.value)}
-                      className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
-                      required
-                    />
+                  {/* First Name & Last Name */}
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">First Name</label>
+                      <input
+                        type="text"
+                        placeholder="First Name"
+                        value={form.firstName}
+                        onChange={(e) => updateForm({ firstName: e.target.value })}
+                        className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                        required
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Last Name</label>
+                      <input
+                        type="text"
+                        placeholder="Last Name"
+                        value={form.lastName}
+                        onChange={(e) => updateForm({ lastName: e.target.value })}
+                        className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                        required
+                      />
+                    </div>
                   </div>
 
                   {/* Academic Details - ONLY shown if role is Student */}
@@ -795,7 +881,8 @@ function SignUp() {
                         <select
                           value={form.campus}
                           onChange={(e) => updateForm({ campus: e.target.value })}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer"
+                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
+                          style={selectStyle}
                           required
                         >
                           <option value="">Select Campus</option>
@@ -811,7 +898,8 @@ function SignUp() {
                           value={form.college}
                           onChange={(e) => updateForm({ college: e.target.value })}
                           disabled={!form.campus}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50"
+                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer disabled:opacity-50"
+                          style={selectStyle}
                           required
                         >
                           <option value="">Select College</option>
@@ -827,7 +915,8 @@ function SignUp() {
                           value={form.course}
                           onChange={(e) => updateForm({ course: e.target.value })}
                           disabled={!form.college}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50"
+                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer disabled:opacity-50"
+                          style={selectStyle}
                           required
                         >
                           <option value="">Select Department</option>
@@ -837,23 +926,46 @@ function SignUp() {
                         </select>
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Year and Block</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 3rd Year - Block A"
-                          value={desktopYearBlock}
-                          onChange={(e) => setDesktopYearBlock(e.target.value)}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
-                          required
-                        />
+                      <div className="flex gap-4">
+                        <div className="flex-1">
+                          <label className="block text-sm font-bold text-gray-700 mb-2">Year</label>
+                          <select
+                            value={form.yearLevel}
+                            onChange={(e) => updateForm({ yearLevel: e.target.value })}
+                            className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
+                            style={selectStyle}
+                            required
+                          >
+                            <option value="">Select Year</option>
+                            <option value="1st Year">1st Year</option>
+                            <option value="2nd Year">2nd Year</option>
+                            <option value="3rd Year">3rd Year</option>
+                            <option value="4th Year">4th Year</option>
+                            <option value="5th Year +">5th Year +</option>
+                          </select>
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-sm font-bold text-gray-700 mb-2">Block (Optional)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. A"
+                            value={form.block}
+                            onChange={(e) => {
+                              const val = e.target.value.toUpperCase();
+                              if (val === '' || /^[A-Z]$/.test(val)) {
+                                updateForm({ block: val });
+                              }
+                            }}
+                            className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                          />
+                        </div>
                       </div>
                     </>
                   )}
 
                   <Button
                     type="submit"
-                    disabled={!desktopFullName || (form.role === 'Student' && (!form.college || !form.course || !desktopYearBlock))}
+                    disabled={!form.firstName || !form.lastName || (form.role === 'Student' && (!form.college || !form.course || !form.yearLevel))}
                     className="w-full h-12 font-bold rounded-xl shadow-md mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
                   >
                     Finish

@@ -81,7 +81,7 @@ function FiltersModal({ isOpen, onClose, initialFilters, onApply }) {
       {/* Modal Slide-up Drawer */}
       <div className="fixed inset-x-0 bottom-0 max-h-[85vh] bg-white rounded-t-[2rem] shadow-2xl z-[9999] overflow-hidden flex flex-col justify-between animate-slide-up border-t border-gray-100 lg:max-w-xl lg:mx-auto lg:rounded-2xl lg:bottom-1/2 lg:top-auto lg:translate-y-1/2 lg:max-h-none lg:h-[70vh]">
         {/* Modal Header */}
-        <header className="px-6 py-5 border-b border-gray-150 flex items-center justify-between sticky top-0 bg-white z-10">
+        <header className="px-6 py-5 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
           <button
             type="button"
             onClick={onClose}

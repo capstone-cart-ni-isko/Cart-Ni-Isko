@@ -6,8 +6,6 @@ import wishlistIcon from '../../assets/icons/navigation-bar/wishlist.svg'
 import cartIcon from '../../assets/icons/navigation-bar/cart.svg'
 import profileIcon from '../../assets/icons/navigation-bar/profile.svg'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
-import { SparklesIcon } from '../ui/Icons.jsx'
-import { triggerPwaInstall } from '../ui/PwaInstallPrompt.jsx'
 
 const navItems = [
   { to: '/home', label: 'Home', icon: homeIcon },

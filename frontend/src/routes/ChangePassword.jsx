@@ -53,53 +53,63 @@ function ChangePassword() {
   }
 
   return (
-    <AppShell showNav={false}>
-      <PageHeader title="Change Password" backTo="/settings" />
+    <AppShell>
+      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in max-w-3xl mx-auto">
+        {/* Desktop Title */}
+        <div className="hidden lg:block mb-8">
+          <h1 className="text-3xl font-black text-gray-900">Change Password</h1>
+        </div>
 
-      <div className="px-5 py-6 pb-12 space-y-5 animate-fade-in">
-        <p className="text-sm text-gray-500 font-medium leading-relaxed">
-          Set a new strong password for your Tindahan ni Isko student account.
-        </p>
+        {/* Mobile Title */}
+        <div className="lg:hidden -mx-4 -mt-4 mb-4">
+          <PageHeader title="Change Password" backTo="/settings" />
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <PasswordField
-            label="Current Password"
-            name="current"
-            value={form.current}
-            onChange={handleChange}
-            placeholder="Enter current password"
-          />
-          <PasswordField
-            label="New Password"
-            name="newPass"
-            value={form.newPass}
-            onChange={handleChange}
-            placeholder="At least 8 characters"
-          />
-          {form.newPass.length > 0 && !newValid && (
-            <p className="text-red-500 text-xs font-semibold -mt-3">Password must be at least 8 characters.</p>
-          )}
-          <PasswordField
-            label="Confirm New Password"
-            name="confirm"
-            value={form.confirm}
-            onChange={handleChange}
-            placeholder="Re-enter new password"
-          />
-          {form.confirm.length > 0 && !matchValid && (
-            <p className="text-red-500 text-xs font-semibold -mt-3">Passwords do not match.</p>
-          )}
+        <div className="space-y-5">
+          <p className="text-sm text-gray-500 font-medium leading-relaxed">
+            Set a new strong password for your Tindahan ni Isko student account.
+          </p>
 
-          <div className="pt-2">
-            <Button
-              type="submit"
-              disabled={!canSubmit}
-              className="w-full h-12 rounded-full font-bold shadow-md"
-            >
-              Update Password
-            </Button>
-          </div>
-        </form>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <PasswordField
+              label="Current Password"
+              name="current"
+              value={form.current}
+              onChange={handleChange}
+              placeholder="Enter current password"
+            />
+            <PasswordField
+              label="New Password"
+              name="newPass"
+              value={form.newPass}
+              onChange={handleChange}
+              placeholder="At least 8 characters"
+            />
+            {form.newPass.length > 0 && !newValid && (
+              <p className="text-red-500 text-xs font-semibold -mt-3">Password must be at least 8 characters.</p>
+            )}
+            <PasswordField
+              label="Confirm New Password"
+              name="confirm"
+              value={form.confirm}
+              onChange={handleChange}
+              placeholder="Re-enter new password"
+            />
+            {form.confirm.length > 0 && !matchValid && (
+              <p className="text-red-500 text-xs font-semibold -mt-3">Passwords do not match.</p>
+            )}
+
+            <div className="pt-2">
+              <Button
+                type="submit"
+                disabled={!canSubmit}
+                className="w-full h-12 rounded-full font-bold shadow-md"
+              >
+                Update Password
+              </Button>
+            </div>
+          </form>
+        </div>
       </div>
     </AppShell>
   )
