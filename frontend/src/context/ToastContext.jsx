@@ -26,7 +26,7 @@ export function ToastProvider({ children }) {
               toast.type === 'error' ? 'bg-red-500' : 'bg-brand-orange'
             }`}
           >
-            <span>{toast.type === 'error' ? '❌' : '✨'}</span>
+            <span>{toast.type === 'error' ? '' : ''}</span>
             <span>{toast.message}</span>
             <button
               onClick={closeToast}

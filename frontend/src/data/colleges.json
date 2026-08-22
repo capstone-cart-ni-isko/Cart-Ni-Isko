@@ -1,83 +1,120 @@
 [
   {
-    "id": "main",
-    "name": "Main Campus",
-    "colleges": [
-      {
-        "id": "ceng",
-        "name": "College of Engineering",
-        "departments": [
-          "Mechanical Engineering",
-          "Civil Engineering",
-          "Electrical Engineering",
-          "Chemical Engineering",
-          "Geodetic Engineering",
-          "Mining Engineering"
-        ]
-      },
-      {
-        "id": "cs",
-        "name": "College of Science",
-        "departments": [
-          "Computer Science",
-          "Information Technology",
-          "Biology",
-          "Chemistry",
-          "Meteorology"
-        ]
-      },
-      {
-        "id": "cal",
-        "name": "College of Arts and Letters",
-        "departments": [
-          "Communication",
-          "English",
-          "Filipino",
-          "Humanities",
-          "Journalism"
-        ]
-      },
-      {
-        "id": "cbem",
-        "name": "College of Business, Economics and Management",
-        "departments": [
-          "Accountancy",
-          "Business Administration",
-          "Entrepreneurship",
-          "Economics"
-        ]
-      },
-      {
-        "id": "ce",
-        "name": "College of Education",
-        "departments": [
-          "Elementary Education",
-          "Secondary Education",
-          "Physical Education"
-        ]
-      }
-    ]
-  },
-  {
     "id": "daraga",
     "name": "Daraga Campus",
     "colleges": [
       {
         "id": "cssp",
         "name": "College of Social Sciences and Philosophy",
-        "departments": [
-          "Political Science",
-          "Sociology",
-          "Social Work",
-          "Peace Studies"
+        "programs": [
+          "Bachelor of Arts in Peace Studies",
+          "Bachelor of Arts in Philosophy",
+          "Bachelor of Arts in Political Science",
+          "Bachelor of Arts in Sociology",
+          "Bachelor of Science in Psychology",
+          "Bachelor of Science in Social Work"
+        ]
+      },
+      {
+        "id": "cbem",
+        "name": "College of Business, Economics and Management",
+        "programs": [
+          "Bachelor of Science in Accountancy",
+          "Bachelor of Science in Economics",
+          "Bachelor of Science in Entrepreneurship",
+          "BSBA Major in Financial Management",
+          "BSBA Major in Human Resource Management",
+          "BSBA Major in Management",
+          "BSBA Major in Marketing Management",
+          "BSBA Major in Microfinance",
+          "BSBA Major in Operations Management"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "main",
+    "name": "Main Campus",
+    "colleges": [
+      {
+        "id": "ce",
+        "name": "College of Education",
+        "programs": [
+          "Bachelor of Culture and Arts Education",
+          "Bachelor of Early Childhood Education",
+          "Bachelor of Elementary Education",
+          "Bachelor of Secondary Education major in English",
+          "Bachelor of Secondary Education major in Filipino",
+          "Bachelor of Secondary Education major in Mathematics",
+          "Bachelor of Secondary Education major in Science",
+          "Bachelor of Secondary Education major in Social Studies",
+          "Bachelor of Secondary Education major in Values Education"
+        ]
+      },
+      {
+        "id": "cal",
+        "name": "College of Arts and Letters",
+        "programs": [
+          "Bachelor of Arts in Broadcasting",
+          "Bachelor of Arts in Communication",
+          "Bachelor of Arts in English Language",
+          "Bachelor of Arts in Journalism",
+          "Bachelor of Performing Arts (BPeA) Theater",
+          "Bachelor of Arts in Literature"
         ]
       },
       {
         "id": "cn",
         "name": "College of Nursing",
-        "departments": [
-          "Nursing"
+        "programs": [
+          "Bachelor of Science in Nursing"
         ]
+      },
+      {
+        "id": "cs",
+        "name": "College of Science",
+        "programs": [
+          "Bachelor of Science in Biology",
+          "Bachelor of Science in Chemistry",
+          "Bachelor of Science in Computer Science",
+          "Bachelor of Science in Information Technology",
+          "Bachelor of Science in Meteorology"
+        ]
+      },
+      {
+        "id": "ipesr",
+        "name": "Institute of Physical Education, Sports, and Recreation",
+        "programs": [
+          "Bachelor of Physical Education",
+          "Bachelor of Science in Exercise & Sports Sciences major in Fitness and Sports Coaching",
+          "Bachelor of Science in Exercise & Sports Sciences major in Fitness and Sports Management"
+        ]
+      },
+      {
+        "id": "jmrigd",
+        "name": "Jesse M. Robredo Institute of Governance and Development",
+        "programs": [
+          "Bachelor of Public Administration"
+        ]
+      },
+      {
+        "id": "cdm",
+        "name": "College of Dental Medicine",
+        "programs": [
+          "Doctor of Dental Medicine"
+        ]
+      },
+      {
+        "id": "medicine",
+        "name": "College of Medicine",
+        "programs": [
+          "Doctor of Medicine"
+        ]
+      },
+      {
+        "id": "law",
+        "name": "College of Law",
+        "programs": []
       }
     ]
   },
@@ -86,56 +123,126 @@
     "name": "East Campus",
     "colleges": [
       {
+        "id": "ceng",
+        "name": "College of Engineering",
+        "programs": [
+          "Bachelor of Science in Chemical Engineering",
+          "Bachelor of Science in Civil Engineering",
+          "Bachelor of Science in Electrical Engineering",
+          "Bachelor of Science in Geodetic Engineering",
+          "Bachelor of Science in Mechanical Engineering",
+          "Bachelor of Science in Mining Engineering"
+        ]
+      },
+      {
+        "id": "idea",
+        "name": "Institute of Design and Architecture",
+        "programs": [
+          "Bachelor of Science in Architecture"
+        ]
+      },
+      {
         "id": "cit",
         "name": "College of Industrial Technology",
-        "departments": [
-          "Automotive Technology",
-          "Electrical Technology",
-          "Electronics Technology",
-          "Food Service Technology"
+        "programs": [
+          "Bachelor of Industrial Technology Major in Automotive Technology",
+          "Bachelor of Industrial Technology Major in Construction Technology",
+          "Bachelor of Industrial Technology Major in Electrical Technology",
+          "Bachelor of Industrial Technology Major in Electronics Technology",
+          "Bachelor of Industrial Technology Major in Mechanical Technology",
+          "Bachelor of Science in Food Technology",
+          "Bachelor of Industrial Design",
+          "Bachelor of Technical-Vocational Teacher Education with specializations in Drafting Technology",
+          "Bachelor of Technical-Vocational Teacher Education with specializations in Electrical Technology",
+          "Bachelor of Technical-Vocational Teacher Education with specializations in Food and Service Management",
+          "Bachelor of Technical-Vocational Teacher Education with specializations in Garments Fashion and Design"
         ]
       }
     ]
   },
   {
-    "id": "polangui",
-    "name": "Polangui Campus (BUPC)",
+    "id": "guinobatan",
+    "name": "Guinobatan Campus",
     "colleges": [
       {
-        "id": "bupc-tech",
-        "name": "BUPC Technology Department",
-        "departments": [
-          "Information Technology (BUPC)",
-          "Computer Engineering (BUPC)"
-        ]
-      },
-      {
-        "id": "bupc-ed",
-        "name": "BUPC Education Department",
-        "departments": [
-          "Secondary Education (BUPC)"
+        "id": "undergraduate",
+        "name": "Undergraduate Programs",
+        "programs": [
+          "Bachelor of Science in Agribusiness",
+          "Bachelor of Science in Agricultural & Biosystems Engineering",
+          "Bachelor of Science in Agriculture",
+          "Bachelor of Science in Forestry",
+          "Bachelor of Science in Development Communication",
+          "Bachelor of Technical-Vocational Teacher Education Major in Animal Production",
+          "Bachelor of Technical-Vocational Teacher Education Major in Agricultural Crop Production",
+          "Bachelor of Science in Food Technology",
+          "Doctor of Veterinary Medicine"
         ]
       }
     ]
   },
   {
     "id": "tabaco",
-    "name": "Tabaco Campus (BUTC)",
+    "name": "Tabaco Campus",
     "colleges": [
       {
-        "id": "butc-fisheries",
-        "name": "BUTC Fisheries Department",
-        "departments": [
-          "Fisheries",
-          "Aquaculture"
+        "id": "undergraduate",
+        "name": "Undergraduate Programs",
+        "programs": [
+          "Bachelor of Secondary Education Major in Science",
+          "Bachelor of Secondary Education Major in Math",
+          "Bachelor of Science in Entrepreneurship",
+          "Bachelor of Science in Fisheries",
+          "Bachelor of Science in Food Technology",
+          "Bachelor of Science in Nursing",
+          "Bachelor of Science in Social Work"
         ]
-      },
+      }
+    ]
+  },
+  {
+    "id": "gubat",
+    "name": "Gubat Campus",
+    "colleges": [
       {
-        "id": "butc-biz",
-        "name": "BUTC Business & Education",
-        "departments": [
-          "Business Administration (BUTC)",
-          "Secondary Education (BUTC)"
+        "id": "undergraduate",
+        "name": "Undergraduate Programs",
+        "programs": [
+          "Bachelor of Elementary Education",
+          "Bachelor of Secondary Education Major in Filipino",
+          "Bachelor of Secondary Education Major in Social Studies",
+          "Bachelor of Science in Entrepreneurship - General Track",
+          "Bachelor of Science in Entrepreneurship - Agribusiness Track",
+          "Bachelor of Science in Business Administration Major in Microfinance"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "polangui",
+    "name": "Polangui Campus",
+    "colleges": [
+      {
+        "id": "undergraduate",
+        "name": "Undergraduate Programs",
+        "programs": [
+          "Bachelor of Elementary Education",
+          "Bachelor of Secondary Education Major in English",
+          "Bachelor of Secondary Education Major in Math",
+          "Bachelor of Science in Automotive Technology",
+          "Bachelor of Science in Computer Engineering",
+          "Bachelor of Science in Computer Science",
+          "Bachelor of Science in Electrical Technology",
+          "Bachelor of Science in Electronics Engineering",
+          "Bachelor of Science in Electronics Technology",
+          "Bachelor of Science in Entrepreneurship",
+          "Bachelor of Science in Information System",
+          "Bachelor of Science in Information Technology",
+          "Bachelor of Science in Information Technology (Animation)",
+          "Bachelor of Science in Mechanical Technology",
+          "Bachelor of Science in Nursing",
+          "Bachelor of Technology and Livelihood Education - Information and Communication Technology",
+          "Bachelor of Technology and Livelihood Education - Home Economics"
         ]
       }
     ]

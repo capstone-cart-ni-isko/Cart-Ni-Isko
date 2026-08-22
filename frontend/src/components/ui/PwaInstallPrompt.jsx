@@ -78,7 +78,7 @@ export default function PwaInstallPrompt() {
   if (!showPrompt) return null
 
   return (
-    <div className="fixed bottom-20 right-4 left-4 sm:left-auto sm:right-6 sm:bottom-6 w-auto sm:w-96 bg-white border border-gray-150 rounded-2xl p-4 shadow-2xl z-[9999] animate-slide-up transition-all">
+    <div className="fixed bottom-20 right-4 left-4 sm:left-auto sm:right-6 sm:bottom-6 w-auto sm:w-96 bg-white border border-gray-200 rounded-2xl p-4 shadow-2xl z-[9999] animate-slide-up transition-all">
       <div className="flex items-start gap-3.5">
         {/* App Icon */}
         <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center shrink-0 border border-orange-100 p-1.5 shadow-xs">

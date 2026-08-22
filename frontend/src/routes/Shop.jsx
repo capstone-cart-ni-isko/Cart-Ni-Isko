@@ -136,7 +136,7 @@ function Shop() {
             className={`w-9 h-9 rounded-full border flex items-center justify-center shrink-0 active:scale-95 transition-all ${
               Object.values(activeFilters).some((v, i) => (i === 0 ? v !== 'All' : i === 1 ? v !== 'All' : !!v))
                 ? 'bg-brand-orange border-brand-orange text-white'
-                : 'bg-white border-gray-150 text-gray-700'
+                : 'bg-white border-gray-200 text-gray-700'
             }`}
           >
             <svg
