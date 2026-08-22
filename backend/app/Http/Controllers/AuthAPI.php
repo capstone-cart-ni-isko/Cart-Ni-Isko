@@ -7,27 +7,30 @@
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\Hash;
 
-    class api_auth extends Controller
+    class AuthAPI extends Controller
     {
-        public function cust_signup(Request $json)
+        public function customerSignup(Request $json)
         {
             /*
-            CUSTOMER SIGNUP
-            ----------
-            JSON Request
+                CUSTOMER SIGNUP
+                ----------
+                JSON REQUEST
 
-            password - string (req)
-            nickname - string (req)
-            pronoun - string (req)
-            birthday - string (req)
-            brgy - string (req)
-            city - string (req)
-            province - string (req)
-            callcode - string (req)
-            phone - string (req)
-            email - string (req)
-            type - string (req)
+                password - string (req)
+                nickname - string (req)
+                pronoun - string (req)
+                birthday - string (req)
+                brgy - string (req)
+                city - string (req)
+                province - string (req)
+                callcode - string (req)
+                phone - string (req)
+                email - string (req)
+                type - string (req)
             */
+
+            $validator = (new InputValidatorAPI()->customerSignup($json));
+            if ($validator) return $validator;
 
             // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
@@ -36,6 +39,7 @@
             // Check if user provided phone and password
             if (!$phone || !$password) {
                 return response()->json([
+                    // JSON RESPONSE
                         'success' => false,
                         'message' => 'Phone and password required'
                     ], 400);
@@ -44,6 +48,7 @@
             // Check if phone already exists
             if (Customer::where('cust_phone', $phone)->exists()) {
                 return response()->json([
+                    // JSON RESPONSE
                         'success' => false,
                         'message' => 'Phone already exists'
                     ], 409);
@@ -89,12 +94,14 @@
             }
         }
 
-        public function cust_login(Request $json)
+        public function customerLogin(Request $json)
         {
+
             // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
             $password = $json->input('password');
 
+            
             // Check if user provided phone and password
             if (!$phone || !$password) {
                 return response()->json(['success' => false, 'message' => 'Phone and password required'], 400);
@@ -125,7 +132,7 @@
             }
         }
 
-        public function emp_signup(Request $json)
+        public function employeeSignup(Request $json)
         {
             // Get user-provided email and password from JSON
             $email      = $json->input('email');
@@ -187,7 +194,7 @@
             }
         }
 
-        public function emp_login(Request $json)
+        public function employeeLogin(Request $json)
         {
             // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
@@ -223,7 +230,7 @@
             }
         }
 
-        public function password_recovery(Request $json)
+        public function passwordRecovery(Request $json)
         {
             // Get user-provided email from JSON
             $email = $json->input('email');
