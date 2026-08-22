@@ -12,6 +12,7 @@ import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
 import productsData from '../data/products.json'
 import backIcon from '../assets/icons/common/back.svg'
 import { ShirtIcon } from '../components/ui/Icons.jsx'
+import { getImageUrl } from '../utils/imageUtils.js'
 
 function ProductDetail() {
   const { id } = useParams()
@@ -110,7 +111,15 @@ function ProductDetail() {
               </div>
             )}
 
-            <ShirtIcon className="w-28 h-28 md:w-36 md:h-36 text-brand-orange opacity-40 filter drop-shadow-md" />
+            {product.images && product.images[0] ? (
+              <img
+                src={getImageUrl(product.images[0])}
+                alt={product.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <ShirtIcon className="w-28 h-28 md:w-36 md:h-36 text-brand-orange opacity-40 filter drop-shadow-md" />
+            )}
           </div>
 
           {/* Details */}

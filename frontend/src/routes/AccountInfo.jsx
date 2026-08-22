@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AuthLayout from '../components/layout/AuthLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Input from '../components/ui/Input.jsx'
 import Button from '../components/ui/Button.jsx'
 import { mockUser } from '../data/mockUser.js'
+import collegesData from '../data/colleges.json'
 import avatarImg from '../assets/avatar.png'
+
+const yearLevels = ['1st Year Student', '2nd Year Student', '3rd Year Student', '4th Year Student', '5th Year Student', 'Faculty / Staff', 'Alumni']
 
 function AccountInfo() {
   const [form, setForm] = useState({
@@ -13,15 +16,47 @@ function AccountInfo() {
     username: mockUser.username,
     email: mockUser.email,
     phone: mockUser.phone,
-    yearLevel: mockUser.yearLevel,
-    campus: mockUser.campus,
-    college: mockUser.college,
-    course: mockUser.course,
+    yearLevel: mockUser.yearLevel || '1st Year Student',
+    campus: mockUser.campus || 'Main Campus',
+    college: mockUser.college || 'College of Engineering',
+    course: mockUser.course || 'Computer Engineering',
   })
   const [saved, setSaved] = useState(false)
+  const [availableColleges, setAvailableColleges] = useState([])
+  const [availableDepartments, setAvailableDepartments] = useState([])
+
+  // Sync colleges when campus changes
+  useEffect(() => {
+    if (form.campus) {
+      const campusObj = collegesData.find((c) => c.name === form.campus)
+      setAvailableColleges(campusObj ? campusObj.colleges : [])
+    } else {
+      setAvailableColleges([])
+    }
+  }, [form.campus])
+
+  // Sync departments when college changes
+  useEffect(() => {
+    if (form.college && availableColleges.length > 0) {
+      const collegeObj = availableColleges.find((col) => col.name === form.college)
+      setAvailableDepartments(collegeObj ? collegeObj.departments : [])
+    } else {
+      setAvailableDepartments([])
+    }
+  }, [form.college, availableColleges])
 
   function handleChange(e) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    setForm((prev) => {
+      const updated = { ...prev, [name]: value }
+      if (name === 'campus') {
+        updated.college = ''
+        updated.course = ''
+      } else if (name === 'college') {
+        updated.course = ''
+      }
+      return updated
+    })
     setSaved(false)
   }
 
@@ -57,10 +92,71 @@ function AccountInfo() {
           <Input label="Username" name="username" value={form.username} onChange={handleChange} />
           <Input label="Email" name="email" type="email" value={form.email} onChange={handleChange} />
           <Input label="Phone" name="phone" type="tel" value={form.phone} onChange={handleChange} />
-          <Input label="Year Level" name="yearLevel" value={form.yearLevel} onChange={handleChange} />
-          <Input label="Campus" name="campus" value={form.campus} onChange={handleChange} />
-          <Input label="College" name="college" value={form.college} onChange={handleChange} />
-          <Input label="Course" name="course" value={form.course} onChange={handleChange} />
+
+          {/* Year Level Dropdown */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Year Level</label>
+            <select
+              name="yearLevel"
+              value={form.yearLevel}
+              onChange={handleChange}
+              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer"
+            >
+              {yearLevels.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Campus Dropdown */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Campus</label>
+            <select
+              name="campus"
+              value={form.campus}
+              onChange={handleChange}
+              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer"
+            >
+              <option value="">Select Campus</option>
+              {collegesData.map((c) => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* College Dropdown */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">College</label>
+            <select
+              name="college"
+              value={form.college}
+              onChange={handleChange}
+              disabled={!form.campus}
+              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50"
+            >
+              <option value="">Select College</option>
+              {availableColleges.map((col) => (
+                <option key={col.id} value={col.name}>{col.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Department / Course Dropdown */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Department / Course</label>
+            <select
+              name="course"
+              value={form.course}
+              onChange={handleChange}
+              disabled={!form.college}
+              className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50"
+            >
+              <option value="">Select Department / Course</option>
+              {availableDepartments.map((dept, i) => (
+                <option key={i} value={dept}>{dept}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <Button type="submit" className="w-full h-12 shadow-md">
@@ -72,4 +168,3 @@ function AccountInfo() {
 }
 
 export default AccountInfo
-

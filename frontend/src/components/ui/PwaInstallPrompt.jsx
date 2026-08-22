@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Button from './Button.jsx'
+import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 export function triggerPwaInstall() {
   window.dispatchEvent(new CustomEvent('open-pwa-prompt'))
@@ -57,8 +58,7 @@ export default function PwaInstallPrompt() {
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {
-      // Fallback if browser doesn't expose deferredPrompt directly
-      alert('To install, use your browser options (e.g., Chrome address bar "Install" icon or menu "Add to Home Screen").')
+      alert('To install, use your browser menu or address bar option to Add to Home Screen.')
       return
     }
 
@@ -78,61 +78,58 @@ export default function PwaInstallPrompt() {
   if (!showPrompt) return null
 
   return (
-    <>
-      {/* Backdrop overlay if manually triggered or floating card */}
-      <div className="fixed bottom-20 left-4 right-4 md:left-auto md:right-6 md:bottom-6 md:w-96 bg-white border border-orange-200/80 rounded-3xl p-4 shadow-2xl z-[9999] animate-slide-up transition-all">
-        <div className="flex items-start gap-3.5">
-          {/* App Icon */}
-          <div className="w-12 h-12 rounded-2xl bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-md font-black text-xl">
-            T
-          </div>
+    <div className="fixed bottom-20 right-4 left-4 sm:left-auto sm:right-6 sm:bottom-6 w-auto sm:w-96 bg-white border border-gray-150 rounded-2xl p-4 shadow-2xl z-[9999] animate-slide-up transition-all">
+      <div className="flex items-start gap-3.5">
+        {/* App Icon */}
+        <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center shrink-0 border border-orange-100 p-1.5 shadow-xs">
+          <img src={logo} alt="Tindahan ni Isko" className="w-full h-full object-contain" />
+        </div>
 
-          {/* Text Details */}
-          <div className="flex-1 min-w-0 pr-2">
-            <h4 className="text-sm font-black text-gray-900 leading-snug">
-              Install Tindahan ni Isko
-            </h4>
-            <p className="text-xs text-gray-500 font-medium mt-0.5 leading-relaxed">
-              {isStandalone
-                ? 'App is already installed on your device!'
-                : isIos
-                ? 'Tap the Share button in Safari, then select "Add to Home Screen".'
-                : 'Add to home screen for fast access, full-screen mode & offline shopping.'}
-            </p>
-          </div>
+        {/* Text Details */}
+        <div className="flex-1 min-w-0 pr-1">
+          <h4 className="text-sm font-bold text-gray-900 leading-snug">
+            Install Tindahan ni Isko
+          </h4>
+          <p className="text-xs text-gray-500 font-medium mt-0.5 leading-relaxed">
+            {isStandalone
+              ? 'App is already installed on your device.'
+              : isIos
+              ? 'Tap Share in Safari, then select "Add to Home Screen".'
+              : 'Add to home screen for fast access and offline shopping.'}
+          </p>
+        </div>
 
-          {/* Close Button */}
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={handleDismiss}
+          className="text-gray-400 hover:text-gray-600 p-1 -mt-1 -mr-1 rounded-full transition-colors shrink-0"
+          aria-label="Close"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Actions */}
+      {!isStandalone && !isIos && (
+        <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-gray-100">
           <button
             type="button"
             onClick={handleDismiss}
-            className="text-gray-400 hover:text-gray-600 p-1 -mt-1 -mr-1 rounded-full transition-colors shrink-0"
-            aria-label="Close"
+            className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            Not now
           </button>
+          <Button
+            onClick={handleInstallClick}
+            className="h-8 px-3.5 text-xs font-bold rounded-lg text-white bg-brand-orange hover:bg-brand-orange-dark shadow-sm"
+          >
+            Install App
+          </Button>
         </div>
-
-        {/* Actions */}
-        {!isStandalone && !isIos && (
-          <div className="flex items-center justify-end gap-2.5 mt-3 pt-3 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={handleDismiss}
-              className="text-xs font-bold text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-xl transition-colors"
-            >
-              Not now
-            </button>
-            <Button
-              onClick={handleInstallClick}
-              className="h-9 px-4 text-xs font-bold rounded-xl text-white bg-brand-orange hover:bg-brand-orange-dark shadow-sm"
-            >
-              Install App
-            </Button>
-          </div>
-        )}
-      </div>
-    </>
+      )}
+    </div>
   )
 }
