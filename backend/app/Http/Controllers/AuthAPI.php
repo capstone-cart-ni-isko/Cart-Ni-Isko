@@ -29,35 +29,26 @@
                 type - string (req)
             */
 
+            // Validate signup input
             $validator = (new InputValidatorAPI()->customerSignup($json));
             if ($validator) return $validator;
 
-            // Get user-provided phone and password from JSON
+            // Get user phone and password
             $phone = $json->input('phone');
             $password = $json->input('password');
 
-            // Check if user provided phone and password
-            if (!$phone || !$password) {
-                return response()->json([
-                    // JSON RESPONSE
-                        'success' => false,
-                        'message' => 'Phone and password required'
-                    ], 400);
-            }
-
             // Check if phone already exists
             if (Customer::where('cust_phone', $phone)->exists()) {
+                // JSON ERROR
                 return response()->json([
-                    // JSON RESPONSE
                         'success' => false,
                         'message' => 'Phone already exists'
                     ], 409);
             }
 
-            // Inserts user-provided details into database using Models
-            // Some fields have default values if not provided by user
+            // Inserts to database using Models
             try {
-                // Create new customer
+                // Create new Customer
                 $customer = Customer::create([
                     'cust_created' => now(),
                     'cust_password' => Hash::make($password),
@@ -77,7 +68,7 @@
                     'cust_appoints' => 0,
                 ]);
 
-                // Successful signup response
+                // JSON SUCCESS
                 return response()->json([
                     'success' => true,
                     'message' => 'Signup successful',
@@ -85,7 +76,7 @@
                 ], 201);
 
             } catch (\Exception $e) {
-                // Error response if signup fails
+                // JSON ERROR
                 return response()->json([
                     'success' => false,
                     'message' => 'Signup failed',
@@ -96,26 +87,33 @@
 
         public function customerLogin(Request $json)
         {
+            /*
+                CUSTOMER LOGIN
+                ----------
+                JSON REQUEST
 
-            // Get user-provided phone and password from JSON
+                password - string (req)
+                phone - string (req)
+            */
+
+            // Validate login input
+            $validator = (new InputValidatorAPI()->customerLogin($json));
+            if ($validator) return $validator;
+
+            // Get user phone and password
             $phone = $json->input('phone');
             $password = $json->input('password');
-
             
-            // Check if user provided phone and password
-            if (!$phone || !$password) {
-                return response()->json(['success' => false, 'message' => 'Phone and password required'], 400);
-            }
-
             // Find customer and verify password
             try {
                 $customer = Customer::where('cust_phone', $phone)->first();
 
                 if (!$customer || !Hash::check($password, $customer->cust_password)) {
+                    // JSON ERROR
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
 
-                // Successful login response
+                // JSON SUCCESS
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
@@ -123,7 +121,7 @@
                 ], 200);
 
             } catch (\Exception $e) {
-                // Error response if login fails
+                // JSON ERROR
                 return response()->json([
                     'success' => false,
                     'message' => 'Login failed',
@@ -134,27 +132,47 @@
 
         public function employeeSignup(Request $json)
         {
-            // Get user-provided email and password from JSON
+            /*
+                EMPLOYEE SIGNUP
+                ----------
+                JSON REQUEST
+
+                password - string (req)
+                email - string (req)
+                surname - string (req)
+                givname - string (req)
+                midname - string (opt)
+                suffix - string (opt)
+                studnum - string (req)
+                pronoun - string (opt)
+                birthday - string (opt)
+                brgy - string (opt)
+                city - string (opt)
+                province - string (opt)
+                callcode - string (opt)
+                phone - string (opt)
+                type - string (opt)
+                instore - boolean (opt)
+            */
+            
+            // Validate signup input
+            $validator = (new InputValidatorAPI()->employeeSignup($json));
+            if ($validator) return $validator;
+
+            // Get user email and password
             $email      = $json->input('email');
             $password   = $json->input('password');
 
-            // Check if user provided email and password
-            if (!$email || !$password) {
-                return response()->json([
-                        'success' => false,
-                        'message' => 'Email and password required'
-                    ], 400);
-            }
-
             // Check if email already exists
             if (Employee::where('emp_email', $email)->exists()) {
+                // JSON ERROR
                 return response()->json([
                         'success' => false,
                         'message' => 'Email already exists'
                     ], 409);
             }
 
-            // Inserts user-provided details into database using Models
+            // Insert to database using Models
             try {
                 // Create new employee
                 $employee = Employee::create([
@@ -177,7 +195,7 @@
                     'emp_instore' => $json->input('instore') ?? 0,
                 ]);
 
-                // Successful signup response
+                // JSON SUCCESS
                 return response()->json([
                     'success' => true,
                     'message' => 'Signup successful',
@@ -185,7 +203,7 @@
                 ], 201);
 
             } catch (\Exception $e) {
-                // Error response if signup fails
+                // JSON ERROR
                 return response()->json([
                     'success' => false,
                     'message' => 'Signup failed',
@@ -196,24 +214,33 @@
 
         public function employeeLogin(Request $json)
         {
-            // Get user-provided phone and password from JSON
-            $phone = $json->input('phone');
-            $password = $json->input('password');
+            /*
+                EMPLOYEE LOGIN
+                ----------
+                JSON REQUEST
 
-            // Check if user provided phone and password
-            if (!$phone || !$password) {
-                return response()->json(['success' => false, 'message' => 'Phone and password required'], 400);
-            }
+                password - string (req)
+                email - string (req)
+            */
+
+            // Validate login input
+            $validator = (new InputValidatorAPI()->employeeLogin($json));
+            if ($validator) return $validator;
+            
+            // Get user email and password
+            $email = $json->input('email');
+            $password = $json->input('password');
 
             // Find employee and verify password
             try {
-                $employee = Employee::where('emp_phone', $phone)->first();
+                $employee = Employee::where('emp_email', $email)->first();
 
                 if (!$employee || !Hash::check($password, $employee->emp_password)) {
+                    // JSON ERROR
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
 
-                // Successful login response
+                // JSON SUCCESS
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
@@ -221,7 +248,7 @@
                 ], 200);
 
             } catch (\Exception $e) {
-                // Error response if login fails
+                // JSON ERROR
                 return response()->json([
                     'success' => false,
                     'message' => 'Login failed',
@@ -229,5 +256,4 @@
                 ], 500);
             }
         }
-
     }
