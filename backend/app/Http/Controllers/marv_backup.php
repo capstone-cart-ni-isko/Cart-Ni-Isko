@@ -7,9 +7,9 @@
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\Hash;
 
-    class api_auth extends Controller
+    class AuthAPI extends Controller
     {
-        public function cust_signup(Request $json)
+        public function customerSignup(Request $json)
         {
             /*
                 CUSTOMER SIGNUP
@@ -28,6 +28,9 @@
                 email - string (req)
                 type - string (req)
             */
+
+            $validator = (new InputValidatorAPI()->customerSignup($json));
+            if ($validator) return $validator;
 
             // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
@@ -91,12 +94,14 @@
             }
         }
 
-        public function cust_login(Request $json)
+        public function customerLogin(Request $json)
         {
+
             // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
             $password = $json->input('password');
 
+            
             // Check if user provided phone and password
             if (!$phone || !$password) {
                 return response()->json(['success' => false, 'message' => 'Phone and password required'], 400);
@@ -127,7 +132,7 @@
             }
         }
 
-        public function emp_signup(Request $json)
+        public function employeeSignup(Request $json)
         {
             // Get user-provided email and password from JSON
             $email      = $json->input('email');
@@ -189,7 +194,7 @@
             }
         }
 
-        public function emp_login(Request $json)
+        public function employeeLogin(Request $json)
         {
             // Get user-provided phone and password from JSON
             $phone = $json->input('phone');
@@ -220,41 +225,6 @@
                 return response()->json([
                     'success' => false,
                     'message' => 'Login failed',
-                    'error' => $e->getMessage()
-                ], 500);
-            }
-        }
-
-        public function password_recovery(Request $json)
-        {
-            // Get user-provided email from JSON
-            $email = $json->input('email');
-
-            // Check if user provided email
-            if (!$email) {
-                return response()->json(['success' => false, 'message' => 'Email required'], 400);
-            }
-
-            // Find employee by email
-            try {
-                $employee = Employee::where('emp_email', $email)->first();
-
-                if (!$employee) {
-                    return response()->json(['success' => false, 'message' => 'Email not found'], 404);
-                }
-
-                // Here you would typically send a password recovery email
-                // For demonstration, we will just return a success message
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Password recovery instructions sent to your email'
-                ], 200);
-
-            } catch (\Exception $e) {
-                // Error response if password recovery fails
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Password recovery failed',
                     'error' => $e->getMessage()
                 ], 500);
             }
