@@ -235,6 +235,68 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
+    public function addProduct(Request $json)
+    {
+        $requiredCheck = $this->validateFields($json, [
+            'prod_name'  => 'required',
+            'prod_tag'   => 'required',
+            'prod_price' => 'required',
+            'prod_qty'   => 'required',
+        ], [
+            'prod_name.required'  => 'Product name is required.',
+            'prod_tag.required'   => 'Product tag is required.',
+            'prod_price.required' => 'Product price is required.',
+            'prod_qty.required'   => 'Product quantity is required.',
+        ]);
+        if ($requiredCheck) return $requiredCheck;
+
+        return $this->validateFields($json, [
+            'prod_name'  => 'string|max:255|unique:product,prod_name',
+            'prod_tag'   => 'string|max:255|unique:product,prod_tag',
+            'prod_categ' => 'nullable|string|max:100',
+            'prod_price' => 'numeric|min:0',
+            'prod_qty'   => 'integer|min:0',
+            'prod_desc'  => 'nullable|string',
+        ], [
+            'prod_name.unique'   => 'Product name already exists.',
+            'prod_tag.unique'    => 'Product tag already exists.',
+            'prod_price.numeric' => 'Product price must be a number.',
+            'prod_price.min'     => 'Product price cannot be negative.',
+            'prod_qty.integer'   => 'Product quantity must be an integer.',
+            'prod_qty.min'       => 'Product quantity cannot be negative.',
+        ]);
+    }
+
+    public function updateProductDetails(Request $json)
+    {
+        $requiredCheck = $this->validateFields($json, [
+            'prod_id' => 'required',
+        ], [
+            'prod_id.required' => 'Product ID is required to update details.',
+        ]);
+        if ($requiredCheck) return $requiredCheck;
+
+        $prodId = $json->input('prod_id');
+
+        return $this->validateFields($json, [
+            'prod_id'    => 'integer|exists:product,prod_id',
+            'prod_name'  => 'nullable|string|max:255|unique:product,prod_name,' . $prodId . ',prod_id',
+            'prod_tag'   => 'nullable|string|max:255|unique:product,prod_tag,' . $prodId . ',prod_id',
+            'prod_categ' => 'nullable|string|max:100',
+            'prod_price' => 'nullable|numeric|min:0',
+            'prod_qty'   => 'nullable|integer|min:0',
+            'prod_desc'  => 'nullable|string',
+        ], [
+            'prod_id.exists'     => 'Product not found.',
+            'prod_name.unique'   => 'Product name already exists.',
+            'prod_tag.unique'    => 'Product tag already exists.',
+            'prod_price.numeric' => 'Product price must be a number.',
+            'prod_price.min'     => 'Product price cannot be negative.',
+            'prod_qty.integer'   => 'Product quantity must be an integer.',
+            'prod_qty.min'       => 'Product quantity cannot be negative.',
+        ]);
+    }
+
     // ==========================================
     // UTILITY HELPER
     // ==========================================

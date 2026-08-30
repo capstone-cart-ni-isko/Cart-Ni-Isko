@@ -1,0 +1,540 @@
+--- TABLE START ---
+CUSTNOTIF
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+custnotif_id | INT8 |  |  | / | 
+cust_id | INT8 |  |  |  | 
+custnotif_created | TIMESTAMP | now() |  |  | 
+custnotif_read | TIMESTAMP |  | / |  | 
+custnotif_msg | TEXT |  |  |  | 
+--- TABLE END ---
+--- TABLE START ---
+CUSTOMER
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+cust_id | INT8 |  |  | / | 
+cust_created | TIMESTAMP | now() |  |  | 
+cust_disabled | TIMESTAMP |  | / |  | 
+cust_deleted | TIMESTAMP |  | / |  | 
+cust_password | VARCHAR |  |  |  | 
+cust_nickname | VARCHAR |  |  |  | 
+cust_pronoun | VARCHAR |  |  |  | 
+cust_birthday | DATE |  |  |  | 
+cust_brgy | VARCHAR |  |  |  | 
+cust_city | VARCHAR |  |  |  | 
+cust_province | VARCHAR |  |  |  | 
+cust_country | VARCHAR |  |  |  | 
+cust_callcode | VARCHAR | +63 |  |  | 
+cust_phone | VARCHAR |  |  | / | 
+cust_email | VARCHAR |  | / | / | 
+cust_backupcallcode | VARCHAR | +63 | / |  | 
+cust_backupphone | VARCHAR |  | / |  | 
+cust_backupemail | VARCHAR |  | / |  | 
+cust_type | VARCHAR | STUDENT |  |  | 
+cust_college | VARCHAR |  | / |  | 
+cust_wishlist | INT4 | 0 |  |  | 
+cust_cart | INT4 | 0 |  |  | 
+cust_orders | INT4 | 0 |  |  | 
+cust_appoints | INT4 | 0 |  |  | 
+
+--- TABLE END ---
+--- TABLE START ---
+EMPNOTIF
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+empnotif_id | INT8 |  |  | / | 
+emp_id | INT8 |  |  |  | 
+empnotif_created | TIMESTAMP | now() |  |  | 
+empnotif_read | TIMESTAMP |  | / |  | 
+empnotif_msg | TEXT |  |  |  | 
+--- TABLE END ---
+--- TABLE START ---
+EMPLOYEE
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+emp_id | INT8 |  |  | / | 
+emp_created | TIMESTAMP | now() |  |  | 
+emp_disabled | TIMESTAMP |  | / |  | 
+emp_deleted | TIMESTAMP |  | / |  | 
+emp_password | VARCHAR |  |  |  | 
+emp_surname | VARCHAR |  |  |  | 
+emp_givname | VARCHAR |  |  |  | 
+emp_midname | VARCHAR |  | / |  | 
+emp_suffix | VARCHAR |  | / |  | 
+emp_studnum | VARCHAR |  |  | / | 
+emp_pronoun | VARCHAR |  |  |  | 
+emp_birthday | DATE |  |  |  | 
+emp_brgy | VARCHAR |  |  |  | 
+emp_city | VARCHAR |  |  |  | 
+emp_province | VARCHAR |  |  |  | 
+emp_country | VARCHAR |  |  |  | 
+emp_callcode | VARCHAR | +63 |  |  | 
+emp_phone | VARCHAR |  |  | / | 
+emp_email | VARCHAR |  |  | / | 
+emp_backupcallcode | VARCHAR | +63 | / |  | 
+emp_backupphone | VARCHAR |  | / |  | 
+emp_backupemail | VARCHAR |  | / |  | 
+emp_type | VARCHAR | STAFF |  |  | 
+emp_instore | BOOL | FALSE |  |  | 
+
+--- TABLE END ---
+--- TABLE START ---
+PRODUCT
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+prod_id | INT8 |  |  | / | 
+prod_created | TIMESTAMP | now() |  |  | 
+prod_disabled | TIMESTAMP |  | / |  | 
+prod_deleted | TIMESTAMP |  | / |  | 
+prod_tag | VARCHAR |  |  | / | 
+prod_name | VARCHAR |  |  | / | 
+prod_categ | VARCHAR | OTHERS |  |  | 
+prod_price | NUMERIC | 0 |  |  | 
+prod_qty | INT4 | 0 |  |  | 
+prod_desc | TEXT |  | / |  | 
+prod_peakqty | INT4 | 0 |  |  | 
+prod_peaksold | NUMERIC | 0.00 |  |  | 
+prod_peakdate | TIMESTAMP | now() |  |  | 
+prod_todayqty | INT4 | 0 |  |  | 
+prod_todaysold | NUMERIC | 0.00 |  |  | 
+--- TABLE END ---
+--- TABLE START ---
+ITEMS
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+ord_id | INT8 |  |  |  | 
+prod_id | INT8 |  |  |  | 
+item_qty | INT4 | 0 |  |  | 
+item_amount | NUMERIC | 0.00 |  |  | 
+--- TABLE END ---
+--- TABLE START ---
+ORDERS
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+ord_id | INT8 |  |  | / | 
+cust_id | INT8 |  |  |  | 
+ord_created | TIMESTAMP | now() |  |  | 
+ord_completed | TIMESTAMP |  | / |  | 
+ord_tag | VARCHAR |  |  |  | 
+ord_status | VARCHAR | TO PROCESS |  |  | 
+ord_rating | INT8 | 0 |  |  | 
+ord_review | TEXT |  | / |  | 
+--- TABLE END ---
+--- TABLE START ---
+PAYMENT
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+pay_id | INT8 |  |  | / | 
+pay_created | TIMESTAMP | now() |  |  | 
+pay_ref | VARCHAR |  |  |  | 
+pay_given | NUMERIC | 0.00 |  |  | 
+pay_due | NUMERIC | 0.00 |  |  | 
+pay_change | NUMERIC | 0.00 |  |  | 
+--- TABLE END ---
+--- TABLE START ---
+PICKUP
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+pickup_id | INT8 |  |  | / | 
+ord_id | INT8 |  |  |  | 
+appoint_id | INT8 |  |  |  | 
+pay_id | INT8 |  |  |  | 
+pickup_created | TIMESTAMP | now() |  |  | 
+pickup_completed | TIMESTAMP |  | / |  | 
+--- TABLE END ---
+--- TABLE START ---
+APPOINTMENT
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+appoint_id | INT8 |  |  | / | 
+cust_id | INT8 |  |  |  | 
+appoint_created | TIMESTAMP | now() |  |  | 
+appoint_closed | TIMESTAMP |  | / |  | 
+appoint_date | DATETIME |  |  |  | 
+appoint_type | VARCHAR | VISIT |  |  | 
+appoint_qr | VARCHAR |  |  |  | 
+appoint_desc | TEXT |  | / |  | 
+--- TABLE END ---
+--- TABLE START ---
+PARCEL
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+parcel_id | INT8 |  |  | / | 
+ord_id | INT8 |  |  |  | 
+deliver_id | INT8 |  |  |  | 
+pay_id | INT8 |  |  |  | 
+parcel_created | TIMESTAMP | now() |  |  | 
+parcel_completed | TIMESTAMP |  | / |  | 
+--- TABLE END ---
+--- TABLE START ---
+DELIVERY
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+deliver_id | INT8 |  |  | / | 
+deliver_created | TIMESTAMP | now() |  |  | 
+deliver_deleted | TIMESTAMP |  | / |  | 
+delvier_ref | VARCHAR |  |  |  | 
+deliver_date | DATETIME |  |  |  | 
+deliver_address | VARCHAR |  |  |  | 
+deliver_status | VARCHAR | TRANSIT |  |  | 
+deliver_qr | VARCHAR |  |  |  | 
+--- TABLE END ---
+--- TABLE START ---
+REPORTS
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+report_id | INT8 |  |  | / | 
+emp_id | INT8 |  |  |  | 
+report_created | TIMESTAMP | now() |  |  | 
+report_file | VARCHAR |  |  |  | 
+report_title | TEXT |  |  |  | 
+report_text | TEXT |  | / |  | 
+--- TABLE END ---
+--- TABLE START ---
+CUSTLOG
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+custlog_id | INT8 |  |  | / | 
+cust_id | INT8 |  |  |  | 
+custlog_created | TIMESTAMP | now() |  |  | 
+custlog_action |  |  |  |  | 
+custlog_desc | TEXT |  |  |  | 
+--- TABLE END ---
+--- TABLE START ---
+EMPLOG
+NAME | TYPE | DEFAULT | NULLABLE? | UNIQUE? | ARRAY?
+emplog_id | INT8 |  |  | / | 
+emp_id | INT8 |  |  |  | 
+emplog_created | TIMESTAMP | now() |  |  | 
+emplog_action | TEXT |  |  |  | 
+emplog_desc | TEXT |  |  |  | 
+--- TABLE END ---
+P: SOFTWARE REQUIREMENT SPECIFICATIONS
+P: Cart ni Isko
+P: INTRODUCTION
+P: Purpose
+P: This document delineates and describes the requirements of Cart ni Isko, a web-based e-commerce system for Tindahan ni Isko, the official merchandise line of the Bicol University Student Council (BU USC). The system aims to consolidate order processing pipeline, stock management, and in-store visits and order claiming scheduling into a unified, ubiquitous system.
+P: Scope
+P: Account Control. The system will allow customers and employees to privately access and control their accounts, like editing their details and login credentials, updating their cart and wishlist, and viewing their notifications.
+P: Administrative Management. The system will allow store owners to monitor customer and employee transactions, control their access, assist in remediation caused by issues and errors, and configure system settings.
+P: Appointment Scheduling. The system will allow customers to schedule their on-site order claiming or visit beforehand and reschedule whenever their appointment gets cancelled as connected with in-store staff scheduling.
+P: Business Insights. The system will allow employees to monitor trends and status, whether overall or specific, presented in an aggregate yet simplified way to help come up with more precise and relevant business decisions.
+P: Online Ordering. The system will allow customers to place certain products in orders, proceed to order checkout and payment, and track real-time order status online anytime and anywhere.
+P: Order Fulfillment. The system will allow customers to choose whether to claim their online orders in their designated place through a freight forwarder or pick them up in the physical store through a scheduled appointment.
+P: Point-of-Sale Ordering. The system will allow walk-in customers to order certain products available in store and then pay for and claim them right away as facilitated by a store employee.
+P: Product Discovery. The system will allow customers to easily browse currently offered products individually or overall along with their availability and certain details and filter them by category.
+P: Intended Users
+P: Customers. The system is expected to benefit the customers of Tindahan ni Isko, comprising students, alumni, and those who are neither. It will ease their purchase decision, ordering, and in-store visits through a unified system accessible in just one tap, wherever they are and whenever they like.
+P: BU USC Ways and Means Committee. The system is expected to benefit the members of the BU USC Ways and Means Committee. It will ease their transaction management since all previously separate and manual transactions will now be in an online unified platform.
+P: BU USC. The system is expected to benefit the BU USC, especially its Business Manager since transactions and stakeholder logs are now in an online unified platform, thereby easing the analysis of store trends and conditions for more substantial decision-making.
+P: Definitions
+P: Appointment. A predetermined date and time when a customer personally transacts in the physical store with certain employees for a certain purpose.
+P: Cart. A list of orders to which the customer is more committed and may or may not be checked out sooner.
+P: Catalog. A list of currently offered products by the store that can be availed online or through point-of-sale by customers.
+P: Checkout. The phase where certain stocks of products in the order are made unavailable from others and now are paid and owned by the customer.
+P: Customer. Any individual who transacts with the store to consume certain products or services therefrom. Employees can also be customers but must transact in a separate capacity.
+P: Employee. An individual authorized by and accountable to the store in fulfilling certain functions on its behalf in certain transactions.
+P: Order. A list of certain products that can have many variations, modifiable only before checkout, and can be checked out alone or with others in the cart.
+P: Point-of-Sale (POS). A module that allows walk-in customers to order products and check them out with facilitation by a store employee.
+P: Review. A numerical rating, relevant alphanumeric comment, or both about a certain product that can be given by a customer who ordered it and can be viewed by other customers for their purchase decision.
+P: Wishlist. A list of products that piqued the interest of the customer, which may or may not be added in an incoming or existing order in the cart.
+P: OVERALL DESCRIPTION
+P: System Overview
+P: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris blandit arcu nisl, eget accumsan lorem euismod iaculis. Cras vestibulum turpis sed dolor lacinia, a accumsan ante tristique. Nam imperdiet justo sed nibh venenatis porttitor. Mauris feugiat risus quis urna condimentum lobortis. 
+P: System Features
+P: Account Profile Control. Customers and employees can edit their account information, settings, and login credentials.
+P: Account Login and Registration. Customers and employees can log in to their accounts. Also, customers who do not yet have an account can sign up.
+P: Account Notification. Customers and employees will get notifications specific to their account, including real-time progress on active transactions.
+P: Appointment Booking. Customers can book in-store appointments for order claiming or visits and must reschedule upon unavailability.
+P: Cart and Wishlist. Customers can fill their cart and wishlist for easier recall and distinction between orders to check out and products they like.
+P: Inventory Management. Employees can manually update product inventory based on stock availability and automated stock update on order checkout.
+P: Order Checkout. Customers must settle payment, select a claiming modality, and settle additional details per modality to check out the order.
+P: Order Tracking. Customers and employees can track real-time order status, while employees can approve customer-requested cancels and returns.
+P: Payment Gateway. The total order amount and other additional fees must first be settled through online payment gateways to complete order checkout.
+P: Point–of–Sale Interface. Employees can facilitate walk-in orders by browsing through the catalog and filling out payment details.
+P: Product Catalog. Customers and, in POS, employees can view and categorize currently offered products and their latest specific details.
+P: Product Reviews. Customers can rate and leave employee-censored reviews about a certain purchased product to boost its discoverability.
+P: QR-code Verification. Each active order will have a unique QR code upon checkout until claiming for easier verification.
+P: Schedule Calendar. Employees can view in calendar format all previous and active appointments, while customers will see only theirs.
+P: Staff Scheduling. Employees will automatically be prescheduled as available, but they can change availability on or before the actual date.
+P: Status Dashboard. Employees can view all previous and latest statuses on daily sales, bookings, employee attendance, and order fulfillment.
+P: User Management. Employees can monitor, recover, or ban accounts and register or delete employee accounts.
+P: User Roles
+P: Customer. Registers and controls an account, browses through the catalog, customizes wishlist and cart, and checks out and tracks status orders.
+P: Employees.
+P: Staff. Controls an account, browses the catalog and appointments, and views active order queue.
+P: Admin. Controls an account, facilitates walk-in orders, customizes the catalog, and manages appointments and active orders.
+P: Super Admin. Manages customer and employee accounts, registers and deletes employee accounts, and has all other employee access.
+P: Operating Environment
+P: Web Browser. Each active order will have a unique QR code upon checkout until claiming for easier verification.
+P: Internet Connection Employees can view in calendar format all previous and active appointments, while customers will see only theirs.
+P: Server and Database. Employees will automatically be prescheduled as available, but they can change availability on or before the actual date .
+P: Assumptions
+P: Customers and employees have internet access. Each active order will have a unique QR code upon checkout until claiming for easier verification.
+P: Customers and employees know basic web navigation. Employees can view in calendar format all previous and active appointments, while customers will see only theirs.
+P: Customers and employees will transact locally. Each active order will have a unique QR code upon checkout until claiming for easier verification.
+P: Customers have an active phone number. Employees will automatically be prescheduled as available, but they can change availability on or before the actual date.
+P: Employees have an active university email address. Employees will automatically be prescheduled as available, but they can change availability on or before the actual date.
+P: FUNCTIONAL REQUIREMENTS
+P: Account Profile Control.
+P: Description
+P: Customers and employees can edit their account information, settings, and login credentials.
+P: Stimulus/Response Sequences
+P: Customization:
+P: The user must fill out the new data for specific account information in their profile form. 
+P: The system will then validate, hash, and save all new inputs in the database.
+P: Functional Requirements
+P: REQ-APC-01: Sensitive account information like login credentials can not be changed within thirty days of the most recent change.
+P: REQ-APC-02: The profile form must not refresh, nor must the form input with incorrect data be emptied after an incorrect input is detected.
+P: Account Login and Registration.
+P: Description
+P: Customers and employees can log in to their accounts. Also, customers who do not yet have an account can sign up.
+P: Stimulus/Response Sequences
+P: Registration:
+P: A customer without an already existing account fills out the registration form with his nickname, phone number, and password and, optionally, his email address, preferably the university-provided one, and default delivery address.
+P: A super admin employee fills out the registration form for the employee without an existing account with the latter's surname, given name, nickname, university email address, phone number, and currently-enrolled college or institute, program, year, and bloc.
+P: The system will then validate and hash all inputs and create the account, and the customer will then be redirected to the product catalog, while the employee will be redirected to the dashboard.
+P: The newly registered employee must, at their earliest convenience, log in to their account and change the password automatically provided by the system within twenty-four hours upon account registration.
+P: Login:
+P: A customer inputs his phone number while an employee inputs his university email address; both must then input their password.
+P: The system will then validate and hash all inputs, find the account, and, if found, compare the login credentials; the customer will then be redirected to the product catalog, while the employee will be redirected to the dashboard.
+P: Logout:
+P: The currently logged-in customer or employee chooses the logout option and chooses "Yes" in the logout confirmation popup.
+P: The system ends the session of the currently logged-in user then returns to the login page.
+P: Functional Requirements
+P: REQ-ALR-01: Login must be required every time after a logout, the browser reopens or refreshes, or the device awakens or restarts.
+P: REQ-ALR-02: The login or registration form must not refresh, nor must the form input with incorrect data be emptied after an incorrect input is detected.
+P: REQ-ALR-03: An error message must be shown only when necessary, particularly during input validation, and the message must be specific to the correct input error at hand.
+P: Account Notification.
+P: Description
+P: Customers and employees will get notifications specific to their account, including real-time progress on active transactions.
+P: Stimulus/Response Sequences
+P: Automated Notifications:
+P: The user must automatically receive notifications about every change in transaction statuses like active orders or pending appointments as soon as they occur.
+P: Manual Notifications:
+P: The user must automatically receive notifications about every change in transaction statuses like active orders or pending appointments as soon as they occur.
+P: Functional Requirements
+P: REQ-AN-01: A notification remains unread upon reaching the inbox of the user until he manually clicks that specific notification.
+P: REQ-AN-02: The look of an unread notification must be similar yet distinguishable from notifications already read, and the notification icon must change when there is at least one unread notification.
+P: REQ-AN-03: There must be an automated follow-up notification for every priority notification that must be read but remains unread.
+P: Appointment Booking.
+P: Description
+P: Customers can book in-store appointments for order claiming or visits and must reschedule upon unavailability.
+P: Stimulus/Response Sequences
+P: Timeslot Selection:
+P: The customer must select among the available timeslots in the schedule calendar.
+P: The customer must fill out all necessary details in the appointment form.
+P: The system will then validate and hash all inputs and create the appointment, and the customer will then be redirected to the updated schedule calendar.
+P: Rescheduling Mechanisms:
+P: The customer must automatically receive a priority notification as soon as the timeslot he booked gets cancelled by an admin or super admin employee or the required number of employees who signified presence in their booked timeslot falls short.
+P: The customer must be redirected to the updated schedule calendar upon clicking the notification.
+P: Functional Requirements
+P: REQ-AB-01: Each timeslot for an "order claiming"-type appointment must be exactly thirty minutes long, and the same timeslot can be booked by at most ten customers.
+P: REQ-AB-02: Each timeslot for a "visit"-type appointment must be exactly ten minutes long and can be booked by at most one customer.
+P: REQ-AB-03: In a certain period of time, visit appointments therein must be made unavailable if the number of in-store employees is lower than two, while order-claiming appointments must be made unavailable if there are not in-store employees.
+P: REQ-AB-04: The reason for the unavailability of an already-booked timeslot must be detailed in the notification.
+P: Cart and Wishlist.
+P: Description
+P: Customers can fill their cart and wishlist for easier recall and distinction between orders to check out and products they like.
+P: Stimulus/Response Sequences
+P: Customizing the Wishlist:
+P: A customer on the details page of a certain product must select the wishlist option to add it thereto.
+P: A certain product remains on the wishlist until manually removed by the customer.
+P: Customizing the Cart
+P: A customer on the details page of a certain product must fill out or modify quantities and details to be ordered and then choose the cart option to add it thereto.
+P: A certain product remains on the cart until it is manually removed by the customer, checked out as an order, or no longer offered.
+P: A customer may from time to time modify the quantities and details of products already added in the cart.
+P: Functional Requirements
+P: REQ-CW-01: A product in the wishlist will not disappear from it when it is no longer offered, but it cannot be added to the cart.
+P: REQ-CW-02: A product in the cart will not disappear from it when stocks are no longer available, but it cannot be checked out.
+P: REQ-CW-03: A product will not be removed from the wishlist if added to or removed from the cart, and it will not be removed from the cart if added to or removed from the wishlist.
+P: Inventory Management.
+P: Description
+P: Employees can manually update product inventory based on stock availability and automated stock update on order checkout.
+P: Stimulus/Response Sequences
+P: Adding a New Product:
+P: The admin or super admin employee must fill out the product registration form with its unique name, description, base price, category, and product photo and optionally list first variations and second variations, like color and size, respectively, and each variation's name, markup price, photo, and description.
+P: The system will then validate and hash all inputs and create the account, and the employee will then be redirected to the product list.
+P: Updating Product Details:
+P: When the admin or super admin employee is in the product list, he must choose the unlist option to remove a product from the catalog of currently offered products viewable to customers.
+P: When the admin or super admin employee is in the product list, he must choose the sell option to add or bring back a product to the catalog of currently offered products viewable to customers.
+P: When the admin or super admin employee is in the product list, he must click on the product to modify certain product details; the system will then validate, hash, and save all new inputs in the database.
+P: Every time a certain product is checked out, its currently available quantity must decrease.
+P: Functional Requirements
+P: REQ-IM-01: The product registration or detail form must not refresh, nor must the form input with incorrect data be emptied after an incorrect input is detected.
+P: REQ-IM-02: An error message must be shown only when necessary, particularly during input validation, and the message must be specific to the correct input error at hand.
+P: REQ-IM-03: Admin and super admin employees must get a priority notification every time the quantity of a certain product variation falls behind a preconfigured number.
+P: Order Checkout.
+P: Description
+P: Customers must settle payment, select a claiming modality, and settle additional details per modality to check out the order.
+P: Stimulus/Response Sequences
+P: Order Overview:
+P: The customer can see an organized overview of the product variations, their quantities and details, and the total amount due for the order.
+P: Modality Selection:
+P: The customer must choose the pickup option if the order will be claimed in the physical store and the delivery option if the order will be claimed at his delivery address.
+P: If the pickup option is chosen, the customer must be redirected to the updated schedule calendar to book an appointment, then return to the updated order checkout page with the in-store appointment details now included in the order overview.
+P: If the delivery option is selected, the customer will choose between his default delivery address and, if it is different from the default one, the delivery address from his last order delivery, but if he prefers a different address, he must input it in the space provided; he must then choose a priority option if the delivery must arrive within at most 24 hours but with a higher delivery fee; the standard option for the normal delivery fee and time; and the saver option for a lower delivery fee but with a slower delivery time.
+P: Checkout Completion:
+P: Upon choosing the modality and completing modality-related details, the customer must then proceed to pay the updated amount due, and only after that will the order become active and move out from the cart; the customer will then be redirected to the updated cart.
+P: Functional Requirements
+P: REQ-OC-01: The customer can check out only certain product variations or all items in the cart at once.
+P: REQ-OC-02: An order checkout that failed to be saved will bring back the cart to the original state before the checkout was started.
+P: Order Tracking.
+P: Description
+P: Customers and employees can track real-time order status, while employees can approve customer-requested cancels and returns.
+P: Stimulus/Response Sequences
+P: Completing the “To Process” Status:
+P: The number of in-store stocks for every product variation in an order must already be available from the manufacturer to change its status from "to process" to "to claim" if it is to be picked up in store or to "to receive" if it is to be delivered.
+P: Additionally, if the order is to be delivered, the order must already be handed over to the freight forwarder or courier before the status changes to "to receive."
+P: Completing the “To Claim” and “To Receive” Statuses:
+P: The order status will change from "to claim" to "claimed" if the customer claims it in the physical store and scans his copy of the order's QR code and the codes match; otherwise, it changes to "unclaimed."
+P: The order status will change from "to receive" to "claimed" if he already received the order from the freight forwarder and scans the order QR code attached in the parcel and the codes match; otherwise, it changes to “unclaimed”.
+P: Order Cancellation:
+P: The customer can request cancellation of an order that is still in "to process," "to claim," or "to receive" status, but it must be approved first by an admin or super admin employee, and only by then will the status change to "cancelled."
+P: Order Return:
+P: The customer can request to return an order that is already in "claimed" status in the same process during order checkout with two modality options.
+P: An admin or super admin employee must manually change the order status from "claimed" to "returned" immediately after receiving the returned order.
+P: If the returned order will be refunded instead of being replaced with a fixed or new one, the admin or super admin employee in charge must manually change the order status to "refunded" once the return of payment has been completed; otherwise, it remains "returned" or returns to "claimed" status.
+P: Functional Requirements
+P: REQ-OT-01: All order status changes are regular notifications except "to claim" or "to receive" status.
+P: Payment Gateway.
+P: Description
+P: The total order amount and other additional fees must first be settled through online payment gateways to complete order checkout.
+P: Stimulus/Response Sequences
+P: Action/Feature 1:
+P: Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+P: Action/Feature 2:
+P: Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+P: Action/Feature 3:
+P: Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+P: Functional Requirements
+P: REQ-APC-01: Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+P: Point–of–Sale Interface.
+P: Description
+P: Employees can facilitate walk-in orders by browsing through the catalog and filling out payment details.
+P: Stimulus/Response Sequences
+P: Cart Customization:
+P: An admin or super admin employee browses the point-of-sale product catalog and manually adds product variations and their respective details in the point-of-sale cart.
+P: Order Checkout:
+P: Once no product variations are added to, modified in, or removed from the point-of-sale cart, the employee in charge sees an order overview and the total amount due.
+P: Once no product variations are added to, modified in, or removed from the point-of-sale cart, the employee in charge sees an order overview and the total amount due.
+P: Functional Requirements
+P: REQ-POS-01: All walk-in customers are listed under "Walk-in" with a phone number "0000000000."
+P: REQ-POS-02: Customers who ordered via walk-in cannot request a return online unless they book a "visit" appointment where they can personally do so.
+P: Product Catalog.
+P: Description
+P: Customers and, in POS, employees can view and categorize currently offered products and their latest specific details.
+P: Stimulus/Response Sequences
+P: Individual Product Details:
+P: The customer, or the employee in the point-of-sale module, can check the specific details of every currently offered product by clicking its catalog card.
+P: Catalog Filtering:
+P: The customer can select a specific product category to filter the products showing in the catalog.
+P: Functional Requirements
+P: REQ-PC-01: The product catalog is displayed in grid format, with each product having its own catalog card, showing its product name, category, and base price.
+P: Product Reviews.
+P: Description
+P: Customers can rate and leave employee-censored reviews about a certain purchased product to boost its discoverability.
+P: Stimulus/Response Sequences
+P: Product Rating:
+P: A customer on the details page of a certain product must select the rate option, and then a five-star scale will pop up where he will rate the product.
+P: The system will then validate and save the rating on the product’s catalog card and details page.
+P: Product Feedback:
+P: A customer on the details page of a certain product can input a message in a provided space but will be reviewed first by an admin or super admin employee before adding it to existing feedback about the product.
+P: Functional Requirements
+P: REQ-APC-01: The system will check if a customer who will be leaving feedback or a rating has ever ordered the product, without which the rating and feedback options will be disabled for that customer.
+P: REQ-APC-2: A customer may submit only one rating and one feedback entry per product but may edit either so long as the feedback has not yet been approved.
+P: QR-code Verification.
+P: Description
+P: Each active order will have a unique QR code upon checkout until claiming for easier verification.
+P: Stimulus/Response Sequences
+P: QR Code Generation
+P: Upon successful order checkout, the system must automatically generate a unique QR code tied exclusively to that order
+P: The QR code must be accessible to the customer through their order tracking page and must remain active until the order status changes to “claimed”, “cancelled”, or “returned”
+P: In-Store QR Code Scanning:
+P: Upon the customer’s arrival at the physical store for a scheduled claiming, a staff, admin, or superadmin employee must scan the customer’s QR code
+P: The system will then validate the scanned code against the record. If the codes match and the appointment is valid, the order status will change from “to claim” to “claimed” 
+P: Delivery QR Code Scanning:
+P: Upon delivery of the parcel to the customer, the QR code attached to the parcel must be scanned by the customer.
+P: The system will then validate the scanned code against the active order record. If the codes match, the order status order status will change from “to receive” to “claimed”.
+P: Functional Requirements
+P: REQ-APC-01: Each QR code must be unique per order and must not be reusable across different orders or after the order has reached the following status(“claimed”, “cancelled”, “returned”)
+P: REQ-APC-02: Only staff,admin, and superadmin employees may use the in-store QR code scanning interface, customers may only scan the parcel QR code on their end for delivery orders.
+P: REQ-APC-03: The system must immediately update the order status and trigger the corresponding notification to both the customer and the store-side upon successful/failed QR code scan. 
+P: Schedule Calendar.
+P: Description
+P: Employees can view in calendar format all previous and active appointments, while customers will see only theirs.
+P: Stimulus/Response Sequences
+P: Role-Based Calendar 
+P: The system must dynamically filter the schedule calendar interface depending on the authenticated user's role.
+P: For an admin or super admin employee, the calendar must render a master view displaying all previous, current, and active appointments across both "order claiming" and "visit" types. For a customer, the calendar must hide all other users' details, displaying only their own active and historical appointments, while rendering external slots purely as "available" or "unavailable."
+P: Timeslot Status Changes
+P: The schedule calendar must automatically update the visibility and availability status of its timeslots based on real-time backend validations. 
+P: An "order claiming" timeslot must automatically change its status to "unavailable" on the calendar the moment its concurrent bookings reach the maximum limit of ten customers. A "visit" timeslot must immediately change its status to "unavailable" to customers as soon as a single user books it. 
+P: System-Enforced  Unavailability 
+P: The calendar must continuously monitor employee attendance metrics to alter timeslot states dynamically.
+P: If the number of active in-store employees for a specific block drops below two, the calendar must automatically switch all "visit"-type slots in that period to "unavailable." If the number of in-store employees drops to zero, the calendar must automatically switch both "visit" and "order claiming" slots to "unavailable," triggering the rescheduling mechanism notifications for any customers who had already booked within those blocks.
+P: Functional Requirements
+P: REQ-SC-01: The schedule calendar must support two distinct visual layouts or filtering toggles: a master view for admin/super admin employees to track total shop traffic, and a restricted view for customers to isolate their personal bookings.
+P: REQ-SC-02: The calendar interface must visually partition and display timeslots strictly according to their type rules: "order claiming" blocks must render in 30-minute increments, and "visit" blocks must render in 10-minute increments. 
+P: REQ-SC-03: The system must prevent the schedule calendar from accepting any customer inputs or forms for a timeslot that has been flagged as "unavailable" due to capacity limits or employee shortages. 
+P: REQ-SC-04: When an admin or super admin employee manually cancels a block on the master calendar, or when the system automates a cancellation due to an employee shortfall, the calendar must immediately update its state across all active customer views to prevent further booking.
+P: Staff Scheduling.
+P: Description
+P: Employees will automatically be prescheduled as available, but they can change availability on or before the actual date.
+P: Stimulus/Response Sequences
+P: Automated Prescheduling:
+P: At the start of each academic period, the system automatically marks all active employees as "Available" across all standard operating hours of the merchandise shop.
+P: This automated preschedule acts as the baseline roster, allowing the Schedule Calendar to open up all maximum "order claiming" and "visit" timeslots to customers by default.
+P: Setting Unavailability:
+P: An employee can log into their dashboard on or before the actual operational date to input their class schedules or personal conflicts by marking specific recurring or one-off time blocks as "Unavailable."
+P: The system instantly subtracts that employee from the active headcount for those specific hours. If the remaining available employee count drops below the store's threshold, the system triggers a warning to the admin.
+P: Same-Day Emergency Unavailability Changes:
+P: If an employee experiences a sudden academic conflict (e.g., an unexpected exam or extended class) on the actual day of their shift, they can change their status to "Unavailable" via their mobile device or dashboard.
+P: The system immediately checks the remaining in-store headcount for that hour. If this change causes the headcount to fall short, the system places the affected calendar slots into a "Pending Replacement" state and alerts the super admins to find a substitute.
+P: Functional Requirements
+P: REQ-SS-01: The system must automatically initialize all active staff accounts to an "Available" state across the shop's full operating calendar unless an explicit exception is logged by the user or an admin.
+P: REQ-SS-02: The system must allow employees to modify their availability status up until the exact start time of the scheduled block, after which the slot is locked and any changes require a super admin override. 
+P: REQ-SS-03: The system must automatically cross-reference all employee availability changes with active customer bookings. If an employee updates their status to "Unavailable" and causes the active staff count to drop below two for visits or zero for claims, the system must restrict further customer bookings for that block. 
+P: Status Dashboard.
+P: Description
+P: Employees can view all previous and latest statuses on daily sales, bookings, employee attendance, and order fulfillment.
+P: Stimulus/Response Sequences
+P: Viewing Daily Sales:
+P: An employee navigates to the status dashboard to view a summary of all completed transactions for the current day, including total revenue, number of orders fulfilled, and top-selling products.
+P: The system aggregates and displays all relevant sales data in real time, broken down by order type (online or walk-in) and payment method.  
+P: Viewing Bookings and Appointments: 
+P: An employee navigates to the status dashboard to view a summary of all active, completed, and cancelled appointments for the current day, including the number of "order claiming" and "visit" slots occupied and remaining.
+P: The system retrieves and displays appointment data in real time, reflecting any changes made through the schedule calendar.
+P: Viewing Employee Attendance:
+P: An employee navigates to the status dashboard to view the current headcount and attendance status of all employees scheduled for the day, including those marked as "Available," "Unavailable," or "Pending Replacement."
+P: The system cross-references staff scheduling data and displays the real-time in-store headcount per time block.
+P: Viewing Order Fulfillment:
+P: An employee navigates to the status dashboard to view a breakdown of all active and completed orders by their current status, namely "To Process," "To Claim," "To Receive," "Claimed," "Cancelled," "Returned," and "Refunded."
+P: The system retrieves and displays the order fulfillment pipeline in real time, allowing employees to identify bottlenecks or pending actions.
+P: Functional Requirements
+P: REQ-SD-01: The status dashboard must be accessible only to staff, admin, and super admin employees; customers must not have access to any dashboard data.
+P: REQ-SD-02: All metrics displayed on the status dashboard must reflect real-time data and automatically refresh without requiring a manual page reload.
+P: REQ-SD-03: The status dashboard must display data filterable by date range, allowing employees to view historical summaries beyond the current day.
+P: REQ-SD-04: Sales and order fulfillment data on the dashboard must be consistent with and traceable to the actual transaction records in the system.
+P: User Management.
+P: Description
+P: Employees can monitor, recover, or ban accounts and register or delete employee accounts.
+P: Stimulus/Response Sequences
+P: Monitoring Accounts:
+P: A super admin employee navigates to the user management page to view a list of all registered customer and employee accounts, along with their account status, registration date, and recent activity.
+P: The system retrieves and displays all account records from the database, with options to search and filter by account type, status, or name.
+P: Recovering or Banning an Account:
+P: A super admin employee selects a specific customer or employee account from the user management list and chooses either the "Recover" option to restore a previously banned account or the "Ban" option to restrict access.
+P: Upon choosing "Ban," the super admin must input a reason for the action, after which the system logs the reason, updates the account status, and immediately terminates any active session of the affected user.
+P: Upon choosing "Recover," the system restores the account to active status and notifies the affected user through their registered contact.
+P: Registering or Deleting an Employee Account:
+P: A super admin employee fills out the employee registration form as described in REQ 3.2 to create a new employee account, or selects an existing employee account from the list and chooses the "Delete" option to permanently remove it.
+P: Upon deletion, the system must prompt the super admin with a confirmation dialog before permanently removing the account and all its associated data from the system.
+P: Functional Requirements
+P: REQ-UM-01: Only super admin employees may register, delete, ban, or recover employee accounts; admin and staff employees may only view the account list.
+P: REQ-UM-02: A banned account must immediately lose access to the system upon the ban taking effect, and any active session must be terminated without prior warning to the banned user.
+P: REQ-UM-03: Permanent deletion of an employee account must require a confirmation step and must not be reversible; all data associated with the deleted account must be purged from the system.
+P: REQ-UM-04: A log of all user management actions, including bans, recoveries, registrations, and deletions, must be recorded in the system with the responsible super admin, timestamp, and reason where applicable.
+--- TABLE START ---
+API | DESCRIPTION and/orFUNCTIONS | IN-CHARGE | STATUS
+api_access | Flagging irregularitiesLogging actions | John Marvin Gumapac Marfil | To do
+api_accounts | Changing account typeDeleting accountsDisabling accountsDisplaying accountsRecovering accountsSearching accountsSorting accountsUpdating account details | John Marvin Gumapac Marfil | To do
+api_appoint | Closing appointmentsCreating appointmentsDisplaying appointmentsSearching appointmentsSorting appointmentsUpdating appointment details | John Marvin Gumapac Marfil | To do
+api_auth | Backup credentialsCustomer loginCustomer signupEmployee loginEmployee signupRecovering credentialsUpdating credentials | John Marvin Gumapac Marfil | Doing
+api_cart | Adding ordersDisplaying ordersSearching ordersSorting ordersRemoving orders | Austin Fenis | To do
+api_checkout | Determining dispatch detailsIntegrating payment | Austin Fenis | To do
+api_notif | Creating notificationsDistributing notificationsUpdating notification status | Person | To do
+api_orders | Adding products to orderUpdating order detailsRemoving products from order | Austin Fenis | To do
+api_pos | Adding products to orderChecking out orderUpdating order detailsRemoving products from order | Austin Fenis | To do
+api_products | Adding product to catalog/inventoryDisplaying orders from catalog/inventoryFiltering the catalog/inventoryRemoving product from catalog/inventorySearching productsSorting productsUpdating product detailsViewing product details | John Marvin Gumapac Marfil | To do
+api_reviews | Creating product reviewsDeleting product reviewsDisplaying product reviewsModerating product reviewsScoring product ratingsUpdating product reviews | John Marvin Gumapac Marfil | To do
+api_settings | ??? | John Marvin Gumapac Marfil | To do
+api_tracking | Creating fulfillment trackUpdating fulfillment statusClosing fulfillment track | Austin Fenis | To do
+api_wishlist | Adding wishlist itemsAddiing wishlist items to ordersDisplaying products from wishlistUpdating wishlist itemsRemoving wishlist items | John Marvin Gumapac Marfil | To do
+--- TABLE END ---
