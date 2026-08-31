@@ -15,7 +15,7 @@ function SidebarLayout({ sidebar, bottomNav, children, className = '' }) {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col w-full">
         <div
-          className={`app-container relative flex-1 w-full bg-[#F8F9FA] md:max-w-7xl md:mx-auto md:px-8 md:py-8 ${className}`}
+          className={`app-container relative flex-1 w-full bg-[#F8F9FA] md:max-w-[1600px] md:mx-auto md:px-8 lg:px-12 md:py-8 ${className}`}
         >
           {children}
         </div>

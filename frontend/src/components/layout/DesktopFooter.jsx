@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 function DesktopFooter() {
   return (
     <footer className="hidden md:block bg-white border-t border-gray-200 mt-auto">
-      <div className="max-w-7xl mx-auto px-6 py-16">
+      <div className="max-w-[1600px] mx-auto px-8 lg:px-12 py-16">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
           {/* Logo & Description */}
           <div className="space-y-4">

@@ -8,15 +8,18 @@ const DEFAULT_USER = {
   firstName: 'Juan',
   lastName: 'Dela Cruz',
   fullName: 'Juan Dela Cruz',
-  email: 'jdc2026-1234-5678@bicol-u.edu.ph',
-  phone: '09123456789',
+  email: 'jdcruz@student.u.edu.ph',
+  phone: '+63 912 345 6789',
   username: 'juandc',
-  yearLevel: '1st Year Student',
+  studentId: '2020-1234-5678',
+  yearLevel: '1st Year',
   campus: 'Main Campus',
   college: 'College of Engineering',
   course: 'Mechanical Engineering',
+  bio: '1st Year Student at the College of Engineering, taking up Mechanical Engineering.',
   role: 'Student',
   avatar: null,
+  preferredContact: 'Email',
 }
 
 const DEFAULT_ADDRESSES = [
@@ -85,9 +88,11 @@ export function AuthProvider({ children }) {
     }
 
     // Fallback local mock login if backend API server is offline
+    const isEmail = (phone || '').includes('@')
     const user = {
       ...DEFAULT_USER,
-      phone: phone,
+      email: isEmail ? phone : DEFAULT_USER.email,
+      phone: isEmail ? DEFAULT_USER.phone : phone,
     }
     setCurrentUser(user)
     return { user, error: null }
