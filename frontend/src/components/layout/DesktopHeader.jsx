@@ -18,6 +18,15 @@ function DesktopHeader() {
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0)
   const isHomePage = location.pathname === '/home' || location.pathname === '/'
+  const isWishlistPage = location.pathname.startsWith('/wishlist')
+  const isCartPage = location.pathname.startsWith('/cart') || location.pathname.startsWith('/checkout')
+  const isNotificationsPage = location.pathname.startsWith('/notifications')
+  const isProfilePage =
+    location.pathname.startsWith('/profile') ||
+    location.pathname.startsWith('/orders') ||
+    location.pathname.startsWith('/account') ||
+    location.pathname.startsWith('/settings') ||
+    location.pathname.startsWith('/security')
 
   useEffect(() => {
     const q = searchParams.get('search')
@@ -39,7 +48,7 @@ function DesktopHeader() {
 
   return (
     <header className="hidden md:block w-full bg-white border-b border-gray-100 sticky top-0 z-40">
-      <div className="w-full max-w-7xl mx-auto px-8 h-20 flex items-center justify-between gap-12">
+      <div className="w-full max-w-[1600px] mx-auto px-8 lg:px-12 h-20 flex items-center justify-between gap-12">
         {/* Logo Left */}
         <Link to="/home" className="flex items-center shrink-0">
           <img src={logo} alt="Tindahan ni Isko" className="h-10 object-contain hover:opacity-90 transition-opacity" />
@@ -59,54 +68,79 @@ function DesktopHeader() {
 
         {/* Navigation Icons Right */}
         <div className="flex items-center gap-6 text-gray-700 shrink-0">
-          {/* Home Icon Button (Shown when not on Home Page) */}
-          {!isHomePage && (
-            <Link
-              to="/home"
-              className="p-2.5 rounded-full hover:bg-gray-100 hover:text-brand-orange transition-all relative"
-              title="Home"
-            >
-              <img src={homeIcon} alt="Home" className="w-5.5 h-5.5" />
-            </Link>
-          )}
+          {/* Home Icon Button (Persistent on top bar) */}
+          <Link
+            to="/home"
+            className="p-2.5 rounded-full hover:bg-gray-100 transition-all relative"
+            title="Home"
+          >
+            <img
+              src={homeIcon}
+              alt="Home"
+              className="w-5.5 h-5.5 transition-all"
+              style={{ filter: isHomePage ? 'brightness(0)' : 'none' }}
+            />
+          </Link>
 
           {/* Wishlist */}
           <Link
             to="/wishlist"
-            className="p-2.5 rounded-full hover:bg-gray-100 hover:text-brand-orange transition-all relative"
+            className="p-2.5 rounded-full hover:bg-gray-100 transition-all relative"
             title="Wishlist"
           >
-            <img src={wishlistIcon} alt="Wishlist" className="w-5.5 h-5.5" />
+            <img
+              src={wishlistIcon}
+              alt="Wishlist"
+              className="w-5.5 h-5.5 transition-all"
+              style={{ filter: isWishlistPage ? 'brightness(0)' : 'none' }}
+            />
           </Link>
 
           {/* Cart */}
           <Link
             to="/cart"
-            className="p-2.5 rounded-full hover:bg-gray-100 hover:text-brand-orange transition-all relative"
+            className="p-2.5 rounded-full hover:bg-gray-100 transition-all relative"
             title="Cart"
           >
-            <img src={cartIcon} alt="Cart" className="w-5.5 h-5.5" />
-            <span className="absolute top-1 right-1 bg-brand-orange text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
-              {cartCount}
-            </span>
+            <img
+              src={cartIcon}
+              alt="Cart"
+              className="w-5.5 h-5.5 transition-all"
+              style={{ filter: isCartPage ? 'brightness(0)' : 'none' }}
+            />
+            {cartCount > 0 && (
+              <span className="absolute top-1 right-1 bg-brand-orange text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
+                {cartCount}
+              </span>
+            )}
           </Link>
 
           {/* Notifications */}
           <Link
             to="/notifications"
-            className="p-2.5 rounded-full hover:bg-gray-100 hover:text-brand-orange transition-all relative"
+            className="p-2.5 rounded-full hover:bg-gray-100 transition-all relative"
             title="Notifications"
           >
-            <img src={notificationIcon} alt="Notifications" className="w-5.5 h-5.5" />
+            <img
+              src={notificationIcon}
+              alt="Notifications"
+              className="w-5.5 h-5.5 transition-all"
+              style={{ filter: isNotificationsPage ? 'brightness(0)' : 'none' }}
+            />
           </Link>
 
           {/* Profile */}
           <Link
             to="/profile"
-            className="p-2.5 rounded-full hover:bg-gray-100 hover:text-brand-orange transition-all relative"
+            className="p-2.5 rounded-full hover:bg-gray-100 transition-all relative"
             title="Profile"
           >
-            <img src={profileIcon} alt="Profile" className="w-5.5 h-5.5" />
+            <img
+              src={profileIcon}
+              alt="Profile"
+              className="w-5.5 h-5.5 transition-all"
+              style={{ filter: isProfilePage ? 'brightness(0)' : 'none' }}
+            />
           </Link>
         </div>
       </div>
