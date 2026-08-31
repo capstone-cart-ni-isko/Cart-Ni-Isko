@@ -4,6 +4,8 @@ import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import ordersData from '../data/orders.json'
+import productsData from '../data/products.json'
+import { getImageUrl } from '../utils/imageUtils.js'
 
 import { PackageIcon, ShirtIcon } from '../components/ui/Icons.jsx'
 
@@ -69,26 +71,39 @@ function OrderDetail() {
           {/* Product Card */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Item Ordered</h3>
-            <div className="flex gap-4">
-              <div className="w-16 h-16 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
-                <ShirtIcon className="w-7 h-7 text-brand-orange opacity-40" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="font-extrabold text-gray-900 text-sm truncate">{order.name}</h4>
-                <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400 font-bold uppercase">
-                  <span>{order.size}</span>
-                  <span>·</span>
-                  <span
-                    className="w-3 h-3 rounded-full border border-gray-200 inline-block shrink-0"
-                    style={{ backgroundColor: order.color.value }}
-                  />
-                  <span>{order.color.name}</span>
-                  <span>·</span>
-                  <span>Qty: {order.qty}</span>
+            {(() => {
+              const matchedProduct = productsData.find((p) => p.id === order.productId)
+              const productImage = matchedProduct && matchedProduct.images && matchedProduct.images[0]
+                ? getImageUrl(matchedProduct.images[0])
+                : null
+
+              return (
+                <div className="flex gap-4">
+                  <div className="w-16 h-16 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 overflow-hidden border border-gray-100">
+                    {productImage ? (
+                      <img src={productImage} alt={order.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <ShirtIcon className="w-7 h-7 text-brand-orange opacity-40" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-extrabold text-gray-900 text-sm truncate">{order.name}</h4>
+                    <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400 font-bold uppercase">
+                      <span>{order.size}</span>
+                      <span>·</span>
+                      <span
+                        className="w-3 h-3 rounded-full border border-gray-200 inline-block shrink-0"
+                        style={{ backgroundColor: order.color.value }}
+                      />
+                      <span>{order.color.name}</span>
+                      <span>·</span>
+                      <span>Qty: {order.qty}</span>
+                    </div>
+                    <p className="text-sm font-black text-brand-orange mt-2">{formatPrice(order.price)} / item</p>
+                  </div>
                 </div>
-                <p className="text-sm font-black text-brand-orange mt-2">{formatPrice(order.price)} / item</p>
-              </div>
-            </div>
+              )
+            })()}
           </div>
 
           {/* Pricing Breakdown */}

@@ -70,8 +70,8 @@ function ProductDetail() {
   }
 
   return (
-    <AppShell showNav={true}>
-      <div className="pb-28 md:pb-12 animate-fade-in">
+    <AppShell showBottomNav={false}>
+      <div className="px-4 pb-28 md:px-0 md:pb-12 animate-fade-in">
         {/* Desktop Breadcrumbs */}
         <div className="hidden md:flex items-center gap-2 text-xs font-semibold text-gray-400 mb-6">
           <Link to="/home" className="hover:text-brand-orange">Home</Link>
