@@ -430,7 +430,7 @@ function SignUp() {
 
                   <div>
                     <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
-                      Username / Student ID
+                      Username
                     </label>
                     <input
                       type="text"
