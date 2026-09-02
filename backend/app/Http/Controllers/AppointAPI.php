@@ -17,7 +17,7 @@
         */
         public function closeAppointment(Request $json)
         {
-            $validator = (new InputValidatorAPI()->closeAppointment($json));
+            $validator = (new InputValidatorAPI())->closeAppointment($json);
             if ($validator) return $validator;
 
             try {
@@ -59,7 +59,7 @@
         */
         public function createAppointment(Request $json)
         {
-            $validator = (new InputValidatorAPI()->createAppointment($json));
+            $validator = (new InputValidatorAPI())->createAppointment($json);
             if ($validator) return $validator;
 
             try {
@@ -213,7 +213,7 @@
         */
         public function updateAppointmentDetails(Request $json)
         {
-            $validator = (new InputValidatorAPI()->updateAppointmentDetails($json));
+            $validator = (new InputValidatorAPI())->updateAppointmentDetails($json);
             if ($validator) return $validator;
 
             try {

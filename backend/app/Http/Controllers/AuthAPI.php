@@ -30,7 +30,7 @@
             */
 
             // Validate signup input
-            $validator = (new InputValidatorAPI()->customerSignup($json));
+            $validator = (new InputValidatorAPI())->customerSignup($json);      
             if ($validator) return $validator;
 
             // Get user phone and password
@@ -97,7 +97,7 @@
             */
 
             // Validate login input
-            $validator = (new InputValidatorAPI()->customerLogin($json));
+            $validator = (new InputValidatorAPI())->customerLogin($json);
             if ($validator) return $validator;
 
             // Get user phone and password
@@ -156,7 +156,7 @@
             */
             
             // Validate signup input
-            $validator = (new InputValidatorAPI()->employeeSignup($json));
+            $validator = (new InputValidatorAPI())->employeeSignup($json);
             if ($validator) return $validator;
 
             // Get user email and password
@@ -224,7 +224,7 @@
             */
 
             // Validate login input
-            $validator = (new InputValidatorAPI()->employeeLogin($json));
+            $validator = (new InputValidatorAPI())->employeeLogin($json);
             if ($validator) return $validator;
             
             // Get user email and password
@@ -271,7 +271,7 @@
                 backupemail - string (opt)
             */
 
-            $validator = (new InputValidatorAPI()->backupCredentials($json));
+            $validator = (new InputValidatorAPI())->backupCredentials($json);
             if ($validator) return $validator;
 
             try {
@@ -324,7 +324,7 @@
                 account_type - string (req: customer | employee)
             */
 
-            $validator = (new InputValidatorAPI()->recoverCredentials($json));
+            $validator = (new InputValidatorAPI())->recoverCredentials($json);
             if ($validator) return $validator;
 
             try {
@@ -375,7 +375,7 @@
                 email - string (opt)
             */
 
-            $validator = (new InputValidatorAPI()->updateCredentials($json));
+            $validator = (new InputValidatorAPI())->updateCredentials($json);
             if ($validator) return $validator;
 
             try {

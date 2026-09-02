@@ -545,6 +545,25 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
+    public function addOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'cust_id' => 'required',
+        ], [
+            'cust_id.required' => 'Customer ID is required.',
+        ]);
+    }
+
+    public function removeOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+        ]);
+    }
+
+
     // ==========================================
     // UTILITY HELPER
     // ==========================================

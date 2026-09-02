@@ -18,7 +18,7 @@
         */
         public function createReview(Request $json)
         {
-            $validator = (new InputValidatorAPI()->createReview($json));
+            $validator = (new InputValidatorAPI())->createReview($json);
             if ($validator) return $validator;
 
             try {
@@ -60,7 +60,7 @@
         */
         public function deleteReview(Request $json)
         {
-            $validator = (new InputValidatorAPI()->deleteReview($json));
+            $validator = (new InputValidatorAPI())->deleteReview($json);
             if ($validator) return $validator;
 
             try {
@@ -146,7 +146,7 @@
         */
         public function moderateReview(Request $json)
         {
-            $validator = (new InputValidatorAPI()->moderateReview($json));
+            $validator = (new InputValidatorAPI())->moderateReview($json);
             if ($validator) return $validator;
 
             try {
@@ -232,7 +232,7 @@
         */
         public function updateReview(Request $json)
         {
-            $validator = (new InputValidatorAPI()->updateReview($json));
+            $validator = (new InputValidatorAPI())->updateReview($json);
             if ($validator) return $validator;
 
             try {

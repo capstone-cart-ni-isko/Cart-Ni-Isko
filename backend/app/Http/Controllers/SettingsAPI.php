@@ -50,7 +50,7 @@
         */
         public function updateSettings(Request $json)
         {
-            $validator = (new InputValidatorAPI()->updateSettings($json));
+            $validator = (new InputValidatorAPI())->updateSettings($json);
             if ($validator) return $validator;
 
             try {

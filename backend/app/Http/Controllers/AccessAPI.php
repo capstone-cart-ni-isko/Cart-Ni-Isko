@@ -20,7 +20,7 @@
         */
         public function flagIrregularity(Request $json)
         {
-            $validator = (new InputValidatorAPI()->flagIrregularity($json));
+            $validator = (new InputValidatorAPI())->flagIrregularity($json);
             if ($validator) return $validator;
 
             try {
@@ -71,7 +71,7 @@
         */
         public function logAction(Request $json)
         {
-            $validator = (new InputValidatorAPI()->logAction($json));
+            $validator = (new InputValidatorAPI())->logAction($json);
             if ($validator) return $validator;
 
             try {

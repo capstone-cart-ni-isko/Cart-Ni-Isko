@@ -18,7 +18,7 @@
         */
         public function addWishlistItem(Request $json)
         {
-            $validator = (new InputValidatorAPI()->addWishlistItem($json));
+            $validator = (new InputValidatorAPI())->addWishlistItem($json);
             if ($validator) return $validator;
 
             try {
@@ -67,7 +67,7 @@
         */
         public function addWishlistToOrder(Request $json)
         {
-            $validator = (new InputValidatorAPI()->addWishlistToOrder($json));
+            $validator = (new InputValidatorAPI())->addWishlistToOrder($json);
             if ($validator) return $validator;
 
             try {
@@ -158,7 +158,7 @@
         */
         public function removeWishlistItem(Request $json)
         {
-            $validator = (new InputValidatorAPI()->removeWishlistItem($json));
+            $validator = (new InputValidatorAPI())->removeWishlistItem($json);
             if ($validator) return $validator;
 
             try {
@@ -199,7 +199,7 @@
         */
         public function updateWishlistItem(Request $json)
         {
-            $validator = (new InputValidatorAPI()->updateWishlistItem($json));
+            $validator = (new InputValidatorAPI())->updateWishlistItem($json);
             if ($validator) return $validator;
 
             try {

@@ -19,7 +19,7 @@
         */
         public function changeAccountType(Request $json)
         {
-            $validator = (new InputValidatorAPI()->changeAccountType($json));
+            $validator = (new InputValidatorAPI())->changeAccountType($json);
             if ($validator) return $validator;
 
             try {
@@ -65,7 +65,7 @@
         */
         public function deleteAccount(Request $json)
         {
-            $validator = (new InputValidatorAPI()->deleteAccount($json));
+            $validator = (new InputValidatorAPI())->deleteAccount($json);
             if ($validator) return $validator;
 
             try {
@@ -117,7 +117,7 @@
         */
         public function disableAccount(Request $json)
         {
-            $validator = (new InputValidatorAPI()->disableAccount($json));
+            $validator = (new InputValidatorAPI())->disableAccount($json);
             if ($validator) return $validator;
 
             try {
@@ -201,7 +201,7 @@
         */
         public function recoverAccount(Request $json)
         {
-            $validator = (new InputValidatorAPI()->recoverAccount($json));
+            $validator = (new InputValidatorAPI())->recoverAccount($json);
             if ($validator) return $validator;
 
             try {
@@ -353,7 +353,7 @@
         */
         public function updateAccountDetails(Request $json)
         {
-            $validator = (new InputValidatorAPI()->updateAccountDetails($json));
+            $validator = (new InputValidatorAPI())->updateAccountDetails($json);
             if ($validator) return $validator;
 
             try {

@@ -23,7 +23,7 @@
         public function addProduct(Request $json)
         {
             // Validate product details
-            $validator = (new InputValidatorAPI()->addProduct($json));
+            $validator = (new InputValidatorAPI())->addProduct($json);
             if ($validator) return $validator;
 
             try {
@@ -311,7 +311,7 @@
         */
         public function updateProductDetails(Request $json)
         {
-            $validator = (new InputValidatorAPI()->updateProductDetails($json));
+            $validator = (new InputValidatorAPI())->updateProductDetails($json);
             if ($validator) return $validator;
 
             try {

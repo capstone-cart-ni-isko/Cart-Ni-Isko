@@ -6,10 +6,19 @@ use App\Http\Controllers\AccessAPI;
 use App\Http\Controllers\AccountsAPI;
 use App\Http\Controllers\AppointAPI;
 use App\Http\Controllers\AuthAPI;
+use App\Http\Controllers\CartAPI;
 use App\Http\Controllers\ProductsAPI;
 use App\Http\Controllers\ReviewsAPI;
 use App\Http\Controllers\SettingsAPI;
 use App\Http\Controllers\WishlistAPI;
+
+// Cart API Routes
+Route::post('/cart/add', [CartAPI::class, 'addOrder']);
+Route::get('/cart/display', [CartAPI::class, 'displayOrders']);
+Route::get('/cart/search', [CartAPI::class, 'searchOrders']);
+Route::get('/cart/sort', [CartAPI::class, 'sortOrders']);
+Route::delete('/cart/remove', [CartAPI::class, 'removeOrder']);
+
 
 // Auth API Routes
 Route::post('/auth/cust_signup', [AuthAPI::class, 'customerSignup']);
