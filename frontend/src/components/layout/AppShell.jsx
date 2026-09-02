@@ -5,7 +5,7 @@ import SidebarLayout from './SidebarLayout.jsx'
 import DesktopHeader from './DesktopHeader.jsx'
 import PwaInstallPrompt from '../ui/PwaInstallPrompt.jsx'
 
-function AppShell({ children, showNav = true, className = '' }) {
+function AppShell({ children, showNav = true, showBottomNav = true, className = '' }) {
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
 
   useEffect(() => {
@@ -35,7 +35,7 @@ function AppShell({ children, showNav = true, className = '' }) {
         <DesktopHeader />
         
         {/* Card wrapper centered on desktop background */}
-        <div className="flex-1 flex items-center justify-center p-4 md:py-16">
+        <div className="flex-1 flex items-center justify-center p-4 pt-8 md:py-16">
           <div
             className={`app-container relative w-full bg-white md:max-w-lg md:rounded-3xl md:shadow-[0_20px_50px_rgba(0,0,0,0.08)] border-none overflow-hidden ${className}`}
           >
@@ -51,7 +51,7 @@ function AppShell({ children, showNav = true, className = '' }) {
   return (
     <SidebarLayout
       sidebar={showNav ? <SideNav /> : null}
-      bottomNav={showNav ? <BottomNav /> : null}
+      bottomNav={showNav && showBottomNav ? <BottomNav /> : null}
       className={className}
     >
       {isOffline && (

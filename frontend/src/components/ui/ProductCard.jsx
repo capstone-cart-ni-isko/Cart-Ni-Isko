@@ -63,7 +63,7 @@ function ProductCard({ product }) {
           >
             <svg
               viewBox="0 0 24 24"
-              className={`w-4 h-4 ${isSaved ? 'text-red-500 fill-red-500' : 'text-gray-400'}`}
+              className={`w-4 h-4 ${isSaved ? 'text-red-500 fill-red-500' : 'text-gray-300 fill-none'}`}
               stroke="currentColor"
               strokeWidth="2.2"
               strokeLinecap="round"

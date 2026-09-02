@@ -105,7 +105,7 @@ function ForgotPassword() {
             <div className="animate-fade-in">
               <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Confirm it's you</h1>
               <p className="text-sm text-gray-500 font-semibold mb-8 leading-relaxed">
-                Enter the phone number associated with your Bicol U student account.
+                Enter the phone number associated with your account.
               </p>
 
               <form onSubmit={handlePhoneSubmit} className="space-y-6">
