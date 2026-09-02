@@ -7,6 +7,7 @@ use App\Http\Controllers\AccountsAPI;
 use App\Http\Controllers\AppointAPI;
 use App\Http\Controllers\AuthAPI;
 use App\Http\Controllers\CartAPI;
+use App\Http\Controllers\CheckoutAPI;
 use App\Http\Controllers\ProductsAPI;
 use App\Http\Controllers\ReviewsAPI;
 use App\Http\Controllers\SettingsAPI;
@@ -18,6 +19,11 @@ Route::get('/cart/display', [CartAPI::class, 'displayOrders']);
 Route::get('/cart/search', [CartAPI::class, 'searchOrders']);
 Route::get('/cart/sort', [CartAPI::class, 'sortOrders']);
 Route::delete('/cart/remove', [CartAPI::class, 'removeOrder']);
+
+// Checkout API Routes
+Route::post('/checkout/dispatch', [CheckoutAPI::class, 'determineDispatchDetails']);
+Route::post('/checkout/payment', [CheckoutAPI::class, 'integratePayment']);
+
 
 
 // Auth API Routes

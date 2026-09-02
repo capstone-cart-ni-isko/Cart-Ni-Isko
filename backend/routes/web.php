@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthAPI;
 use App\Http\Controllers\CartAPI;
+use App\Http\Controllers\CheckoutAPI;
 
 Route::get('/', function () {
     return view('welcome');
@@ -23,3 +24,7 @@ Route::get('/cart/display', [CartAPI::class, 'displayOrders']);
 Route::get('/cart/search', [CartAPI::class, 'searchOrders']);
 Route::get('/cart/sort', [CartAPI::class, 'sortOrders']);
 Route::delete('/cart/remove', [CartAPI::class, 'removeOrder']);
+
+// Checkout Routes
+Route::post('/checkout/dispatch', [CheckoutAPI::class, 'determineDispatchDetails']);
+Route::post('/checkout/payment', [CheckoutAPI::class, 'integratePayment']);

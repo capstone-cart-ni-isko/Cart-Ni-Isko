@@ -563,6 +563,35 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
+    public function determineDispatchDetails(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'        => 'required',
+            'dispatch_type' => 'required|in:pickup,delivery',
+        ], [
+            'ord_id.required'        => 'Order ID is required.',
+            'dispatch_type.required' => 'Dispatch type (pickup or delivery) is required.',
+            'dispatch_type.in'       => 'Dispatch type must be either pickup or delivery.',
+        ]);
+    }
+
+    public function integratePayment(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'        => 'required',
+            'pay_given'     => 'required|numeric|min:0',
+            'dispatch_type' => 'required|in:pickup,delivery',
+        ], [
+            'ord_id.required'        => 'Order ID is required.',
+            'pay_given.required'     => 'Payment given amount is required.',
+            'pay_given.numeric'      => 'Payment given must be a numeric amount.',
+            'pay_given.min'          => 'Payment given cannot be negative.',
+            'dispatch_type.required' => 'Dispatch type (pickup or delivery) is required.',
+            'dispatch_type.in'       => 'Dispatch type must be either pickup or delivery.',
+        ]);
+    }
+
+
 
     // ==========================================
     // UTILITY HELPER
