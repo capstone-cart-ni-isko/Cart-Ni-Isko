@@ -10,7 +10,7 @@ Instead of running validation directly inside controllers, APIs instantiate `Inp
 
 Example:
 ```php
-$validator = (new InputValidatorAPI()->customerSignup($json));
+$validator = (new InputValidatorAPI())->customerSignup($json);
 if ($validator) return $validator; // Stops execution if validation fails
 ```
 
