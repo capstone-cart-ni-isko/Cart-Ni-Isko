@@ -256,4 +256,163 @@
                 ], 500);
             }
         }
+
+        public function backupCredentials(Request $json)
+        {
+            /*
+                BACKUP CREDENTIALS
+                ----------
+                JSON REQUEST
+
+                user_id - integer (req)
+                account_type - string (req: customer | employee)
+                backupcallcode - string (opt)
+                backupphone - string (opt)
+                backupemail - string (opt)
+            */
+
+            $validator = (new InputValidatorAPI()->backupCredentials($json));
+            if ($validator) return $validator;
+
+            try {
+                $userId = $json->input('user_id');
+                $accountType = strtolower($json->input('account_type'));
+
+                if ($accountType === 'customer') {
+                    $user = Customer::where('cust_id', $userId)->first();
+                    if (!$user) return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
+
+                    $user->update([
+                        'cust_backupcallcode' => $json->input('backupcallcode') ?? $user->cust_backupcallcode,
+                        'cust_backupphone'    => $json->input('backupphone') ?? $user->cust_backupphone,
+                        'cust_backupemail'    => $json->input('backupemail') ?? $user->cust_backupemail,
+                    ]);
+                } else {
+                    $user = Employee::where('emp_id', $userId)->first();
+                    if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
+
+                    $user->update([
+                        'emp_backupcallcode' => $json->input('backupcallcode') ?? $user->emp_backupcallcode,
+                        'emp_backupphone'    => $json->input('backupphone') ?? $user->emp_backupphone,
+                        'emp_backupemail'    => $json->input('backupemail') ?? $user->emp_backupemail,
+                    ]);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Backup credentials updated successfully',
+                    'data' => $user
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update backup credentials',
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+        }
+
+        public function recoverCredentials(Request $json)
+        {
+            /*
+                RECOVERING CREDENTIALS
+                ----------
+                JSON REQUEST
+
+                identifier - string (req: phone or email)
+                account_type - string (req: customer | employee)
+            */
+
+            $validator = (new InputValidatorAPI()->recoverCredentials($json));
+            if ($validator) return $validator;
+
+            try {
+                $identifier = $json->input('identifier');
+                $accountType = strtolower($json->input('account_type'));
+
+                if ($accountType === 'customer') {
+                    $user = Customer::where('cust_phone', $identifier)
+                        ->orWhere('cust_email', $identifier)
+                        ->orWhere('cust_backupemail', $identifier)
+                        ->first();
+                } else {
+                    $user = Employee::where('emp_email', $identifier)
+                        ->orWhere('emp_phone', $identifier)
+                        ->orWhere('emp_backupemail', $identifier)
+                        ->first();
+                }
+
+                if (!$user) {
+                    return response()->json(['success' => false, 'message' => 'Account not found'], 404);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Credential recovery instructions issued successfully'
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to initiate credential recovery',
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+        }
+
+        public function updateCredentials(Request $json)
+        {
+            /*
+                UPDATING CREDENTIALS
+                ----------
+                JSON REQUEST
+
+                user_id - integer (req)
+                account_type - string (req: customer | employee)
+                new_password - string (req)
+                phone - string (opt)
+                email - string (opt)
+            */
+
+            $validator = (new InputValidatorAPI()->updateCredentials($json));
+            if ($validator) return $validator;
+
+            try {
+                $userId = $json->input('user_id');
+                $accountType = strtolower($json->input('account_type'));
+                $newPassword = $json->input('new_password');
+
+                if ($accountType === 'customer') {
+                    $user = Customer::where('cust_id', $userId)->first();
+                    if (!$user) return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
+
+                    $updateData = ['cust_password' => Hash::make($newPassword)];
+                    if ($json->has('phone')) $updateData['cust_phone'] = $json->input('phone');
+                    if ($json->has('email')) $updateData['cust_email'] = $json->input('email');
+                    $user->update($updateData);
+
+                } else {
+                    $user = Employee::where('emp_id', $userId)->first();
+                    if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
+
+                    $updateData = ['emp_password' => Hash::make($newPassword)];
+                    if ($json->has('phone')) $updateData['emp_phone'] = $json->input('phone');
+                    if ($json->has('email')) $updateData['emp_email'] = $json->input('email');
+                    $user->update($updateData);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Credentials updated successfully'
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update credentials',
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+        }
     }

@@ -69,3 +69,24 @@ Added to support `ProductsAPI`:
 ### `updateProductDetails(Request $json)`
 - **Required**: `prod_id` (must exist in database).
 - **Constraints**: Price/quantity must be non-negative. Unique rules for `prod_name` and `prod_tag` exclude the current product `prod_id` to allow editing other fields without unique conflicts.
+
+---
+
+## 5. Additional Module Validators
+
+The following validator methods have been added to support the remaining modules:
+
+- `flagIrregularity`: Validates `action` and `desc`.
+- `logAction`: Validates `action` and `desc`.
+- `changeAccountType`: Validates `user_id`, `account_type`, and `new_type`.
+- `deleteAccount` / `disableAccount` / `recoverAccount` / `updateAccountDetails`: Validates `user_id` and `account_type`.
+- `createAppointment`: Validates `cust_id`, `appoint_date`, and `appoint_type`.
+- `closeAppointment` / `updateAppointmentDetails`: Validates `appoint_id`.
+- `backupCredentials`: Validates `user_id` and `account_type`.
+- `recoverCredentials`: Validates `identifier` and `account_type`.
+- `updateCredentials`: Validates `user_id`, `account_type`, and `new_password`.
+- `createReview`: Validates `ord_id` and `ord_rating` (1-5 range).
+- `deleteReview` / `moderateReview` / `updateReview`: Validates `ord_id`.
+- `updateSettings`: Validates `settings` array.
+- `addWishlistItem` / `addWishlistToOrder` / `removeWishlistItem` / `updateWishlistItem`: Validates `cust_id` and `prod_id`.
+

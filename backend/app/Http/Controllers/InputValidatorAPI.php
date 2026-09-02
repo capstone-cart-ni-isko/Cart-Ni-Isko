@@ -297,6 +297,254 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
+    public function flagIrregularity(Request $json)
+    {
+        return $this->validateFields($json, [
+            'action' => 'required',
+            'desc'   => 'required',
+        ], [
+            'action.required' => 'Action title is required.',
+            'desc.required'   => 'Description is required.',
+        ]);
+    }
+
+    public function logAction(Request $json)
+    {
+        return $this->validateFields($json, [
+            'action' => 'required',
+            'desc'   => 'required',
+        ], [
+            'action.required' => 'Action name is required.',
+            'desc.required'   => 'Description is required.',
+        ]);
+    }
+
+    public function changeAccountType(Request $json)
+    {
+        return $this->validateFields($json, [
+            'user_id'      => 'required',
+            'account_type' => 'required|in:customer,employee',
+            'new_type'     => 'required',
+        ], [
+            'user_id.required'      => 'User ID is required.',
+            'account_type.required' => 'Account type (customer or employee) is required.',
+            'account_type.in'       => 'Account type must be customer or employee.',
+            'new_type.required'     => 'New account type is required.',
+        ]);
+    }
+
+    public function deleteAccount(Request $json)
+    {
+        return $this->validateFields($json, [
+            'user_id'      => 'required',
+            'account_type' => 'required|in:customer,employee',
+        ], [
+            'user_id.required'      => 'User ID is required.',
+            'account_type.required' => 'Account type is required.',
+            'account_type.in'       => 'Account type must be customer or employee.',
+        ]);
+    }
+
+    public function disableAccount(Request $json)
+    {
+        return $this->validateFields($json, [
+            'user_id'      => 'required',
+            'account_type' => 'required|in:customer,employee',
+        ], [
+            'user_id.required'      => 'User ID is required.',
+            'account_type.required' => 'Account type is required.',
+            'account_type.in'       => 'Account type must be customer or employee.',
+        ]);
+    }
+
+    public function recoverAccount(Request $json)
+    {
+        return $this->validateFields($json, [
+            'user_id'      => 'required',
+            'account_type' => 'required|in:customer,employee',
+        ], [
+            'user_id.required'      => 'User ID is required.',
+            'account_type.required' => 'Account type is required.',
+            'account_type.in'       => 'Account type must be customer or employee.',
+        ]);
+    }
+
+    public function updateAccountDetails(Request $json)
+    {
+        return $this->validateFields($json, [
+            'user_id'      => 'required',
+            'account_type' => 'required|in:customer,employee',
+        ], [
+            'user_id.required'      => 'User ID is required.',
+            'account_type.required' => 'Account type is required.',
+            'account_type.in'       => 'Account type must be customer or employee.',
+        ]);
+    }
+
+    public function createAppointment(Request $json)
+    {
+        return $this->validateFields($json, [
+            'cust_id'      => 'required',
+            'appoint_date' => 'required',
+            'appoint_type' => 'required',
+        ], [
+            'cust_id.required'      => 'Customer ID is required.',
+            'appoint_date.required' => 'Appointment date is required.',
+            'appoint_type.required' => 'Appointment type is required.',
+        ]);
+    }
+
+    public function closeAppointment(Request $json)
+    {
+        return $this->validateFields($json, [
+            'appoint_id' => 'required',
+        ], [
+            'appoint_id.required' => 'Appointment ID is required.',
+        ]);
+    }
+
+    public function updateAppointmentDetails(Request $json)
+    {
+        return $this->validateFields($json, [
+            'appoint_id' => 'required',
+        ], [
+            'appoint_id.required' => 'Appointment ID is required.',
+        ]);
+    }
+
+    public function backupCredentials(Request $json)
+    {
+        return $this->validateFields($json, [
+            'user_id'      => 'required',
+            'account_type' => 'required|in:customer,employee',
+        ], [
+            'user_id.required'      => 'User ID is required.',
+            'account_type.required' => 'Account type is required.',
+            'account_type.in'       => 'Account type must be customer or employee.',
+        ]);
+    }
+
+    public function recoverCredentials(Request $json)
+    {
+        return $this->validateFields($json, [
+            'identifier'   => 'required',
+            'account_type' => 'required|in:customer,employee',
+        ], [
+            'identifier.required'   => 'Identifier (phone or email) is required.',
+            'account_type.required' => 'Account type is required.',
+            'account_type.in'       => 'Account type must be customer or employee.',
+        ]);
+    }
+
+    public function updateCredentials(Request $json)
+    {
+        return $this->validateFields($json, [
+            'user_id'      => 'required',
+            'account_type' => 'required|in:customer,employee',
+            'new_password' => 'required',
+        ], [
+            'user_id.required'      => 'User ID is required.',
+            'account_type.required' => 'Account type is required.',
+            'account_type.in'       => 'Account type must be customer or employee.',
+            'new_password.required' => 'New password is required.',
+        ]);
+    }
+
+    public function createReview(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'     => 'required',
+            'ord_rating' => 'required|numeric|min:1|max:5',
+        ], [
+            'ord_id.required'     => 'Order ID is required.',
+            'ord_rating.required' => 'Rating score is required.',
+            'ord_rating.numeric'  => 'Rating must be a number.',
+            'ord_rating.min'      => 'Rating score must be at least 1.',
+            'ord_rating.max'      => 'Rating score cannot exceed 5.',
+        ]);
+    }
+
+    public function deleteReview(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+        ]);
+    }
+
+    public function moderateReview(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+        ]);
+    }
+
+    public function updateReview(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+        ]);
+    }
+
+    public function updateSettings(Request $json)
+    {
+        return $this->validateFields($json, [
+            'settings' => 'required|array',
+        ], [
+            'settings.required' => 'Settings dictionary is required.',
+            'settings.array'    => 'Settings must be an array / dictionary.',
+        ]);
+    }
+
+    public function addWishlistItem(Request $json)
+    {
+        return $this->validateFields($json, [
+            'cust_id' => 'required',
+            'prod_id' => 'required',
+        ], [
+            'cust_id.required' => 'Customer ID is required.',
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    public function addWishlistToOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'cust_id' => 'required',
+            'prod_id' => 'required',
+        ], [
+            'cust_id.required' => 'Customer ID is required.',
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    public function removeWishlistItem(Request $json)
+    {
+        return $this->validateFields($json, [
+            'cust_id' => 'required',
+            'prod_id' => 'required',
+        ], [
+            'cust_id.required' => 'Customer ID is required.',
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    public function updateWishlistItem(Request $json)
+    {
+        return $this->validateFields($json, [
+            'cust_id' => 'required',
+            'prod_id' => 'required',
+        ], [
+            'cust_id.required' => 'Customer ID is required.',
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
     // ==========================================
     // UTILITY HELPER
     // ==========================================

@@ -135,3 +135,65 @@ Authenticates an employee.
 ### Process Flow
 1. **Validation**: Verifies `email` and `password` are present.
 2. **Verify**: Verifies existence of employee by `emp_email` and checks password hashes.
+
+---
+
+## 5. Backup Credentials (`backupCredentials`)
+
+### Purpose
+Updates secondary / backup dial code, phone number, or email address for account recovery.
+
+### Endpoint Mapping
+- **Route**: `POST /api/auth/backup_credentials`
+- **Controller Method**: `AuthAPI@backupCredentials`
+
+### Request Payload (JSON)
+```json
+{
+  "user_id": 1,
+  "account_type": "customer",
+  "backupcallcode": "+63",
+  "backupphone": "09991234567",
+  "backupemail": "backup@example.com"
+}
+```
+
+---
+
+## 6. Recovering Credentials (`recoverCredentials`)
+
+### Purpose
+Initiates credential recovery for customers or employees using their registered contact info.
+
+### Endpoint Mapping
+- **Route**: `POST /api/auth/recover_credentials`
+- **Controller Method**: `AuthAPI@recoverCredentials`
+
+### Request Payload (JSON)
+```json
+{
+  "identifier": "09123456789",
+  "account_type": "customer"
+}
+```
+
+---
+
+## 7. Updating Credentials (`updateCredentials`)
+
+### Purpose
+Updates account credentials such as primary password, phone, or email.
+
+### Endpoint Mapping
+- **Route**: `PUT /api/auth/update_credentials`
+- **Controller Method**: `AuthAPI@updateCredentials`
+
+### Request Payload (JSON)
+```json
+{
+  "user_id": 1,
+  "account_type": "customer",
+  "new_password": "NewPassword123!",
+  "phone": "09129876543"
+}
+```
