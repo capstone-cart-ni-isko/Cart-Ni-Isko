@@ -76,7 +76,7 @@ export default function StatusPill({ status, variant, className = '' }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${style} ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold border ${style} ${className}`}
     >
       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70 shrink-0" />
       <span className="capitalize">{status}</span>

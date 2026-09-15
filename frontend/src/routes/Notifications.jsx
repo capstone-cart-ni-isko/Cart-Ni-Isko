@@ -1,161 +1,362 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
-import { SparklesIcon, PackageIcon, CheckIcon, ShirtIcon, StarIcon, BellIcon } from '../components/ui/Icons.jsx'
 
-function NotifIcon({ type, className }) {
-  switch (type) {
-    case 'welcome': return <SparklesIcon className={className} />
-    case 'order': return <PackageIcon className={className} />
-    case 'pickup': return <CheckIcon className={className} />
-    case 'arrival': return <ShirtIcon className={className} />
-    case 'review': return <StarIcon className={className} />
-    default: return <BellIcon className={className} />
+// SVG Icons tailored for notification types
+function NotifTypeIcon({ icon, className = 'w-5 h-5' }) {
+  switch (icon) {
+    case 'megaphone':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          <path d="m3 11 18-5v12L3 14v-3z" />
+          <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+        </svg>
+      )
+    case 'box':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+          <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+      )
+    case 'bag':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <path d="M16 10a4 4 0 0 1-8 0" />
+        </svg>
+      )
+    case 'truck':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          <rect x="1" y="3" width="15" height="13" />
+          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+          <circle cx="5.5" cy="18.5" r="2.5" />
+          <circle cx="18.5" cy="18.5" r="2.5" />
+        </svg>
+      )
+    case 'alert':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      )
+    default:
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      )
   }
 }
 
-const mockNotifications = [
-  {
-    id: 1,
-    type: 'welcome',
-    title: 'Welcome to Tindahan ni Isko!',
-    message: 'Your account is ready. Start browsing BU campus merch and show your Iskolar pride.',
-    time: '1h ago',
-    read: false,
-  },
-  {
-    id: 2,
-    type: 'order',
-    title: 'Order Confirmed',
-    message: 'Your order ORD-2026-001 for BUnique College Hoodie has been confirmed and is being processed.',
-    time: '3h ago',
-    read: false,
-  },
-  {
-    id: 3,
-    type: 'pickup',
-    title: 'Ready for Pick-up',
-    message: 'Your Isko Tote Bag is ready! Visit the Main Campus store Mon–Fri, 8AM–5PM.',
-    time: '1d ago',
-    read: true,
-  },
-  {
-    id: 4,
-    type: 'arrival',
-    title: 'New Arrivals: BUnique Collection',
-    message: "The limited BUnique Collection is now available for pre-order. Don't miss out!",
-    time: '2d ago',
-    read: true,
-  },
-  {
-    id: 5,
-    type: 'review',
-    title: 'Rate Your Order',
-    message: 'How was the BU Lanyard Set? Share your feedback to help other Iskos.',
-    time: '5d ago',
-    read: true,
-  },
-]
+// Caught Up illustration component
+function CaughtUpIllustration({ className = 'w-44 h-44' }) {
+  return (
+    <div className={`relative flex items-center justify-center ${className}`}>
+      {/* Background soft blob */}
+      <div className="absolute inset-2 bg-orange-50/80 rounded-full blur-xs" />
+      <svg viewBox="0 0 200 200" className="w-full h-full relative z-10" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Soft background circle */}
+        <circle cx="100" cy="105" r="75" fill="#FFF7ED" />
 
-function Notifications() {
-  const [items, setItems] = useState(mockNotifications)
+        {/* Character Illustration */}
+        <g id="character">
+          {/* Hair behind */}
+          <path d="M70 120 C60 100 65 70 95 65 C130 60 145 85 135 120 Z" fill="#1F2937" />
+          {/* Body / Shirt */}
+          <path d="M60 180 C60 140 75 125 100 125 C125 125 140 140 140 180 Z" fill="#FED7AA" />
+          {/* Neck */}
+          <path d="M92 115 L108 115 L108 128 L92 128 Z" fill="#FDBA74" />
+          {/* Head & Face */}
+          <ellipse cx="100" cy="98" rx="22" ry="25" fill="#FED7AA" />
+          {/* Hair front */}
+          <path d="M78 90 C82 72 100 70 115 72 C125 74 125 85 124 95 C118 85 105 82 92 84 C85 85 80 88 78 90 Z" fill="#1F2937" />
+          {/* Eyes & Smile */}
+          <circle cx="93" cy="97" r="2.2" fill="#1F2937" />
+          <circle cx="107" cy="97" r="2.2" fill="#1F2937" />
+          <path d="M96 106 Q100 110 104 106" stroke="#C2410C" strokeWidth="2" strokeLinecap="round" fill="none" />
+          {/* Blush */}
+          <circle cx="88" cy="103" r="3" fill="#FCA5A5" opacity="0.6" />
+          <circle cx="112" cy="103" r="3" fill="#FCA5A5" opacity="0.6" />
+
+          {/* Smartphone held in hand */}
+          <rect x="122" y="120" width="20" height="34" rx="4" fill="#374151" transform="rotate(8 122 120)" />
+          <rect x="124" y="123" width="16" height="28" rx="2" fill="#E5E7EB" transform="rotate(8 122 120)" />
+          {/* Hand */}
+          <circle cx="126" cy="138" r="5" fill="#FED7AA" />
+        </g>
+
+        {/* Ringing Bell Icon badge */}
+        <g id="ringing-bell" transform="translate(130, 50)">
+          <path d="M18 10 A6 6 0 0 0 6 10 c0 7-3 9-3 9 h18 s-3-2-3-9" fill="#EA580C" />
+          <circle cx="12" cy="21" r="2" fill="#EA580C" />
+          {/* Motion lines */}
+          <path d="M22 6 L25 4" stroke="#EA580C" strokeWidth="2" strokeLinecap="round" />
+          <path d="M25 11 L28 11" stroke="#EA580C" strokeWidth="2" strokeLinecap="round" />
+          <path d="M2 11 L-1 11" stroke="#EA580C" strokeWidth="2" strokeLinecap="round" />
+          <path d="M2 6 L-1 4" stroke="#EA580C" strokeWidth="2" strokeLinecap="round" />
+        </g>
+      </svg>
+    </div>
+  )
+}
+
+const INITIAL_NOTIFICATIONS = []
+
+export default function Notifications() {
+  const navigate = useNavigate()
+  const [items, setItems] = useState(INITIAL_NOTIFICATIONS)
+  const [activeTab, setActiveTab] = useState('All') // 'All' | 'Orders' | 'Production' | 'System' | 'Promotions'
 
   const markAllRead = () => {
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })))
+    setItems((prev) => prev.map((n) => ({ ...n, unread: false })))
   }
 
-  const markRead = (id) => {
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+  const markRead = (id, targetUrl) => {
+    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)))
+    if (targetUrl) {
+      navigate(targetUrl)
+    }
   }
 
-  const unreadCount = items.filter((n) => !n.read).length
+  // Calculate badge counts
+  const countAll = items.length
+  const countOrders = items.filter((n) => n.category === 'orders').length
+  const countProduction = items.filter((n) => n.category === 'production').length
+  const countSystem = items.filter((n) => n.category === 'system').length
+  const countPromotions = items.filter((n) => n.category === 'promotions').length
+  const unreadTotal = items.filter((n) => n.unread).length
+
+  // Filter items based on activeTab
+  const filteredItems = items.filter((n) => {
+    if (activeTab === 'All') return true
+    if (activeTab === 'Orders') return n.category === 'orders'
+    if (activeTab === 'Production') return n.category === 'production'
+    if (activeTab === 'System') return n.category === 'system'
+    if (activeTab === 'Promotions') return n.category === 'promotions'
+    return true
+  })
+
+  // Mobile: show caught-up only when there are no notifications at all
+  const isMobileEmpty = filteredItems.length === 0
+  // Desktop: show caught-up card only when all notifications are read
+  const isDesktopCaughtUp = unreadTotal === 0
 
   return (
     <AppShell>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in max-w-4xl mx-auto">
-        {/* Desktop Header Title */}
-        <div className="hidden lg:flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-black text-gray-900">Notifications</h1>
-            {unreadCount > 0 && (
-              <p className="text-sm text-gray-450 font-semibold mt-1">{unreadCount} unread</p>
-            )}
+      <div className="px-4 py-4 pb-32 lg:px-0 lg:py-0 lg:pb-16 max-w-[1280px] mx-auto animate-fade-in">
+
+        {/* Header (Matching Photo 5 on desktop & Photo 2 on mobile) */}
+        <div className="flex items-start gap-3.5 mb-6">
+          <div className="w-11 h-11 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0 text-brand-orange shadow-2xs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-5 h-5">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
           </div>
-          {unreadCount > 0 && (
-            <button
-              type="button"
-              onClick={markAllRead}
-              className="text-sm font-bold text-brand-orange hover:underline transition-colors cursor-pointer"
-            >
-              Mark all read
-            </button>
-          )}
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Notifications</h1>
+            <p className="text-xs lg:text-sm text-gray-500 font-medium mt-0.5">
+              Stay updated with your orders, production, and important announcements.
+            </p>
+          </div>
         </div>
 
-        {/* Mobile Header Title */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white sticky top-0 z-20 lg:hidden -mx-4 -mt-4 mb-4">
-          <div>
-            <h1 className="text-lg font-extrabold text-gray-900">Notifications</h1>
-            {unreadCount > 0 && (
-              <p className="text-xs text-gray-400 font-semibold mt-0.5">{unreadCount} unread</p>
-            )}
-          </div>
-          {unreadCount > 0 && (
-            <button
-              type="button"
-              onClick={markAllRead}
-              className="text-xs font-bold text-brand-orange hover:underline transition-colors"
-            >
-              Mark all read
-            </button>
-          )}
-        </div>
-
-        <div className="pb-12">
-          {items.length === 0 ? (
-            <div className="text-center py-20 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-200 shadow-sm">
-              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-200 mb-2">
-                <BellIcon className="w-7 h-7 text-gray-400" />
-              </div>
-              <h3 className="font-bold text-gray-700">No notifications yet</h3>
-              <p className="text-sm text-gray-450 mt-2">We'll let you know when something happens.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-50 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              {items.map((notif) => (
+        {/* Filter Pills and Mark as read toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-2">
+          {/* Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {[
+              { label: 'All', count: countAll },
+              { label: 'Orders', count: countOrders },
+              { label: 'Production', count: countProduction },
+              { label: 'System', count: countSystem },
+              { label: 'Promotions', count: countPromotions },
+            ].map(({ label, count }) => {
+              const active = activeTab === label
+              return (
                 <button
-                  key={notif.id}
+                  key={label}
                   type="button"
-                  onClick={() => markRead(notif.id)}
-                  className={`w-full text-left flex items-start gap-4 px-5 py-4 transition-colors hover:bg-gray-50 cursor-pointer ${
-                    !notif.read ? 'bg-brand-orange/[0.02] border-l-2 border-brand-orange' : ''
+                  onClick={() => setActiveTab(label)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    active
+                      ? 'bg-orange-50 border-2 border-brand-orange text-brand-orange shadow-2xs'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}
                 >
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0 ${
-                    !notif.read ? 'bg-brand-orange/10' : 'bg-gray-50'
-                  }`}>
-                    <NotifIcon type={notif.type} className={`w-5 h-5 ${!notif.read ? 'text-brand-orange' : 'text-gray-450'}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className={`text-sm leading-tight ${!notif.read ? 'font-extrabold text-gray-900' : 'font-bold text-gray-700'}`}>
-                        {notif.title}
-                      </p>
-                      {!notif.read && (
-                        <span className="w-2 h-2 rounded-full bg-brand-orange shrink-0 mt-0.5" />
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">{notif.message}</p>
-                    <p className="text-[10px] text-gray-400 font-semibold mt-1.5">{notif.time}</p>
-                  </div>
+                  <span>{label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                      active ? 'bg-brand-orange text-white' : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {count}
+                  </span>
                 </button>
-              ))}
-            </div>
+              )
+            })}
+          </div>
+
+          {/* Mark all as read button */}
+          {unreadTotal > 0 && (
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 hover:text-brand-orange self-end sm:self-auto transition-colors cursor-pointer shrink-0"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-brand-orange">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>Mark all as read</span>
+            </button>
           )}
+        </div>
+
+        {/* Main Grid: Left Notification List + Right Caught-Up Card (Desktop) */}
+        <div className="lg:grid lg:grid-cols-12 lg:gap-8 items-start">
+          {/* Notifications Feed (or Mobile Empty State) */}
+          <div className="lg:col-span-8 space-y-3">
+            {/* Mobile Empty / Caught Up State */}
+            <div className={`md:hidden ${isMobileEmpty ? 'block' : 'hidden'}`}>
+              {/* Illustration + Text — no card, sits on page bg */}
+              <div className="flex flex-col items-center justify-center text-center pt-10 pb-8 px-6">
+                <CaughtUpIllustration className="w-52 h-52 mb-5" />
+                <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">You're all caught up!</h3>
+                <p className="text-sm text-gray-400 font-medium mt-2 max-w-[240px] leading-relaxed">
+                  No new notifications at the moment.
+                </p>
+              </div>
+
+              {/* Need help card — separate white card below */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center shrink-0 mt-0.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <path d="M9 18h6M10 22h4" />
+                    <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-gray-900">Need help?</h4>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5 leading-relaxed">
+                    Check the Help Center for more information about your orders and fulfillment process.
+                  </p>
+                  <Link
+                    to="/help"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-brand-orange hover:underline mt-2"
+                  >
+                    <span>Visit Help Center</span>
+                    <span>→</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Notification Cards List (When not mobile empty) */}
+            <div className={`space-y-3 ${isMobileEmpty ? 'hidden md:block' : 'block'}`}>
+              {filteredItems.length === 0 ? (
+                <div className="hidden md:block text-center py-16 bg-white rounded-2xl border border-gray-100 p-8 shadow-xs">
+                  <p className="text-sm font-bold text-gray-500">No notifications found in this category.</p>
+                </div>
+              ) : (
+                filteredItems.map((item) => (
+                  <article
+                    key={item.id}
+                    onClick={() => markRead(item.id, item.targetUrl)}
+                    className={`relative bg-white rounded-2xl border transition-all duration-200 p-4 sm:p-5 flex items-start gap-4 cursor-pointer hover:shadow-md hover:border-orange-200 group ${
+                      item.unread ? 'border-orange-200/90 bg-orange-50/10' : 'border-gray-200'
+                    }`}
+                  >
+                    {/* Left Icon */}
+                    <div
+                      className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${item.iconBg}`}
+                    >
+                      <NotifTypeIcon icon={item.icon} className="w-5 h-5" />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h3 className="text-sm font-black text-gray-900 truncate">
+                            {item.title}
+                          </h3>
+                          {item.unread && (
+                            <span className="w-2 h-2 rounded-full bg-brand-orange shrink-0 animate-pulse" />
+                          )}
+                        </div>
+                        <span className="text-[11px] font-semibold text-gray-400 shrink-0">
+                          {item.time}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-gray-600 mt-1 leading-relaxed line-clamp-2">
+                        {item.message}
+                      </p>
+
+                      <div className="flex items-center justify-between mt-2.5">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${item.tagColor}`}
+                        >
+                          {item.tag}
+                        </span>
+                        <div className="text-gray-400 group-hover:text-brand-orange group-hover:translate-x-0.5 transition-all text-sm font-bold">
+                          ›
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ))
+              )}
+
+              {/* Showing count footer */}
+              {filteredItems.length > 0 && (
+                <div className="text-xs text-gray-400 font-medium pt-2 text-center sm:text-left">
+                  Showing 1–{filteredItems.length} of {countAll} notifications
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Desktop Right Column: Caught Up Card (Photo 5) */}
+          <div className="hidden lg:block lg:col-span-4 sticky top-28 space-y-4">
+            {isDesktopCaughtUp && (
+              <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs text-center flex flex-col items-center">
+                <CaughtUpIllustration className="w-48 h-48 mb-2" />
+                <h3 className="text-lg font-black text-gray-900 mt-1">You're all caught up!</h3>
+                <p className="text-xs text-gray-400 font-semibold mt-1">
+                  No new notifications at the moment.
+                </p>
+              </div>
+            )}
+
+            {/* Quick Link Card to Help Center */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center font-bold text-xs">
+                  💡
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-900">Need order assistance?</h4>
+                  <p className="text-[11px] text-gray-400">Visit our student help desk</p>
+                </div>
+              </div>
+              <Link
+                to="/help"
+                className="text-xs font-bold text-brand-orange hover:underline px-2 py-1"
+              >
+                Help Center →
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </AppShell>
   )
 }
-
-export default Notifications

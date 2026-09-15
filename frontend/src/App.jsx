@@ -52,13 +52,14 @@ function App() {
             <WishlistProvider>
               <Routes>
                 {/* ── Customer Routes ── */}
-                <Route path="/" element={<Welcome />} />
+                <Route path="/" element={<Home />} />
+                <Route path="/home" element={<Home />} />
+                <Route path="/welcome" element={<Welcome />} />
                 <Route path="/signup/*" element={<SignUp />} />
                 <Route path="/signin" element={<SignIn />} />
                 <Route path="/verify-otp" element={<VerifyOtp />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
-                <Route path="/home" element={<Home />} />
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
                 <Route path="/wishlist" element={<Wishlist />} />

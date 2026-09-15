@@ -22,7 +22,7 @@ function StatusBadge({ status, className = '' }) {
 
   return (
     <span
-      className={`inline-block px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full ${colorClasses} ${className}`}
+      className={`inline-block px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded ${colorClasses} ${className}`}
     >
       {normalized}
     </span>

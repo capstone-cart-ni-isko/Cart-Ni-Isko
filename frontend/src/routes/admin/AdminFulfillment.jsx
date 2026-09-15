@@ -1,214 +1,327 @@
 import React, { useState, useMemo } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
-import StatCard from '../../components/admin/StatCard.jsx'
-import StatusPill from '../../components/admin/StatusPill.jsx'
 
-import { INITIAL_ADMIN_DATA } from '../../data/adminMockData.js'
+const INITIAL_FULFILLMENT_ORDERS = [
+  {
+    id: '#ORD-8921',
+    customer: 'Maria Santos',
+    date: 'Oct 24, 2:30 PM',
+    batchId: 'BAT-0012',
+    batchCount: 5,
+    category: 'Regular',
+    fulfillmentType: 'Store Pickup',
+    studentId: '2022-10492',
+    pickupMode: 'Self Pickup',
+    status: 'Ready for Pickup',
+    timeInStage: '2h 14m',
+    sinceTime: 'Since 12:16 PM',
+    exceeds24h: false,
+    actionType: 'handover',
+    actionLabel: 'Hand Over Item',
+  },
+  {
+    id: '#ORD-8923',
+    customer: 'Elena Reyes',
+    date: 'Oct 24, 1:45 PM',
+    batchId: 'BAT-0012',
+    batchCount: 5,
+    category: 'Regular',
+    fulfillmentType: 'Store Pickup',
+    studentId: '2020-55321',
+    proxyName: 'Ana P.',
+    pickupMode: 'Proxy: Ana P.',
+    status: 'Ready for Pickup',
+    timeInStage: '28m',
+    sinceTime: 'Since 2:17 PM',
+    exceeds24h: false,
+    actionType: 'handover',
+    actionLabel: 'Hand Over Item',
+  },
+  {
+    id: '#ORD-8925',
+    customer: 'Corazon Aquino',
+    date: 'Oct 24, 11:20 AM',
+    batchId: 'BAT-0014',
+    batchCount: 5,
+    category: 'Pre-order',
+    fulfillmentType: 'Store Pickup',
+    studentId: '2021-00293',
+    pickupMode: 'Self Pickup',
+    status: 'In Production',
+    timeInStage: '3h 05m',
+    sinceTime: 'Since 11:20 AM',
+    exceeds24h: false,
+    actionType: 'production',
+    actionLabel: 'View Production',
+  },
+  {
+    id: '#ORD-8928',
+    customer: 'Diana Lopez',
+    date: 'Oct 24, 10:10 AM',
+    batchId: 'BAT-0015',
+    batchCount: 6,
+    category: 'Pre-order',
+    fulfillmentType: 'Store Pickup',
+    studentId: '2022-88910',
+    proxyName: 'John L.',
+    pickupMode: 'Proxy: John L.',
+    status: 'Awaiting Production',
+    timeInStage: '5h 45m',
+    sinceTime: 'Since 10:10 AM',
+    exceeds24h: false,
+    actionType: 'production',
+    actionLabel: 'View Production',
+  },
+  {
+    id: '#ORD-8929',
+    customer: 'Kevin Tan',
+    date: 'Oct 24, 9:05 AM',
+    batchId: 'BAT-0016',
+    batchCount: 4,
+    category: 'Regular',
+    fulfillmentType: 'Store Pickup',
+    studentId: '2023-11455',
+    pickupMode: 'Self Pickup',
+    status: 'Unclaimed > 24h',
+    timeInStage: '25h 20m',
+    sinceTime: 'Since Oct 23, 8:30 PM',
+    exceeds24h: true,
+    actionType: 'notify',
+    actionLabel: 'Notify Customer',
+  },
+]
 
 export default function AdminFulfillment() {
-  const { adminState = {}, updateLogisticsStage, batchCompleteLogistics } = useAdmin()
+  const { updateLogisticsStage } = useAdmin()
 
-  const [activeTab, setActiveTab] = useState('campus') // 'campus' | 'courier' | 'pos'
-  const [subFilter, setSubFilter] = useState('all') // 'all' | 'overdue' | 'unclaimed'
+  // Tab State: 'pickup' | 'courier' | 'history'
+  const [activeTab, setActiveTab] = useState('pickup')
+
+  // Orders list state
+  const [orders, setOrders] = useState(INITIAL_FULFILLMENT_ORDERS)
+  const [selectedIds, setSelectedIds] = useState(['#ORD-8921', '#ORD-8923']) // 2/3 selected (Photo 4)
+  const [showBatchDropdown, setShowBatchDropdown] = useState(false)
+
+  // Filters State
   const [searchQuery, setSearchQuery] = useState('')
-  const [viewMode, setViewMode] = useState('table') // 'table' | 'grid'
-  const [selectedIds, setSelectedIds] = useState([])
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [batchFilter, setBatchFilter] = useState('All')
+  const [categoryFilter, setCategoryFilter] = useState('All')
+  const [dateRangeFilter, setDateRangeFilter] = useState('All')
+  const [exceptionFilter, setExceptionFilter] = useState('All')
 
-  // Action Modals
-  const [handoverModalOrder, setHandoverModalOrder] = useState(null)
-  const [dispatchModalOrder, setDispatchModalOrder] = useState(null)
-  const [trackingNumberInput, setTrackingNumberInput] = useState('')
-  const [notifySuccessMsg, setNotifySuccessMsg] = useState('')
+  // Active tags (matching Photo 4)
+  const [activeTags, setActiveTags] = useState([
+    'Status: Awaiting Production, In Production, Preparing...',
+    'Exception: Unclaimed > 24h',
+    'Order Category: All',
+  ])
 
-  const kpi = adminState?.fulfillmentKPIs || INITIAL_ADMIN_DATA.fulfillmentKPIs
-  const items = adminState?.logisticsOrders || INITIAL_ADMIN_DATA.logisticsOrders || []
+  // Modals & feedback
+  const [toastMessage, setToastMessage] = useState('')
 
-  // Filter items by main tab, sub filter, and search
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      const matchTab =
-        (activeTab === 'campus' && item.methodType === 'campus') ||
-        (activeTab === 'courier' && item.methodType === 'courier') ||
-        (activeTab === 'pos' && item.methodType === 'pos')
-
-      const matchSearch =
-        !searchQuery ||
-        item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.studentId && item.studentId.includes(searchQuery))
-
-      const matchSub =
-        subFilter === 'all' ||
-        (subFilter === 'overdue' && item.stage === 'Delayed') ||
-        (subFilter === 'unclaimed' && item.stage === 'Ready')
-
-      return matchTab && matchSearch && matchSub
-    })
-  }, [items, activeTab, subFilter, searchQuery])
-
-  // Handover confirmation
-  const handleHandoverConfirm = () => {
-    if (handoverModalOrder) {
-      updateLogisticsStage(handoverModalOrder.id, 'Completed')
-      setHandoverModalOrder(null)
-    }
+  const showToast = (msg) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(''), 3500)
   }
 
-  // Dispatch tracking submit
-  const handleDispatchConfirm = () => {
-    if (dispatchModalOrder) {
-      updateLogisticsStage(dispatchModalOrder.id, 'In Transit', {
-        trackingNumber: trackingNumberInput || 'LLM-2026-9921',
-        details: `Courier - Lalamove\nTracking: ${trackingNumberInput || 'LLM-2026-9921'}`,
-      })
-      setDispatchModalOrder(null)
-      setTrackingNumberInput('')
-    }
+  // Toggle order checkbox selection
+  const toggleSelectOrder = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
   }
 
-  // Notify student trigger
-  const handleNotifyTrigger = (order) => {
-    updateLogisticsStage(order.id, 'Ready')
-    setNotifySuccessMsg(`Notification sent to ${order.customer} (SMS & In-App Alert dispatched).`)
-    setTimeout(() => setNotifySuccessMsg(''), 4000)
-  }
-
-  // Batch complete
-  const handleBatchComplete = () => {
-    if (selectedIds.length > 0) {
-      batchCompleteLogistics(selectedIds)
+  const toggleSelectAll = () => {
+    if (selectedIds.length === orders.length) {
       setSelectedIds([])
     } else {
-      const readyIds = filteredItems.filter((i) => i.stage === 'Ready').map((i) => i.id)
-      batchCompleteLogistics(readyIds)
+      setSelectedIds(orders.map((o) => o.id))
     }
   }
+
+  // Batch actions
+  const handleBatchStatusUpdate = (newStatus) => {
+    setOrders((prev) =>
+      prev.map((o) => (selectedIds.includes(o.id) ? { ...o, status: newStatus } : o))
+    )
+    showToast(`Updated ${selectedIds.length} orders to "${newStatus}"`)
+    setShowBatchDropdown(false)
+  }
+
+  // Single order action
+  const handleOrderAction = (order) => {
+    if (order.actionType === 'handover') {
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? { ...o, status: 'Claimed', actionLabel: 'Claimed' } : o))
+      )
+      showToast(`Order ${order.id} handed over to ${order.customer}!`)
+    } else if (order.actionType === 'notify') {
+      showToast(`Notification and SMS reminder sent to ${order.customer} for ${order.id}.`)
+    } else {
+      showToast(`Viewing production queue for ${order.id}`)
+    }
+  }
+
+  // Remove single active tag
+  const removeTag = (tag) => {
+    setActiveTags((prev) => prev.filter((t) => t !== tag))
+  }
+  const clearAllTags = () => {
+    setActiveTags([])
+  }
+
+  // Filtered orders
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const matchSearch =
+        !searchQuery ||
+        o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.batchId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.studentId.includes(searchQuery)
+      return matchSearch
+    })
+  }, [orders, searchQuery])
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        {/* Page Header */}
+      <div className="space-y-6 animate-fade-in pb-12">
+        {/* Toast alert */}
+        {toastMessage && (
+          <div className="fixed top-20 right-8 z-50 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-slide-up">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        {/* Page Header (Photo 4) */}
         <div>
           <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
             Fulfillment &amp; Logistics
           </h1>
-          <p className="text-xs lg:text-sm font-medium text-gray-500 mt-1">
-            Track batch shipments, student claim windows, and courier dispatch.
+          <p className="text-xs lg:text-sm text-gray-500 font-medium mt-0.5">
+            Process online orders through production, pickup, and delivery.
           </p>
         </div>
 
-        {/* 4 Stat Cards */}
+        {/* 4 Metric KPI Cards (Photo 4) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="TOTAL UNITS ORDERED"
-            value={kpi.totalUnitsOrdered}
-            subtitle={kpi.totalUnitsNote}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <circle cx="9" cy="21" r="1" />
-                <circle cx="20" cy="21" r="1" />
-                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+          {/* Active Fulfillment */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
               </svg>
-            }
-          />
-          <StatCard
-            title="STOCK ARRIVAL"
-            value={kpi.stockArrival}
-            subtitle={kpi.stockArrivalNote}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            </div>
+            <div>
+              <p className="text-[10px] font-extrabold tracking-wider uppercase text-gray-400">
+                ACTIVE FULFILLMENT
+              </p>
+              <h3 className="text-2xl font-black text-gray-900 mt-0.5">42</h3>
+              <p className="text-[11px] text-gray-400 font-medium">Orders in progress</p>
+            </div>
+          </div>
+
+          {/* Awaiting Production */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+                <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4H2v16z" />
               </svg>
-            }
-            iconBg="bg-blue-50 text-blue-600"
-          />
-          <StatCard
-            title="READY FOR CLAIM"
-            value={kpi.readyForClaim}
-            subtitle={kpi.readyForClaimNote}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+            </div>
+            <div>
+              <p className="text-[10px] font-extrabold tracking-wider uppercase text-gray-400">
+                AWAITING PRODUCTION
+              </p>
+              <h3 className="text-2xl font-black text-gray-900 mt-0.5">4</h3>
+              <p className="text-[11px] text-gray-400 font-medium">Need production</p>
+            </div>
+          </div>
+
+          {/* Ready For Pickup */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 0 1-8 0" />
               </svg>
-            }
-            iconBg="bg-amber-50 text-amber-600"
-          />
-          <StatCard
-            title="COMPLETED"
-            value={kpi.completed}
-            subtitle={kpi.completedNote}
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                <polyline points="22 4 12 14.01 9 11.01" />
+            </div>
+            <div>
+              <p className="text-[10px] font-extrabold tracking-wider uppercase text-gray-400">
+                READY FOR PICKUP
+              </p>
+              <h3 className="text-2xl font-black text-gray-900 mt-0.5">12</h3>
+              <p className="text-[11px] text-gray-400 font-medium">Waiting for customers</p>
+            </div>
+          </div>
+
+          {/* Ready For Dispatch */}
+          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+                <rect x="1" y="3" width="15" height="13" />
+                <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
+                <circle cx="5.5" cy="18.5" r="2.5" />
+                <circle cx="18.5" cy="18.5" r="2.5" />
               </svg>
-            }
-            iconBg="bg-emerald-50 text-emerald-600"
-          />
+            </div>
+            <div>
+              <p className="text-[10px] font-extrabold tracking-wider uppercase text-gray-400">
+                READY FOR DISPATCH
+              </p>
+              <h3 className="text-2xl font-black text-gray-900 mt-0.5">5</h3>
+              <p className="text-[11px] text-gray-400 font-medium">For courier delivery</p>
+            </div>
+          </div>
         </div>
 
-        {/* Notification banner */}
-        {notifySuccessMsg && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center justify-between animate-slide-up">
-            <div className="flex items-center gap-2">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-emerald-600">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <span>{notifySuccessMsg}</span>
-            </div>
-            <button onClick={() => setNotifySuccessMsg('')} className="text-emerald-700 hover:text-emerald-900">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-        )}
+        {/* Main Tabs (Store Pickup / Courier Delivery / Completed) */}
+        <div className="flex items-center gap-8 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setActiveTab('pickup')}
+            className={`pb-3.5 text-xs font-bold transition-colors flex items-center gap-2 relative cursor-pointer ${
+              activeTab === 'pickup'
+                ? 'text-brand-orange border-b-2 border-brand-orange font-extrabold'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <span>🏪 Store Pickup (38)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('courier')}
+            className={`pb-3.5 text-xs font-bold transition-colors flex items-center gap-2 relative cursor-pointer ${
+              activeTab === 'courier'
+                ? 'text-brand-orange border-b-2 border-brand-orange font-extrabold'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <span>🚚 Courier Delivery (12)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('history')}
+            className={`pb-3.5 text-xs font-bold transition-colors flex items-center gap-2 relative cursor-pointer ${
+              activeTab === 'history'
+                ? 'text-brand-orange border-b-2 border-brand-orange font-extrabold'
+                : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <span>⏱ Completed / History</span>
+          </button>
+        </div>
 
-        {/* Main Tab Switcher & Search */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            {/* Primary Tab Switcher */}
-            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setActiveTab('campus')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'campus'
-                    ? 'bg-brand-orange text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Campus Claims (38)
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('courier')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'courier'
-                    ? 'bg-brand-orange text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Courier Shipping (12)
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('pos')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                  activeTab === 'pos'
-                    ? 'bg-brand-orange text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                In-Store POS Log
-              </button>
-            </div>
-
+        {/* Filters Toolbar (Photo 4) */}
+        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs space-y-3">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
             {/* Search Input */}
-            <div className="relative min-w-[240px]">
+            <div className="relative flex-1">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -221,360 +334,400 @@ export default function AdminFulfillment() {
               </svg>
               <input
                 type="search"
-                placeholder="Search student, order ID, or name..."
+                placeholder="Search order, customer, or batch..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 pl-9 pr-3 rounded-xl bg-gray-50 border border-gray-200 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange"
+                className="w-full h-9 pl-9 pr-4 rounded-md bg-white border border-gray-200 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 focus:border-gray-300"
               />
             </div>
-          </div>
 
-          {/* Secondary Sub Filters & Batch Complete */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setSubFilter('all')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
-                  subFilter === 'all'
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+            {/* Dropdown Filters (Clean without orange or black outlines) */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
               >
-                All Orders ({filteredItems.length})
-              </button>
+                <option value="All">Status ▾</option>
+                <option value="Ready for Pickup">Ready for Pickup</option>
+                <option value="In Production">In Production</option>
+                <option value="Awaiting Production">Awaiting Production</option>
+                <option value="Unclaimed">Unclaimed &gt; 24h</option>
+              </select>
+
+              <select
+                value={batchFilter}
+                onChange={(e) => setBatchFilter(e.target.value)}
+                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+              >
+                <option value="All">Batch ▾</option>
+                <option value="BAT-0012">BAT-0012</option>
+                <option value="BAT-0014">BAT-0014</option>
+                <option value="BAT-0015">BAT-0015</option>
+                <option value="BAT-0016">BAT-0016</option>
+              </select>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+              >
+                <option value="All">Order Category ▾</option>
+                <option value="Regular">Regular</option>
+                <option value="Pre-order">Pre-order</option>
+              </select>
+
+              <select
+                value={dateRangeFilter}
+                onChange={(e) => setDateRangeFilter(e.target.value)}
+                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+              >
+                <option value="All">Date Range ▾</option>
+                <option value="Today">Today</option>
+                <option value="Last 7 Days">Last 7 Days</option>
+                <option value="This Month">This Month</option>
+              </select>
+
+              <select
+                value={exceptionFilter}
+                onChange={(e) => setExceptionFilter(e.target.value)}
+                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+              >
+                <option value="All">Exception ▾</option>
+                <option value="Unclaimed">Unclaimed &gt; 24h</option>
+                <option value="Delayed">Delayed</option>
+              </select>
+
               <button
                 type="button"
-                onClick={() => setSubFilter('overdue')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
-                  subFilter === 'overdue'
-                    ? 'bg-rose-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                onClick={clearAllTags}
+                className="text-xs font-semibold text-gray-500 hover:text-brand-orange px-2 py-1 cursor-pointer"
+              >
+                Clear all
+              </button>
+
+              <button
+                type="button"
+                className="h-9 px-3.5 rounded-md border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                 </svg>
-                <span>Overdue (3)</span>
+                <span>Filters</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setSubFilter('unclaimed')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
-                  subFilter === 'unclaimed'
-                    ? 'bg-amber-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                Unclaimed &gt; 24h (5)
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBatchComplete}
-                className="px-3.5 py-1.5 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
-              >
-                <span>Batch Complete</span>
-              </button>
-
-              {/* View Toggle List vs Grid */}
-              <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('table')}
-                  className={`p-1 rounded ${viewMode === 'table' ? 'bg-white shadow-2xs text-brand-orange' : 'text-gray-400'}`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <line x1="8" y1="6" x2="21" y2="6" />
-                    <line x1="8" y1="12" x2="21" y2="12" />
-                    <line x1="8" y1="18" x2="21" y2="18" />
-                    <line x1="3" y1="6" x2="3.01" y2="6" />
-                    <line x1="3" y1="12" x2="3.01" y2="12" />
-                    <line x1="3" y1="18" x2="3.01" y2="18" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('grid')}
-                  className={`p-1 rounded ${viewMode === 'grid' ? 'bg-white shadow-2xs text-brand-orange' : 'text-gray-400'}`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <rect x="3" y="3" width="7" height="7" />
-                    <rect x="14" y="3" width="7" height="7" />
-                    <rect x="14" y="14" width="7" height="7" />
-                    <rect x="3" y="14" width="7" height="7" />
-                  </svg>
-                </button>
-              </div>
             </div>
           </div>
+
+          {/* Active Filter Tags */}
+          {activeTags.length > 0 && (
+            <div className="flex items-center gap-2 pt-2 border-t border-gray-100 flex-wrap">
+              {activeTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-medium border border-gray-200"
+                >
+                  <span>{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="text-gray-400 hover:text-gray-700 cursor-pointer text-sm font-bold"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Data Table View */}
-        {viewMode === 'table' ? (
-          <div className="bg-white rounded-2xl border border-gray-100/90 shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[760px]">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/70 text-[10px] font-extrabold uppercase tracking-wider text-gray-500">
-                    <th className="py-3.5 px-4 w-10 text-center">
-                      <input
-                        type="checkbox"
-                        checked={
-                          filteredItems.length > 0 &&
-                          filteredItems.every((i) => selectedIds.includes(i.id))
-                        }
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedIds(filteredItems.map((i) => i.id))
-                          else setSelectedIds([])
-                        }}
-                        className="rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
-                      />
-                    </th>
-                    <th className="py-3.5 px-4">ORDER ID</th>
-                    <th className="py-3.5 px-4">CUSTOMER</th>
-                    <th className="py-3.5 px-4">FULFILLMENT METHOD</th>
-                    <th className="py-3.5 px-4">CLAIM / DELIVERY DETAILS</th>
-                    <th className="py-3.5 px-4">LOGISTICS STAGE</th>
-                    <th className="py-3.5 px-4 text-center">ACTION</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-xs">
-                  {filteredItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="py-3.5 px-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(item.id)}
-                          onChange={() => {
-                            if (selectedIds.includes(item.id)) {
-                              setSelectedIds(selectedIds.filter((id) => id !== item.id))
-                            } else {
-                              setSelectedIds([...selectedIds, item.id])
-                            }
-                          }}
-                          className="rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
-                        />
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-gray-900">{item.id}</td>
-                      <td className="py-3.5 px-4 font-semibold text-gray-800">{item.customer}</td>
-                      <td className="py-3.5 px-4">
-                        <StatusPill status={item.method} variant="blue" />
-                      </td>
-                      <td className="py-3.5 px-4 text-gray-600 whitespace-pre-line text-[11px] leading-tight font-medium">
-                        {item.details}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <StatusPill status={item.stage} />
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        {item.stage === 'Ready' && (
-                          <button
-                            type="button"
-                            onClick={() => setHandoverModalOrder(item)}
-                            className="px-3.5 py-1.5 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-xl shadow-2xs transition-colors"
-                          >
-                            Hand Over Item
-                          </button>
-                        )}
-                        {item.stage === 'Packing' && (
-                          <button
-                            type="button"
-                            onClick={() => setDispatchModalOrder(item)}
-                            className="px-3.5 py-1.5 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-xs rounded-xl shadow-2xs transition-colors"
-                          >
-                            Dispatch / Track
-                          </button>
-                        )}
-                        {item.stage === 'Delayed' && (
-                          <button
-                            type="button"
-                            onClick={() => handleNotifyTrigger(item)}
-                            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors"
-                          >
-                            Notify
-                          </button>
-                        )}
-                        {item.stage === 'Completed' && (
-                          <button
-                            type="button"
-                            disabled
-                            className="px-3.5 py-1.5 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 cursor-default flex items-center justify-center gap-1 mx-auto"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            <span>Fulfilled</span>
-                          </button>
-                        )}
-                        {item.stage === 'Pending' && (
-                          <button
-                            type="button"
-                            onClick={() => updateLogisticsStage(item.id, 'Packing')}
-                            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors"
-                          >
-                            Start Packing
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          /* Grid View */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredItems.map((item) => (
-              <div key={item.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-xs space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-sm font-black text-gray-900">{item.id}</h3>
-                    <p className="text-xs font-semibold text-gray-600">{item.customer}</p>
+        {/* Selected Orders Banner & Batch Actions Dropdown (Photo 4) */}
+        {selectedIds.length > 0 && (
+          <div className="bg-orange-50/70 border border-orange-200/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <span className="text-xs font-extrabold text-orange-950">
+                {selectedIds.length} orders selected
+              </span>
+
+              {/* Batch Actions Dropdown - Rectangular Button */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchDropdown(!showBatchDropdown)}
+                  className="px-3.5 py-1.5 bg-white border border-gray-200 hover:border-gray-300 rounded-md text-xs font-semibold text-gray-800 flex items-center gap-2 shadow-2xs cursor-pointer focus:outline-none"
+                >
+                  <span>Batch Actions</span>
+                  <span className="text-gray-400 text-xs">▾</span>
+                </button>
+
+                {showBatchDropdown && (
+                  <div className="absolute left-0 mt-1.5 w-60 bg-white rounded-md shadow-xl border border-gray-200 py-1.5 z-40 animate-fade-in">
+                    <button
+                      type="button"
+                      onClick={() => handleBatchStatusUpdate('In Production')}
+                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                    >
+                      <span className="text-base">🛍</span>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 leading-tight">Mark In Production</p>
+                        <p className="text-[10px] text-gray-400">Move to in production</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBatchStatusUpdate('Preparing')}
+                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                    >
+                      <span className="text-base">📦</span>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 leading-tight">Mark Preparing</p>
+                        <p className="text-[10px] text-gray-400">Move to preparing</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBatchStatusUpdate('Ready for Pickup')}
+                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                    >
+                      <span className="text-base">🧺</span>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 leading-tight">Mark Ready for Pickup</p>
+                        <p className="text-[10px] text-gray-400">Notify customers</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBatchStatusUpdate('Claimed')}
+                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                    >
+                      <span className="text-base">✅</span>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 leading-tight">Mark Claimed</p>
+                        <p className="text-[10px] text-gray-400">by customer</p>
+                      </div>
+                    </button>
                   </div>
-                  <StatusPill status={item.stage} />
-                </div>
-                <div className="text-xs text-gray-500 whitespace-pre-line bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-                  {item.details}
-                </div>
-                <div className="pt-2">
-                  {item.stage === 'Ready' && (
-                    <button
-                      type="button"
-                      onClick={() => setHandoverModalOrder(item)}
-                      className="w-full py-2 bg-gray-900 text-white font-bold text-xs rounded-xl hover:bg-black"
-                    >
-                      Hand Over Item
-                    </button>
-                  )}
-                  {item.stage === 'Packing' && (
-                    <button
-                      type="button"
-                      onClick={() => setDispatchModalOrder(item)}
-                      className="w-full py-2 bg-brand-orange text-white font-bold text-xs rounded-xl hover:bg-brand-orange-dark"
-                    >
-                      Dispatch / Track
-                    </button>
-                  )}
-                  {item.stage === 'Delayed' && (
-                    <button
-                      type="button"
-                      onClick={() => handleNotifyTrigger(item)}
-                      className="w-full py-2 bg-rose-600 text-white font-bold text-xs rounded-xl hover:bg-rose-700"
-                    >
-                      Notify Student
-                    </button>
-                  )}
-                  {item.stage === 'Completed' && (
-                    <button
-                      type="button"
-                      disabled
-                      className="w-full py-2 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 flex items-center justify-center gap-1"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      <span>Fulfilled</span>
-                    </button>
-                  )}
-                  {item.stage === 'Pending' && (
-                    <button
-                      type="button"
-                      onClick={() => updateLogisticsStage(item.id, 'Packing')}
-                      className="w-full py-2 bg-blue-600 text-white font-bold text-xs rounded-xl hover:bg-blue-700"
-                    >
-                      Start Packing
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
-            ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 text-xs text-orange-900/80 font-medium">
+              <span>ⓘ</span>
+              <span>Actions are shown based on the status of selected orders.</span>
+            </div>
           </div>
         )}
+
+        {/* Table Container (Photo 4) */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-gray-700 border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50/50 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                  <th className="p-4 w-10">
+                    <input
+                      type="checkbox"
+                      className="rounded text-brand-orange focus:ring-0"
+                      checked={selectedIds.length === orders.length && orders.length > 0}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <th className="p-4">ORDER ID</th>
+                  <th className="p-4">BATCH ID</th>
+                  <th className="p-4">CATEGORY</th>
+                  <th className="p-4">FULFILLMENT DETAILS</th>
+                  <th className="p-4">STATUS</th>
+                  <th className="p-4">TIME IN STAGE</th>
+                  <th className="p-4 text-right">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredOrders.map((order) => {
+                  const isSelected = selectedIds.includes(order.id)
+                  return (
+                    <tr
+                      key={order.id}
+                      className={`hover:bg-gray-50/70 transition-colors ${
+                        isSelected ? 'bg-orange-50/20' : ''
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="p-4">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectOrder(order.id)}
+                          className="rounded text-brand-orange focus:ring-0"
+                        />
+                      </td>
+
+                      {/* Order ID & Customer */}
+                      <td className="p-4">
+                        <p className="font-extrabold text-gray-900 text-xs hover:text-brand-orange cursor-pointer">
+                          {order.id}
+                        </p>
+                        <p className="text-gray-800 font-semibold text-[11px] mt-0.5">
+                          {order.customer}
+                        </p>
+                        <p className="text-[10px] text-gray-400 font-medium">{order.date}</p>
+                      </td>
+
+                      {/* Batch ID - Rectangular */}
+                      <td className="p-4">
+                        <span className="inline-block px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold text-[11px] border border-blue-100/70">
+                          {order.batchId}
+                        </span>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{order.batchCount} orders</p>
+                      </td>
+
+                      {/* Category Badge - Rectangular */}
+                      <td className="p-4">
+                        <span
+                          className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold ${
+                            order.category === 'Pre-order'
+                              ? 'bg-orange-50 text-brand-orange border border-orange-200/60'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                          }`}
+                        >
+                          {order.category}
+                        </span>
+                      </td>
+
+                      {/* Fulfillment Details */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-1.5 font-bold text-gray-900 text-xs">
+                          <span className="w-2 h-2 rounded-full bg-purple-600" />
+                          <span>{order.fulfillmentType}</span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                          Student ID: {order.studentId}
+                        </p>
+                        <p className="text-[10px] text-gray-400 font-medium">
+                          {order.pickupMode}
+                        </p>
+                      </td>
+
+                      {/* Status Badge - Rectangular */}
+                      <td className="p-4">
+                        <span
+                          className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold ${
+                            order.status === 'Ready for Pickup'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                              : order.status === 'In Production'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                              : order.status === 'Awaiting Production'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                          }`}
+                        >
+                          {order.status}
+                        </span>
+                        {order.status === 'Unclaimed > 24h' && (
+                          <p className="text-[10px] text-rose-500 font-medium mt-0.5">
+                            {order.sinceTime}
+                          </p>
+                        )}
+                      </td>
+
+                      {/* Time In Stage */}
+                      <td className="p-4">
+                        <div className="flex items-center gap-1 font-bold text-xs">
+                          <span className="text-gray-400">⏱</span>
+                          <span
+                            className={order.exceeds24h ? 'text-rose-600 font-black' : 'text-gray-800'}
+                          >
+                            {order.timeInStage}
+                          </span>
+                        </div>
+                        <p
+                          className={`text-[10px] font-medium mt-0.5 ${
+                            order.exceeds24h ? 'text-rose-600 font-bold' : 'text-gray-400'
+                          }`}
+                        >
+                          {order.exceeds24h ? 'Exceeds 24h' : order.sinceTime}
+                        </p>
+                      </td>
+
+                      {/* Action Buttons - Rectangular */}
+                      <td className="p-4 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOrderAction(order)}
+                            className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
+                              order.actionType === 'handover'
+                                ? 'bg-[#18181B] hover:bg-black text-white shadow-2xs'
+                                : 'bg-white border border-gray-200 hover:bg-gray-50 text-gray-800'
+                            }`}
+                          >
+                            {order.actionLabel}
+                          </button>
+                          <button
+                            type="button"
+                            className="p-1.5 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 cursor-pointer"
+                          >
+                            ···
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Footer (Photo 4) */}
+          <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <span className="text-gray-500 font-medium">Showing 1–5 of 38 orders</span>
+            <div className="flex items-center gap-4">
+              <select className="h-8 px-2.5 rounded-md border border-gray-200 bg-white text-xs font-semibold text-gray-700 focus:outline-none focus:ring-0">
+                <option>10 per page</option>
+                <option>25 per page</option>
+                <option>50 per page</option>
+              </select>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded-md bg-brand-orange text-white font-bold flex items-center justify-center shadow-2xs"
+                >
+                  1
+                </button>
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
+                >
+                  2
+                </button>
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
+                >
+                  3
+                </button>
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
+                >
+                  4
+                </button>
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-
-      {/* Hand Over Item Modal */}
-      {handoverModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 space-y-4">
-            <h3 className="text-base font-black text-gray-900">Confirm Campus Claim</h3>
-            <p className="text-xs text-gray-500">
-              Confirm handover of merchandise to{' '}
-              <strong className="text-gray-900">{handoverModalOrder.customer}</strong>{' '}
-              ({handoverModalOrder.id}).
-            </p>
-            <div className="p-3 bg-gray-50 rounded-xl text-xs space-y-1">
-              <p className="font-bold text-gray-800">Verification Details:</p>
-              <p className="text-gray-600">{handoverModalOrder.details}</p>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setHandoverModalOrder(null)}
-                className="px-4 py-2 bg-gray-100 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleHandoverConfirm}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-xs flex items-center gap-1"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                <span>Confirm Claim</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Dispatch / Track Modal */}
-      {dispatchModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 space-y-4">
-            <h3 className="text-base font-black text-gray-900">Dispatch Courier Order</h3>
-            <p className="text-xs text-gray-500">
-              Enter courier tracking code for{' '}
-              <strong className="text-gray-900">{dispatchModalOrder.customer}</strong>.
-            </p>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
-                Lalamove / Courier Tracking #
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. LLM-992140"
-                value={trackingNumberInput}
-                onChange={(e) => setTrackingNumberInput(e.target.value)}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand-orange"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setDispatchModalOrder(null)}
-                className="px-4 py-2 bg-gray-100 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDispatchConfirm}
-                className="px-4 py-2 bg-brand-orange hover:bg-brand-orange-dark text-white rounded-xl text-xs font-black shadow-xs"
-              >
-                Dispatch &amp; Update
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </AdminLayout>
   )
 }

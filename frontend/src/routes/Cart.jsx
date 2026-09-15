@@ -31,19 +31,73 @@ function Cart() {
 
   return (
     <AppShell>
-      <PageHeader title="Cart" backTo="/home" />
+      <PageHeader
+        title="Cart"
+        backTo="/home"
+        rightAction={
+          <button
+            type="button"
+            onClick={() => navigate('/shop')}
+            className="text-xs font-bold text-brand-orange"
+          >
+            Shop
+          </button>
+        }
+      />
       <div className="px-4 py-4 pb-36 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in">
-        {/* Desktop Page Title */}
-        <h1 className="hidden lg:block text-3xl font-black text-gray-900 mb-8">Shopping Cart</h1>
+        {/* Desktop Top Nav & Page Title */}
+        <div className="hidden lg:flex items-center justify-between mb-6">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:text-brand-orange hover:border-brand-orange bg-white transition-all shadow-2xs cursor-pointer"
+              title="Go back to previous page"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <span>Go Back</span>
+            </button>
+            <h1 className="text-3xl font-black text-gray-900">Shopping Cart</h1>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/shop')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-brand-orange font-bold text-xs transition-colors cursor-pointer"
+          >
+            <span>Continue Shopping</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
         {cartItems.length === 0 ? (
-          <div className="text-center py-20 flex flex-col items-center justify-center">
+          <div className="text-center py-20 flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 p-8 shadow-xs">
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-100 mb-2">
               <CartIcon className="w-7 h-7 text-gray-400" />
             </div>
-            <h3 className="font-bold text-gray-700 mt-3">Your cart is empty</h3>
-            <p className="text-sm text-gray-450 mt-1 max-w-[220px] mx-auto">
-              Add some BU campus merch to get started!
+            <h3 className="font-bold text-gray-800 mt-3 text-lg">Your cart is empty</h3>
+            <p className="text-sm text-gray-450 mt-1 max-w-[260px] mx-auto">
+              Add some BU campus merch and university apparel to get started!
             </p>
+            <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
+              <Button
+                onClick={() => navigate('/shop')}
+                className="px-6 h-11 rounded-full font-bold text-xs shadow-md"
+              >
+                Continue Shopping
+              </Button>
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="px-6 h-11 rounded-full border border-gray-200 text-gray-700 font-bold text-xs hover:bg-gray-50 hover:border-gray-300 transition-all cursor-pointer"
+              >
+                Go Back
+              </button>
+            </div>
           </div>
         ) : (
           <div className="lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start">
