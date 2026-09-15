@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect } from 'react'
+import { signInUser, signUpUser, signOutUser } from '../services/auth.js'
 
 export const AuthContext = createContext(null)
 
@@ -62,6 +63,7 @@ export function AuthProvider({ children }) {
   }, [addresses])
 
   const login = async (phone, password) => {
+    // 1. Try backend API server if running
     try {
       const res = await fetch(`${API_BASE_URL}/auth/cust_login`, {
         method: 'POST',
@@ -84,10 +86,31 @@ export function AuthProvider({ children }) {
         return { user: null, error: data.message }
       }
     } catch (err) {
-      console.warn('Backend server not reached (http://127.0.0.1:8000), using local authentication fallback:', err.message)
+      console.warn('Backend server not reached (http://127.0.0.1:8000), trying Supabase Auth:', err.message)
     }
 
-    // Fallback local mock login if backend API server is offline
+    // 2. Try Supabase Auth
+    try {
+      const isEmail = (phone || '').includes('@')
+      const sbResult = await signInUser({ phone, email: isEmail ? phone : null, password })
+      if (sbResult.user && !sbResult.error) {
+        const user = {
+          ...DEFAULT_USER,
+          id: sbResult.user.id,
+          email: sbResult.user.email || (isEmail ? phone : DEFAULT_USER.email),
+          phone: sbResult.user.user_metadata?.phone || phone,
+          fullName: sbResult.user.user_metadata?.full_name || sbResult.user.user_metadata?.username || 'User',
+          username: sbResult.user.user_metadata?.username || DEFAULT_USER.username,
+          role: sbResult.user.user_metadata?.role || 'Student',
+        }
+        setCurrentUser(user)
+        return { user, error: null }
+      }
+    } catch (sbErr) {
+      console.warn('Supabase auth attempt:', sbErr.message)
+    }
+
+    // 3. Fallback local mock login
     const isEmail = (phone || '').includes('@')
     const user = {
       ...DEFAULT_USER,
@@ -100,6 +123,7 @@ export function AuthProvider({ children }) {
 
   const register = async (details) => {
     const fullName = `${details.firstName || ''} ${details.lastName || ''}`.trim() || details.username || 'User'
+    // 1. Try backend API server if running
     try {
       const res = await fetch(`${API_BASE_URL}/auth/cust_signup`, {
         method: 'POST',
@@ -128,10 +152,36 @@ export function AuthProvider({ children }) {
         return { user: null, error: data.message }
       }
     } catch (err) {
-      console.warn('Backend server not reached (http://127.0.0.1:8000), using local registration fallback:', err.message)
+      console.warn('Backend server not reached (http://127.0.0.1:8000), trying Supabase registration:', err.message)
     }
 
-    // Fallback local mock registration if backend API server is offline
+    // 2. Try Supabase Auth
+    try {
+      const sbResult = await signUpUser({
+        firstName: details.firstName,
+        lastName: details.lastName,
+        phone: details.phone,
+        email: details.email,
+        username: details.username,
+        password: details.password,
+      })
+      if (sbResult.user && !sbResult.error) {
+        const user = {
+          ...DEFAULT_USER,
+          ...details,
+          id: sbResult.user.id,
+          fullName,
+        }
+        setCurrentUser(user)
+        return { user, error: null }
+      } else if (sbResult.error) {
+        console.warn('Supabase sign up error:', sbResult.error)
+      }
+    } catch (sbErr) {
+      console.warn('Supabase registration error:', sbErr.message)
+    }
+
+    // 3. Fallback local mock registration
     const user = {
       ...DEFAULT_USER,
       ...details,
@@ -153,6 +203,7 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
+    signOutUser().catch(() => {})
     setCurrentUser(null)
   }
 
