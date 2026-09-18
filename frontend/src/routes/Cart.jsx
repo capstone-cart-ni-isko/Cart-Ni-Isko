@@ -153,14 +153,14 @@ function Cart() {
             <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
               <Button
                 onClick={() => navigate('/shop')}
-                className="px-6 h-11 rounded-full font-bold text-xs shadow-md"
+                className="px-6 h-11 rounded-xl font-bold text-xs shadow-md"
               >
                 Browse Shop
               </Button>
               <button
                 type="button"
                 onClick={() => navigate(-1)}
-                className="px-6 h-11 rounded-full border border-gray-200 text-gray-700 font-bold text-xs hover:bg-gray-50 hover:border-gray-300 transition-all cursor-pointer"
+                className="px-6 h-11 rounded-xl border border-gray-200 text-gray-700 font-bold text-xs hover:bg-gray-50 hover:border-gray-300 transition-all cursor-pointer"
               >
                 Go Back
               </button>
@@ -489,7 +489,7 @@ function Cart() {
               type="button"
               disabled={isNoneSelected || hasMixedSelection}
               onClick={handleCheckout}
-              className={`flex-1 h-12 rounded-full font-black text-xs sm:text-sm transition-all px-4 cursor-pointer shadow-md ${
+              className={`flex-1 h-12 rounded-xl font-black text-xs sm:text-sm transition-all px-4 cursor-pointer shadow-md ${
                 hasMixedSelection
                   ? 'bg-amber-500 text-white cursor-not-allowed'
                   : isNoneSelected

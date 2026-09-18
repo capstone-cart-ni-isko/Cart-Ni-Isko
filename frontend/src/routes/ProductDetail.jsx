@@ -609,7 +609,7 @@ function ProductDetail() {
             type="button"
             disabled={isOutOfStock}
             onClick={handleAddToCart}
-            className={`flex-1 h-12 font-black rounded-full shadow-md transition-all text-sm cursor-pointer ${
+            className={`flex-1 h-12 font-black rounded-xl shadow-md transition-all text-sm cursor-pointer ${
               isOutOfStock
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
                 : 'bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98'

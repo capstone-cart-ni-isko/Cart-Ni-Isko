@@ -30,7 +30,7 @@ function Wishlist() {
             <button
               type="button"
               onClick={() => setShowLogin(true)}
-              className="mt-6 bg-brand-orange text-white font-bold text-sm px-6 py-2.5 rounded-full shadow-md hover:shadow-lg active:scale-98 transition-all"
+              className="mt-6 bg-brand-orange text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-md hover:shadow-lg active:scale-98 transition-all"
             >
               Sign In
             </button>

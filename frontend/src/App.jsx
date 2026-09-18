@@ -25,7 +25,6 @@ import AccountInfo from './routes/AccountInfo.jsx'
 import Security from './routes/Security.jsx'
 import ChangePassword from './routes/ChangePassword.jsx'
 import MyAddress from './routes/MyAddress.jsx'
-import PaymentMethods from './routes/PaymentMethods.jsx'
 import Notifications from './routes/Notifications.jsx' // Notification panel/bell inbox
 import NotificationPreferences from './routes/NotificationPreferences.jsx' // Notification toggle settings
 import CheckoutPlaceholder from './routes/CheckoutPlaceholder.jsx'
@@ -45,6 +44,7 @@ import AdminStoreCustomization from './routes/admin/AdminStoreCustomization.jsx'
 import AdminSchedule from './routes/admin/AdminSchedule.jsx'
 import AdminReviews from './routes/admin/AdminReviews.jsx'
 import AdminUsers from './routes/admin/AdminUsers.jsx'
+import AdminAppointments from './routes/admin/AdminAppointments.jsx'
 
 function App() {
   return (
@@ -76,7 +76,6 @@ function App() {
                 <Route path="/security" element={<Security />} />
                 <Route path="/settings/change-password" element={<ChangePassword />} />
                 <Route path="/settings/address" element={<MyAddress />} />
-                <Route path="/settings/payments" element={<PaymentMethods />} />
                 <Route path="/notifications" element={<Notifications />} />
                 <Route path="/settings/notifications" element={<NotificationPreferences />} />
                 <Route path="/checkout" element={<CheckoutPlaceholder />} />
@@ -95,6 +94,7 @@ function App() {
                 <Route path="/admin/customization" element={<AdminStoreCustomization />} />
                 <Route path="/admin/settings" element={<AdminStoreCustomization />} />
                 <Route path="/admin/schedule" element={<AdminSchedule />} />
+                <Route path="/admin/appointments" element={<AdminAppointments />} />
                 <Route path="/admin/reviews" element={<AdminReviews />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
 

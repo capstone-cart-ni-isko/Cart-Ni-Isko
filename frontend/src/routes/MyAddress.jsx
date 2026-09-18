@@ -9,8 +9,6 @@ import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import { MapPinIcon } from '../components/ui/Icons.jsx'
 
 const EMPTY_FORM = {
-  recipient: '',
-  phone: '',
   addressLine: '',
   barangay: '',
   city: '',
@@ -19,12 +17,15 @@ const EMPTY_FORM = {
   isDefault: false,
 }
 
-function AddressCard({ address, onEdit, onDelete, onSetDefault }) {
+function AddressCard({ address, defaultName, defaultPhone, onEdit, onDelete, onSetDefault }) {
+  const recipientName = address.recipient || defaultName
+  const phoneNumber = address.phone || defaultPhone
+
   return (
     <div className={`bg-white rounded-2xl border p-4 shadow-sm ${address.isDefault ? 'border-brand-orange/30' : 'border-gray-200'}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-extrabold text-gray-900">{address.recipient}</p>
+          <p className="text-sm font-extrabold text-gray-900">{recipientName}</p>
           {address.isDefault && (
             <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-orange/10 text-brand-orange border border-brand-orange/20">
               Default
@@ -49,7 +50,7 @@ function AddressCard({ address, onEdit, onDelete, onSetDefault }) {
           </button>
         </div>
       </div>
-      <p className="text-xs text-gray-500">{address.phone}</p>
+      <p className="text-xs text-gray-500">{phoneNumber}</p>
       <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
         {address.addressLine}, {address.barangay}, {address.city}, {address.province} {address.postalCode}
       </p>
@@ -58,8 +59,11 @@ function AddressCard({ address, onEdit, onDelete, onSetDefault }) {
 }
 
 function MyAddress() {
-  const { addresses, addAddress, updateAddress, deleteAddress } = useAuth()
+  const { currentUser, addresses, addAddress, updateAddress, deleteAddress } = useAuth()
   const { showToast } = useToast()
+
+  const accountName = currentUser?.fullName || 'Juan Dela Cruz'
+  const accountPhone = currentUser?.phone || '+63 912 345 6789'
 
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -82,7 +86,14 @@ function MyAddress() {
 
   const handleEdit = (addr) => {
     setEditingId(addr.id)
-    setForm(addr)
+    setForm({
+      addressLine: addr.addressLine || '',
+      barangay: addr.barangay || '',
+      city: addr.city || '',
+      province: addr.province || '',
+      postalCode: addr.postalCode || '',
+      isDefault: Boolean(addr.isDefault),
+    })
     setShowForm(true)
   }
 
@@ -96,12 +107,18 @@ function MyAddress() {
     e.preventDefault()
     if (!isFormValid) return
 
+    const addressPayload = {
+      ...form,
+      recipient: accountName,
+      phone: accountPhone,
+    }
+
     if (editingId) {
-      updateAddress(editingId, form)
+      updateAddress(editingId, addressPayload)
       showToast('Address updated successfully!')
     } else {
       addAddress({
-        ...form,
+        ...addressPayload,
         id: Date.now().toString(),
       })
       showToast('Address added successfully!')
@@ -123,7 +140,7 @@ function MyAddress() {
     showToast('Default address updated!')
   }
 
-  const isFormValid = form.recipient && form.phone && form.addressLine && form.city && form.province
+  const isFormValid = form.addressLine?.trim() && form.city?.trim() && form.province?.trim()
 
   return (
     <AppShell>
@@ -152,6 +169,8 @@ function MyAddress() {
             <AddressCard
               key={addr.id}
               address={addr}
+              defaultName={accountName}
+              defaultPhone={accountPhone}
               onEdit={handleEdit}
               onDelete={(id) => setDeleteTarget(id)}
               onSetDefault={handleSetDefault}
@@ -161,12 +180,25 @@ function MyAddress() {
           {/* Add / Edit Form */}
           {showForm && (
             <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4 animate-fade-in">
-              <h3 className="text-sm font-extrabold text-gray-900">
-                {editingId ? 'Edit Address' : 'Add New Address'}
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-gray-900">
+                  {editingId ? 'Edit Address' : 'Add New Address'}
+                </h3>
+                <span className="text-[10px] font-bold text-gray-400">Recipient info synced from account</span>
+              </div>
+
+              {/* Account Contact Display */}
+              <div className="bg-orange-50/50 rounded-xl p-3 border border-orange-100/80 flex items-center justify-between text-xs">
+                <div>
+                  <p className="font-bold text-gray-900">{accountName}</p>
+                  <p className="text-gray-500 mt-0.5">{accountPhone}</p>
+                </div>
+                <span className="text-[10px] font-bold text-brand-orange bg-white px-2.5 py-1 rounded-lg border border-orange-200/80 shadow-2xs">
+                  Account Contact
+                </span>
+              </div>
+
               <form onSubmit={handleSave} className="space-y-3">
-                <Input label="Recipient Name" name="recipient" value={form.recipient} onChange={handleChange} placeholder="Full name" />
-                <Input label="Phone Number" name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="+63 9XX XXX XXXX" />
                 <Input label="Address Line" name="addressLine" value={form.addressLine} onChange={handleChange} placeholder="House no., Street, Building" />
                 <Input label="Barangay" name="barangay" value={form.barangay} onChange={handleChange} placeholder="Barangay" />
                 <div className="grid grid-cols-2 gap-3">

@@ -58,7 +58,7 @@ function CheckoutPlaceholder() {
         </div>
 
         <div className="w-full max-w-xs space-y-3">
-          <Button onClick={() => navigate('/orders')} className="w-full h-12 rounded-full font-bold shadow-md cursor-pointer">
+          <Button onClick={() => navigate('/orders')} className="w-full h-12 rounded-xl font-bold shadow-md cursor-pointer">
             View My Orders Now
           </Button>
           <button

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell.jsx'
-import DesktopAccountSidebar from '../components/layout/DesktopAccountSidebar.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import { mockUser } from '../data/mockUser.js'
 import collegesData from '../data/colleges.json'
@@ -91,15 +90,6 @@ function AccountInfo() {
     e.preventDefault()
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
-  }
-
-  const handleTabChange = (tab) => {
-    const routes = {
-      overview: '/profile', orders: '/orders', appointments: '/appointments',
-      saved: '/wishlist', addresses: '/settings/address', payments: '/settings',
-      settings: '/settings', help: '/help',
-    }
-    navigate(routes[tab] || '/profile')
   }
 
   const fullName = `${form.firstName} ${form.lastName}`
@@ -199,50 +189,45 @@ function AccountInfo() {
         </form>
       </div>
 
-      {/* ── DESKTOP LAYOUT ── */}
-      <div className="hidden md:flex gap-8 items-start w-full py-2">
-        {/* Left Sidebar */}
-        <DesktopAccountSidebar activeTab="settings" onTabChange={handleTabChange} />
+      {/* ── DESKTOP LAYOUT (No Sidebar) ── */}
+      <div className="hidden md:block w-full max-w-4xl mx-auto space-y-6 py-4 animate-fade-in">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 text-sm">
+          <Link to="/settings" className="text-gray-400 hover:text-gray-600 transition-colors">Account Settings</Link>
+          <span className="text-gray-300">/</span>
+          <span className="text-gray-900 font-bold">Edit Profile</span>
+        </div>
 
-        {/* Right Main Content */}
-        <div className="flex-1 min-w-0 space-y-6">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm">
-            <Link to="/settings" className="text-gray-400 hover:text-gray-600 transition-colors">Account Settings</Link>
-            <span className="text-gray-300">/</span>
-            <span className="text-gray-900 font-bold">Edit Profile</span>
+        {/* Page Title */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-[#FFF4EC] text-[#FF6A00] flex items-center justify-center">
+            <UserIcon className="w-5 h-5" />
           </div>
-
-          {/* Page Title */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#FFF4EC] text-[#FF6A00] flex items-center justify-center">
-              <UserIcon className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-gray-900">Edit Profile</h1>
-              <p className="text-sm text-gray-400">Keep your personal information up to date.</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-black text-gray-900">Edit Profile</h1>
+            <p className="text-sm text-gray-400">Keep your personal information up to date.</p>
           </div>
+        </div>
 
-          {/* Form Card */}
-          <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-gray-100/90 shadow-xs overflow-hidden">
-            {/* Profile Photo Section */}
-            <div className="px-7 py-6 border-b border-gray-100 flex items-center gap-5">
-              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-md shrink-0">
-                <img src={avatarImg} alt="Avatar" className="w-full h-full object-cover" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-lg font-bold text-gray-900">{fullName}</h3>
-                <p className="text-sm text-gray-400 truncate">{form.email}</p>
-              </div>
-              <button
-                type="button"
-                className="ml-auto flex items-center gap-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm px-5 py-2.5 rounded-full shadow-sm active:scale-95 transition-all shrink-0"
-              >
-                <PencilIcon className="w-3.5 h-3.5" />
-                <span>Edit Photo</span>
-              </button>
+        {/* Form Card */}
+        <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-gray-100/90 shadow-xs overflow-hidden">
+          {/* Profile Photo Section */}
+          <div className="px-7 py-6 border-b border-gray-100 flex items-center gap-5">
+            <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-md shrink-0">
+              <img src={avatarImg} alt="Avatar" className="w-full h-full object-cover" />
             </div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-bold text-gray-900">{fullName}</h3>
+              <p className="text-sm text-gray-400 truncate">{form.email}</p>
+            </div>
+            <button
+              type="button"
+              className="ml-auto flex items-center gap-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm px-5 py-2.5 rounded-xl shadow-sm active:scale-95 transition-all shrink-0"
+            >
+              <PencilIcon className="w-3.5 h-3.5" />
+              <span>Edit Photo</span>
+            </button>
+          </div>
 
             {/* Personal Information Section */}
             <div className="px-7 py-6 border-b border-gray-100 space-y-5">
@@ -320,25 +305,24 @@ function AccountInfo() {
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons - Rectangular */}
             <div className="px-7 py-5 flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => navigate('/profile')}
-                className="px-7 py-2.5 rounded-full border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 active:scale-95 transition-all"
+                className="px-7 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 active:scale-95 transition-all"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-7 py-2.5 rounded-full bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm shadow-sm active:scale-95 transition-all"
+                className="px-7 py-2.5 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm shadow-sm active:scale-95 transition-all"
               >
                 {saved ? 'Changes Saved!' : 'Save Changes'}
               </button>
             </div>
           </form>
         </div>
-      </div>
     </AppShell>
   )
 }

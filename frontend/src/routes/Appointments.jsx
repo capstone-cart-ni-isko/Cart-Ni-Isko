@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
-import DesktopAccountSidebar from '../components/layout/DesktopAccountSidebar.jsx'
 import { mockUser } from '../data/mockUser.js'
 import avatarImg from '../assets/avatar.png'
 import hoodieImg from '../assets/Images/unnamed (11).png'
@@ -514,51 +513,46 @@ export default function Appointments() {
         </div>
       </div>
 
-      {/* ── DESKTOP VIEW (md+) matching the reference mockup ── */}
-      <div className="hidden md:flex gap-8 items-start w-full py-2">
-        {/* Left Sidebar Navigation */}
-        <DesktopAccountSidebar activeTab="appointments" />
+      {/* ── DESKTOP VIEW (No Sidebar) ── */}
+      <div className="hidden md:block w-full max-w-5xl mx-auto space-y-5 py-2 animate-fade-in">
+        {/* Top Profile Banner - Compact */}
+        <div className="rounded-3xl p-5 md:py-5 md:px-6 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
+          <div className="absolute inset-0 opacity-[0.04] select-none pointer-events-none flex items-center justify-center">
+            <span className="text-5xl font-black tracking-widest rotate-[6deg] whitespace-nowrap text-white">
+              TINDAHAN NI ISKO
+            </span>
+          </div>
 
-        {/* Right Content Area */}
-        <div className="flex-1 min-w-0 space-y-6">
-          {/* Top Profile Banner */}
-          <div className="rounded-3xl p-7 md:p-8 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
-            <div className="absolute inset-0 opacity-[0.05] select-none pointer-events-none flex items-center justify-center">
-              <span className="text-[6rem] font-black tracking-widest rotate-[12deg] whitespace-nowrap text-white">
-                TINDAHAN NI ISKO
-              </span>
+          {/* User Info */}
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="w-16 h-16 rounded-full overflow-hidden shrink-0 shadow-sm">
+              <img src={avatarImg} alt={fullName} className="w-full h-full object-cover scale-120" />
             </div>
-
-            {/* User Info */}
-            <div className="flex items-center gap-6 relative z-10">
-              <div className="w-24 h-24 rounded-full border-4 border-white overflow-hidden bg-blue-100 shadow-md shrink-0">
-                <img src={avatarImg} alt={fullName} className="w-full h-full object-cover" />
-              </div>
-              <div className="text-white">
-                <h1 className="text-2xl md:text-3xl font-black tracking-tight leading-tight">{fullName}</h1>
-                <p className="text-white/90 text-xs md:text-sm font-normal mt-1">{email}</p>
-                <p className="text-white/80 text-xs font-normal mt-0.5">Student ID: {studentId}</p>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-3 relative z-10">
-              <Link
-                to="/account"
-                className="flex items-center gap-2 bg-white text-gray-800 font-bold text-xs px-5 py-2.5 rounded-full shadow-xs hover:bg-gray-50 active:scale-95 transition-all"
-              >
-                <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
-                <span>Edit Profile</span>
-              </Link>
-              <Link
-                to="/settings"
-                className="w-10 h-10 rounded-full bg-white text-gray-700 flex items-center justify-center shadow-xs hover:bg-gray-50 active:scale-95 transition-all"
-                title="Settings"
-              >
-                <SettingsIcon className="w-5 h-5 text-gray-600" />
-              </Link>
+            <div className="text-white">
+              <h1 className="text-xl font-black tracking-tight leading-tight">{fullName}</h1>
+              <p className="text-white/90 text-xs font-normal mt-0.5">{email}</p>
+              <p className="text-white/80 text-[11px] font-normal mt-0.5">Student ID: {studentId}</p>
             </div>
           </div>
+
+          {/* Actions - Rectangular */}
+          <div className="flex items-center gap-2.5 relative z-10">
+            <Link
+              to="/account"
+              className="flex items-center gap-1.5 bg-white text-gray-800 font-bold text-xs px-4 py-2.5 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
+              <span>Edit Profile</span>
+            </Link>
+            <Link
+              to="/settings"
+              className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs text-white hover:bg-white hover:text-gray-800 flex items-center justify-center shadow-2xs active:scale-95 transition-all"
+              title="Settings"
+            >
+              <SettingsIcon className="w-5 h-5" />
+            </Link>
+          </div>
+        </div>
 
           {/* 2-Column Grid (8 cols Main + 4 cols Sidebar) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -840,7 +834,7 @@ export default function Appointments() {
                   href="https://maps.google.com/?q=Bicol+University+Main+Campus+Legazpi+City"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-2.5 rounded-full border border-blue-200 text-[#2563EB] font-bold text-sm flex items-center justify-center gap-1.5 hover:bg-blue-50 transition-colors shadow-2xs"
+                  className="w-full py-2.5 rounded-xl border border-blue-200 text-[#2563EB] font-bold text-sm flex items-center justify-center gap-1.5 hover:bg-blue-50 transition-colors shadow-2xs"
                 >
                   <span>View on Maps</span>
                   <span>→</span>
@@ -849,7 +843,6 @@ export default function Appointments() {
             </div>
           </div>
         </div>
-      </div>
     </AppShell>
   )
 }

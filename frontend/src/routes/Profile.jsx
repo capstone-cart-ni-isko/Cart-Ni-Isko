@@ -244,46 +244,50 @@ function Profile() {
         </div>
 
         <div className="p-4 space-y-4">
-          {/* Orange Banner */}
-          <div className="rounded-3xl p-5 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
+          {/* Orange Banner - Mobile Redesign */}
+          <div className="rounded-3xl p-5 text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] space-y-4">
             <div className="absolute inset-0 opacity-[0.05] select-none pointer-events-none flex items-center justify-center">
               <span className="text-5xl font-black tracking-widest rotate-[12deg] whitespace-nowrap text-white">
                 TINDAHAN NI ISKO
               </span>
             </div>
 
-            {/* Avatar + Info */}
-            <div className="flex items-center gap-3.5 relative z-10 min-w-0">
-              <div className="w-16 h-16 rounded-full border-2 border-white overflow-hidden bg-blue-100 shadow-md shrink-0">
-                <img src={avatarImg} alt={fullName} className="w-full h-full object-cover" />
+            {/* Avatar + Info Header with Settings Icon */}
+            <div className="flex items-start justify-between gap-3 relative z-10">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm">
+                  <img src={avatarImg} alt={fullName} className="w-full h-full object-cover scale-120" />
+                </div>
+                <div className="min-w-0 text-white">
+                  <h1 className="text-lg font-black tracking-tight leading-tight truncate">{fullName}</h1>
+                  <p className="text-white/90 text-xs font-normal mt-0.5 truncate">{email}</p>
+                  <p className="text-white/80 text-[11px] font-normal mt-0.5">Student ID: {studentId}</p>
+                </div>
               </div>
-              <div className="min-w-0 text-white">
-                <h1 className="text-xl font-black tracking-tight leading-tight truncate">{fullName}</h1>
-                <p className="text-white/90 text-sm font-normal mt-0.5 truncate">{email}</p>
-                <p className="text-white/80 text-xs font-normal mt-0.5">Student ID: {studentId}</p>
-              </div>
+
+              {/* Settings Action Button - Rectangular */}
+              <Link
+                to="/settings"
+                className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs text-white hover:bg-white hover:text-gray-800 flex items-center justify-center shadow-2xs active:scale-95 transition-all shrink-0"
+                title="Settings"
+              >
+                <SettingsIcon className="w-5 h-5" />
+              </Link>
             </div>
 
-            {/* Actions */}
-            <div className="flex items-center gap-2 relative z-10 shrink-0">
+            {/* Action Bar: Edit Profile - Rectangular */}
+            <div className="relative z-10 pt-1">
               <Link
                 to="/account"
-                className="flex items-center gap-1.5 bg-white text-gray-800 font-bold text-xs px-3.5 py-2 rounded-full shadow-xs hover:bg-gray-50 active:scale-95 transition-all"
+                className="flex items-center justify-center gap-2 bg-white text-gray-800 font-bold text-xs py-2.5 px-4 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-98 transition-all w-full"
               >
                 <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
                 <span>Edit Profile</span>
               </Link>
-              <Link
-                to="/settings"
-                className="w-9 h-9 rounded-full bg-white text-gray-700 flex items-center justify-center shadow-xs hover:bg-gray-50 active:scale-95 transition-all"
-                title="Settings"
-              >
-                <SettingsIcon className="w-4.5 h-4.5 text-gray-600" />
-              </Link>
             </div>
           </div>
 
-          {/* 1. Quick Overview */}
+          {/* 1. Quick Overview - 2x2 Responsive Grid */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
@@ -292,50 +296,58 @@ function Profile() {
               <h3 className="text-base font-black text-gray-900">Quick Overview</h3>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               {/* Total Orders */}
-              <div className="bg-white rounded-2xl p-2.5 border border-gray-100 flex flex-col justify-between text-center items-center shadow-2xs">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#2563EB] flex items-center justify-center mb-1">
+              <div className="bg-[#F0F5FF] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+                <div className="w-9 h-9 rounded-lg bg-blue-100 text-[#2563EB] flex items-center justify-center shrink-0">
                   <OrdersNavIcon className="w-4.5 h-4.5" />
                 </div>
-                <span className="text-xl font-black text-gray-900 leading-none">{overview.totalOrders}</span>
-                <p className="text-xs text-gray-500 font-semibold mt-1">Total Orders</p>
+                <div className="min-w-0">
+                  <span className="text-xl font-black text-gray-900 leading-none">{overview.totalOrders}</span>
+                  <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Total Orders</p>
+                </div>
               </div>
 
               {/* Completed Orders */}
-              <div className="bg-white rounded-2xl p-2.5 border border-gray-100 flex flex-col justify-between text-center items-center shadow-2xs">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-[#10B981] flex items-center justify-center mb-1">
+              <div className="bg-[#F0FDF4] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+                <div className="w-9 h-9 rounded-lg bg-emerald-100 text-[#10B981] flex items-center justify-center shrink-0">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4.5 h-4.5">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
-                <span className="text-xl font-black text-gray-900 leading-none">{overview.completedOrders}</span>
-                <p className="text-xs text-gray-500 font-semibold mt-1">Completed Orders</p>
+                <div className="min-w-0">
+                  <span className="text-xl font-black text-gray-900 leading-none">{overview.completedOrders}</span>
+                  <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Completed</p>
+                </div>
               </div>
 
               {/* Appointments */}
-              <div className="bg-white rounded-2xl p-2.5 border border-gray-100 flex flex-col justify-between text-center items-center shadow-2xs">
-                <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#FF6A00] flex items-center justify-center mb-1">
+              <div className="bg-[#FFF7ED] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+                <div className="w-9 h-9 rounded-lg bg-orange-100 text-[#FF6A00] flex items-center justify-center shrink-0">
                   <CalendarNavIcon className="w-4.5 h-4.5" />
                 </div>
-                <span className="text-xl font-black text-gray-900 leading-none">{overview.appointments}</span>
-                <p className="text-xs text-gray-500 font-semibold mt-1">Appointments</p>
+                <div className="min-w-0">
+                  <span className="text-xl font-black text-gray-900 leading-none">{overview.appointments}</span>
+                  <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Appointments</p>
+                </div>
               </div>
 
               {/* Saved Items */}
-              <div className="bg-white rounded-2xl p-2.5 border border-gray-100 flex flex-col justify-between text-center items-center shadow-2xs">
-                <div className="w-8 h-8 rounded-lg bg-purple-50 text-[#8B5CF6] flex items-center justify-center mb-1">
+              <div className="bg-[#FAF5FF] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
+                <div className="w-9 h-9 rounded-lg bg-purple-100 text-[#8B5CF6] flex items-center justify-center shrink-0">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4.5 h-4.5">
                     <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
                   </svg>
                 </div>
-                <span className="text-xl font-black text-gray-900 leading-none">{overview.savedItems}</span>
-                <p className="text-xs text-gray-500 font-semibold mt-1">Saved Items</p>
+                <div className="min-w-0">
+                  <span className="text-xl font-black text-gray-900 leading-none">{overview.savedItems}</span>
+                  <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Saved Items</p>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* 2. About Me */}
+          {/* 2. About Me - 2 Columns on mobile */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -349,22 +361,22 @@ function Profile() {
               </Link>
             </div>
             <p className="text-sm text-gray-600 leading-relaxed font-normal">{bio}</p>
-            <div className="grid grid-cols-4 gap-2 pt-3 border-t border-gray-100">
+            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">Year Level</p>
                 <p className="text-sm font-bold text-gray-900">{yearLevel}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">Course</p>
-                <p className="text-sm font-bold text-gray-900 truncate" title={course}>{course}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">Campus</p>
                 <p className="text-sm font-bold text-gray-900">{campus}</p>
               </div>
               <div>
+                <p className="text-xs font-semibold text-gray-500 mb-0.5">Course</p>
+                <p className="text-sm font-bold text-gray-900 leading-snug">{course}</p>
+              </div>
+              <div>
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">College</p>
-                <p className="text-sm font-bold text-gray-900 truncate" title={college}>{college}</p>
+                <p className="text-sm font-bold text-gray-900 leading-snug">{college}</p>
               </div>
             </div>
           </div>
@@ -484,7 +496,27 @@ function Profile() {
             </div>
           </div>
 
-          {/* 6. Account Security */}
+          {/* 6. Help Center */}
+          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-orange-50 text-[#FF6A00] flex items-center justify-center">
+                <HelpIcon className="w-4 h-4 text-[#FF6A00]" />
+              </div>
+              <h3 className="text-base font-black text-gray-900">Need Help?</h3>
+            </div>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              We're here to assist with your BU merch orders, campus pickups, and sizing queries.
+            </p>
+            <Link
+              to="/help"
+              className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 hover:bg-orange-100 text-[#FF6A00] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <HelpIcon className="w-4 h-4 text-[#FF6A00]" />
+              <span>Visit Help Center</span>
+            </Link>
+          </div>
+
+          {/* 7. Account Security */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -510,48 +542,103 @@ function Profile() {
         </div>
       </div>
 
-      {/* ── DESKTOP LAYOUT (Full width without sidebar) ── */}
-      <div className="hidden md:block w-full max-w-6xl mx-auto space-y-6 py-4 animate-fade-in">
-        {/* Top Banner spanning across full width */}
-          <div className="rounded-3xl p-7 md:p-8 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
-            <div className="absolute inset-0 opacity-[0.05] select-none pointer-events-none flex items-center justify-center">
-              <span className="text-[6rem] font-black tracking-widest rotate-[12deg] whitespace-nowrap text-white">
-                TINDAHAN NI ISKO
-              </span>
-            </div>
+      {/* ── DESKTOP LAYOUT ── */}
+      <div className="hidden md:block w-full max-w-5xl mx-auto space-y-5 py-2 animate-fade-in">
+        {/* Top Banner - Hero style */}
+        <div className="rounded-3xl py-12 px-10 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
+          <div className="absolute inset-0 opacity-[0.04] select-none pointer-events-none flex items-center justify-center">
+            <span className="text-[7rem] font-black tracking-widest rotate-[6deg] whitespace-nowrap text-white">
+              CART NI ISKO
+            </span>
+          </div>
 
-            {/* Left: Avatar + Info */}
-            <div className="flex items-center gap-6 relative z-10">
-              <div className="w-24 h-24 rounded-full border-4 border-white overflow-hidden bg-blue-100 shadow-md shrink-0">
-                <img src={avatarImg} alt={fullName} className="w-full h-full object-cover" />
-              </div>
-              <div className="text-white">
-                <h1 className="text-2xl md:text-3xl font-black tracking-tight leading-tight">{fullName}</h1>
-                <p className="text-white/90 text-xs md:text-sm font-normal mt-1">{email}</p>
-                <p className="text-white/80 text-xs font-normal mt-0.5">Student ID: {studentId}</p>
-              </div>
+          {/* Left: Avatar + Info */}
+          <div className="flex items-center gap-5 relative z-10">
+            <div className="w-24 h-24 rounded-full overflow-hidden shrink-0 shadow-md">
+              <img src={avatarImg} alt={fullName} className="w-full h-full object-cover scale-120" />
             </div>
+            <div className="text-white">
+              <h1 className="text-3xl font-black tracking-tight leading-tight">{fullName}</h1>
+              <p className="text-white/90 text-sm font-normal mt-1">{email}</p>
+              <p className="text-white/80 text-xs font-normal mt-0.5">Student ID: {studentId}</p>
+            </div>
+          </div>
 
-            {/* Right: Actions */}
-            <div className="flex items-center gap-3 relative z-10">
-              <Link
-                to="/account"
-                className="flex items-center gap-2 bg-white text-gray-800 font-bold text-xs px-5 py-2.5 rounded-full shadow-xs hover:bg-gray-50 active:scale-95 transition-all"
-              >
-                <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
-                <span>Edit Profile</span>
+          {/* Right: Actions - Rectangular with rounded corners */}
+          <div className="flex items-center gap-3 relative z-10">
+            <Link
+              to="/account"
+              className="flex items-center gap-2 bg-white text-gray-800 font-bold text-sm px-5 py-3 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              <PencilIcon className="w-4 h-4 text-gray-500" />
+              <span>Edit Profile</span>
+            </Link>
+            <Link
+              to="/settings"
+              className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-xs text-white hover:bg-white hover:text-gray-800 flex items-center justify-center shadow-2xs active:scale-95 transition-all"
+              title="Settings"
+            >
+              <SettingsIcon className="w-5 h-5" />
+            </Link>
+          </div>
+        </div>
+
+          {/* Order Status Tracker - Full Width Bar */}
+          <div className="bg-white rounded-3xl p-5 border border-gray-100/90 shadow-xs">
+            <div className="flex items-center justify-between px-4">
+              {/* Step 1: In Progress */}
+              <Link to="/orders?status=in_progress" className="flex items-center gap-3 group">
+                <div className="w-11 h-11 rounded-full bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+                  <PipelineIcon id="in_progress" className="w-5 h-5 text-[#2563EB]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-gray-900 leading-none">2</p>
+                  <p className="text-xs text-gray-500 font-semibold mt-0.5">In Progress</p>
+                </div>
               </Link>
-              <Link
-                to="/settings"
-                className="w-10 h-10 rounded-full bg-white text-gray-700 flex items-center justify-center shadow-xs hover:bg-gray-50 active:scale-95 transition-all"
-                title="Settings"
-              >
-                <SettingsIcon className="w-5 h-5 text-gray-600" />
+
+              <span className="text-gray-200 text-lg">- - -</span>
+
+              {/* Step 2: For Pickup */}
+              <Link to="/orders?status=for_pickup" className="flex items-center gap-3 group">
+                <div className="w-11 h-11 rounded-full bg-[#FFF4E5] text-[#FF6A00] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+                  <PipelineIcon id="for_pickup" className="w-5 h-5 text-[#FF6A00]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-gray-900 leading-none">3</p>
+                  <p className="text-xs text-gray-500 font-semibold mt-0.5">For Pickup</p>
+                </div>
+              </Link>
+
+              <span className="text-gray-200 text-lg">- - -</span>
+
+              {/* Step 3: For Delivery */}
+              <Link to="/orders?status=for_delivery" className="flex items-center gap-3 group">
+                <div className="w-11 h-11 rounded-full bg-[#E8F8EE] text-[#10B981] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+                  <PipelineIcon id="for_delivery" className="w-5 h-5 text-[#10B981]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-gray-900 leading-none">5</p>
+                  <p className="text-xs text-gray-500 font-semibold mt-0.5">For Delivery</p>
+                </div>
+              </Link>
+
+              <span className="text-gray-200 text-lg">- - -</span>
+
+              {/* Step 4: Completed */}
+              <Link to="/orders?status=completed" className="flex items-center gap-3 group">
+                <div className="w-11 h-11 rounded-full bg-[#F3E8FF] text-[#8B5CF6] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
+                  <PipelineIcon id="completed" className="w-5 h-5 text-[#8B5CF6]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-gray-900 leading-none">2</p>
+                  <p className="text-xs text-gray-500 font-semibold mt-0.5">Completed</p>
+                </div>
               </Link>
             </div>
           </div>
 
-          {/* 2-Column Grid below banner */}
+          {/* 2-Column Grid below tracker */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Center Main Column (8 Cols) */}
             <div className="lg:col-span-8 space-y-6">
@@ -590,78 +677,6 @@ function Profile() {
                     <p className="text-xs font-semibold text-gray-500 mb-1">College</p>
                     <p className="text-sm font-bold text-gray-900">{college}</p>
                   </div>
-                </div>
-              </div>
-
-              {/* 2. My Orders Stepper */}
-              <div className="bg-white rounded-3xl p-6 md:p-7 border border-gray-100/90 shadow-xs space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-2xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                      <OrdersNavIcon className="w-5 h-5" />
-                    </div>
-                    <h2 className="text-lg font-black text-gray-900">My Orders</h2>
-                  </div>
-                  <Link
-                    to="/orders"
-                    className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1"
-                  >
-                    <span>View All Orders</span>
-                    <span>→</span>
-                  </Link>
-                </div>
-
-                {/* Pipeline Steps */}
-                <div className="flex items-center justify-between px-2">
-                  {/* Step 1: In Progress */}
-                  <Link to="/orders?status=in_progress" className="flex items-center gap-3 group">
-                    <div className="w-12 h-12 rounded-full bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-                      <PipelineIcon id="in_progress" className="w-5 h-5 text-[#2563EB]" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-black text-gray-900 leading-none">2</p>
-                      <p className="text-xs text-gray-500 font-semibold mt-1">In Progress</p>
-                    </div>
-                  </Link>
-
-                  <span className="text-gray-300 font-light text-sm">→</span>
-
-                  {/* Step 2: For Pickup */}
-                  <Link to="/orders?status=for_pickup" className="flex items-center gap-3 group">
-                    <div className="w-12 h-12 rounded-full bg-[#FFF4E5] text-[#FF6A00] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-                      <PipelineIcon id="for_pickup" className="w-5 h-5 text-[#FF6A00]" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-black text-gray-900 leading-none">3</p>
-                      <p className="text-xs text-gray-500 font-semibold mt-1">For Pickup</p>
-                    </div>
-                  </Link>
-
-                  <span className="text-gray-300 font-light text-sm">→</span>
-
-                  {/* Step 3: For Delivery */}
-                  <Link to="/orders?status=for_delivery" className="flex items-center gap-3 group">
-                    <div className="w-12 h-12 rounded-full bg-[#E8F8EE] text-[#10B981] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-                      <PipelineIcon id="for_delivery" className="w-5 h-5 text-[#10B981]" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-black text-gray-900 leading-none">5</p>
-                      <p className="text-xs text-gray-500 font-semibold mt-1">For Delivery</p>
-                    </div>
-                  </Link>
-
-                  <span className="text-gray-300 font-light text-sm">→</span>
-
-                  {/* Step 4: Completed */}
-                  <Link to="/orders?status=completed" className="flex items-center gap-3 group">
-                    <div className="w-12 h-12 rounded-full bg-[#F3E8FF] text-[#8B5CF6] flex items-center justify-center shadow-2xs group-hover:scale-105 transition-transform">
-                      <PipelineIcon id="completed" className="w-5 h-5 text-[#8B5CF6]" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-black text-gray-900 leading-none">2</p>
-                      <p className="text-xs text-gray-500 font-semibold mt-1">Completed</p>
-                    </div>
-                  </Link>
                 </div>
               </div>
 
@@ -809,7 +824,32 @@ function Profile() {
                 </div>
               </div>
 
-              {/* 3. Account Security */}
+              {/* 3. Help Center */}
+              <div className="bg-white rounded-3xl p-6 border border-gray-100/90 shadow-xs space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#FF6A00] flex items-center justify-center">
+                    <HelpIcon className="w-4.5 h-4.5 text-[#FF6A00]" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-gray-900">Help Center</h3>
+                    <p className="text-xs text-gray-400">Order & account assistance</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 font-normal leading-relaxed">
+                  Have questions about your BU merchandise, order status, pickup schedules, or sizing?
+                </p>
+                <div className="pt-1">
+                  <Link
+                    to="/help"
+                    className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/50 hover:bg-orange-100/70 text-[#FF6A00] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <HelpIcon className="w-4 h-4 text-[#FF6A00]" />
+                    <span>Visit Help Center</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* 4. Account Security */}
               <div className="bg-white rounded-3xl p-6 border border-gray-100/90 shadow-xs space-y-3">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
@@ -830,27 +870,6 @@ function Profile() {
             </div>
           </div>
         </div>
-
-      {/* Floating Circular Help Center Icon (Bottom Right on both Mobile & Web) */}
-      <Link
-        to="/help"
-        className="fixed bottom-20 right-5 md:bottom-8 md:right-8 z-40 w-13 h-13 md:w-14 md:h-14 rounded-full bg-[#FF6A00] text-white shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all group cursor-pointer"
-        title="Help & Support"
-        aria-label="Help & Support"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="w-6 h-6 md:w-7 md:h-7 transition-transform group-hover:rotate-12"
-        >
-          <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-          <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-        </svg>
-      </Link>
 
       <ConfirmModal
         isOpen={showLogoutConfirm}
