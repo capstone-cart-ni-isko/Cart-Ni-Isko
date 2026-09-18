@@ -3,19 +3,22 @@ import { INITIAL_ADMIN_DATA } from '../data/adminMockData.js'
 
 export const AdminContext = createContext(null)
 
-const STORAGE_KEY = 'isko_admin_state_v3'
-const AUTH_STORAGE_KEY = 'isko_admin_auth_v3'
+const STORAGE_KEY = 'isko_admin_state_v4'
+const AUTH_STORAGE_KEY = 'isko_admin_auth_v4'
 
 export const DEFAULT_ADMIN_USERS = [
   {
     id: 'usr-1',
     name: 'Super Admin',
     email: 'superadmin@bicol-u.edu.ph',
+    phone: '+63 912 345 6789',
     role: 'Super Admin',
     roleKey: 'SUPER_ADMIN',
     avatar: 'SA',
+    avatarBg: 'orange',
     status: 'Active',
     permissions: 'Full System Access',
+    modules: ['products', 'orders', 'analytics', 'content', 'settings'],
     dateAdded: 'Aug 01, 2026',
     isOriginal: true,
   },
@@ -23,11 +26,14 @@ export const DEFAULT_ADMIN_USERS = [
     id: 'usr-2',
     name: 'Maria Santos',
     email: 'maria.santos@bicol-u.edu.ph',
-    role: 'Store Manager',
-    roleKey: 'STORE_MANAGER',
+    phone: '+63 917 555 1234',
+    role: 'Admin',
+    roleKey: 'ADMIN',
     avatar: 'MS',
+    avatarBg: 'blue',
     status: 'Active',
     permissions: 'Products, Orders, Inventory, Schedule',
+    modules: ['products', 'orders', 'analytics'],
     dateAdded: 'Aug 10, 2026',
     isOriginal: false,
   },
@@ -35,11 +41,14 @@ export const DEFAULT_ADMIN_USERS = [
     id: 'usr-3',
     name: 'Juan Cruz',
     email: 'juan.cruz@bicol-u.edu.ph',
-    role: 'Logistics Officer',
-    roleKey: 'LOGISTICS_OFFICER',
+    phone: '+63 918 555 4321',
+    role: 'Staff',
+    roleKey: 'STAFF',
     avatar: 'JC',
+    avatarBg: 'purple',
     status: 'Active',
     permissions: 'Fulfillment, Orders, POS',
+    modules: ['orders'],
     dateAdded: 'Aug 12, 2026',
     isOriginal: false,
   },
@@ -47,11 +56,14 @@ export const DEFAULT_ADMIN_USERS = [
     id: 'usr-4',
     name: 'Elena Reyes',
     email: 'elena.reyes@bicol-u.edu.ph',
-    role: 'POS Cashier',
-    roleKey: 'CASHIER',
+    phone: '+63 919 555 9876',
+    role: 'Staff',
+    roleKey: 'STAFF',
     avatar: 'ER',
+    avatarBg: 'teal',
     status: 'Active',
     permissions: 'POS Register, Claims',
+    modules: ['orders', 'content'],
     dateAdded: 'Aug 15, 2026',
     isOriginal: false,
   },
@@ -177,27 +189,36 @@ export function AdminProvider({ children }) {
 
   // ── SUPER ADMIN USER MANAGEMENT ACTIONS ──
   const addAdminUser = useCallback((userData) => {
-    const initials = (userData.name || 'Admin')
+    const initials = (userData.name || 'Staff')
       .split(' ')
+      .filter(Boolean)
       .map((n) => n[0])
       .join('')
       .substring(0, 2)
-      .toUpperCase()
+      .toUpperCase() || 'ST'
+
+    const colorPalette = ['orange', 'blue', 'purple', 'teal']
+    const randomColor = colorPalette[Math.floor(Math.random() * colorPalette.length)]
+
+    const defaultPerm =
+      userData.role === 'Super Admin'
+        ? 'Full System Access'
+        : userData.role === 'Admin'
+        ? 'Products, Orders, Inventory, Schedule'
+        : 'POS Register, Claims'
 
     const newUser = {
       id: `usr-${Date.now()}`,
-      status: 'Active',
-      avatar: initials || 'AD',
+      status: userData.status || 'Active',
+      avatar: initials,
+      avatarBg: userData.avatarBg || randomColor,
       dateAdded: 'Today',
       isOriginal: false,
-      permissions:
-        userData.role === 'Super Admin'
-          ? 'Full System Access'
-          : userData.role === 'Store Manager'
-          ? 'Products, Orders, Inventory, Schedule'
-          : userData.role === 'Logistics Officer'
-          ? 'Fulfillment, Orders, POS'
-          : 'POS Register, Claims',
+      role: userData.role || 'Staff',
+      roleKey: userData.role === 'Super Admin' ? 'SUPER_ADMIN' : userData.role === 'Admin' ? 'ADMIN' : 'STAFF',
+      permissions: userData.permissions || defaultPerm,
+      modules: userData.modules || ['orders'],
+      phone: userData.phone || '+63 912 345 6789',
       ...userData,
     }
 
@@ -211,9 +232,25 @@ export function AdminProvider({ children }) {
   const updateAdminUser = useCallback((userId, updatedData) => {
     setAdminState((prev) => ({
       ...prev,
-      adminUsers: (prev.adminUsers || DEFAULT_ADMIN_USERS).map((u) =>
-        u.id === userId ? { ...u, ...updatedData } : u
-      ),
+      adminUsers: (prev.adminUsers || DEFAULT_ADMIN_USERS).map((u) => {
+        if (u.id !== userId) return u
+        const updated = { ...u, ...updatedData }
+        if (updatedData.name && !updatedData.avatar) {
+          updated.avatar =
+            updatedData.name
+              .split(' ')
+              .filter(Boolean)
+              .map((n) => n[0])
+              .join('')
+              .substring(0, 2)
+              .toUpperCase() || u.avatar
+        }
+        if (updatedData.role) {
+          updated.roleKey =
+            updatedData.role === 'Super Admin' ? 'SUPER_ADMIN' : updatedData.role === 'Admin' ? 'ADMIN' : 'STAFF'
+        }
+        return updated
+      }),
     }))
   }, [])
 

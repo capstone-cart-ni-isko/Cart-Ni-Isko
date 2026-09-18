@@ -6,13 +6,84 @@
     "category": "Hoodie",
     "sizes": ["S", "M", "L", "XL", "2XL"],
     "colors": [
-      { "name": "BU Orange", "value": "#F97316" },
-      { "name": "Navy Blue", "value": "#1E3A8A" }
+      {
+        "name": "Navy Blue",
+        "value": "#1E3A8A",
+        "image": "/src/assets/Images/unnamed (4).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (4).png",
+          "/src/assets/Images/unnamed (8).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      },
+      {
+        "name": "BU Orange",
+        "value": "#F97316",
+        "image": "/src/assets/Images/unnamed (5).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (5).png",
+          "/src/assets/Images/unnamed (8).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      }
     ],
-    "description": "BUnique Collection Labels Hoodie. Premium cotton-blend fabric with clean typography styling and front kangaroo pockets.",
-    "images": ["/src/assets/Images/unnamed (1).png", "/src/assets/Branding/Copy of jacket.png"],
+    "description": "BUnique Collection Labels Hoodie. Premium cotton-blend fabric with clean typography styling, ribbed cuffs, and front kangaroo pockets.",
+    "images": [
+      "/src/assets/Images/unnamed (4).png",
+      "/src/assets/Images/unnamed (8).png",
+      "/src/assets/Images/unnamed.jpg"
+    ],
     "preOrder": true,
-    "status": "For Pre-order"
+    "status": "For Pre-order",
+    "preOrderInfo": {
+      "productionTime": "Approximately 7–10 business days",
+      "estimatedAvailability": "October 15–20, 2026",
+      "paymentPolicy": "Payment is required when placing your pre-order to guarantee your production slot.",
+      "batchName": "Batch 2026-B (Official BU Apparel Run)",
+      "maxPreOrderQty": 10
+    },
+    "stockMatrix": {
+      "Navy Blue": { "S": 8, "M": 12, "L": 3, "XL": 0, "2XL": 5 },
+      "BU Orange": { "S": 5, "M": 7, "L": 2, "XL": 4, "2XL": 1 }
+    },
+    "details": {
+      "material": "Heavyweight 330 GSM brushed cotton-poly blend (80% combed cotton, 20% polyester). Premium inner fleece provides optimal warmth without excessive bulk.",
+      "sizeFit": "Collegiate relaxed streetwear fit. Dropped shoulder seams with reinforced double-needle stitching. Fits true to size; order one size up for an oversized streetwear look.",
+      "care": "Machine wash cold inside out with like colors. Do not bleach. Tumble dry low or line dry in shade. Cool iron on reverse side; avoid ironing directly on graphic prints.",
+      "shippingReturns": "Store Pickup: Free pickup at BU Student Center, Ground Floor (Mon–Fri, 9:00 AM – 4:00 PM). Courier Delivery: 2–3 business days within Albay; 4–7 business days nationwide. Returns: 7-day hassle-free replacement for defective items or size adjustments."
+    },
+    "rating": 4.8,
+    "reviewCount": 24,
+    "ratingBreakdown": { "5": 18, "4": 4, "3": 2, "2": 0, "1": 0 },
+    "reviews": [
+      {
+        "id": "rev-1",
+        "author": "Eleanor S.",
+        "rating": 5,
+        "date": "August 28, 2026",
+        "variant": "Navy Blue / M",
+        "comment": "The double-brushed inner fleece is incredibly soft! Wore it to campus during rainy days and it kept me warm all day. The typography embroidery is immaculate.",
+        "verified": true
+      },
+      {
+        "id": "rev-2",
+        "author": "Carlos M.",
+        "rating": 5,
+        "date": "August 15, 2026",
+        "variant": "BU Orange / L",
+        "comment": "Fits true to size with a nice structured boxy silhouette. The hood has great structure and doesn't flop over. Definitely worth the pre-order wait!",
+        "verified": true
+      },
+      {
+        "id": "rev-3",
+        "author": "Samantha B.",
+        "rating": 4,
+        "date": "July 30, 2026",
+        "variant": "Navy Blue / XL",
+        "comment": "Thick premium fabric and clean seams. Sleeves are just the right length. Just wash it inside out so the lettering stays pristine.",
+        "verified": true
+      }
+    ]
   },
   {
     "id": "prod-2",
@@ -21,13 +92,68 @@
     "category": "Hoodie",
     "sizes": ["S", "M", "L", "XL", "2XL"],
     "colors": [
-      { "name": "Off White", "value": "#F9F6EE" },
-      { "name": "Green", "value": "#15803D" }
+      {
+        "name": "Off White",
+        "value": "#F9F6EE",
+        "image": "/src/assets/Images/unnamed (5).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (5).png",
+          "/src/assets/Images/unnamed (8).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      },
+      {
+        "name": "Navy Blue",
+        "value": "#1E3A8A",
+        "image": "/src/assets/Images/unnamed (4).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (4).png",
+          "/src/assets/Images/unnamed (8).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      }
     ],
     "description": "Classic Bicol University Hoodie with collegiate varsity lettering across the chest. Built with double-brushed inner fleece for maximum comfort.",
-    "images": ["/src/assets/Images/unnamed (5).png", "/src/assets/Branding/Copy of jacket.png"],
+    "images": [
+      "/src/assets/Images/unnamed (5).png",
+      "/src/assets/Images/unnamed (8).png",
+      "/src/assets/Images/unnamed.jpg"
+    ],
     "preOrder": false,
-    "status": "In Stock"
+    "status": "In Stock",
+    "stockMatrix": {
+      "Off White": { "S": 9, "M": 14, "L": 3, "XL": 0, "2XL": 4 },
+      "Navy Blue": { "S": 4, "M": 8, "L": 2, "XL": 1, "2XL": 0 }
+    },
+    "details": {
+      "material": "320 GSM Premium Fleece (75% Cotton, 25% Polyester). Pre-shrunk fabric to minimize shrinkage after washing.",
+      "sizeFit": "Standard unisex collegiate cut with relaxed room in the chest and arms. Rib-knit cuffs and waist hem provide snug retention.",
+      "care": "Machine wash cold with gentle detergent. Avoid chlorine bleach. Hang dry or tumble dry low. Do not iron silkscreen graphics.",
+      "shippingReturns": "Store Pickup: Available immediately at BU Student Center. Courier Delivery: Dispatched within 24 hours. Returns: 7-day return/exchange window."
+    },
+    "rating": 4.9,
+    "reviewCount": 18,
+    "ratingBreakdown": { "5": 16, "4": 2, "3": 0, "2": 0, "1": 0 },
+    "reviews": [
+      {
+        "id": "rev-4",
+        "author": "Bea Rodriguez",
+        "rating": 5,
+        "date": "September 2, 2026",
+        "variant": "Off White / S",
+        "comment": "The cream colorway is gorgeous in person! The green vintage lettering gives it such a classic varsity feel.",
+        "verified": true
+      },
+      {
+        "id": "rev-5",
+        "author": "Mark Anthony",
+        "rating": 5,
+        "date": "August 20, 2026",
+        "variant": "Off White / M",
+        "comment": "Comfortable to wear even in air-conditioned lecture halls. Definitely my favorite campus hoodie so far.",
+        "verified": true
+      }
+    ]
   },
   {
     "id": "prod-3",
@@ -36,12 +162,70 @@
     "category": "Shirts",
     "sizes": ["S", "M", "L", "XL"],
     "colors": [
-      { "name": "White/Navy", "value": "#FFFFFF" }
+      {
+        "name": "White/Navy",
+        "value": "#FFFFFF",
+        "image": "/src/assets/Images/unnamed (1).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (1).png",
+          "/src/assets/Images/unnamed (10).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      },
+      {
+        "name": "Beige/Torch",
+        "value": "#E8DEC8",
+        "image": "/src/assets/Images/unnamed (2).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (2).png",
+          "/src/assets/Images/unnamed (10).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      },
+      {
+        "name": "Black/Torch",
+        "value": "#18181B",
+        "image": "/src/assets/Images/unnamed (3).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (3).png",
+          "/src/assets/Images/unnamed (10).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      }
     ],
     "description": "Retro BUnique Ringer Tee shirt featuring contrast collar and cuff ribbing. Soft cotton knit fabric perfect for daily campus wear.",
-    "images": ["/src/assets/Images/unnamed (1).png", "/src/assets/Branding/Copy of shirt.png"],
+    "images": [
+      "/src/assets/Images/unnamed (1).png",
+      "/src/assets/Images/unnamed (10).png",
+      "/src/assets/Images/unnamed.jpg"
+    ],
     "preOrder": false,
-    "status": "In Stock"
+    "status": "In Stock",
+    "stockMatrix": {
+      "White/Navy": { "S": 6, "M": 10, "L": 4, "XL": 2 },
+      "Beige/Torch": { "S": 4, "M": 8, "L": 3, "XL": 1 },
+      "Black/Torch": { "S": 5, "M": 6, "L": 2, "XL": 0 }
+    },
+    "details": {
+      "material": "100% Combed Ringspun Cotton (220 GSM). Breathable, lightweight, and ultra-soft for tropical campus weather.",
+      "sizeFit": "Regular streetwear fit. Tailored contrast rib collar and sleeves.",
+      "care": "Machine wash cold with similar colors. Do not bleach. Air dry recommended to preserve print crispness.",
+      "shippingReturns": "Store Pickup: Next-day claim at BU Student Center. Albay delivery: 1–2 days. 7-day exchange warranty."
+    },
+    "rating": 4.7,
+    "reviewCount": 31,
+    "ratingBreakdown": { "5": 22, "4": 7, "3": 2, "2": 0, "1": 0 },
+    "reviews": [
+      {
+        "id": "rev-6",
+        "author": "Gabriel T.",
+        "rating": 5,
+        "date": "August 12, 2026",
+        "variant": "White/Navy / M",
+        "comment": "The ringer ribbing has great contrast. Breathable fabric that doesn't feel heavy under the Bicol sun.",
+        "verified": true
+      }
+    ]
   },
   {
     "id": "prod-4",
@@ -50,13 +234,66 @@
     "category": "Varsity Jacket",
     "sizes": ["S", "M", "L", "XL", "2XL"],
     "colors": [
-      { "name": "Green/White", "value": "#16A34A" },
-      { "name": "Navy/White", "value": "#1E3A8A" }
+      {
+        "name": "Green/White",
+        "value": "#16A34A",
+        "image": "/src/assets/Images/unnamed (12).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (12).png",
+          "/src/assets/Images/unnamed (8).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      },
+      {
+        "name": "Navy/White",
+        "value": "#1E3A8A",
+        "image": "/src/assets/Images/unnamed (4).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (4).png",
+          "/src/assets/Images/unnamed (8).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      }
     ],
     "description": "Classic BU Varsity Jacket. Premium fleece body with faux leather contrast sleeves, detailed rib-knit cuffs and hem, and classic letterman patches.",
-    "images": ["/src/assets/Images/unnamed (12).png", "/src/assets/Branding/Copy of jacket.png"],
+    "images": [
+      "/src/assets/Images/unnamed (12).png",
+      "/src/assets/Images/unnamed (8).png",
+      "/src/assets/Images/unnamed.jpg"
+    ],
     "preOrder": true,
-    "status": "For Pre-order"
+    "status": "For Pre-order",
+    "preOrderInfo": {
+      "productionTime": "Approximately 10–14 business days",
+      "estimatedAvailability": "October 20–28, 2026",
+      "paymentPolicy": "Payment is required upon placing your pre-order to reserve personalized letterman patch production.",
+      "batchName": "Varsity Limited Batch 2026-A",
+      "maxPreOrderQty": 5
+    },
+    "stockMatrix": {
+      "Green/White": { "S": 4, "M": 6, "L": 2, "XL": 1, "2XL": 0 },
+      "Navy/White": { "S": 3, "M": 5, "L": 3, "XL": 0, "2XL": 0 }
+    },
+    "details": {
+      "material": "Heavyweight Wool-Fleece body (400 GSM) with premium vegan leather sleeves, quilted diamond-stitch inner lining, and brass snap-front buttons.",
+      "sizeFit": "Boxy collegiate varsity fit. Designed to comfortably layer over hoodies or shirts. Ribbed stand collar, cuffs, and hem.",
+      "care": "Specialist dry clean only or spot clean sleeves with damp cloth. Do not machine wash or tumble dry.",
+      "shippingReturns": "Store Pickup: Complimentary campus claim upon arrival notification. Courier: Insured delivery nationwide. Returns: Replacement guaranteed for sizing or craft defects within 7 days of pickup."
+    },
+    "rating": 5.0,
+    "reviewCount": 12,
+    "ratingBreakdown": { "5": 12, "4": 0, "3": 0, "2": 0, "1": 0 },
+    "reviews": [
+      {
+        "id": "rev-7",
+        "author": "Patricia Alcantara",
+        "rating": 5,
+        "date": "September 1, 2026",
+        "variant": "Green/White / L",
+        "comment": "The chenille BU patches and sleeve texture are top-notch! Feels like a genuine heirloom varsity jacket. Everyone on campus asked where I got it.",
+        "verified": true
+      }
+    ]
   },
   {
     "id": "prod-5",
@@ -65,13 +302,59 @@
     "category": "Cap",
     "sizes": ["One Size"],
     "colors": [
-      { "name": "Green", "value": "#15803D" },
-      { "name": "Black", "value": "#111827" }
+      {
+        "name": "Green",
+        "value": "#15803D",
+        "image": "/src/assets/Images/unnamed (6).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (6).png",
+          "/src/assets/Images/unnamed (7).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      },
+      {
+        "name": "Off White",
+        "value": "#F9F6EE",
+        "image": "/src/assets/Images/unnamed (7).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (7).png",
+          "/src/assets/Images/unnamed (6).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      }
     ],
     "description": "BUnique BU Labels Cap. Adjustable 6-panel strapback design with detailed embroidery text on the front panels.",
-    "images": ["/src/assets/Images/unnamed (6).png", "/src/assets/Branding/Copy of cap.png"],
+    "images": [
+      "/src/assets/Images/unnamed (6).png",
+      "/src/assets/Images/unnamed (7).png",
+      "/src/assets/Images/unnamed.jpg"
+    ],
     "preOrder": false,
-    "status": "In Stock"
+    "status": "In Stock",
+    "stockMatrix": {
+      "Green": { "One Size": 8 },
+      "Off White": { "One Size": 3 }
+    },
+    "details": {
+      "material": "100% Washed Cotton Twill. High-definition 3D embroidery on crown panels.",
+      "sizeFit": "Adjustable brass buckle strapback fits circumference 54–60 cm. Pre-curved visor.",
+      "care": "Hand wash with mild soap in cool water. Air dry in shade to maintain brim curvature.",
+      "shippingReturns": "Store Pickup: Ready for claim in 2 hours. Courier delivery: 1-2 days Albay."
+    },
+    "rating": 4.8,
+    "reviewCount": 9,
+    "ratingBreakdown": { "5": 7, "4": 2, "3": 0, "2": 0, "1": 0 },
+    "reviews": [
+      {
+        "id": "rev-8",
+        "author": "Rafael D.",
+        "rating": 5,
+        "date": "August 19, 2026",
+        "variant": "Green / One Size",
+        "comment": "Deep forest green color is amazing. The buckle strap makes it easy to adjust.",
+        "verified": true
+      }
+    ]
   },
   {
     "id": "prod-6",
@@ -80,12 +363,48 @@
     "category": "Accessories",
     "sizes": ["One Size"],
     "colors": [
-      { "name": "Black", "value": "#111827" }
+      {
+        "name": "Black",
+        "value": "#111827",
+        "image": "/src/assets/Images/unnamed (6).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (6).png",
+          "/src/assets/Images/unnamed (9).png",
+          "/src/assets/Images/unnamed (10).png"
+        ]
+      }
     ],
     "description": "BUnique Official Campus Lanyard and Pin Badge set. High density woven strap with heavy-duty metal clip.",
-    "images": ["/src/assets/Images/unnamed (6).png", "/src/assets/Branding/Copy of lanyard.png"],
+    "images": [
+      "/src/assets/Images/unnamed (6).png",
+      "/src/assets/Images/unnamed (9).png",
+      "/src/assets/Images/unnamed (10).png"
+    ],
     "preOrder": false,
-    "status": "In Stock"
+    "status": "In Stock",
+    "stockMatrix": {
+      "Black": { "One Size": 15 }
+    },
+    "details": {
+      "material": "Heavy duty jacquard woven polyester strap with zinc alloy swivel clasp and safety breakaway buckle.",
+      "sizeFit": "Strap length 48 cm, width 2.5 cm. Comes with matching 1.25 inch zinc alloy enamel pin.",
+      "care": "Spot clean strap with mild soapy water. Wipe pin with soft cloth.",
+      "shippingReturns": "Store pickup available at BU Student Center. Standard courier shipping."
+    },
+    "rating": 4.9,
+    "reviewCount": 42,
+    "ratingBreakdown": { "5": 38, "4": 4, "3": 0, "2": 0, "1": 0 },
+    "reviews": [
+      {
+        "id": "rev-9",
+        "author": "Jasmine K.",
+        "rating": 5,
+        "date": "August 24, 2026",
+        "variant": "Black / One Size",
+        "comment": "Sturdy clip that doesn't bend or snap easily. Perfect for my campus student ID!",
+        "verified": true
+      }
+    ]
   },
   {
     "id": "prod-7",
@@ -94,13 +413,56 @@
     "category": "Accessories",
     "sizes": ["One Size"],
     "colors": [
-      { "name": "White", "value": "#FFFFFF" },
-      { "name": "Orange", "value": "#F97316" }
+      {
+        "name": "White",
+        "value": "#FFFFFF",
+        "image": "/src/assets/Images/unnamed (7).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (7).png",
+          "/src/assets/Images/unnamed (8).png"
+        ]
+      },
+      {
+        "name": "Orange",
+        "value": "#F97316",
+        "image": "/src/assets/Images/unnamed (8).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (8).png",
+          "/src/assets/Images/unnamed (7).png"
+        ]
+      }
     ],
     "description": "Insulated Campus Water Bottle. Double-walled stainless steel keeps drinks ice-cold for 24 hours. Matte powder-coat finish.",
-    "images": ["/src/assets/Images/unnamed (7).png", "/src/assets/Branding/Copy of store.png"],
+    "images": [
+      "/src/assets/Images/unnamed (7).png",
+      "/src/assets/Images/unnamed (8).png"
+    ],
     "preOrder": false,
-    "status": "In Stock"
+    "status": "In Stock",
+    "stockMatrix": {
+      "White": { "One Size": 8 },
+      "Orange": { "One Size": 3 }
+    },
+    "details": {
+      "material": "18/8 Food-grade stainless steel with BPA-free leakproof lid. Sweat-free powder coat exterior.",
+      "sizeFit": "750 mL (25 oz) capacity. Fits standard backpack side pockets and cup holders.",
+      "care": "Hand wash recommended with bottle brush. Not suitable for microwave or freezer.",
+      "shippingReturns": "Store pickup and courier available. 7-day replacement for vacuum seal defects."
+    },
+    "rating": 4.6,
+    "reviewCount": 15,
+    "ratingBreakdown": { "5": 10, "4": 4, "3": 1, "2": 0, "1": 0 },
+    "reviews": [
+      {
+        "id": "rev-10",
+        "author": "Miguel O.",
+        "rating": 5,
+        "date": "August 3, 2026",
+        "variant": "Orange / One Size",
+        "comment": "Keeps ice intact the whole day during my long lab classes. High quality lid that doesn't leak.",
+        "verified": true
+      }
+    ]
   },
   {
     "id": "prod-8",
@@ -109,12 +471,48 @@
     "category": "Accessories",
     "sizes": ["One Size"],
     "colors": [
-      { "name": "Gold", "value": "#D97706" }
+      {
+        "name": "Gold",
+        "value": "#D97706",
+        "image": "/src/assets/Images/unnamed (9).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (9).png",
+          "/src/assets/Images/unnamed (10).png",
+          "/src/assets/Images/unnamed (8).png"
+        ]
+      }
     ],
     "description": "Official Bicol University Metallic Pin Badge. Enamel filled with butterfly clasp backer.",
-    "images": ["/src/assets/Images/unnamed (9).png", "/src/assets/Branding/Copy of badge.png"],
+    "images": [
+      "/src/assets/Images/unnamed (9).png",
+      "/src/assets/Images/unnamed (10).png",
+      "/src/assets/Images/unnamed (8).png"
+    ],
     "preOrder": false,
-    "status": "In Stock"
+    "status": "In Stock",
+    "stockMatrix": {
+      "Gold": { "One Size": 24 }
+    },
+    "details": {
+      "material": "Hard enamel brass alloy with gold electroplating and dual butterfly clutch pin backings.",
+      "sizeFit": "35 mm diameter. Ideal for lanyards, tote bags, lapels, and backpacks.",
+      "care": "Wipe clean with a dry microfiber cloth. Store away from sharp metal keys to prevent surface scratching.",
+      "shippingReturns": "Store pickup ready in 1 hour. Standard courier shipping available."
+    },
+    "rating": 4.9,
+    "reviewCount": 19,
+    "ratingBreakdown": { "5": 17, "4": 2, "3": 0, "2": 0, "1": 0 },
+    "reviews": [
+      {
+        "id": "rev-11",
+        "author": "Christine L.",
+        "rating": 5,
+        "date": "July 18, 2026",
+        "variant": "Gold / One Size",
+        "comment": "Crisp enamel details! Pins firmly onto my canvas tote and doesn't rotate.",
+        "verified": true
+      }
+    ]
   },
   {
     "id": "prod-9",
@@ -123,12 +521,46 @@
     "category": "Shirts",
     "sizes": ["S", "M", "L", "XL", "2XL"],
     "colors": [
-      { "name": "Orange", "value": "#FF7A00" },
-      { "name": "Blue", "value": "#1887C7" }
+      {
+        "name": "White",
+        "value": "#FFFFFF",
+        "image": "/src/assets/Images/unnamed (11).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (11).png",
+          "/src/assets/Images/unnamed (1).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      },
+      {
+        "name": "Orange",
+        "value": "#FF7A00",
+        "image": "/src/assets/Images/unnamed (11).png",
+        "gallery": [
+          "/src/assets/Images/unnamed (11).png",
+          "/src/assets/Images/unnamed.jpg"
+        ]
+      }
     ],
     "description": "Premium Bicol University polo shirt crafted from breathable pique fabric. Features the embroidered BU logo.",
-    "images": ["/src/assets/Images/unnamed (11).png", "/src/assets/Branding/Copy of shirt.png"],
+    "images": [
+      "/src/assets/Images/unnamed (11).png",
+      "/src/assets/Images/unnamed.jpg"
+    ],
     "preOrder": false,
-    "status": "In Stock"
+    "status": "In Stock",
+    "stockMatrix": {
+      "White": { "S": 5, "M": 7, "L": 2, "XL": 0, "2XL": 3 },
+      "Orange": { "S": 3, "M": 4, "L": 0, "XL": 2, "2XL": 1 }
+    },
+    "details": {
+      "material": "Breathable Honeycomb Cotton Pique (240 GSM). Soft-touch ribbed collar and mother-of-pearl style 2-button placket.",
+      "sizeFit": "Classic smart-casual fit. True to size; structured collar that holds shape after wash.",
+      "care": "Machine wash warm inside out. Hang dry or light tumble. Warm iron if desired.",
+      "shippingReturns": "Store Pickup: Claim at BU Student Center. Courier: 1-2 days Albay. 7-day replacement policy."
+    },
+    "rating": 0,
+    "reviewCount": 0,
+    "ratingBreakdown": { "5": 0, "4": 0, "3": 0, "2": 0, "1": 0 },
+    "reviews": []
   }
 ]

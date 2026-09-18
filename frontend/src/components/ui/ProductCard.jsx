@@ -48,7 +48,7 @@ function ProductCard({ product }) {
             <div className="relative flex flex-col items-center justify-center p-4 text-center">
               <ShirtIcon className="w-12 h-12 text-brand-orange opacity-40 mb-1" />
               {product.preOrder && (
-                <span className="absolute top-2 left-2 bg-[#DBEAFE] text-[#1D4ED8] text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                <span className="absolute top-2 left-2 bg-[#DBEAFE] text-[#1D4ED8] text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
                   Pre-order
                 </span>
               )}
@@ -76,14 +76,14 @@ function ProductCard({ product }) {
 
         {/* Product details */}
         <div className="p-3.5">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
             {product.category}
           </span>
-          <h3 className="text-sm font-extrabold text-gray-900 mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
+          <h3 className="text-sm md:text-base font-extrabold text-gray-900 mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
             {product.name}
           </h3>
           <div className="mt-1.5 flex items-center justify-between">
-            <PriceTag amount={product.price} className="text-sm" />
+            <PriceTag amount={product.price} className="text-sm md:text-base" />
           </div>
         </div>
       </Link>

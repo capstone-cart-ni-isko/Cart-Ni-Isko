@@ -6,9 +6,9 @@ import DesktopFooter from './DesktopFooter.jsx'
  *   - On Desktop (md+): Full browser width with Header at top, max-w-7xl content area, Footer at bottom.
  *   - On Mobile (<md): Single column with floating bottomNav.
  */
-function SidebarLayout({ sidebar, bottomNav, children, className = '' }) {
+function SidebarLayout({ bottomNav, children, className = '' }) {
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex flex-col w-full">
+    <div className="min-h-screen bg-[#F8F9FA] flex flex-col w-full customer-desktop-scale">
       {/* Desktop Header - visible on md+ */}
       <DesktopHeader />
 

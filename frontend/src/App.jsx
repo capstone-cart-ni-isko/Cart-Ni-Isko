@@ -29,6 +29,8 @@ import Notifications from './routes/Notifications.jsx' // Notification panel/bel
 import NotificationPreferences from './routes/NotificationPreferences.jsx' // Notification toggle settings
 import CheckoutPlaceholder from './routes/CheckoutPlaceholder.jsx'
 import HelpCenter from './routes/HelpCenter.jsx'
+import AboutUs from './routes/AboutUs.jsx'
+import Appointments from './routes/Appointments.jsx'
 
 // Admin Screen Routes
 import AdminLogin from './routes/admin/AdminLogin.jsx'
@@ -66,6 +68,7 @@ function App() {
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/orders" element={<Orders />} />
                 <Route path="/orders/:id" element={<OrderDetail />} />
+                <Route path="/appointments" element={<Appointments />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/account" element={<AccountInfo />} />
@@ -76,6 +79,7 @@ function App() {
                 <Route path="/settings/notifications" element={<NotificationPreferences />} />
                 <Route path="/checkout" element={<CheckoutPlaceholder />} />
                 <Route path="/help" element={<HelpCenter />} />
+                <Route path="/about" element={<AboutUs />} />
 
                 {/* ── Admin & Staff Routes ── */}
                 <Route path="/admin/login" element={<AdminLogin />} />

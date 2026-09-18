@@ -3,9 +3,9 @@
 export const INITIAL_ADMIN_DATA = {
   // ── 1. KPI & DASHBOARD METRICS ──
   dashboardKPIs: {
-    grossSales: 124500.0,
+    grossSales: 126610.0,
     grossSalesTrend: '+14% vs last period',
-    totalOrders: 142,
+    totalOrders: 144,
     totalOrdersTrend: '+8% vs last period',
     preOrders: 8,
     preOrdersSubtitle: 'Requires production',
@@ -14,12 +14,12 @@ export const INITIAL_ADMIN_DATA = {
   },
 
   fulfillmentStages: [
-    { key: 'awaiting_production', label: 'Awaiting Production', count: 4, color: '#F97316', bgClass: 'bg-orange-500' },
-    { key: 'in_production', label: 'In Production', count: 6, color: '#EAB308', bgClass: 'bg-yellow-500' },
-    { key: 'preparing', label: 'Preparing', count: 7, color: '#3B82F6', bgClass: 'bg-blue-500' },
-    { key: 'ready_pickup', label: 'Ready for Pickup', count: 12, color: '#10B981', bgClass: 'bg-emerald-500' },
-    { key: 'ready_dispatch', label: 'Ready for Dispatch', count: 5, color: '#8B5CF6', bgClass: 'bg-purple-500' },
-    { key: 'in_transit', label: 'In Transit', count: 8, color: '#06B6D4', bgClass: 'bg-cyan-500' },
+    { key: 'awaiting_production', label: 'Awaiting Production', count: 4, color: '#94A3B8', bgClass: 'bg-slate-400' },
+    { key: 'in_production', label: 'In Production', count: 6, color: '#64748B', bgClass: 'bg-slate-500' },
+    { key: 'preparing', label: 'Preparing', count: 7, color: '#475569', bgClass: 'bg-slate-600' },
+    { key: 'ready_pickup', label: 'Ready for Pickup', count: 12, color: '#334155', bgClass: 'bg-slate-700' },
+    { key: 'ready_dispatch', label: 'Ready for Dispatch', count: 5, color: '#1E293B', bgClass: 'bg-slate-800' },
+    { key: 'in_transit', label: 'In Transit', count: 8, color: '#0F172A', bgClass: 'bg-slate-900' },
   ],
 
   categorySales: [

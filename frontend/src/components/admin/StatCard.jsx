@@ -7,7 +7,7 @@ export default function StatCard({
   trend,
   trendPositive = true,
   icon,
-  iconBg = 'bg-orange-50 text-brand-orange',
+  iconBg = 'bg-orange-50 text-[#FF6B00]',
   progressBar = null,
   className = '',
   onClick,
@@ -15,22 +15,22 @@ export default function StatCard({
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-2xl p-5 border border-gray-100/90 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between ${
+      className={`bg-white rounded-xl p-5 border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:border-slate-200/80 transition-all flex flex-col justify-between ${
         onClick ? 'cursor-pointer' : ''
       } ${className}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-bold tracking-wider text-gray-500 uppercase">
+        <div className="space-y-1">
+          <p className="text-xs font-medium tracking-wider text-slate-400 uppercase">
             {title}
           </p>
-          <p className="text-2xl lg:text-3xl font-black text-gray-900 mt-1 tracking-tight">
+          <p className="text-2xl font-bold text-slate-900 tracking-tight">
             {value}
           </p>
         </div>
         {icon && (
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}
           >
             {icon}
           </div>
@@ -39,9 +39,9 @@ export default function StatCard({
 
       {progressBar !== null && (
         <div className="mt-4">
-          <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+          <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
             <div
-              className="bg-brand-orange h-full rounded-full transition-all duration-500"
+              className="bg-[#FF6B00] h-full rounded-full transition-all duration-500"
               style={{ width: `${Math.min(100, Math.max(0, progressBar))}%` }}
             />
           </div>
@@ -49,10 +49,10 @@ export default function StatCard({
       )}
 
       {(trend || subtitle) && (
-        <div className="mt-3 flex items-center gap-1.5 text-xs">
+        <div className="mt-3.5 pt-0.5 flex items-center gap-1.5 text-xs">
           {trend && (
             <span
-              className={`font-bold flex items-center gap-0.5 ${
+              className={`inline-flex items-center gap-1 font-medium ${
                 trendPositive ? 'text-emerald-600' : 'text-rose-600'
               }`}
             >
@@ -70,7 +70,7 @@ export default function StatCard({
             </span>
           )}
           {subtitle && (
-            <span className="text-gray-500 font-medium truncate">{subtitle}</span>
+            <span className="text-slate-500 font-normal truncate">{subtitle}</span>
           )}
         </div>
       )}

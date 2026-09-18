@@ -24,7 +24,7 @@ function AppShell({ children, showNav = true, showBottomNav = true, className = 
   // Auth/Onboarding pages (no bottom nav, no sidebar) — center card without black border/outline on desktop
   if (!showNav) {
     return (
-      <div className="min-h-screen bg-white md:bg-[#F8F9FA] flex flex-col w-full">
+      <div className="min-h-screen bg-white md:bg-[#F8F9FA] flex flex-col w-full customer-desktop-scale">
         {isOffline && (
           <div className="bg-amber-500 text-white text-xs font-bold py-2 px-4 text-center sticky top-0 z-[99999] shadow-sm">
             You are currently offline. Browsing in cached mode.

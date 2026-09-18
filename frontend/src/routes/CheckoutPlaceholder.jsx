@@ -1,19 +1,41 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../hooks/useCart.js'
+import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import Button from '../components/ui/Button.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
-
 import { SparklesIcon } from '../components/ui/Icons.jsx'
 
 function CheckoutPlaceholder() {
   const navigate = useNavigate()
-  const { clearCart } = useCart()
+  const { clearSelectedItems, clearCart } = useCart()
+  const { showToast } = useToast()
+  const [countdown, setCountdown] = useState(3)
 
   useEffect(() => {
-    clearCart()
-  }, [])
+    if (clearSelectedItems) {
+      clearSelectedItems()
+    } else {
+      clearCart()
+    }
+    showToast('Order confirmed! Redirecting to your orders...', 'success')
+  }, [clearSelectedItems, clearCart, showToast])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          navigate('/orders')
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [navigate])
 
   return (
     <AppShell showNav={false}>
@@ -26,18 +48,23 @@ function CheckoutPlaceholder() {
         </div>
 
         <h1 className="text-3xl font-black text-gray-900 mb-2">Order Placed!</h1>
-        <p className="text-sm text-gray-500 font-medium max-w-[280px] leading-relaxed mb-8">
-          Your order has been confirmed. We'll notify you when it's ready for pick-up at the BU campus store.
+        <p className="text-sm text-gray-600 font-medium max-w-[340px] leading-relaxed mb-4">
+          Your order has been confirmed. We'll notify you via SMS/Email when it's ready for pick-up or out for courier delivery.
         </p>
 
+        {/* Dynamic countdown indicator */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-200 text-brand-orange text-xs font-bold rounded-full mb-8 animate-pulse">
+          <span>Redirecting to your orders in {countdown}s...</span>
+        </div>
+
         <div className="w-full max-w-xs space-y-3">
-          <Button onClick={() => navigate('/orders')} className="w-full h-12 rounded-full font-bold shadow-md">
-            View My Orders
+          <Button onClick={() => navigate('/orders')} className="w-full h-12 rounded-full font-bold shadow-md cursor-pointer">
+            View My Orders Now
           </Button>
           <button
             type="button"
             onClick={() => navigate('/home')}
-            className="w-full text-sm font-bold text-gray-400 hover:text-brand-orange transition-colors py-2"
+            className="w-full text-sm font-bold text-gray-500 hover:text-brand-orange transition-colors py-2 cursor-pointer"
           >
             Continue Shopping
           </button>

@@ -90,3 +90,21 @@ body {
 /* Hide scrollbar for horizontal scrollable areas */
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Customer Web Scale-Down (Desktop md+) ── */
+@media (min-width: 768px) {
+  .customer-desktop-scale {
+    zoom: 0.88;
+  }
+}
+
+/* Ensure customer pages have crisp, legible typography */
+.customer-desktop-scale {
+  font-size: 1.05rem;
+}
+
+.customer-desktop-scale .text-\[9px\],
+.customer-desktop-scale .text-\[10px\],
+.customer-desktop-scale .text-\[11px\] {
+  font-size: 0.75rem; /* at least 12px */
+}

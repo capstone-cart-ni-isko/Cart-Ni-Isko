@@ -7,7 +7,7 @@ import productsData from '../data/products.json'
 import backIcon from '../assets/icons/common/back.svg'
 import searchIcon from '../assets/icons/common/search.svg'
 
-const categories = ['All', 'Shirts', 'Hoodie', 'Cap', 'Lanyard', 'Stickers', 'Pins', 'Windbreaker', 'Varsity Jacket']
+const categories = ['All', 'Shirts', 'Hoodie', 'Varsity Jacket', 'Accessories', 'Cap', 'Lanyard', 'Pins']
 
 function Shop() {
   const navigate = useNavigate()
@@ -66,8 +66,17 @@ function Shop() {
     }
 
     // 2. Category filter
-    if (activeFilters.category !== 'All' && prod.category !== activeFilters.category) {
-      return false
+    if (activeFilters.category !== 'All') {
+      if (activeFilters.category === 'Accessories') {
+        const isAccessory =
+          prod.category === 'Accessories' ||
+          prod.category === 'Cap' ||
+          prod.category === 'Lanyard' ||
+          prod.category === 'Pins'
+        if (!isAccessory) return false
+      } else if (prod.category !== activeFilters.category) {
+        return false
+      }
     }
 
     // 3. Collection filter
