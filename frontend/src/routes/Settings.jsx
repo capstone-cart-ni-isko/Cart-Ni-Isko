@@ -19,10 +19,24 @@ import {
 } from '../components/ui/Icons.jsx'
 import { triggerPwaInstall } from '../components/ui/PwaInstallPrompt.jsx'
 
+function WalletIcon({ className = 'w-5 h-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+    </svg>
+  )
+}
+
 const settingsAccountItems = [
   { to: '/account', label: 'Edit Profile', icon: <UserIcon className="w-5 h-5 text-gray-450" />, description: 'Update name, email and photo' },
   { to: '/settings/change-password', label: 'Change Password', icon: <KeyIcon className="w-5 h-5 text-gray-450" />, description: 'Update your login password' },
-  { to: '/settings/address', label: 'My Address', icon: <MapPinIcon className="w-5 h-5 text-gray-450" />, description: 'Manage delivery addresses' },
+  { to: '/security', label: 'Security', icon: <LockIcon className="w-5 h-5 text-gray-450" />, description: 'Two-factor authentication' },
+]
+
+const settingsBillingItems = [
+  { to: '/settings/address', label: 'Addresses', icon: <MapPinIcon className="w-5 h-5 text-gray-450" />, description: 'Manage campus and home delivery addresses' },
+  { to: '/settings/payments', label: 'Payment Methods', icon: <WalletIcon className="w-5 h-5 text-gray-450" />, description: 'Manage GCash, Maya, and cards' },
 ]
 
 const settingsPrefsItems = [
@@ -33,7 +47,6 @@ const settingsPrefsItems = [
 
 const settingsSupportItems = [
   { to: '/help', label: 'Help & Support', icon: <HelpIcon className="w-5 h-5 text-gray-450" />, description: 'FAQs and contact support' },
-  { to: '/security', label: 'Security', icon: <LockIcon className="w-5 h-5 text-gray-450" />, description: 'Two-factor authentication' },
 ]
 
 function SettingsSection({ title, items }) {
@@ -101,6 +114,7 @@ function Settings() {
 
         <div className="space-y-5">
           <SettingsSection title="Account" items={settingsAccountItems} />
+          <SettingsSection title="Addresses & Payments" items={settingsBillingItems} />
           <SettingsSection title="Preferences" items={settingsPrefsItems} />
           <SettingsSection title="Support" items={settingsSupportItems} />
 

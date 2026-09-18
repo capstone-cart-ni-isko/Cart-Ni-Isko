@@ -76,8 +76,6 @@ export default function DesktopAccountSidebar({ activeTab = 'overview', onTabCha
     { id: 'orders', label: 'My Orders', icon: OrdersNavIcon, path: '/orders' },
     { id: 'appointments', label: 'My Appointments', icon: CalendarNavIcon, path: '/appointments' },
     { id: 'saved', label: 'Saved Items', icon: StarNavIcon, path: '/wishlist' },
-    { id: 'addresses', label: 'Addresses', icon: MapPinNavIcon, path: '/settings/address' },
-    { id: 'payments', label: 'Payment Methods', icon: WalletNavIcon, path: '/settings' },
     { id: 'settings', label: 'Account Settings', icon: SettingsIcon, path: '/settings' },
     { id: 'help', label: 'Help & Support', icon: HelpIcon, path: '/help' },
   ]

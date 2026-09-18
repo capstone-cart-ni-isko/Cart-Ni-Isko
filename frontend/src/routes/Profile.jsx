@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
-import DesktopAccountSidebar from '../components/layout/DesktopAccountSidebar.jsx'
 import { mockUser, mockAppointments, mockQuickOverview } from '../data/mockUser.js'
 import avatarImg from '../assets/avatar.png'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
@@ -186,9 +185,7 @@ function Profile() {
   const { currentUser, logout } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
-  const [menuOpen, setMenuOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const [activeTab, setActiveTab] = useState('overview')
 
   const baseUser = currentUser || mockUser
 
@@ -217,33 +214,8 @@ function Profile() {
     navigate('/')
   }
 
-  // Handle tab navigation for desktop sidebar
-  const handleTabChange = (tabId) => {
-    const routeMap = {
-      overview: null,
-      orders: '/orders',
-      appointments: '/appointments',
-      saved: '/wishlist',
-      addresses: '/settings/address',
-      payments: null,
-      settings: '/settings',
-      help: '/help',
-    }
-    if (routeMap[tabId]) {
-      navigate(routeMap[tabId])
-    } else {
-      setActiveTab(tabId)
-    }
-  }
-
   return (
     <AppShell>
-      <DrawerMenu
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        user={{ ...baseUser, email, phone, fullName }}
-        onLogout={() => setShowLogoutConfirm(true)}
-      />
 
       {/* ── MOBILE LAYOUT (matching Image 2) ── */}
       <div className="md:hidden pb-28 bg-[#F8F9FA] min-h-dvh">
@@ -538,14 +510,9 @@ function Profile() {
         </div>
       </div>
 
-      {/* ── DESKTOP LAYOUT (matching reference image) ── */}
-      <div className="hidden md:flex gap-8 items-start w-full py-2">
-        {/* Left Navigation Sidebar */}
-        <DesktopAccountSidebar activeTab={activeTab} onTabChange={handleTabChange} />
-
-        {/* Right Main Container (Banner + 2-Column Grid) */}
-        <div className="flex-1 min-w-0 space-y-6">
-          {/* Top Banner spanning across full width */}
+      {/* ── DESKTOP LAYOUT (Full width without sidebar) ── */}
+      <div className="hidden md:block w-full max-w-6xl mx-auto space-y-6 py-4 animate-fade-in">
+        {/* Top Banner spanning across full width */}
           <div className="rounded-3xl p-7 md:p-8 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
             <div className="absolute inset-0 opacity-[0.05] select-none pointer-events-none flex items-center justify-center">
               <span className="text-[6rem] font-black tracking-widest rotate-[12deg] whitespace-nowrap text-white">
@@ -863,7 +830,27 @@ function Profile() {
             </div>
           </div>
         </div>
-      </div>
+
+      {/* Floating Circular Help Center Icon (Bottom Right on both Mobile & Web) */}
+      <Link
+        to="/help"
+        className="fixed bottom-20 right-5 md:bottom-8 md:right-8 z-40 w-13 h-13 md:w-14 md:h-14 rounded-full bg-[#FF6A00] text-white shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all group cursor-pointer"
+        title="Help & Support"
+        aria-label="Help & Support"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-6 h-6 md:w-7 md:h-7 transition-transform group-hover:rotate-12"
+        >
+          <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+          <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+        </svg>
+      </Link>
 
       <ConfirmModal
         isOpen={showLogoutConfirm}

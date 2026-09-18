@@ -319,9 +319,9 @@ function ProductDetail() {
                       key={imgSrc + idx}
                       type="button"
                       onClick={() => setActiveImage(imgSrc)}
-                      className={`relative w-20 h-20 rounded-2xl overflow-hidden border-2 bg-white flex-shrink-0 transition-all cursor-pointer p-1 ${
+                      className={`relative w-20 h-20 rounded-2xl overflow-hidden border-2 bg-white flex-shrink-0 transition-all cursor-pointer p-1.5 ${
                         isActive
-                          ? 'border-brand-orange ring-2 ring-brand-orange/30 shadow-sm scale-105'
+                          ? 'border-[#FF6A00] shadow-sm'
                           : 'border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
                       }`}
                       title={label}
@@ -584,9 +584,11 @@ function ProductDetail() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="flex gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-2 md:grid md:grid-cols-4 md:overflow-visible md:snap-none md:pb-0">
               {relatedProducts.map((relProduct) => (
-                <ProductCard key={relProduct.id} product={relProduct} />
+                <div key={relProduct.id} className="min-w-[160px] w-[44vw] flex-shrink-0 snap-start md:min-w-0 md:w-auto">
+                  <ProductCard product={relProduct} />
+                </div>
               ))}
             </div>
           </div>
