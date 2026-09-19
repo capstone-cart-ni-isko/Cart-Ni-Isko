@@ -51,67 +51,64 @@ function DesktopHeader() {
       <div className="w-full max-w-[1600px] mx-auto px-8 lg:px-12 h-20 flex items-center justify-between gap-8">
         {/* Logo Left */}
         <Link to="/home" className="flex items-center shrink-0">
-          <img src={logo} alt="Tindahan ni Isko" className="h-10 object-contain hover:opacity-90 transition-opacity" />
+          <img src={logo} alt="Tindahan ni Isko" className="h-11 md:h-12 object-contain hover:opacity-90 transition-opacity" />
         </Link>
 
         {/* Search Bar Center */}
         <form onSubmit={handleSearchSubmit} className="flex-1 max-w-xl relative">
-          <img src={searchIcon} alt="" className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 opacity-40" />
+          <img src={searchIcon} alt="" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 opacity-45" />
           <input
             type="search"
-            placeholder="Search products..."
+            placeholder="Search products, apparel, essentials..."
             value={searchVal}
             onChange={(e) => setSearchVal(e.target.value)}
-            className="w-full h-11 pl-12 pr-4 rounded-full bg-[#F8F9FA] border-none text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all"
+            className="w-full h-10.5 pl-11 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-sm placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:bg-white transition-all shadow-2xs"
           />
         </form>
 
-        {/* Navigation Items Right: Logo -> Search -> Home -> About Us -> Wishlist -> Cart -> Notifications -> Account */}
-        <div className="flex items-center gap-4 lg:gap-6 text-gray-700 shrink-0">
+        {/* Navigation Items Right: Logo -> Search -> Home -> Wishlist -> Cart -> Notifications -> Account */}
+        <div className="flex items-center gap-2 lg:gap-3 text-gray-700 shrink-0">
           {/* Home */}
           <div className="relative group flex items-center justify-center">
             <Link
               to="/home"
-              className={`p-2.5 rounded-full hover:bg-gray-100 transition-all relative flex items-center justify-center ${
-                isHomePage ? 'bg-gray-100' : ''
+              className={`p-2.5 rounded-xl hover:bg-slate-100 transition-all relative flex items-center justify-center ${
+                isHomePage ? 'bg-slate-100' : ''
               }`}
               aria-label="Home"
             >
               <img
                 src={homeIcon}
                 alt="Home"
-                className="w-5.5 h-5.5 transition-all"
+                className="w-6 h-6 transition-all"
                 style={{ filter: isHomePage ? 'brightness(0)' : 'none' }}
               />
             </Link>
             {/* Tooltip */}
-            <span className="pointer-events-none absolute -bottom-9 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-gray-900 text-white text-xs font-semibold rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap shadow-lg z-50">
+            <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[11px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
               Home
-              <span className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900" />
             </span>
           </div>
-
 
           {/* Wishlist */}
           <div className="relative group flex items-center justify-center">
             <Link
               to="/wishlist"
-              className={`p-2.5 rounded-full hover:bg-gray-100 transition-all relative ${
-                isWishlistPage ? 'bg-gray-100' : ''
+              className={`p-2.5 rounded-xl hover:bg-slate-100 transition-all relative flex items-center justify-center ${
+                isWishlistPage ? 'bg-slate-100' : ''
               }`}
               aria-label="Wishlist"
             >
               <img
                 src={wishlistIcon}
                 alt="Wishlist"
-                className="w-5.5 h-5.5 transition-all"
+                className="w-6 h-6 transition-all"
                 style={{ filter: isWishlistPage ? 'brightness(0)' : 'none' }}
               />
             </Link>
             {/* Tooltip */}
-            <span className="pointer-events-none absolute -bottom-9 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-gray-900 text-white text-[11px] font-semibold rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap shadow-lg z-50">
+            <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[11px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
               Wishlist
-              <span className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900" />
             </span>
           </div>
 
@@ -119,27 +116,26 @@ function DesktopHeader() {
           <div className="relative group flex items-center justify-center">
             <Link
               to="/cart"
-              className={`p-2.5 rounded-full hover:bg-gray-100 transition-all relative ${
-                isCartPage ? 'bg-gray-100' : ''
+              className={`p-2.5 rounded-xl hover:bg-slate-100 transition-all relative flex items-center justify-center ${
+                isCartPage ? 'bg-slate-100' : ''
               }`}
               aria-label="Cart"
             >
               <img
                 src={cartIcon}
                 alt="Cart"
-                className="w-5.5 h-5.5 transition-all"
+                className="w-6 h-6 transition-all"
                 style={{ filter: isCartPage ? 'brightness(0)' : 'none' }}
               />
               {cartCount > 0 && (
-                <span className="absolute top-1 right-1 bg-brand-orange text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
+                <span className="absolute top-1 right-1 bg-brand-orange text-white text-[11px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-xs animate-scale-in">
                   {cartCount}
                 </span>
               )}
             </Link>
             {/* Tooltip */}
-            <span className="pointer-events-none absolute -bottom-9 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-gray-900 text-white text-[11px] font-semibold rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap shadow-lg z-50">
+            <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[11px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
               Cart
-              <span className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900" />
             </span>
           </div>
 
@@ -147,27 +143,26 @@ function DesktopHeader() {
           <div className="relative group flex items-center justify-center">
             <Link
               to="/notifications"
-              className={`p-2.5 rounded-full hover:bg-gray-100 transition-all relative ${
-                isNotificationsPage ? 'bg-gray-100' : ''
+              className={`p-2.5 rounded-xl hover:bg-slate-100 transition-all relative flex items-center justify-center ${
+                isNotificationsPage ? 'bg-slate-100' : ''
               }`}
               aria-label="Notifications"
             >
               <img
                 src={notificationIcon}
                 alt="Notifications"
-                className="w-5.5 h-5.5 transition-all"
+                className="w-6 h-6 transition-all"
                 style={{ filter: isNotificationsPage ? 'brightness(0)' : 'none' }}
               />
               {unreadNotifCount > 0 && (
-                <span className="absolute top-1 right-1 bg-brand-orange text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
+                <span className="absolute top-1 right-1 bg-brand-orange text-white text-[11px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-xs animate-scale-in">
                   {unreadNotifCount}
                 </span>
               )}
             </Link>
             {/* Tooltip */}
-            <span className="pointer-events-none absolute -bottom-9 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-gray-900 text-white text-[11px] font-semibold rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap shadow-lg z-50">
+            <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[11px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
               Notifications
-              <span className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900" />
             </span>
           </div>
 
@@ -175,22 +170,21 @@ function DesktopHeader() {
           <div className="relative group flex items-center justify-center">
             <Link
               to="/profile"
-              className={`p-2.5 rounded-full hover:bg-gray-100 transition-all relative ${
-                isProfilePage ? 'bg-gray-100' : ''
+              className={`p-2.5 rounded-xl hover:bg-slate-100 transition-all relative flex items-center justify-center ${
+                isProfilePage ? 'bg-slate-100' : ''
               }`}
               aria-label="My Account"
             >
               <img
                 src={profileIcon}
                 alt="Profile"
-                className="w-5.5 h-5.5 transition-all"
+                className="w-6 h-6 transition-all"
                 style={{ filter: isProfilePage ? 'brightness(0)' : 'none' }}
               />
             </Link>
             {/* Tooltip */}
-            <span className="pointer-events-none absolute -bottom-9 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-gray-900 text-white text-[11px] font-semibold rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap shadow-lg z-50">
+            <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[11px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
               My Account
-              <span className="absolute -top-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900" />
             </span>
           </div>
         </div>

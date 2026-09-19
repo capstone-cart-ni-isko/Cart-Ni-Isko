@@ -20,12 +20,12 @@ function SideNav() {
   const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0)
 
   return (
-    <nav className="h-full flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <div className="flex items-center gap-3 px-2 pb-6 mb-4 border-b border-gray-100">
-        <img src={brandLogo} alt="Tindahan ni Isko" className="w-10 h-10 object-contain shrink-0" />
+    <nav className="h-full flex flex-col bg-white rounded-lg border border-slate-200 p-4">
+      <div className="flex items-center gap-2.5 px-2 pb-4 mb-3 border-b border-slate-200">
+        <img src={brandLogo} alt="Tindahan ni Isko" className="w-8 h-8 object-contain shrink-0" />
         <div className="min-w-0">
-          <p className="text-sm font-bold text-gray-900 truncate">Tindahan</p>
-          <p className="text-sm font-bold text-brand-orange truncate">ni Isko</p>
+          <p className="text-xs font-bold text-gray-900 truncate">Tindahan</p>
+          <p className="text-xs font-bold text-brand-orange truncate">ni Isko</p>
         </div>
       </div>
 
@@ -35,20 +35,20 @@ function SideNav() {
             <NavLink
               to={to}
               className={({ isActive }) =>
-                `flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                `flex items-center justify-between px-3 py-2 rounded-md text-xs font-semibold transition-colors ${
                   isActive
                     ? 'bg-brand-orange/10 text-brand-orange'
-                    : 'text-gray-600 hover:bg-surface-gray'
+                    : 'text-gray-600 hover:bg-slate-100'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     <img
                       src={icon}
                       alt=""
-                      className="w-5 h-5 shrink-0"
+                      className="w-4 h-4 shrink-0"
                       style={{
                         filter: isActive
                           ? 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(100%) contrast(96%)'
@@ -58,7 +58,7 @@ function SideNav() {
                     <span>{label}</span>
                   </div>
                   {isCart && cartCount > 0 && (
-                    <span className="bg-brand-orange text-white text-[10px] font-black px-2 py-0.5 rounded-full border border-white animate-scale-in">
+                    <span className="bg-brand-orange text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-white animate-scale-in">
                       {cartCount}
                     </span>
                   )}

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { RulerIcon, CloseIcon, HelpIcon } from './Icons.jsx'
 
 const SIZE_CHARTS = {
   Hoodie: {
@@ -71,43 +72,43 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodie' })
   const rows = unit === 'inches' ? currentChart.inches : currentChart.cm
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fade-in">
       <div
-        className="bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-in"
+        className="bg-white w-full max-w-xl rounded-lg border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-orange-100 text-brand-orange flex items-center justify-center font-bold text-sm">
-              📏
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50/60">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-md bg-orange-100 text-brand-orange flex items-center justify-center font-bold text-xs">
+              <RulerIcon className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-gray-900">Official Size Guide</h2>
-              <p className="text-xs text-gray-400">Garment measurements & fit guidance</p>
+              <h2 className="text-base font-bold text-gray-900">Official Size Guide</h2>
+              <p className="text-[11px] text-gray-500">Garment measurements & fit guidance</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-100 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-7 h-7 rounded-md bg-white border border-slate-200 text-gray-500 hover:text-gray-800 hover:bg-gray-100 flex items-center justify-center transition-colors cursor-pointer"
           >
-            ✕
+            <CloseIcon className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Category Tabs & Unit Switcher */}
-        <div className="px-6 pt-4 pb-2 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100">
-          <div className="flex gap-1.5 p-1 bg-gray-100 rounded-xl">
+        <div className="px-5 pt-3 pb-2 flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200">
+          <div className="flex gap-1 p-0.5 bg-slate-100 rounded-md">
             {Object.keys(SIZE_CHARTS).map((tabKey) => (
               <button
                 key={tabKey}
                 type="button"
                 onClick={() => setActiveTab(tabKey)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === tabKey
-                    ? 'bg-white text-gray-900 shadow-xs'
-                    : 'text-gray-500 hover:text-gray-800'
+                    ? 'bg-white text-gray-900 border border-slate-200'
+                    : 'text-gray-600 hover:text-gray-800'
                 }`}
               >
                 {tabKey}
@@ -115,12 +116,12 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodie' })
             ))}
           </div>
 
-          <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+          <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-md">
             <button
               type="button"
               onClick={() => setUnit('inches')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                unit === 'inches' ? 'bg-white text-brand-orange shadow-xs' : 'text-gray-500 hover:text-gray-800'
+              className={`px-2 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                unit === 'inches' ? 'bg-white text-brand-orange border border-slate-200' : 'text-gray-600 hover:text-gray-800'
               }`}
             >
               Inches (in)
@@ -128,8 +129,8 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodie' })
             <button
               type="button"
               onClick={() => setUnit('cm')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                unit === 'cm' ? 'bg-white text-brand-orange shadow-xs' : 'text-gray-500 hover:text-gray-800'
+              className={`px-2 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                unit === 'cm' ? 'bg-white text-brand-orange border border-slate-200' : 'text-gray-600 hover:text-gray-800'
               }`}
             >
               Centimeters (cm)
@@ -138,11 +139,11 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodie' })
         </div>
 
         {/* Content Body */}
-        <div className="px-6 py-4 overflow-y-auto space-y-5">
+        <div className="px-5 py-3 overflow-y-auto space-y-4">
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-extrabold text-gray-800">{currentChart.title}</h3>
-              <span className="text-[11px] font-medium text-brand-orange bg-orange-50 px-2 py-0.5 rounded-md">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-xs font-bold text-gray-800">{currentChart.title}</h3>
+              <span className="text-[10px] font-semibold text-brand-orange bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md">
                 Standard BU Unisex Sizing
               </span>
             </div>
@@ -150,25 +151,25 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodie' })
           </div>
 
           {/* Sizing Table */}
-          <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-2xs">
+          <div className="border border-slate-200 rounded-md overflow-hidden">
             <table className="w-full text-left text-xs">
-              <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-200">
+              <thead className="bg-slate-50 text-gray-600 font-semibold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-3 font-extrabold text-gray-700">Size</th>
-                  <th className="py-2.5 px-3">Chest (Width)</th>
-                  <th className="py-2.5 px-3">Body Length</th>
-                  <th className="py-2.5 px-3">Shoulder</th>
-                  <th className="py-2.5 px-3">Sleeve</th>
+                  <th className="py-2 px-2.5 font-bold text-gray-700">Size</th>
+                  <th className="py-2 px-2.5">Chest (Width)</th>
+                  <th className="py-2 px-2.5">Body Length</th>
+                  <th className="py-2 px-2.5">Shoulder</th>
+                  <th className="py-2 px-2.5">Sleeve</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-gray-700">
+              <tbody className="divide-y divide-slate-100 text-gray-700">
                 {rows.map((r, idx) => (
-                  <tr key={r.size} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                    <td className="py-2.5 px-3 font-black text-brand-orange">{r.size}</td>
-                    <td className="py-2.5 px-3">{r.chest}</td>
-                    <td className="py-2.5 px-3">{r.length}</td>
-                    <td className="py-2.5 px-3">{r.shoulder}</td>
-                    <td className="py-2.5 px-3">{r.sleeve}</td>
+                  <tr key={r.size} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                    <td className="py-1.5 px-2.5 font-bold text-brand-orange">{r.size}</td>
+                    <td className="py-1.5 px-2.5">{r.chest}</td>
+                    <td className="py-1.5 px-2.5">{r.length}</td>
+                    <td className="py-1.5 px-2.5">{r.shoulder}</td>
+                    <td className="py-1.5 px-2.5">{r.sleeve}</td>
                   </tr>
                 ))}
               </tbody>
@@ -176,11 +177,12 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodie' })
           </div>
 
           {/* How to Measure Section */}
-          <div className="bg-orange-50/60 border border-orange-100 rounded-2xl p-4">
-            <h4 className="text-xs font-extrabold text-orange-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <span>💡</span> How to Find Your Best Fit
+          <div className="bg-orange-50/40 border border-orange-200 rounded-md p-3.5">
+            <h4 className="text-xs font-bold text-orange-950 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <HelpIcon className="w-3.5 h-3.5 text-brand-orange shrink-0" />
+              <span>How to Find Your Best Fit</span>
             </h4>
-            <ul className="text-xs text-orange-950/80 space-y-1.5 list-disc list-inside leading-relaxed">
+            <ul className="text-xs text-orange-950/80 space-y-1 list-disc list-inside leading-relaxed">
               <li>
                 <strong className="text-orange-900">Chest Width:</strong> Measure flat across the fullest part of the garment 1 inch below armholes.
               </li>
@@ -198,12 +200,12 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodie' })
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-          <span className="text-[11px] text-gray-400">Exchanges allowed within 7 days of campus claim</span>
+        <div className="px-5 py-2.5 border-t border-slate-200 bg-slate-50/60 flex items-center justify-between">
+          <span className="text-[11px] text-gray-500">Exchanges allowed within 7 days of campus claim</span>
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange-dark transition-colors cursor-pointer"
+            className="h-8 px-4 rounded-md bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-colors cursor-pointer"
           >
             Got It
           </button>

@@ -134,7 +134,20 @@ export default function AdminOrders() {
     {
       header: 'FULFILLMENT',
       key: 'fulfillment',
-      render: (row) => <span className="text-xs text-gray-600 font-medium">{row.fulfillment}</span>,
+      render: (row) => {
+        const isCourier = row.fulfillment?.toLowerCase().includes('courier') || row.fulfillment?.toLowerCase().includes('delivery')
+        return (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-gray-700 font-medium">{row.fulfillment}</span>
+            {isCourier && (
+              <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-bold flex items-center gap-1" title="Delivery fee paid / Courier locked">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                <span>Locked</span>
+              </span>
+            )}
+          </div>
+        )
+      },
     },
     {
       header: 'STATUS',
@@ -173,23 +186,23 @@ export default function AdminOrders() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="space-y-4">
+        {/* Compacted Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
               Orders
             </h1>
-            <p className="text-xs lg:text-sm font-medium text-gray-500 mt-1">
+            <p className="text-xs font-normal text-slate-500 mt-0.5">
               Manage and track all online and in-store sales.
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleExportCSV}
-              className="px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 font-bold text-xs rounded-xl border border-gray-200 shadow-2xs flex items-center gap-1.5 transition-colors"
+              className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-md border border-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -203,7 +216,7 @@ export default function AdminOrders() {
               <button
                 type="button"
                 onClick={() => setShowBulkModal(true)}
-                className="px-3.5 py-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors"
+                className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -216,7 +229,7 @@ export default function AdminOrders() {
         </div>
 
         {/* 4 Stat Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             title="TOTAL ORDERS"
             value={totalOrders}
@@ -266,16 +279,16 @@ export default function AdminOrders() {
         </div>
 
         {/* Filter Bar */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             {/* Search */}
-            <div className="relative flex-1 min-w-[220px]">
+            <div className="relative flex-1 min-w-[200px]">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
-                className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2"
+                className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"
               >
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -285,7 +298,7 @@ export default function AdminOrders() {
                 placeholder="Search orders, customers, batch..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 pl-9 pr-3 rounded-xl bg-gray-50 border border-gray-200 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange"
+                className="w-full h-8 pl-8 pr-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange"
               />
             </div>
 
@@ -293,7 +306,7 @@ export default function AdminOrders() {
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none"
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none"
             >
               <option value="All">Type: All</option>
               <option value="Regular">Online Regular</option>
@@ -305,7 +318,7 @@ export default function AdminOrders() {
             <select
               value={filterFulfillment}
               onChange={(e) => setFilterFulfillment(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none"
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none"
             >
               <option value="All">Fulfillment: All</option>
               <option value="Courier">Courier</option>
@@ -317,7 +330,7 @@ export default function AdminOrders() {
             <select
               value={filterBatch}
               onChange={(e) => setFilterBatch(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none"
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none"
             >
               <option value="All">Batch: All</option>
               <option value="BAT-0012">BAT-0012</option>
@@ -332,7 +345,7 @@ export default function AdminOrders() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none"
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none"
             >
               <option value="All">Status: All</option>
               <option value="In Production">In Production</option>
@@ -353,7 +366,7 @@ export default function AdminOrders() {
                   setFilterBatch('All')
                   setFilterStatus('All')
                 }}
-                className="text-xs font-bold text-rose-600 hover:underline px-2"
+                className="text-xs font-semibold text-rose-600 hover:underline px-2 cursor-pointer"
               >
                 Clear
               </button>
@@ -362,20 +375,20 @@ export default function AdminOrders() {
 
           {/* Applied Filter Chips */}
           {activeChips.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 APPLIED:
               </span>
               {activeChips.map((chip) => (
                 <span
                   key={chip.key}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 text-brand-orange text-xs font-bold border border-orange-200/60"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 text-brand-orange text-[11px] font-semibold border border-orange-200/60"
                 >
                   <span>{chip.label}</span>
                   <button
                     type="button"
                     onClick={chip.reset}
-                    className="hover:text-rose-600 font-black text-sm"
+                    className="hover:text-rose-600 font-bold cursor-pointer"
                   >
                     ×
                   </button>
@@ -434,16 +447,45 @@ export default function AdminOrders() {
               </div>
             </div>
 
-            {/* Customer Details */}
+            {/* Customer Details & Fulfillment Lock Status */}
             <div className="space-y-2">
-              <h4 className="font-black text-gray-900 text-sm">Customer Info</h4>
-              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100 space-y-1">
-                <p className="font-bold text-gray-900">{activeOrderDetail.customer}</p>
-                <p className="text-gray-500">Fulfillment: {activeOrderDetail.fulfillment}</p>
-                <p className="text-gray-500">Type: {activeOrderDetail.type}</p>
-                {activeOrderDetail.batch && (
-                  <p className="text-gray-500">Batch Code: {activeOrderDetail.batch}</p>
-                )}
+              <h4 className="font-black text-gray-900 text-sm">Customer &amp; Fulfillment Info</h4>
+              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100 space-y-2.5">
+                <div>
+                  <p className="font-bold text-gray-900">{activeOrderDetail.customer}</p>
+                  <p className="text-gray-500">Order Type: {activeOrderDetail.type}</p>
+                  {activeOrderDetail.batch && (
+                    <p className="text-gray-500">Batch Code: {activeOrderDetail.batch}</p>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-gray-200/60 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-700">Fulfillment Method</span>
+                    {activeOrderDetail.fulfillment?.toLowerCase().includes('courier') || activeOrderDetail.fulfillment?.toLowerCase().includes('delivery') ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[10px] font-black uppercase">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                        <span>Delivery Locked</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase">
+                        Store Pickup
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-600 font-semibold">{activeOrderDetail.fulfillment}</p>
+                  {(activeOrderDetail.fulfillment?.toLowerCase().includes('courier') || activeOrderDetail.fulfillment?.toLowerCase().includes('delivery')) && (
+                    <div className="text-[11px] text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 mt-1 space-y-0.5">
+                      <p className="font-bold flex items-center gap-1">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3 text-amber-900"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                        <span>Method Locked</span>
+                      </p>
+                      <p className="text-amber-800">
+                        Delivery fee paid or Lalamove courier dispatch confirmed. The fulfillment method can no longer be switched to Store Pickup.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -480,18 +522,18 @@ export default function AdminOrders() {
 
       {/* Bulk Update Modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 space-y-4">
-            <h3 className="text-base font-black text-gray-900">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-lg p-4 max-w-sm w-full border border-slate-200 space-y-3">
+            <h3 className="text-sm font-bold text-slate-900">
               Bulk Update ({selectedOrderIds.length} Orders)
             </h3>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-500">
               Select a new status to apply to all selected orders.
             </p>
             <select
               value={bulkNewStatus}
               onChange={(e) => setBulkNewStatus(e.target.value)}
-              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-brand-orange"
+              className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-orange"
             >
               <option value="Awaiting Production">Awaiting Production</option>
               <option value="In Production">In Production</option>
@@ -499,18 +541,18 @@ export default function AdminOrders() {
               <option value="Ready for Pickup">Ready for Pickup</option>
               <option value="Completed">Completed</option>
             </select>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-1.5">
               <button
                 type="button"
                 onClick={() => setShowBulkModal(false)}
-                className="px-4 py-2 bg-gray-100 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-200"
+                className="h-8 px-3 bg-slate-100 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleBulkUpdate}
-                className="px-4 py-2 bg-brand-orange rounded-xl text-xs font-black text-white hover:bg-brand-orange-dark shadow-xs"
+                className="h-8 px-3 bg-brand-orange rounded-md text-xs font-semibold text-white hover:bg-brand-orange-dark cursor-pointer"
               >
                 Apply to {selectedOrderIds.length} Orders
               </button>

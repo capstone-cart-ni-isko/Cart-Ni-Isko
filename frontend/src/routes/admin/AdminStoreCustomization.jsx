@@ -1,10 +1,8 @@
 import React, { useState } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
-import ToggleSwitch from '../../components/admin/ToggleSwitch.jsx'
 import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
-
 import { INITIAL_ADMIN_DATA } from '../../data/adminMockData.js'
 
 export default function AdminStoreCustomization() {
@@ -15,38 +13,18 @@ export default function AdminStoreCustomization() {
 
   const initialSettings = adminState?.storeSettings || INITIAL_ADMIN_DATA.storeSettings
 
-  // Local form state for unsaved edits
-  const [isPhysicalOpen, setIsPhysicalOpen] = useState(initialSettings?.isPhysicalStoreOpen ?? true)
-  const [allowPickups, setAllowPickups] = useState(initialSettings?.allowInStorePickups ?? true)
-  const [acceptOnline, setAcceptOnline] = useState(initialSettings?.acceptOnlineOrders ?? true)
-  const [announcementText, setAnnouncementText] = useState(initialSettings?.announcementBanner || '')
   const [slides, setSlides] = useState(initialSettings?.slides || INITIAL_ADMIN_DATA.storeSettings.slides || [])
-  const [expandedSlideId, setExpandedSlideId] = useState(slides[0]?.id || null)
-
-  // Drawer preview state
-  const [showPreviewDrawer, setShowPreviewDrawer] = useState(false)
+  const [expandedSlideId, setExpandedSlideId] = useState(null)
+  const [editingSlideId, setEditingSlideId] = useState(null)
   const [isSavedToast, setIsSavedToast] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showPreviewDrawer, setShowPreviewDrawer] = useState(false)
 
-  const handleTogglePhysical = (val) => {
-    setIsPhysicalOpen(val)
-    setHasUnsavedChanges(true)
-  }
-
-  const handleTogglePickups = (val) => {
-    setAllowPickups(val)
-    setHasUnsavedChanges(true)
-  }
-
-  const handleToggleOnline = (val) => {
-    setAcceptOnline(val)
-    setHasUnsavedChanges(true)
-  }
-
-  const handleAnnouncementChange = (val) => {
-    setAnnouncementText(val)
-    setHasUnsavedChanges(true)
-  }
+  const isStoreOpen = initialSettings?.isPhysicalStoreOpen ?? true
+  const lastEdit = 'May 20, 2025 • 10:42 AM'
+  const lastEditBy = 'by Maria Santos'
+  const bannerCount = '1 image uploaded'
+  const bannerType = '(Hero Banner & Slideshow)'
 
   const handleSlideChange = (slideId, field, value) => {
     setSlides((prev) =>
@@ -58,20 +36,21 @@ export default function AdminStoreCustomization() {
   const handleAddNewSlide = () => {
     const newSlide = {
       id: `slide-${Date.now()}`,
-      title: 'New Featured Merch',
-      subtext: 'Special Bicol University Edition',
+      title: 'New Slide',
+      subtext: 'Add a subtitle here',
       ctaLabel: 'Shop Now',
       ctaLink: '/shop',
       bannerImage: 'banner-new.jpg',
       imagePreview: '/src/assets/Images/unnamed (1).png',
     }
     setSlides([...slides, newSlide])
-    setExpandedSlideId(newSlide.id)
+    setEditingSlideId(newSlide.id)
     setHasUnsavedChanges(true)
   }
 
   const handleDeleteSlide = (slideId) => {
     setSlides(slides.filter((s) => s.id !== slideId))
+    if (editingSlideId === slideId) setEditingSlideId(null)
     setHasUnsavedChanges(true)
   }
 
@@ -87,23 +66,13 @@ export default function AdminStoreCustomization() {
   }
 
   const handleDiscard = () => {
-    setIsPhysicalOpen(initialSettings.isPhysicalStoreOpen)
-    setAllowPickups(initialSettings.allowInStorePickups)
-    setAcceptOnline(initialSettings.acceptOnlineOrders)
-    setAnnouncementText(initialSettings.announcementBanner)
-    setSlides(initialSettings.slides || [])
+    setSlides(initialSettings?.slides || [])
     setHasUnsavedChanges(false)
+    setEditingSlideId(null)
   }
 
-  const handlePublish = () => {
-    updateStoreSettings({
-      isPhysicalStoreOpen: isPhysicalOpen,
-      allowInStorePickups: allowPickups,
-      acceptOnlineOrders: acceptOnline,
-      announcementBanner: announcementText,
-      slides,
-      lastBannerEdit: 'Today',
-    })
+  const handleSaveChanges = () => {
+    updateStoreSettings({ slides, lastBannerEdit: 'Today' })
     setHasUnsavedChanges(false)
     setIsSavedToast(true)
     setTimeout(() => setIsSavedToast(false), 3500)
@@ -111,322 +80,375 @@ export default function AdminStoreCustomization() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6 pb-24 relative">
+      <div className="relative pb-24">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
-              Store Customization
-            </h1>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-0.5">
-              Omnichannel Manager
-            </p>
-          </div>
-
-          {/* Trigger Live Store Preview Drawer */}
-          <button
-            type="button"
-            onClick={() => setShowPreviewDrawer(true)}
-            className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-800 font-bold text-xs rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2 transition-colors self-start sm:self-auto"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange">
-              <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-              <line x1="12" y1="18" x2="12.01" y2="18" />
-            </svg>
-            <span>Live Store Preview</span>
-          </button>
+        <div className="mb-5">
+          <h1 className="text-2xl font-black text-gray-900">Store Customization</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Update your store's appearance and manage what your customers see on the storefront.
+          </p>
         </div>
 
         {/* Top 3 Info Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          {/* Store Status Card */}
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Store Status
             </p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`w-2.5 h-2.5 rounded-full ${isPhysicalOpen ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              <p className="text-sm font-black text-gray-900">
-                {isPhysicalOpen ? 'Store Open' : 'Store Closed'}
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isStoreOpen ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+              <p className="text-sm font-bold text-gray-900">
+                {isStoreOpen ? 'Store Open' : 'Store Closed'}
               </p>
             </div>
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-              Banner Edits
-            </p>
-            <p className="text-sm font-black text-gray-900 mt-1">
-              Last Edit: Today
+            <p className="text-xs text-emerald-600 font-medium mt-1">
+              {isStoreOpen ? 'Your store is visible to customers.' : 'Your store is hidden from customers.'}
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-              Live Slide Count
+          {/* Last Edit Card */}
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+              Last Edit
             </p>
-            <p className="text-sm font-black text-gray-900 mt-1">
-              {slides.length} Active Slides
-            </p>
-          </div>
-        </div>
-
-        {/* Section 1: Store Operational Status & Announcements */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-100/90 shadow-xs space-y-6">
-          <div>
-            <h2 className="text-base font-black text-gray-900">
-              Store Operational Status &amp; Announcements
-            </h2>
-            <p className="text-xs text-gray-400 font-medium mt-0.5">
-              Toggle store visibility and update public announcements.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-100">
-              <ToggleSwitch
-                label="Physical Store Operational Status"
-                description="Controls in-person desk open flag"
-                checked={isPhysicalOpen}
-                onChange={handleTogglePhysical}
-              />
-            </div>
-
-            <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-100">
-              <ToggleSwitch
-                label="Allow In-Store Pickups"
-                description="Campus claim stations active"
-                checked={allowPickups}
-                onChange={handleTogglePickups}
-              />
-            </div>
-
-            <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-100">
-              <ToggleSwitch
-                label="Accept Online Orders"
-                description="Cart checkout enabled"
-                checked={acceptOnline}
-                onChange={handleToggleOnline}
-              />
-            </div>
-          </div>
-
-          {/* Announcement Banner Field */}
-          <div className="space-y-1.5 pt-2">
-            <label className="block text-xs font-bold text-gray-700">
-              Store Announcement Banner
-            </label>
-            <input
-              type="text"
-              value={announcementText}
-              onChange={(e) => handleAnnouncementChange(e.target.value)}
-              placeholder="e.g. Welcome to Tindahan ni Isko! Free shipping on orders over ₱500."
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand-orange"
-            />
-            <p className="text-[11px] text-gray-400">
-              This banner appears at the very top of your customer-facing store.
-            </p>
-          </div>
-        </div>
-
-        {/* Section 2: Hero Banner & Slideshow */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-100/90 shadow-xs space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-black text-gray-900">
-                Hero Banner &amp; Slideshow
-              </h2>
-              <p className="text-xs text-gray-400 font-medium mt-0.5">
-                Design the primary hero section of your storefront.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleAddNewSlide}
-              className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors self-start sm:self-auto"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-gray-400 flex-shrink-0">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
-              <span>Add New Slide</span>
-            </button>
+              <div>
+                <p className="text-sm font-bold text-gray-900">{lastEdit}</p>
+                <p className="text-xs text-gray-400 font-medium">{lastEditBy}</p>
+              </div>
+            </div>
           </div>
 
-          {/* Slides Accordion List */}
-          <div className="space-y-3">
-            {slides.map((slide, idx) => {
-              const isExpanded = expandedSlideId === slide.id
+          {/* Banner Section Card */}
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+              Banner Section
+            </p>
+            <div className="flex items-center gap-2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-gray-400 flex-shrink-0">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              <div>
+                <p className="text-sm font-bold text-gray-900">{bannerCount}</p>
+                <p className="text-xs text-gray-400 font-medium">{bannerType}</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
-              return (
-                <div
-                  key={slide.id}
-                  className={`rounded-2xl border transition-all ${
-                    isExpanded
-                      ? 'border-brand-orange/40 bg-white shadow-sm'
-                      : 'border-gray-200 bg-gray-50/50'
-                  }`}
-                >
-                  {/* Accordion Header Bar */}
-                  <div className="p-4 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {/* Drag / Reorder Handles */}
-                      <div className="flex flex-col gap-0.5 text-gray-400">
+        {/* Two-Column Layout */}
+        <div className="flex gap-6 items-start">
+          {/* LEFT: Hero Banner & Slideshow */}
+          <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Section Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Hero Banner &amp; Slideshow</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Edit the main banner and slideshow images shown on your storefront.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddNewSlide}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 font-semibold text-xs rounded-lg shadow-sm transition-colors flex-shrink-0"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-brand-orange">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>Add New Slide</span>
+              </button>
+            </div>
+
+            {/* Slide Rows */}
+            <div className="divide-y divide-gray-100">
+              {slides.map((slide, idx) => {
+                const isEditing = editingSlideId === slide.id
+                return (
+                  <div key={slide.id} className="px-4 py-3">
+                    {/* Main Row */}
+                    <div className="flex items-center gap-3">
+                      {/* Drag Handle */}
+                      <div className="flex flex-col gap-0.5 text-gray-300 flex-shrink-0 cursor-grab active:cursor-grabbing">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                          <circle cx="9" cy="7" r="1.2" />
+                          <circle cx="15" cy="7" r="1.2" />
+                          <circle cx="9" cy="12" r="1.2" />
+                          <circle cx="15" cy="12" r="1.2" />
+                          <circle cx="9" cy="17" r="1.2" />
+                          <circle cx="15" cy="17" r="1.2" />
+                        </svg>
+                      </div>
+
+                      {/* Thumbnail */}
+                      <div className="w-20 h-14 rounded-lg overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50">
+                        <img
+                          src={getImageUrl(slide.imagePreview)}
+                          alt={slide.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+
+                      {/* Slide Label Badge */}
+                      <div className="flex-shrink-0">
+                        <span className="inline-block bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          Slide {idx + 1}
+                        </span>
+                      </div>
+
+                      {/* Title & Subtitle */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[11px] font-semibold text-gray-400 flex-shrink-0">Title</span>
+                          <span className="text-xs font-semibold text-gray-800 truncate">{slide.title}</span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-0.5">
+                          <span className="text-[11px] font-semibold text-gray-400 flex-shrink-0">Subtitle</span>
+                          <span className="text-xs text-gray-500 truncate">{slide.subtext}</span>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {/* Edit */}
                         <button
                           type="button"
-                          disabled={idx === 0}
-                          onClick={() => handleMoveSlide(idx, -1)}
-                          className="hover:text-gray-900 disabled:opacity-20 p-0.5"
+                          onClick={() => setEditingSlideId(isEditing ? null : slide.id)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition-colors"
                         >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
-                            <polyline points="18 15 12 9 6 15" />
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                          <span>Edit</span>
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSlide(slide.id)}
+                          className="p-1.5 text-gray-400 hover:text-rose-500 border border-gray-200 hover:border-rose-200 rounded-lg bg-white hover:bg-rose-50 transition-colors"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                            <path d="M10 11v6" />
+                            <path d="M14 11v6" />
                           </svg>
                         </button>
+
+                        {/* Expand / Chevron */}
                         <button
                           type="button"
-                          disabled={idx === slides.length - 1}
-                          onClick={() => handleMoveSlide(idx, 1)}
-                          className="hover:text-gray-900 disabled:opacity-20 p-0.5"
+                          onClick={() => setEditingSlideId(isEditing ? null : slide.id)}
+                          className="p-1.5 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors"
                         >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            className={`w-3.5 h-3.5 transform transition-transform ${isEditing ? 'rotate-180' : ''}`}
+                          >
                             <polyline points="6 9 12 15 18 9" />
                           </svg>
                         </button>
                       </div>
-
-                      <span className="text-xs font-black text-gray-900 truncate">
-                        {slide.title || `Slide ${idx + 1}`}
-                      </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedSlideId(isExpanded ? null : slide.id)
-                        }
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 transition-colors"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          className={`w-4 h-4 transform transition-transform ${
-                            isExpanded ? 'rotate-180' : ''
-                          }`}
-                        >
-                          <polyline points="6 9 12 15 18 9" />
-                        </svg>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSlide(slide.id)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 transition-colors"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Accordion Expanded Content */}
-                  {isExpanded && (
-                    <div className="p-4 pt-0 border-t border-gray-100 space-y-4 text-xs">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
-                        <div>
-                          <label className="block font-bold text-gray-700 mb-1">Title</label>
-                          <input
-                            type="text"
-                            value={slide.title}
-                            onChange={(e) =>
-                              handleSlideChange(slide.id, 'title', e.target.value)
-                            }
-                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-orange"
-                          />
+                    {/* Expanded Edit Form */}
+                    {isEditing && (
+                      <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Title</label>
+                            <input
+                              type="text"
+                              value={slide.title}
+                              onChange={(e) => handleSlideChange(slide.id, 'title', e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange focus:bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Subtitle</label>
+                            <input
+                              type="text"
+                              value={slide.subtext}
+                              onChange={(e) => handleSlideChange(slide.id, 'subtext', e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange focus:bg-white"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block font-bold text-gray-700 mb-1">Subtext</label>
-                          <input
-                            type="text"
-                            value={slide.subtext}
-                            onChange={(e) =>
-                              handleSlideChange(slide.id, 'subtext', e.target.value)
-                            }
-                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-orange"
-                          />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">CTA Label</label>
+                            <input
+                              type="text"
+                              value={slide.ctaLabel}
+                              onChange={(e) => handleSlideChange(slide.id, 'ctaLabel', e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange focus:bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">CTA Link</label>
+                            <input
+                              type="text"
+                              value={slide.ctaLink}
+                              onChange={(e) => handleSlideChange(slide.id, 'ctaLink', e.target.value)}
+                              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-orange focus:bg-white"
+                            />
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Banner Image */}
                         <div>
-                          <label className="block font-bold text-gray-700 mb-1">CTA Label</label>
-                          <input
-                            type="text"
-                            value={slide.ctaLabel}
-                            onChange={(e) =>
-                              handleSlideChange(slide.id, 'ctaLabel', e.target.value)
-                            }
-                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-orange"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-bold text-gray-700 mb-1">CTA Link</label>
-                          <input
-                            type="text"
-                            value={slide.ctaLink}
-                            onChange={(e) =>
-                              handleSlideChange(slide.id, 'ctaLink', e.target.value)
-                            }
-                            className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-orange"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Banner Image Preview / Dropzone */}
-                      <div className="space-y-1.5">
-                        <label className="block font-bold text-gray-700">Banner Image</label>
-                        <div className="p-4 border-2 border-dashed border-gray-200 rounded-2xl flex items-center justify-between gap-4 bg-gray-50">
-                          <div className="flex items-center gap-3">
+                          <label className="block text-xs font-bold text-gray-700 mb-1">Banner Image</label>
+                          <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                             <img
                               src={getImageUrl(slide.imagePreview)}
                               alt="Slide preview"
-                              className="w-14 h-14 rounded-xl object-cover border border-gray-200"
+                              className="w-14 h-10 rounded-lg object-cover border border-gray-200 flex-shrink-0"
                             />
-                            <div>
-                              <p className="font-bold text-gray-900 text-xs">{slide.bannerImage}</p>
-                              <p className="text-[10px] text-gray-400 font-semibold">Recommended: 1200x500 JPG/PNG</p>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-gray-800 truncate">{slide.bannerImage}</p>
+                              <p className="text-[10px] text-gray-400">Recommended: 1200×500 JPG/PNG</p>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => alert('Image selector: Selected default theme asset.')}
+                              className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-bold text-gray-700 flex-shrink-0 transition-colors"
+                            >
+                              Replace
+                            </button>
                           </div>
+                        </div>
+                        {/* Reorder buttons */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <span className="text-[11px] font-semibold text-gray-400">Reorder:</span>
                           <button
                             type="button"
-                            onClick={() => alert('Image selector: Selected default theme asset.')}
-                            className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-100 rounded-xl text-xs font-bold text-gray-700"
+                            disabled={idx === 0}
+                            onClick={() => handleMoveSlide(idx, -1)}
+                            className="p-1 rounded border border-gray-200 text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
                           >
-                            Replace Image
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+                              <polyline points="18 15 12 9 6 15" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === slides.length - 1}
+                            onClick={() => handleMoveSlide(idx, 1)}
+                            className="p-1 rounded border border-gray-200 text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+                              <polyline points="6 9 12 15 18 9" />
+                            </svg>
                           </button>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                )
+              })}
+
+              {slides.length === 0 && (
+                <div className="px-6 py-10 text-center">
+                  <p className="text-sm text-gray-400 font-medium">No slides yet. Add a new slide to get started.</p>
                 </div>
-              )
-            })}
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: Sidebar */}
+          <div className="w-64 flex-shrink-0 space-y-4">
+            {/* How to Edit Card */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <h3 className="text-sm font-bold text-gray-900 mb-4">How to Edit</h3>
+              <ol className="space-y-3.5">
+                <li className="flex gap-3">
+                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Click{' '}
+                    <span className="inline-flex items-center gap-0.5 bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                      Edit
+                    </span>{' '}
+                    on a slide to change the image, title, or subtitle.
+                  </p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Click{' '}
+                    <span className="inline-flex items-center gap-0.5 bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
+                      + Add New Slide
+                    </span>{' '}
+                    to include more slides in your slideshow.
+                  </p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Drag and drop the items to rearrange the order of your slides.
+                  </p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Click{' '}
+                    <span className="bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
+                      Save Changes
+                    </span>{' '}
+                    at the bottom to apply your updates.
+                  </p>
+                </li>
+              </ol>
+            </div>
+
+            {/* Store Status Card */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <h3 className="text-sm font-bold text-gray-900 mb-3">Store Status</h3>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isStoreOpen ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                <p className="text-sm font-bold text-gray-900">
+                  {isStoreOpen ? 'Store Open' : 'Store Closed'}
+                </p>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed ml-4">
+                Your store is currently visible to customers. You can update your banners and content anytime. Changes will go live immediately after saving.
+              </p>
+              <div className="mt-3 ml-4 p-2.5 bg-blue-50 border border-blue-100 rounded-lg flex gap-2">
+                <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">i</span>
+                <p className="text-[11px] text-blue-700 leading-relaxed">
+                  To take your store offline, contact your administrator.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Sticky Bottom Bar */}
-        <div className="fixed bottom-0 right-0 left-0 md:left-64 bg-white/95 backdrop-blur-md border-t border-gray-200 p-4 px-6 md:px-8 flex items-center justify-between gap-4 z-20 shadow-lg">
+        <div className="fixed bottom-0 right-0 left-0 md:left-64 bg-white/95 backdrop-blur-md border-t border-gray-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${
                 hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
               }`}
             />
-            <span className="text-xs font-bold text-gray-600">
+            <span className="text-xs font-semibold text-gray-600">
               {hasUnsavedChanges ? 'Unsaved changes' : 'All changes published'}
             </span>
           </div>
@@ -436,89 +458,53 @@ export default function AdminStoreCustomization() {
               type="button"
               disabled={!hasUnsavedChanges}
               onClick={handleDiscard}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-gray-700 font-bold text-xs rounded-xl transition-colors"
+              className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 font-semibold text-xs rounded-lg transition-colors"
             >
               Discard
             </button>
             <button
               type="button"
-              onClick={handlePublish}
-              className="px-4 py-2 bg-gray-900 hover:bg-black text-white font-bold text-xs rounded-xl transition-colors"
+              onClick={handleSaveChanges}
+              className="px-4 py-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-xs rounded-lg transition-colors shadow-sm"
             >
-              Save Draft
-            </button>
-            <button
-              type="button"
-              onClick={handlePublish}
-              className="px-5 py-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-black text-xs rounded-xl shadow-xs transition-colors"
-            >
-              Publish Changes
+              Save Changes
             </button>
           </div>
         </div>
 
-        {/* Toast confirmation */}
+        {/* Toast Confirmation */}
         {isSavedToast && (
-          <div className="fixed bottom-20 right-8 bg-gray-900 text-white text-xs font-bold py-3 px-5 rounded-2xl shadow-2xl flex items-center gap-2 animate-slide-up z-50">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-emerald-400">
+          <div className="fixed bottom-20 right-8 bg-white text-gray-800 border border-gray-200 text-xs font-bold py-2.5 px-4 rounded-xl flex items-center gap-2 shadow-lg z-50">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-emerald-500">
               <polyline points="20 6 9 17 4 12" />
             </svg>
-            <span>Store settings &amp; hero banners successfully published!</span>
+            <span>Changes saved successfully!</span>
           </div>
         )}
       </div>
 
-      {/* Live Store Preview Side Drawer */}
+      {/* Live Store Preview Drawer */}
       <DrawerPanel
         isOpen={showPreviewDrawer}
         onClose={() => setShowPreviewDrawer(false)}
         title="Live Storefront Preview"
-        subtitle="Real-time mobile simulation of Tindahan ni Isko"
+        subtitle="Real-time preview of Tindahan ni Isko"
         width="max-w-md"
       >
         <div className="space-y-4">
-          {/* Announcement Banner Simulator */}
-          <div className="bg-brand-orange text-white text-[11px] font-bold p-2.5 rounded-xl text-center shadow-xs flex items-center justify-center gap-1.5">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            <span>{announcementText}</span>
-          </div>
-
-          {/* Operational Status Pill Simulator */}
-          <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-200/80 text-xs">
-            <span className="font-semibold text-gray-600">Store Status</span>
-            <span
-              className={`font-black px-2.5 py-0.5 rounded-full text-[10px] ${
-                isPhysicalOpen
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-rose-100 text-rose-800'
-              }`}
-            >
-              {isPhysicalOpen ? 'OPEN FOR PICKUP' : 'CLOSED'}
-            </span>
-          </div>
-
-          {/* Active Hero Slide Simulator */}
           {slides.length > 0 && (
-            <div className="rounded-2xl overflow-hidden bg-slate-900 relative h-48 shadow-md text-white p-5 flex flex-col justify-end">
+            <div className="rounded-xl overflow-hidden bg-slate-900 relative h-48 border border-slate-200 text-white p-4 flex flex-col justify-end">
               <div
                 className="absolute inset-0 bg-cover bg-center opacity-60"
-                style={{
-                  backgroundImage: `url(${getImageUrl(slides[0].imagePreview)})`,
-                }}
+                style={{ backgroundImage: `url(${getImageUrl(slides[0].imagePreview)})` }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              <div className="relative z-10 space-y-1.5">
-                <span className="inline-block bg-brand-orange text-white text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full">
+              <div className="relative z-10 space-y-1">
+                <span className="inline-block bg-brand-orange text-white text-[9px] font-bold uppercase px-2 py-0.5 rounded-md">
                   {slides[0].subtext}
                 </span>
                 <h3 className="text-xl font-black">{slides[0].title}</h3>
-                <button
-                  type="button"
-                  className="mt-2 inline-flex items-center gap-1 px-3 py-1 bg-white text-gray-900 text-xs font-black rounded-lg shadow-sm"
-                >
+                <button type="button" className="mt-2 inline-flex items-center gap-1 px-3 py-1 bg-white text-gray-900 text-xs font-black rounded-lg">
                   <span>{slides[0].ctaLabel}</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
                     <polyline points="9 18 15 12 9 6" />

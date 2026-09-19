@@ -34,10 +34,10 @@ function ProductCard({ product }) {
     <>
       <Link
         to={`/product/${product.id}`}
-        className="block bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow select-none relative group"
+        className="block bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-slate-300 transition-colors select-none relative group"
       >
         {/* Product image container */}
-        <div className="aspect-square w-full bg-white relative overflow-hidden flex items-center justify-center border-b border-gray-200">
+        <div className="aspect-square w-full bg-white relative overflow-hidden flex items-center justify-center border-b border-slate-200">
           {hasValidImage ? (
             <img
               src={resolvedImage}
@@ -45,10 +45,10 @@ function ProductCard({ product }) {
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             />
           ) : (
-            <div className="relative flex flex-col items-center justify-center p-4 text-center">
-              <ShirtIcon className="w-12 h-12 text-brand-orange opacity-40 mb-1" />
+            <div className="relative flex flex-col items-center justify-center p-3 text-center">
+              <ShirtIcon className="w-10 h-10 text-brand-orange opacity-40 mb-1" />
               {product.preOrder && (
-                <span className="absolute top-2 left-2 bg-[#DBEAFE] text-[#1D4ED8] text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                <span className="absolute top-2 left-2 bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
                   Pre-order
                 </span>
               )}
@@ -59,11 +59,11 @@ function ProductCard({ product }) {
           <button
             type="button"
             onClick={handleWishlistClick}
-            className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm border border-gray-200 hover:bg-gray-50 active:scale-90 transition-transform z-10"
+            className="absolute top-2.5 right-2.5 w-7 h-7 rounded-md bg-white flex items-center justify-center border border-slate-200 hover:bg-slate-50 active:scale-90 transition-transform z-10 cursor-pointer"
           >
             <svg
               viewBox="0 0 24 24"
-              className={`w-4 h-4 ${isSaved ? 'text-red-500 fill-red-500' : 'text-gray-300 fill-none'}`}
+              className={`w-3.5 h-3.5 ${isSaved ? 'text-red-500 fill-red-500' : 'text-gray-300 fill-none'}`}
               stroke="currentColor"
               strokeWidth="2.2"
               strokeLinecap="round"
@@ -75,15 +75,15 @@ function ProductCard({ product }) {
         </div>
 
         {/* Product details */}
-        <div className="p-3.5">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+        <div className="p-3">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
             {product.category}
           </span>
-          <h3 className="text-sm md:text-base font-extrabold text-gray-900 mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
+          <h3 className="text-xs sm:text-sm font-bold text-gray-900 mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
             {product.name}
           </h3>
-          <div className="mt-1.5 flex items-center justify-between">
-            <PriceTag amount={product.price} className="text-sm md:text-base" />
+          <div className="mt-1 flex items-center justify-between">
+            <PriceTag amount={product.price} className="text-xs sm:text-sm" />
           </div>
         </div>
       </Link>

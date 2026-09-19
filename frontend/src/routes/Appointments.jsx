@@ -240,30 +240,30 @@ export default function Appointments() {
           </div>
 
           {/* Section Title & Subtitle */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
+          <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shrink-0">
-                <CalendarHeaderIcon className="w-5 h-5" />
+              <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
+                <CalendarHeaderIcon className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-lg font-black text-gray-900 tracking-tight">My Appointments</h2>
-                <p className="text-xs text-gray-500 leading-relaxed mt-0.5">
+                <h2 className="text-base font-extrabold text-slate-900 tracking-tight">My Appointments</h2>
+                <p className="text-xs text-slate-500 leading-relaxed mt-0.5">
                   View your assigned pickup schedule for your orders. Please arrive at the store at your designated time to claim your items.
                 </p>
               </div>
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex gap-2 overflow-x-auto scrollbar-none pt-2">
+            <div className="flex gap-2 overflow-x-auto scrollbar-none pt-1">
               {filterTabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveFilter(tab.id)}
-                  className={`px-4 py-2 rounded-full text-sm font-bold shrink-0 transition-all cursor-pointer ${
+                  className={`h-8 px-3 rounded-md text-xs font-bold shrink-0 transition-colors cursor-pointer ${
                     activeFilter === tab.id
-                      ? 'bg-[#FF6A00] text-white shadow-xs'
-                      : 'bg-[#F0F2F5] text-gray-700 hover:bg-gray-200'
+                      ? 'bg-brand-orange text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
                   }`}
                 >
                   {tab.label}
@@ -284,41 +284,41 @@ export default function Appointments() {
                 return (
                   <div
                     key={appt.id}
-                    className="bg-white rounded-3xl p-4 border border-gray-100 shadow-xs space-y-3"
+                    className="bg-white rounded-lg p-3.5 border border-slate-200 space-y-3"
                   >
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
                       {/* Left: Schedule details */}
-                      <div className="space-y-2 border-b sm:border-b-0 sm:border-r border-gray-100 pb-3 sm:pb-0 sm:pr-3">
+                      <div className="space-y-2 border-b sm:border-b-0 sm:border-r border-slate-200 pb-3 sm:pb-0 sm:pr-3">
                         <span
-                          className={`inline-flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider ${
+                          className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider ${
                             isUpcoming
-                              ? 'bg-[#E8F8EE] text-[#10B981]'
-                              : 'bg-[#EFF6FF] text-[#2563EB]'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-blue-50 text-blue-700 border border-blue-200'
                           }`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full ${isUpcoming ? 'bg-[#10B981]' : 'bg-[#2563EB]'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${isUpcoming ? 'bg-emerald-600' : 'bg-blue-600'}`} />
                           <span>{appt.status}</span>
                         </span>
 
-                        <div className="space-y-2 text-sm text-gray-600 pt-1">
+                        <div className="space-y-1.5 text-xs text-slate-600 pt-1">
                           <div className="flex items-start gap-2">
-                            <SmallCalendarIcon className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                            <SmallCalendarIcon className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                             <div>
-                              <p className="text-sm font-black text-gray-900 uppercase">{appt.date}</p>
-                              <p className="text-xs text-gray-500 font-medium">{appt.dayOfWeek}</p>
+                              <p className="text-xs font-bold text-slate-900 uppercase">{appt.date}</p>
+                              <p className="text-[11px] text-slate-500">{appt.dayOfWeek}</p>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <ClockIcon className="w-4 h-4 text-gray-400 shrink-0" />
-                            <p className="text-sm font-semibold text-gray-800">{appt.time}</p>
+                            <ClockIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <p className="text-xs font-medium text-slate-800">{appt.time}</p>
                           </div>
 
                           <div className="flex items-start gap-2">
-                            <PinIcon className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                            <PinIcon className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                             <div>
-                              <p className="text-sm font-semibold text-gray-800 leading-tight">{appt.location}</p>
-                              <p className="text-xs text-gray-500 font-medium">{appt.subLocation}</p>
+                              <p className="text-xs font-medium text-slate-800 leading-tight">{appt.location}</p>
+                              <p className="text-[11px] text-slate-500">{appt.subLocation}</p>
                             </div>
                           </div>
                         </div>
@@ -327,10 +327,10 @@ export default function Appointments() {
                       {/* Right: Items and Claiming Action */}
                       <div className="space-y-2.5">
                         <div>
-                          <p className="text-sm font-black text-gray-900">
+                          <p className="text-xs font-bold text-slate-900">
                             Appointment #{appt.id}
                           </p>
-                          <p className="text-xs text-gray-500 font-medium">
+                          <p className="text-[11px] text-slate-500">
                             Order #{appt.orderId} · {appt.itemCount} {appt.itemCount === 1 ? 'item' : 'items'}
                           </p>
                         </div>
@@ -339,7 +339,7 @@ export default function Appointments() {
                         <div className="space-y-2">
                           {appt.items.map((item, idx) => (
                             <div key={idx} className="flex items-center gap-2.5">
-                              <div className="w-12 h-12 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center p-1 shrink-0">
+                              <div className="w-9 h-9 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center p-1 shrink-0">
                                 <img
                                   src={item.image}
                                   alt={item.name}
@@ -347,10 +347,10 @@ export default function Appointments() {
                                 />
                               </div>
                               <div className="min-w-0">
-                                <p className="text-sm font-bold text-gray-900 leading-tight truncate">
+                                <p className="text-xs font-bold text-slate-900 leading-tight truncate">
                                   {item.name}
                                 </p>
-                                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                                <p className="text-[11px] text-slate-500">
                                   {item.details}
                                 </p>
                               </div>
@@ -361,17 +361,17 @@ export default function Appointments() {
                         {/* Claiming Container */}
                         {isUpcoming ? (
                           <div className="space-y-2 pt-1">
-                            <div className="bg-[#FFF5ED] border border-[#FFE2D1] rounded-2xl p-2.5 flex items-center gap-2 text-[#E65100]">
-                              <div className="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                                <ScreenClaimIcon className="w-3.5 h-3.5 text-[#E65100]" />
+                            <div className="bg-orange-50/60 border border-orange-200 rounded-md p-2 flex items-center gap-2 text-brand-orange-dark">
+                              <div className="w-5 h-5 rounded-md bg-orange-100 flex items-center justify-center shrink-0">
+                                <ScreenClaimIcon className="w-3 h-3 text-brand-orange" />
                               </div>
-                              <span className="text-xs font-semibold text-[#E65100] leading-tight">
+                              <span className="text-[11px] font-medium leading-tight">
                                 Show this screen upon claiming.
                               </span>
                             </div>
                             <Link
                               to={`/orders/${appt.orderId}`}
-                              className="inline-flex items-center justify-center gap-1 w-full py-2.5 px-3 rounded-full bg-white border border-[#FF9800] text-[#E65100] text-sm font-bold hover:bg-orange-50 active:scale-95 transition-all shadow-2xs"
+                              className="inline-flex items-center justify-center gap-1 w-full h-8 px-3 rounded-md bg-white border border-brand-orange text-brand-orange text-xs font-bold hover:bg-orange-50 transition-colors"
                             >
                               <span>View Order Details</span>
                               <span>→</span>
@@ -379,18 +379,18 @@ export default function Appointments() {
                           </div>
                         ) : (
                           <div className="space-y-2 pt-1">
-                            <div className="bg-[#F0F5FA] border border-[#E2E8F0] rounded-2xl p-2.5 flex flex-col items-center justify-center text-center">
-                              <div className="flex items-center gap-1.5 text-blue-600 font-black text-sm">
-                                <span className="w-4 h-4 rounded-full bg-blue-100 flex items-center justify-center text-xs">✓</span>
+                            <div className="bg-slate-50 border border-slate-200 rounded-md p-2 flex flex-col items-center justify-center text-center">
+                              <div className="flex items-center gap-1.5 text-blue-600 font-bold text-xs">
+                                <span className="w-4 h-4 rounded-md bg-blue-100 flex items-center justify-center text-[10px]">✓</span>
                                 <span>Order claimed</span>
                               </div>
-                              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                              <p className="text-[11px] text-slate-500 mt-0.5">
                                 Thank you for supporting Tindahan ni Isko!
                               </p>
                             </div>
                             <Link
                               to={`/orders/${appt.orderId}`}
-                              className="inline-flex items-center justify-center gap-1 w-full py-2.5 px-3 rounded-full bg-white border border-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-50 active:scale-95 transition-all shadow-2xs"
+                              className="inline-flex items-center justify-center gap-1 w-full h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
                             >
                               <span>View Order Details</span>
                               <span>→</span>
@@ -406,33 +406,33 @@ export default function Appointments() {
           </div>
 
           {/* Quick Reminders Card (Mobile) */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
+          <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <ClockIcon className="w-4 h-4" />
+                <div className="w-7 h-7 rounded-md bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center">
+                  <ClockIcon className="w-3.5 h-3.5" />
                 </div>
-                <h3 className="text-base font-black text-gray-900">Quick Reminders</h3>
+                <h3 className="text-sm font-extrabold text-slate-900">Quick Reminders</h3>
               </div>
-              <span className="text-gray-400 text-sm font-bold">›</span>
+              <span className="text-slate-400 text-xs font-bold">›</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
               <div className="flex items-start gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center shrink-0 mt-0.5">
-                  <ClockIcon className="w-3.5 h-3.5" />
+                <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                  <ClockIcon className="w-3 h-3" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-gray-900">Arrive on time</h4>
-                  <p className="text-xs text-gray-500 font-normal leading-relaxed mt-0.5">
+                  <h4 className="text-xs font-bold text-slate-900">Arrive on time</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
                     Please be at the store during your scheduled time slot.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
                     <circle cx="9" cy="7" r="4" />
                     <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -440,23 +440,23 @@ export default function Appointments() {
                   </svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-gray-900">Bring a valid ID</h4>
-                  <p className="text-xs text-gray-500 font-normal leading-relaxed mt-0.5">
+                  <h4 className="text-xs font-bold text-slate-900">Bring a valid ID</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
                     For verification purposes.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-gray-900">Show your order details</h4>
-                  <p className="text-xs text-gray-500 font-normal leading-relaxed mt-0.5">
+                  <h4 className="text-xs font-bold text-slate-900">Show your order details</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
                     You may show this page or your order number.
                   </p>
                 </div>
@@ -465,22 +465,22 @@ export default function Appointments() {
           </div>
 
           {/* Store Location Card (Mobile) */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
+          <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <PinIcon className="w-4 h-4" />
+                <div className="w-7 h-7 rounded-md bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center">
+                  <PinIcon className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-gray-900">Store Location</h3>
-                  <p className="text-xs text-gray-500 font-medium">Bicol University, Main Campus</p>
+                  <h3 className="text-sm font-extrabold text-slate-900">Store Location</h3>
+                  <p className="text-xs text-slate-500">Bicol University, Main Campus</p>
                 </div>
               </div>
-              <span className="text-gray-400 text-sm font-bold">›</span>
+              <span className="text-slate-400 text-xs font-bold">›</span>
             </div>
 
             {/* Map Graphic Preview */}
-            <div className="w-full h-28 rounded-2xl overflow-hidden relative border border-gray-100 bg-[#E8EFF5]">
+            <div className="w-full h-24 rounded-md overflow-hidden relative border border-slate-200 bg-[#E8EFF5]">
               <svg className="w-full h-full opacity-60" viewBox="0 0 300 150" fill="none" preserveAspectRatio="none">
                 <rect width="300" height="150" fill="#EBF2F7" />
                 <path d="M-20 40 L320 110" stroke="#FFFFFF" strokeWidth="10" strokeLinecap="round" />
@@ -492,10 +492,9 @@ export default function Appointments() {
 
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="relative">
-                  <div className="w-6 h-6 rounded-full bg-brand-orange text-white flex items-center justify-center shadow-md animate-bounce">
+                  <div className="w-6 h-6 rounded-md bg-brand-orange text-white flex items-center justify-center animate-bounce">
                     <PinIcon className="w-3.5 h-3.5 text-white" />
                   </div>
-                  <div className="w-3 h-1 rounded-full bg-black/20 mx-auto mt-0.5 filter blur-[1px]" />
                 </div>
               </div>
             </div>
@@ -504,7 +503,7 @@ export default function Appointments() {
               href="https://maps.google.com/?q=Bicol+University+Main+Campus+Legazpi+City"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-2.5 rounded-full border border-blue-200 text-[#2563EB] font-bold text-sm flex items-center justify-center gap-1.5 hover:bg-blue-50 transition-colors shadow-2xs"
+              className="w-full h-8 rounded-md border border-slate-200 text-blue-600 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-blue-50 transition-colors"
             >
               <span>View on Maps</span>
               <span>→</span>
@@ -516,7 +515,7 @@ export default function Appointments() {
       {/* ── DESKTOP VIEW (No Sidebar) ── */}
       <div className="hidden md:block w-full max-w-5xl mx-auto space-y-5 py-2 animate-fade-in">
         {/* Top Profile Banner - Compact */}
-        <div className="rounded-3xl p-5 md:py-5 md:px-6 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
+        <div className="rounded-lg p-4 md:py-4 md:px-5 flex items-center justify-between text-white relative overflow-hidden bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
           <div className="absolute inset-0 opacity-[0.04] select-none pointer-events-none flex items-center justify-center">
             <span className="text-5xl font-black tracking-widest rotate-[6deg] whitespace-nowrap text-white">
               TINDAHAN NI ISKO
@@ -524,32 +523,32 @@ export default function Appointments() {
           </div>
 
           {/* User Info */}
-          <div className="flex items-center gap-4 relative z-10">
-            <div className="w-16 h-16 rounded-full overflow-hidden shrink-0 shadow-sm">
-              <img src={avatarImg} alt={fullName} className="w-full h-full object-cover scale-120" />
+          <div className="flex items-center gap-3.5 relative z-10">
+            <div className="w-12 h-12 rounded-md overflow-hidden shrink-0 border border-white/20">
+              <img src={avatarImg} alt={fullName} className="w-full h-full object-cover" />
             </div>
             <div className="text-white">
-              <h1 className="text-xl font-black tracking-tight leading-tight">{fullName}</h1>
-              <p className="text-white/90 text-xs font-normal mt-0.5">{email}</p>
-              <p className="text-white/80 text-[11px] font-normal mt-0.5">Student ID: {studentId}</p>
+              <h1 className="text-base font-extrabold tracking-tight leading-tight">{fullName}</h1>
+              <p className="text-white/90 text-xs mt-0.5">{email}</p>
+              <p className="text-white/80 text-[11px] mt-0.5">Student ID: {studentId}</p>
             </div>
           </div>
 
           {/* Actions - Rectangular */}
-          <div className="flex items-center gap-2.5 relative z-10">
+          <div className="flex items-center gap-2 relative z-10">
             <Link
               to="/account"
-              className="flex items-center gap-1.5 bg-white text-gray-800 font-bold text-xs px-4 py-2.5 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 bg-white text-slate-800 font-bold text-xs h-8 px-3 rounded-md hover:bg-slate-50 transition-colors"
             >
-              <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
+              <PencilIcon className="w-3.5 h-3.5 text-slate-500" />
               <span>Edit Profile</span>
             </Link>
             <Link
               to="/settings"
-              className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs text-white hover:bg-white hover:text-gray-800 flex items-center justify-center shadow-2xs active:scale-95 transition-all"
+              className="w-8 h-8 rounded-md bg-white/20 backdrop-blur-xs text-white hover:bg-white hover:text-slate-800 flex items-center justify-center transition-colors"
               title="Settings"
             >
-              <SettingsIcon className="w-5 h-5" />
+              <SettingsIcon className="w-4 h-4" />
             </Link>
           </div>
         </div>
@@ -559,21 +558,21 @@ export default function Appointments() {
             {/* Center Main Column (8 Cols) */}
             <div className="lg:col-span-8 space-y-6">
               {/* Header Title + Subtitle */}
-              <div className="bg-white rounded-3xl p-6 md:p-7 border border-gray-100/90 shadow-xs space-y-4">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shrink-0">
-                    <CalendarHeaderIcon className="w-6 h-6" />
+              <div className="bg-white rounded-lg p-5 border border-slate-200 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-md bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
+                    <CalendarHeaderIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-black text-gray-900 tracking-tight">My Appointments</h2>
-                    <p className="text-xs text-gray-500 font-normal leading-relaxed mt-1">
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">My Appointments</h2>
+                    <p className="text-xs text-slate-500 font-normal leading-relaxed mt-0.5">
                       View your assigned pickup schedule for your orders. Please arrive at the campus store at your designated time to claim your items.
                     </p>
                   </div>
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="flex items-center gap-2.5 pt-2">
+                <div className="flex items-center gap-2 pt-1">
                   {filterTabs.map((tab) => {
                     const isActive = activeFilter === tab.id
                     return (
@@ -581,10 +580,10 @@ export default function Appointments() {
                         key={tab.id}
                         type="button"
                         onClick={() => setActiveFilter(tab.id)}
-                        className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all cursor-pointer ${
+                        className={`h-8 px-3 rounded-md text-xs font-bold transition-colors cursor-pointer ${
                           isActive
-                            ? 'bg-[#FF6A00] text-white shadow-xs'
-                            : 'bg-[#F0F2F5] text-gray-700 hover:bg-gray-200'
+                            ? 'bg-brand-orange text-white'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
                         }`}
                       >
                         {tab.label}
@@ -597,8 +596,8 @@ export default function Appointments() {
               {/* Appointments List */}
               <div className="space-y-4">
                 {filteredAppointments.length === 0 ? (
-                  <div className="bg-white rounded-3xl p-10 text-center border border-gray-100 shadow-xs">
-                    <p className="text-base font-bold text-gray-500">No appointments in this category.</p>
+                  <div className="bg-white rounded-lg p-8 text-center border border-slate-200">
+                    <p className="text-sm font-bold text-slate-500">No appointments in this category.</p>
                   </div>
                 ) : (
                   filteredAppointments.map((appt) => {
@@ -606,39 +605,39 @@ export default function Appointments() {
                     return (
                       <div
                         key={appt.id}
-                        className="bg-white rounded-3xl p-6 border border-gray-100/90 shadow-xs space-y-4 hover:border-gray-200 transition-colors"
+                        className="bg-white rounded-lg p-5 border border-slate-200 space-y-3 transition-colors"
                       >
                         {/* Card Top Pill & Identifier */}
                         <div>
                           <span
-                            className={`inline-block text-xs font-black px-3.5 py-1.5 rounded-full uppercase tracking-wider mb-2.5 ${
+                            className={`inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider mb-2 ${
                               isUpcoming
-                                ? 'bg-[#E8F8EE] text-[#10B981]'
-                                : 'bg-[#EFF6FF] text-[#2563EB]'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
                             }`}
                           >
                             {appt.status}
                           </span>
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-600 flex items-center justify-center">
-                              <SmallCalendarIcon className="w-4 h-4" />
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center">
+                              <SmallCalendarIcon className="w-3.5 h-3.5" />
                             </div>
-                            <span className="text-base font-black text-gray-900">
+                            <span className="text-sm font-extrabold text-slate-900">
                               Appointment #{appt.id}
                             </span>
-                            <span className="text-sm text-gray-500 font-medium">
+                            <span className="text-xs text-slate-500">
                               Order #{appt.orderId} · {appt.itemCount} {appt.itemCount === 1 ? 'item' : 'items'}
                             </span>
                           </div>
                         </div>
 
                         {/* 3-Column Content Row: Item Details, Schedule Details, Claiming Box */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center pt-2 border-t border-gray-100">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center pt-2 border-t border-slate-200">
                           {/* Item Preview (Col 1-4) */}
-                          <div className="md:col-span-4 space-y-3">
+                          <div className="md:col-span-4 space-y-2.5">
                             {appt.items.map((item, idx) => (
-                              <div key={idx} className="flex items-center gap-3">
-                                <div className="w-16 h-16 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center p-1.5 shrink-0">
+                              <div key={idx} className="flex items-center gap-2.5">
+                                <div className="w-11 h-11 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center p-1 shrink-0">
                                   <img
                                     src={item.image}
                                     alt={item.name}
@@ -646,10 +645,10 @@ export default function Appointments() {
                                   />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-sm font-bold text-gray-900 leading-snug truncate">
+                                  <p className="text-xs font-bold text-slate-900 leading-snug truncate">
                                     {item.name}
                                   </p>
-                                  <p className="text-xs text-gray-500 font-medium mt-0.5">
+                                  <p className="text-[11px] text-slate-500 mt-0.5">
                                     {item.details}
                                   </p>
                                 </div>
@@ -658,28 +657,28 @@ export default function Appointments() {
                           </div>
 
                           {/* Date, Time, Location (Col 5-8) */}
-                          <div className="md:col-span-4 space-y-2.5 text-sm text-gray-700 pl-2">
+                          <div className="md:col-span-4 space-y-2 text-xs text-slate-700 pl-2">
                             {/* Date */}
-                            <div className="flex items-start gap-2.5">
-                              <SmallCalendarIcon className="w-4.5 h-4.5 text-gray-400 shrink-0 mt-0.5" />
+                            <div className="flex items-start gap-2">
+                              <SmallCalendarIcon className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                               <div>
-                                <p className="font-bold text-gray-900 leading-tight">{appt.date}</p>
-                                <p className="text-xs text-gray-500 font-medium">{appt.dayOfWeek}</p>
+                                <p className="font-bold text-slate-900 leading-tight">{appt.date}</p>
+                                <p className="text-[11px] text-slate-500">{appt.dayOfWeek}</p>
                               </div>
                             </div>
 
                             {/* Time */}
-                            <div className="flex items-center gap-2.5">
-                              <ClockIcon className="w-4.5 h-4.5 text-gray-400 shrink-0" />
-                              <p className="font-semibold text-gray-800">{appt.time}</p>
+                            <div className="flex items-center gap-2">
+                              <ClockIcon className="w-4 h-4 text-slate-400 shrink-0" />
+                              <p className="font-medium text-slate-800">{appt.time}</p>
                             </div>
 
                             {/* Location */}
-                            <div className="flex items-start gap-2.5">
-                              <PinIcon className="w-4.5 h-4.5 text-gray-400 shrink-0 mt-0.5" />
+                            <div className="flex items-start gap-2">
+                              <PinIcon className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                               <div>
-                                <p className="font-semibold text-gray-800 leading-tight">{appt.location}</p>
-                                <p className="text-xs text-gray-500 font-medium">{appt.subLocation}</p>
+                                <p className="font-medium text-slate-800 leading-tight">{appt.location}</p>
+                                <p className="text-[11px] text-slate-500">{appt.subLocation}</p>
                               </div>
                             </div>
                           </div>
@@ -687,30 +686,30 @@ export default function Appointments() {
                           {/* Right Action Callout Box (Col 9-12) */}
                           <div className="md:col-span-4">
                             {isUpcoming ? (
-                              <div className="bg-[#FFF5ED] border border-[#FFE2D1] rounded-2xl p-4 flex flex-col items-center justify-center text-center space-y-3">
-                                <div className="flex items-center gap-2 text-[#E65100]">
-                                  <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                                    <ScreenClaimIcon className="w-3.5 h-3.5 text-[#E65100]" />
+                              <div className="bg-orange-50/60 border border-orange-200 rounded-md p-3 flex flex-col items-center justify-center text-center space-y-2">
+                                <div className="flex items-center gap-1.5 text-brand-orange-dark">
+                                  <div className="w-5 h-5 rounded-md bg-orange-100 flex items-center justify-center shrink-0">
+                                    <ScreenClaimIcon className="w-3 h-3 text-brand-orange" />
                                   </div>
-                                  <span className="text-xs font-bold text-[#E65100] leading-tight">
+                                  <span className="text-[11px] font-medium leading-tight">
                                     Show this screen upon claiming.
                                   </span>
                                 </div>
                                 <Link
                                   to={`/orders/${appt.orderId}`}
-                                  className="inline-flex items-center justify-center gap-1 w-full py-2.5 px-4 rounded-full bg-white border border-[#FF9800] text-[#E65100] text-sm font-bold hover:bg-orange-50 active:scale-95 transition-all shadow-2xs"
+                                  className="inline-flex items-center justify-center gap-1 w-full h-8 px-3 rounded-md bg-white border border-brand-orange text-brand-orange text-xs font-bold hover:bg-orange-50 transition-colors"
                                 >
                                   <span>View Order Details</span>
                                   <span>→</span>
                                 </Link>
                               </div>
                             ) : (
-                              <div className="bg-[#F0F5FA] border border-[#E2E8F0] rounded-2xl p-4 flex flex-col items-center justify-center text-center space-y-1.5">
-                                <div className="flex items-center gap-2">
-                                  <CheckmarkCircleIcon className="w-5 h-5 text-blue-600" />
-                                  <span className="text-sm font-black text-gray-900">Order claimed</span>
+                              <div className="bg-slate-50 border border-slate-200 rounded-md p-3 flex flex-col items-center justify-center text-center space-y-1">
+                                <div className="flex items-center gap-1.5">
+                                  <CheckmarkCircleIcon className="w-4 h-4 text-blue-600" />
+                                  <span className="text-xs font-bold text-slate-900">Order claimed</span>
                                 </div>
-                                <p className="text-xs text-gray-500 font-medium">
+                                <p className="text-[11px] text-slate-500">
                                   Thank you for supporting Tindahan ni Isko!
                                 </p>
                               </div>
@@ -727,35 +726,35 @@ export default function Appointments() {
             {/* Right Sidebar Column (4 Cols) */}
             <div className="lg:col-span-4 space-y-6">
               {/* 1. Quick Reminders Card */}
-              <div className="bg-white rounded-3xl p-6 border border-gray-100/90 shadow-xs space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center relative">
-                    <SmallCalendarIcon className="w-5 h-5" />
-                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-white text-[8px] font-black">
+              <div className="bg-white rounded-lg p-5 border border-slate-200 space-y-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center relative">
+                    <SmallCalendarIcon className="w-4 h-4" />
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-md bg-emerald-500 border border-white flex items-center justify-center text-white text-[8px] font-bold">
                       ✓
                     </span>
                   </div>
-                  <h3 className="text-lg font-black text-gray-900">Quick Reminders</h3>
+                  <h3 className="text-base font-extrabold text-slate-900">Quick Reminders</h3>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {/* Reminder 1 */}
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5">
-                      <ClockIcon className="w-4 h-4" />
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                      <ClockIcon className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-gray-900">Arrive on time</h4>
-                      <p className="text-xs text-gray-500 font-normal leading-relaxed mt-0.5">
+                      <h4 className="text-xs font-bold text-slate-900">Arrive on time</h4>
+                      <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
                         Please be at the store during your scheduled time slot.
                       </p>
                     </div>
                   </div>
 
                   {/* Reminder 2 */}
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
                         <circle cx="9" cy="7" r="4" />
                         <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -763,27 +762,24 @@ export default function Appointments() {
                       </svg>
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-gray-900">Bring a valid ID</h4>
-                      <p className="text-xs text-gray-500 font-normal leading-relaxed mt-0.5">
+                      <h4 className="text-xs font-bold text-slate-900">Bring a valid ID</h4>
+                      <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
                         For verification purposes.
                       </p>
                     </div>
                   </div>
 
                   {/* Reminder 3 */}
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 mt-0.5">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                         <polyline points="14 2 14 8 20 8" />
-                        <line x1="16" y1="13" x2="8" y2="13" />
-                        <line x1="16" y1="17" x2="8" y2="17" />
-                        <polyline points="10 9 9 9 8 9" />
                       </svg>
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-gray-900">Show your order details</h4>
-                      <p className="text-xs text-gray-500 font-normal leading-relaxed mt-0.5">
+                      <h4 className="text-xs font-bold text-slate-900">Show your order details</h4>
+                      <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
                         You may show this page or your order number.
                       </p>
                     </div>
@@ -792,20 +788,20 @@ export default function Appointments() {
               </div>
 
               {/* 2. Store Location Card */}
-              <div className="bg-white rounded-3xl p-6 border border-gray-100/90 shadow-xs space-y-4">
+              <div className="bg-white rounded-lg p-5 border border-slate-200 space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shrink-0">
-                    <PinIcon className="w-5 h-5" />
+                  <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
+                    <PinIcon className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-black text-gray-900">Store Location</h3>
-                    <p className="text-sm font-bold text-gray-800 mt-1">Tindahan ni Isko – Main Campus</p>
-                    <p className="text-xs text-gray-500 font-medium">Bicol University, Main Campus</p>
+                    <h3 className="text-sm font-extrabold text-slate-900">Store Location</h3>
+                    <p className="text-xs font-bold text-slate-800 mt-0.5">Tindahan ni Isko – Main Campus</p>
+                    <p className="text-[11px] text-slate-500">Bicol University, Main Campus</p>
                   </div>
                 </div>
 
                 {/* Stylized Map View */}
-                <div className="w-full h-36 rounded-2xl overflow-hidden relative border border-gray-100 bg-[#E8EFF5]">
+                <div className="w-full h-32 rounded-md overflow-hidden relative border border-slate-200 bg-[#E8EFF5]">
                   {/* Subtle map road grid graphics */}
                   <svg className="w-full h-full opacity-60" viewBox="0 0 300 150" fill="none" preserveAspectRatio="none">
                     <rect width="300" height="150" fill="#EBF2F7" />
@@ -821,10 +817,9 @@ export default function Appointments() {
                   {/* Pin in center */}
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="relative">
-                      <div className="w-7 h-7 rounded-full bg-brand-orange text-white flex items-center justify-center shadow-md animate-bounce">
-                        <PinIcon className="w-4 h-4 text-white" />
+                      <div className="w-6 h-6 rounded-md bg-brand-orange text-white flex items-center justify-center animate-bounce">
+                        <PinIcon className="w-3.5 h-3.5 text-white" />
                       </div>
-                      <div className="w-4 h-1.5 rounded-full bg-black/20 mx-auto mt-0.5 filter blur-[1px]" />
                     </div>
                   </div>
                 </div>
@@ -834,7 +829,7 @@ export default function Appointments() {
                   href="https://maps.google.com/?q=Bicol+University+Main+Campus+Legazpi+City"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-2.5 rounded-xl border border-blue-200 text-[#2563EB] font-bold text-sm flex items-center justify-center gap-1.5 hover:bg-blue-50 transition-colors shadow-2xs"
+                  className="w-full h-8 rounded-md border border-slate-200 text-blue-600 font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-blue-50 transition-colors"
                 >
                   <span>View on Maps</span>
                   <span>→</span>

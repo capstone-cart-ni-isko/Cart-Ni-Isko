@@ -18,8 +18,8 @@ export const INITIAL_ADMIN_DATA = {
     { key: 'in_production', label: 'In Production', count: 6, color: '#64748B', bgClass: 'bg-slate-500' },
     { key: 'preparing', label: 'Preparing', count: 7, color: '#475569', bgClass: 'bg-slate-600' },
     { key: 'ready_pickup', label: 'Ready for Pickup', count: 12, color: '#334155', bgClass: 'bg-slate-700' },
-    { key: 'ready_dispatch', label: 'Ready for Dispatch', count: 5, color: '#1E293B', bgClass: 'bg-slate-800' },
-    { key: 'in_transit', label: 'In Transit', count: 8, color: '#0F172A', bgClass: 'bg-slate-900' },
+    { key: 'ready_dispatch', label: 'Ready for Dispatch', count: 5, color: '#2563EB', bgClass: 'bg-blue-600' },
+    { key: 'in_transit', label: 'In Transit', count: 8, color: '#FF6A00', bgClass: 'bg-brand-orange' },
   ],
 
   categorySales: [

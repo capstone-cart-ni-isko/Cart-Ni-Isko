@@ -66,32 +66,32 @@ export default function AdminSchedule() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="space-y-4">
+        {/* Compacted Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
               Student Officer Duty &amp; Shift Scheduler
             </h1>
-            <p className="text-xs lg:text-sm font-medium text-gray-500 mt-1">
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
               Educational Portal • Student Council Organization Management
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {/* Duty Requests Drawer Trigger */}
             <button
               type="button"
               onClick={() => setShowDutyRequestsDrawer(true)}
-              className="px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-800 font-bold text-xs rounded-xl border border-gray-200 shadow-2xs flex items-center gap-2 transition-colors relative"
+              className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs rounded-md border border-slate-200 flex items-center gap-2 transition-colors relative cursor-pointer"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-brand-orange">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
               </svg>
               <span>Duty Requests</span>
               {dutyRequests.length > 0 && (
-                <span className="w-5 h-5 bg-brand-orange text-white text-[10px] font-black rounded-full flex items-center justify-center">
+                <span className="w-4 h-4 bg-brand-orange text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                   {dutyRequests.length}
                 </span>
               )}
@@ -103,9 +103,9 @@ export default function AdminSchedule() {
                 setSelectedOfficerId(officers[0]?.id || '')
                 setShowAssignModal(true)
               }}
-              className="px-4 py-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-black text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors"
+              className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
@@ -115,18 +115,18 @@ export default function AdminSchedule() {
         </div>
 
         {/* View Mode & Date Navigator Bar */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-white rounded-lg p-3 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           {/* Day / Week / Month toggle */}
-          <div className="flex bg-gray-100 p-1 rounded-xl">
+          <div className="flex bg-slate-100 p-0.5 rounded-md border border-slate-200/60">
             {['Day', 'Week', 'Month'].map((tab) => (
               <button
                 key={tab}
                 type="button"
                 onClick={() => setViewMode(tab)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`h-7 px-3 rounded text-xs font-semibold transition-all cursor-pointer ${
                   viewMode === tab
-                    ? 'bg-brand-orange text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-brand-orange text-white'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 {tab}
@@ -135,23 +135,23 @@ export default function AdminSchedule() {
           </div>
 
           {/* Date Navigator */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500"
+              className="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
-            <span className="px-3 py-1 bg-gray-50 rounded-lg text-xs font-black text-gray-900 border border-gray-200">
+            <span className="px-2.5 py-1 bg-slate-50 rounded-md text-xs font-semibold text-slate-900 border border-slate-200">
               Today: August 22, 2026
             </span>
             <button
               type="button"
-              className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500"
+              className="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
@@ -174,26 +174,26 @@ export default function AdminSchedule() {
         </div>
 
         {/* Section 2: Officer Schedules & Free Windows */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-100/90 shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div>
-              <h2 className="text-base font-black text-gray-900">
+              <h2 className="text-sm font-bold text-slate-900">
                 Officer Schedules &amp; Free Windows
               </h2>
-              <p className="text-xs text-gray-400 font-medium mt-0.5">
+              <p className="text-[11px] text-slate-400 font-normal mt-0.5">
                 Manage availability and assign shifts based on class schedules
               </p>
             </div>
 
             {/* Filter pills */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setActiveFilter('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                className={`h-7 px-2.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                   activeFilter === 'all'
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-brand-orange text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 All ({officers.length})
@@ -201,10 +201,10 @@ export default function AdminSchedule() {
               <button
                 type="button"
                 onClick={() => setActiveFilter('available')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                className={`h-7 px-2.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                   activeFilter === 'available'
                     ? 'bg-emerald-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 Available Today (6)
@@ -212,10 +212,10 @@ export default function AdminSchedule() {
               <button
                 type="button"
                 onClick={() => setActiveFilter('conflict')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                className={`h-7 px-2.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
                   activeFilter === 'conflict'
                     ? 'bg-rose-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 Class Conflict (2)
@@ -224,7 +224,7 @@ export default function AdminSchedule() {
           </div>
 
           {/* Officer Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {filteredOfficers.map((off) => (
               <div
                 key={off.id}
@@ -312,7 +312,7 @@ export default function AdminSchedule() {
                   <button
                     type="button"
                     onClick={() => approveDutyRequest(req.id)}
-                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-2xs"
+                    className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-md cursor-pointer"
                   >
                     Approve Shift
                   </button>
@@ -325,16 +325,16 @@ export default function AdminSchedule() {
 
       {/* Assign Duty Modal */}
       {showAssignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 space-y-4">
-            <h3 className="text-base font-black text-gray-900">Assign Officer Duty</h3>
-            <form onSubmit={handleAssignSubmit} className="space-y-3.5 text-xs font-medium">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-lg p-4 max-w-sm w-full border border-slate-200 space-y-3">
+            <h3 className="text-sm font-bold text-slate-900">Assign Officer Duty</h3>
+            <form onSubmit={handleAssignSubmit} className="space-y-2.5 text-xs font-medium">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Officer</label>
+                <label className="block font-semibold text-slate-700 mb-1">Officer</label>
                 <select
                   value={selectedOfficerId}
                   onChange={(e) => setSelectedOfficerId(e.target.value)}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
                 >
                   {officers.map((off) => (
                     <option key={off.id} value={off.id}>
@@ -345,11 +345,11 @@ export default function AdminSchedule() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Duty Type</label>
+                <label className="block font-semibold text-slate-700 mb-1">Duty Type</label>
                 <select
                   value={shiftType}
                   onChange={(e) => setShiftType(e.target.value)}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
                 >
                   <option value="desk_duty">Desk Duty (Main Counter)</option>
                   <option value="event_prep">Event Prep (Merch Distribution)</option>
@@ -359,38 +359,38 @@ export default function AdminSchedule() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Time Slot</label>
+                <label className="block font-semibold text-slate-700 mb-1">Time Slot</label>
                 <input
                   type="text"
                   value={shiftTime}
                   onChange={(e) => setShiftTime(e.target.value)}
                   placeholder="e.g. 10:00 AM - 1:00 PM"
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Room / Location</label>
+                <label className="block font-semibold text-slate-700 mb-1">Room / Location</label>
                 <input
                   type="text"
                   value={dutyLocation}
                   onChange={(e) => setDutyLocation(e.target.value)}
                   placeholder="e.g. Main Campus USC Org Room"
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-1.5">
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(false)}
-                  className="px-4 py-2 bg-gray-100 rounded-xl font-bold text-gray-600 hover:bg-gray-200"
+                  className="h-8 px-3 bg-slate-100 rounded-md font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer text-xs"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-brand-orange rounded-xl font-black text-white hover:bg-brand-orange-dark shadow-xs"
+                  className="h-8 px-3 bg-brand-orange rounded-md font-semibold text-white hover:bg-brand-orange-dark cursor-pointer text-xs"
                 >
                   Assign Shift
                 </button>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { CloseIcon } from '../../components/ui/Icons.jsx'
 
 export default function AdminAppointments() {
   const { currentAdminUser } = useAdmin() || {}
@@ -75,23 +76,22 @@ export default function AdminAppointments() {
 
   return (
     <AdminLayout>
-      <div className="p-6 md:p-8 space-y-6 max-w-[1400px] mx-auto animate-fade-in">
-        {/* Top Greeting Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="space-y-4 animate-fade-in">
+        {/* Compacted Top Greeting Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h1 className="text-2xl md:text-3xl font-black text-gray-900 flex items-center gap-2">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
               <span>Good morning, {staffName}!</span>
-              <span className="text-amber-500 text-2xl">🌅</span>
             </h1>
-            <p className="text-sm text-gray-500 font-medium mt-1">
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
               Here's your assigned shift and today's schedule at a glance.
             </p>
           </div>
 
           {/* Date Selector Badge */}
-          <div className="flex items-center gap-1 bg-white border border-gray-200/90 rounded-2xl px-2 py-1.5 shadow-2xs self-start md:self-auto">
-            <div className="flex items-center gap-2 px-3 py-1 text-sm font-bold text-gray-800">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-500">
+          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-md px-2 py-1 self-start sm:self-auto">
+            <div className="flex items-center gap-2 px-2 py-0.5 text-xs font-semibold text-slate-800">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                 <line x1="16" y1="2" x2="16" y2="6" />
                 <line x1="8" y1="2" x2="8" y2="6" />
@@ -99,14 +99,14 @@ export default function AdminAppointments() {
               </svg>
               <span>{currentDate}</span>
             </div>
-            <div className="flex items-center gap-0.5 border-l border-gray-100 pl-1">
-              <button type="button" className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+            <div className="flex items-center gap-0.5 border-l border-slate-100 pl-1">
+              <button type="button" className="p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                   <polyline points="15 18 9 12 15 6" />
                 </svg>
               </button>
-              <button type="button" className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+              <button type="button" className="p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
               </button>
@@ -115,42 +115,42 @@ export default function AdminAppointments() {
         </div>
 
         {/* 2-Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Left Column (8 cols) */}
-          <div className="lg:col-span-8 space-y-6">
+          <div className="lg:col-span-8 space-y-4">
             {/* 1. Assigned Shift Card */}
-            <div className="bg-[#FFF9F5] border border-[#FFE7D6] rounded-3xl p-6 relative overflow-hidden shadow-2xs">
-              <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+            <div className="bg-[#FFF9F5] border border-[#FFE7D6] rounded-lg p-4 relative overflow-hidden">
+              <div className="flex flex-col md:flex-row items-start justify-between gap-4">
                 {/* Shift Info */}
-                <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-[#FFE8D6] text-[#FF6A00] flex items-center justify-center shrink-0 shadow-2xs">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-7 h-7">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-md bg-[#FFE8D6] text-[#FF6A00] flex items-center justify-center shrink-0">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                       <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
                       <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
                     </svg>
                   </div>
-                  <div className="space-y-1.5">
-                    <span className="inline-block bg-[#FFEDE1] text-[#E65100] text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full">
+                  <div className="space-y-1">
+                    <span className="inline-block bg-[#FFEDE1] text-[#E65100] text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
                       Assigned Shift
                     </span>
-                    <h2 className="text-xl font-black text-gray-900">Desk Duty</h2>
-                    <div className="space-y-1 text-xs text-gray-600 font-medium">
+                    <h2 className="text-base font-bold text-slate-900">Desk Duty</h2>
+                    <div className="space-y-0.5 text-xs text-slate-600 font-medium">
                       <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-gray-400">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
                           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                           <circle cx="12" cy="10" r="3" />
                         </svg>
                         <span>Student Council Office</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-gray-400">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
                           <circle cx="12" cy="12" r="10" />
                           <polyline points="12 6 12 12 16 14" />
                         </svg>
-                        <span className="font-bold text-gray-800">10:00 AM – 1:00 PM</span>
+                        <span className="font-bold text-slate-800">10:00 AM – 1:00 PM</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-gray-400">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
                           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                           <circle cx="12" cy="7" r="4" />
                         </svg>
@@ -161,8 +161,8 @@ export default function AdminAppointments() {
                 </div>
 
                 {/* Shift Details Bullets */}
-                <div className="space-y-1.5 text-xs text-gray-600 border-t md:border-t-0 md:border-l border-orange-100 pt-3 md:pt-0 md:pl-6">
-                  <p className="font-bold text-gray-900 mb-1">Shift Details</p>
+                <div className="space-y-1 text-xs text-slate-600 border-t md:border-t-0 md:border-l border-orange-100 pt-2.5 md:pt-0 md:pl-4">
+                  <p className="font-semibold text-slate-900 mb-0.5">Shift Details</p>
                   <div className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
                     <span>Assist with student inquiries</span>
@@ -180,7 +180,7 @@ export default function AdminAppointments() {
                 {/* View Details Button */}
                 <button
                   type="button"
-                  className="self-start md:self-center border border-[#FF6A00] text-[#FF6A00] bg-white hover:bg-orange-50 active:scale-95 transition-all text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xs flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                  className="self-start md:self-center border border-[#FF6A00] text-[#FF6A00] bg-white hover:bg-orange-50 text-xs font-semibold h-8 px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
@@ -192,7 +192,7 @@ export default function AdminAppointments() {
             </div>
 
             {/* 2. Today's Timeline */}
-            <div className="bg-white rounded-3xl p-6 md:p-7 border border-gray-100/90 shadow-xs space-y-6">
+            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-4">
               {/* Timeline Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -249,33 +249,33 @@ export default function AdminAppointments() {
 
                       {/* Timeline Dot */}
                       <div
-                        className={`w-3.5 h-3.5 rounded-full border-2 border-white shadow-2xs z-10 shrink-0 ${
+                        className={`w-3 h-3 rounded-full border-2 border-white z-10 shrink-0 ${
                           isShift
-                            ? 'bg-[#FF6A00] ring-4 ring-orange-100'
+                            ? 'bg-[#FF6A00] ring-2 ring-orange-100'
                             : isFree
-                            ? 'bg-[#10B981] ring-4 ring-emerald-100'
-                            : 'bg-gray-300'
+                            ? 'bg-[#10B981] ring-2 ring-emerald-100'
+                            : 'bg-slate-300'
                         }`}
                       />
 
                       {/* Content Card (Right) */}
                       <div
-                        className={`flex-1 rounded-2xl p-4 flex items-center justify-between gap-4 transition-all ${
+                        className={`flex-1 rounded-md p-3 flex items-center justify-between gap-3 transition-all ${
                           isShift
-                            ? 'bg-[#FFF5ED] border border-[#FFE2D1] shadow-2xs'
+                            ? 'bg-[#FFF5ED] border border-[#FFE2D1]'
                             : isFree
                             ? 'bg-[#F0FDF4] border border-[#DCFCE7]'
-                            : 'bg-[#F8F9FA] border border-gray-100 hover:bg-gray-50'
+                            : 'bg-slate-50 border border-slate-200 hover:bg-slate-100/60'
                         }`}
                       >
-                        <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
                               isShift
                                 ? 'bg-[#FFE8D6] text-[#FF6A00]'
                                 : isFree
                                 ? 'bg-emerald-100 text-[#10B981]'
-                                : 'bg-white text-gray-500 border border-gray-100'
+                                : 'bg-white text-slate-500 border border-slate-200'
                             }`}
                           >
                             {item.icon === 'desk' ? (
@@ -346,9 +346,9 @@ export default function AdminAppointments() {
               <button
                 type="button"
                 onClick={() => setShowDeclineModal(true)}
-                className="border border-[#FF9800] text-[#E65100] bg-white hover:bg-orange-50 active:scale-95 transition-all font-bold text-xs px-4 py-2 rounded-xl shadow-2xs whitespace-nowrap cursor-pointer self-end sm:self-center"
+                className="border border-brand-orange text-brand-orange bg-white hover:bg-orange-50 font-bold text-xs h-8 px-3 rounded-md whitespace-nowrap cursor-pointer self-end sm:self-center transition-colors"
               >
-                ✕ Decline Shift
+                Decline Shift
               </button>
             </div>
           </div>
@@ -441,10 +441,9 @@ export default function AdminAppointments() {
             </div>
 
             {/* 3. Quick Actions */}
-            <div className="bg-white rounded-3xl p-6 border border-gray-100/90 shadow-xs space-y-4">
+            <div className="bg-white rounded-lg p-5 border border-slate-200 space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-amber-500 text-sm">⚡</span>
-                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wider">Quick Actions</h3>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Quick Actions</h3>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -514,38 +513,38 @@ export default function AdminAppointments() {
 
         {/* Decline Modal */}
         {showDeclineModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fade-in">
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in">
+            <div className="bg-white rounded-lg p-5 max-w-md w-full border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-black text-gray-900">Decline Shift</h3>
+                <h3 className="text-sm font-extrabold text-slate-900">Decline Shift</h3>
                 <button
                   type="button"
                   onClick={() => setShowDeclineModal(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1"
+                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
                 >
-                  ✕
+                  <CloseIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-slate-600">
                 Please provide a brief reason for declining your assigned shift on <strong>Tue, Apr 22, 2025 (10:00 AM – 1:00 PM)</strong>.
               </p>
               <textarea
                 placeholder="e.g. Schedule conflict with laboratory exam..."
                 rows={3}
-                className="w-full p-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/30 resize-none"
+                className="w-full p-2.5 rounded-md border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-brand-orange resize-none"
               />
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setShowDeclineModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                  className="h-8 px-3 rounded-md text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowDeclineModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-700 transition-colors"
+                  className="h-8 px-3 rounded-md text-xs font-bold text-white bg-red-600 hover:bg-red-700 transition-colors cursor-pointer"
                 >
                   Submit Decline
                 </button>

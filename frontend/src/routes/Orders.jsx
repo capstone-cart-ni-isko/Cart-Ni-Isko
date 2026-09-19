@@ -1,14 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
-import ordersData from '../data/orders.json'
 import productsData from '../data/products.json'
 import { getImageUrl } from '../utils/imageUtils.js'
-import { PackageIcon, ShirtIcon } from '../components/ui/Icons.jsx'
+import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon, AlertTriangleIcon } from '../components/ui/Icons.jsx'
+import { getStoredOrders, isFulfillmentLocked } from '../utils/orderStorage.js'
 
 const tabs = [
   { key: 'all', label: 'All' },
@@ -22,11 +22,20 @@ function Orders() {
   const navigate = useNavigate()
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState('all')
+  const [orders, setOrders] = useState(() => getStoredOrders())
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setOrders(getStoredOrders())
+    }
+    window.addEventListener('isko_orders_updated', handleUpdate)
+    return () => window.removeEventListener('isko_orders_updated', handleUpdate)
+  }, [])
 
   const filteredOrders =
     activeTab === 'all'
-      ? ordersData
-      : ordersData.filter((o) => o.type === activeTab)
+      ? orders
+      : orders.filter((o) => o.type === activeTab)
 
   const handleCopyOrderId = (e, orderId) => {
     e.preventDefault()
@@ -45,8 +54,8 @@ function Orders() {
           {tabs.map((tab) => {
             const count =
               tab.key === 'all'
-                ? ordersData.length
-                : ordersData.filter((o) => o.type === tab.key).length
+                ? orders.length
+                : orders.filter((o) => o.type === tab.key).length
 
             return (
               <button
@@ -73,7 +82,7 @@ function Orders() {
         </div>
       </div>
 
-      {/* Single Vertical Column Layout (Chronological Scanning) */}
+      {/* Single Vertical Column Layout */}
       <div className="px-4 py-6 pb-32 animate-fade-in max-w-3xl mx-auto space-y-4">
         {filteredOrders.length === 0 ? (
           <div className="text-center py-20 flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 p-8 shadow-xs">
@@ -98,18 +107,21 @@ function Orders() {
             const productImage =
               order.image ||
               (matchedProduct?.images?.[0] ? matchedProduct.images[0] : null)
-            const orderTotal = order.price * order.qty
+            const isLocked = isFulfillmentLocked(order)
+            const isDelivery = order.fulfillment?.method === 'Courier Delivery'
+            const deliveryFee = isDelivery ? (order.deliveryFee || 280) : 0
+            const orderTotal = (order.price * order.qty) + (order.deliveryFeePaid ? deliveryFee : 0)
 
             return (
               <article
                 key={order.id}
-                className="bg-white rounded-3xl border border-gray-200/90 shadow-2xs hover:shadow-md transition-shadow overflow-hidden"
+                className="bg-white rounded-2xl border border-slate-200 transition-colors overflow-hidden shadow-2xs hover:shadow-xs"
               >
                 {/* ── Level 1 & 2: Order Identity + Status Row ── */}
-                <div className="p-4 sm:p-5 border-b border-gray-100 bg-gray-50/50 flex items-start justify-between gap-3 flex-wrap">
+                <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-base sm:text-lg font-black text-gray-900 tracking-tight">
+                      <span className="text-base font-bold text-gray-900 tracking-tight">
                         Order #{order.id}
                       </span>
                       {/* Copy Order ID Button */}
@@ -120,19 +132,23 @@ function Orders() {
                         title="Copy Order ID to clipboard"
                         aria-label={`Copy Order ID ${order.id}`}
                       >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                         </svg>
                       </button>
+
+                      {/* Fulfillment lock pill */}
+                      {isLocked ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
+                          <LockIcon className="w-2.5 h-2.5 text-slate-600" />
+                          Delivery Locked
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                          Flexible
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-xs text-gray-500 mt-0.5">
@@ -152,16 +168,38 @@ function Orders() {
                 </div>
 
                 {/* ── Level 3: Fulfillment Information ── */}
-                <div className="px-4 sm:px-5 py-2.5 bg-blue-50/40 border-b border-blue-100/50 flex items-center gap-2 text-xs text-blue-950 font-medium">
-                  <span className="text-sm shrink-0">
-                    {order.fulfillment?.method === 'Courier Delivery' ? '🚚' : '📍'}
-                  </span>
-                  <span className="font-bold">
-                    {order.fulfillment?.method || 'Store Pickup'}:
-                  </span>
-                  <span className="text-blue-900 truncate">
-                    {order.fulfillment?.location || 'Tindahan ni Isko · BU Student Center'}
-                  </span>
+                <div className="px-3.5 sm:px-4 py-2.5 bg-blue-50/40 border-b border-blue-100/50 flex items-center justify-between gap-2 flex-wrap text-xs text-blue-950 font-medium">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="shrink-0">
+                      {isDelivery ? (
+                        <TruckIcon className="w-3.5 h-3.5 text-brand-orange" />
+                      ) : (
+                        <MapPinIcon className="w-3.5 h-3.5 text-blue-600" />
+                      )}
+                    </span>
+                    <span className="font-bold">
+                      {order.fulfillment?.method || 'Store Pickup'}:
+                    </span>
+                    <span className="text-blue-900 truncate">
+                      {order.fulfillment?.location || 'Tindahan ni Isko · BU Student Center'}
+                    </span>
+                  </div>
+
+                  {/* Lalamove / Delivery Fee status tag */}
+                  {isDelivery && (
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      order.deliveryFeePaid
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {order.deliveryFeePaid && (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5 shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
+                      )}
+                      {order.deliveryFeePaid
+                        ? (order.lalamoveBookingId ? order.lalamoveBookingId : 'Fee Paid')
+                        : `₱${(order.deliveryFee || 280).toFixed(2)} Fee Pending`}
+                    </span>
+                  )}
                 </div>
 
                 {/* ── Level 4: Product & Variant Information ── */}
@@ -227,13 +265,34 @@ function Orders() {
 
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Secondary Contextual Actions */}
-                    {order.status === 'TO RECEIVE' && (
+                    {order.status === 'TO RECEIVE' && !isDelivery && (
                       <button
                         type="button"
                         onClick={() => navigate(`/orders/${order.id}`)}
                         className="px-3.5 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
                       >
                         Claim Pass
+                      </button>
+                    )}
+
+                    {isDelivery && !order.deliveryFeePaid && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        className="px-3.5 py-2 rounded-xl border border-orange-200 bg-orange-50 text-brand-orange text-xs font-black hover:bg-orange-100 transition-colors cursor-pointer"
+                      >
+                        Pay ₱{(order.deliveryFee || 280).toFixed(2)} Fee
+                      </button>
+                    )}
+
+                    {order.lalamoveStatus === 'booking_failed' && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-black hover:bg-rose-100 transition-colors cursor-pointer"
+                      >
+                        <AlertTriangleIcon className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>Retry Booking</span>
                       </button>
                     )}
 

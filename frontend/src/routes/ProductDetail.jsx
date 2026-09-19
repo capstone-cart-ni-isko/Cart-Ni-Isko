@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useCart } from '../hooks/useCart.js'
@@ -14,7 +14,7 @@ import ProductAccordion from '../components/ui/ProductAccordion.jsx'
 import ProductReviews from '../components/ui/ProductReviews.jsx'
 import productsData from '../data/products.json'
 import backIcon from '../assets/icons/common/back.svg'
-import { ShirtIcon } from '../components/ui/Icons.jsx'
+import { ShirtIcon, CalendarIcon, StoreIcon, RefreshCwIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 
 function ProductDetail() {
@@ -40,6 +40,11 @@ function ProductDetail() {
   // Modals state
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showSizeGuide, setShowSizeGuide] = useState(false)
+
+  // Always scroll to top when landing on product or clicking suggested products
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [id])
 
   // Clean state reset when switching to a different product id (e.g. clicking related items)
   if (id !== prevId) {
@@ -245,16 +250,16 @@ function ProductDetail() {
               {/* Status Badge Tag Over Main Image */}
               <div className="absolute top-4 left-4 md:left-6 z-10 flex flex-col gap-1.5">
                 {product.preOrder ? (
-                  <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
-                    <span>📅</span>
+                  <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                    <CalendarIcon className="w-3.5 h-3.5 shrink-0" />
                     <span>For Pre-order</span>
                   </span>
                 ) : isOutOfStock ? (
-                  <span className="inline-flex items-center gap-1 bg-red-600 text-white text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                  <span className="inline-flex items-center gap-1 bg-red-600 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
                     Out of Stock
                   </span>
                 ) : isLowStock ? (
-                  <span className="inline-flex items-center gap-1 bg-amber-500 text-white text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                  <span className="inline-flex items-center gap-1 bg-amber-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
                     Only {availableStock} Left
                   </span>
                 ) : null}
@@ -520,14 +525,14 @@ function ProductDetail() {
                 type="button"
                 disabled={isOutOfStock}
                 onClick={handleAddToCart}
-                className={`w-full h-14 font-black rounded-2xl shadow-md transition-all text-base flex items-center justify-center gap-2 cursor-pointer ${
+                className={`w-full h-9 font-bold rounded-md transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer ${
                   isOutOfStock
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-                    : 'bg-brand-orange hover:bg-brand-orange-dark text-white hover:shadow-lg active:scale-98'
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                    : 'bg-brand-orange hover:bg-brand-orange-dark text-white'
                 }`}
               >
                 {!isOutOfStock && (
-                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
                     <line x1="3" y1="6" x2="21" y2="6" />
                     <path d="M16 10a4 4 0 0 1-8 0" />
@@ -540,21 +545,21 @@ function ProductDetail() {
 
             {/* Shipping & Returns Trust Signals — Two Column Layout */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              <div className="flex items-start gap-2.5 bg-gray-50/70 rounded-xl p-3 border border-gray-100">
-                <span className="text-lg mt-0.5">🏪</span>
+              <div className="flex items-start gap-2.5 bg-slate-50 rounded-lg p-2.5 border border-slate-200">
+                <StoreIcon className="w-4 h-4 text-brand-orange mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-xs font-bold text-gray-800">Store Pickup & Courier Available</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5 leading-relaxed">
+                  <p className="text-xs font-bold text-slate-800">Store Pickup & Courier Available</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
                     Free claim at BU Student Center (M–F, 9AM–4PM) or courier delivery across Albay & Nationwide.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-2.5 bg-gray-50/70 rounded-xl p-3 border border-gray-100">
-                <span className="text-lg mt-0.5">🔄</span>
+              <div className="flex items-start gap-2.5 bg-slate-50 rounded-lg p-2.5 border border-slate-200">
+                <RefreshCwIcon className="w-4 h-4 text-brand-orange mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-xs font-bold text-gray-800">7-Day Return & Replacement Policy</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5 leading-relaxed">
+                  <p className="text-xs font-bold text-slate-800">7-Day Return & Replacement Policy</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
                     Hassle-free exchange for sizing or verified production defects.
                   </p>
                 </div>
@@ -596,23 +601,23 @@ function ProductDetail() {
       </div>
 
       {/* Sticky Bottom Bar (Mobile only) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 p-4 safe-bottom shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 p-3 safe-bottom">
         <div className="mx-auto max-w-lg flex items-center gap-3">
           <div className="flex-1">
-            <p className="text-[10px] text-gray-400 font-bold uppercase">
+            <p className="text-[10px] text-slate-500 font-bold uppercase">
               {product.preOrder ? 'Pre-order Total' : 'Total'}
             </p>
-            <PriceTag amount={product.price * qty} className="text-lg font-black" />
+            <PriceTag amount={product.price * qty} className="text-base font-bold text-slate-900" />
           </div>
 
           <button
             type="button"
             disabled={isOutOfStock}
             onClick={handleAddToCart}
-            className={`flex-1 h-12 font-black rounded-xl shadow-md transition-all text-sm cursor-pointer ${
+            className={`flex-1 h-9 font-bold rounded-md transition-colors text-xs cursor-pointer ${
               isOutOfStock
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-                : 'bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98'
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                : 'bg-brand-orange hover:bg-brand-orange-dark text-white'
             }`}
           >
             {ctaLabel}

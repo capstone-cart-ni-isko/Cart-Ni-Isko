@@ -25,8 +25,8 @@ export function ToastProvider({ children }) {
       {toast && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[9999] w-max max-w-sm px-4 animate-slide-up">
           <div
-            className={`px-4 py-2.5 rounded-full shadow-lg text-white font-semibold text-xs sm:text-sm flex items-center gap-2.5 border border-white/20 ${
-              toast.type === 'error' ? 'bg-red-600' : 'bg-gray-900/95 backdrop-blur-sm'
+            className={`px-3.5 py-2 rounded-md text-xs font-medium flex items-center gap-2.5 border ${
+              toast.type === 'error' ? 'bg-rose-50 text-rose-900 border-rose-200' : 'bg-white text-slate-800 border-slate-200'
             }`}
           >
             <span>{toast.message}</span>
@@ -37,7 +37,7 @@ export function ToastProvider({ children }) {
                   toast.action.onClick()
                   closeToast()
                 }}
-                className="px-2.5 py-1 rounded-full bg-brand-orange text-white font-black text-xs hover:bg-brand-orange-dark active:scale-95 transition-transform cursor-pointer shadow-xs"
+                className="px-2 py-0.5 rounded-md bg-brand-orange text-white font-bold text-xs hover:bg-brand-orange-dark active:scale-95 transition-transform cursor-pointer"
               >
                 {toast.action.label || 'Undo'}
               </button>
@@ -45,11 +45,14 @@ export function ToastProvider({ children }) {
             <button
               type="button"
               onClick={closeToast}
-              className="ml-1 hover:opacity-80 active:scale-95 text-xs text-white/70 font-bold p-1 cursor-pointer"
+              className="ml-1 hover:opacity-80 active:scale-95 text-xs text-slate-400 hover:text-slate-600 font-bold p-0.5 cursor-pointer"
               title="Close"
               aria-label="Close"
             >
-              ✕
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
         </div>

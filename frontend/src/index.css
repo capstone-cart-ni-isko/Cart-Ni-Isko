@@ -10,10 +10,36 @@
   --color-text-muted: #757575;
   --color-gray-150: #E5E7EB;
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+
+  /* High-Density Border-Radius Tokens (6px-8px max for cards/containers, 6px for buttons/inputs) */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 8px;
+  --radius-3xl: 8px;
+
+  /* Theme Shadows Zeroed Out */
+  --shadow-none: none;
+  --shadow-2xs: none;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-2xl: none;
+  --shadow-inner: none;
+  --shadow: none;
 }
 
 *, *::before, *::after {
   -webkit-tap-highlight-color: transparent;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  --tw-shadow: 0 0 #0000 !important;
+  --tw-shadow-colored: 0 0 #0000 !important;
+  --tw-drop-shadow: none !important;
 }
 
 *:focus, *:focus-visible {
@@ -21,6 +47,7 @@
 }
 
 html {
+  font-size: 87.5%; /* 14px base (high-density root scaling) */
   font-family: var(--font-sans);
 }
 
@@ -28,6 +55,12 @@ body {
   margin: 0;
   background: #F8F9FA;
   color: #111827;
+}
+
+/* ── Global Flat Neutral Border & High-Density Scope ── */
+.admin-portal *,
+.app-container * {
+  box-shadow: none !important;
 }
 
 #root {
@@ -65,8 +98,8 @@ body {
 
 /* ── Animations ── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes scaleIn {
   from { transform: scale(0); }
@@ -96,11 +129,6 @@ body {
   .customer-desktop-scale {
     zoom: 0.88;
   }
-}
-
-/* Ensure customer pages have crisp, legible typography */
-.customer-desktop-scale {
-  font-size: 1.05rem;
 }
 
 .customer-desktop-scale .text-\[9px\],

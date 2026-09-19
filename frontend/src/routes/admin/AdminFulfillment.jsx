@@ -187,139 +187,153 @@ export default function AdminFulfillment() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6 animate-fade-in pb-12">
+      <div className="space-y-4 animate-fade-in pb-10">
         {/* Toast alert */}
         {toastMessage && (
-          <div className="fixed top-20 right-8 z-50 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-slide-up">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <div className="fixed top-16 right-6 z-50 bg-white text-slate-800 px-3.5 py-2 rounded-md border border-slate-200 flex items-center gap-2 text-xs font-semibold animate-slide-up">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             <span>{toastMessage}</span>
           </div>
         )}
 
-        {/* Page Header (Photo 4) */}
+        {/* Compacted Page Header */}
         <div>
-          <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
             Fulfillment &amp; Logistics
           </h1>
-          <p className="text-xs lg:text-sm text-gray-500 font-medium mt-0.5">
+          <p className="text-xs text-slate-500 font-normal mt-0.5">
             Process online orders through production, pickup, and delivery.
           </p>
         </div>
 
-        {/* 4 Metric KPI Cards (Photo 4) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 4 Metric KPI Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Active Fulfillment */}
-          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-md bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
                 <line x1="8" y1="21" x2="16" y2="21" />
                 <line x1="12" y1="17" x2="12" y2="21" />
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-extrabold tracking-wider uppercase text-gray-400">
+              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
                 ACTIVE FULFILLMENT
               </p>
-              <h3 className="text-2xl font-black text-gray-900 mt-0.5">42</h3>
-              <p className="text-[11px] text-gray-400 font-medium">Orders in progress</p>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">42</h3>
+              <p className="text-[10px] text-slate-400 font-normal">Orders in progress</p>
             </div>
           </div>
 
           {/* Awaiting Production */}
-          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                 <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4H2v16z" />
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-extrabold tracking-wider uppercase text-gray-400">
+              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
                 AWAITING PRODUCTION
               </p>
-              <h3 className="text-2xl font-black text-gray-900 mt-0.5">4</h3>
-              <p className="text-[11px] text-gray-400 font-medium">Need production</p>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">4</h3>
+              <p className="text-[10px] text-slate-400 font-normal">Need production</p>
             </div>
           </div>
 
           {/* Ready For Pickup */}
-          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-md bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                 <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
                 <line x1="3" y1="6" x2="21" y2="6" />
                 <path d="M16 10a4 4 0 0 1-8 0" />
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-extrabold tracking-wider uppercase text-gray-400">
+              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
                 READY FOR PICKUP
               </p>
-              <h3 className="text-2xl font-black text-gray-900 mt-0.5">12</h3>
-              <p className="text-[11px] text-gray-400 font-medium">Waiting for customers</p>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">12</h3>
+              <p className="text-[10px] text-slate-400 font-normal">Waiting for customers</p>
             </div>
           </div>
 
           {/* Ready For Dispatch */}
-          <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-md bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                 <rect x="1" y="3" width="15" height="13" />
-                <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
+                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
                 <circle cx="5.5" cy="18.5" r="2.5" />
                 <circle cx="18.5" cy="18.5" r="2.5" />
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-extrabold tracking-wider uppercase text-gray-400">
+              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
                 READY FOR DISPATCH
               </p>
-              <h3 className="text-2xl font-black text-gray-900 mt-0.5">5</h3>
-              <p className="text-[11px] text-gray-400 font-medium">For courier delivery</p>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">5</h3>
+              <p className="text-[10px] text-slate-400 font-normal">For courier delivery</p>
             </div>
           </div>
         </div>
 
-        {/* Main Tabs (Store Pickup / Courier Delivery / Completed) */}
-        <div className="flex items-center gap-8 border-b border-gray-200">
+        {/* Main Tabs - Emojis purged */}
+        <div className="flex items-center gap-6 border-b border-slate-200">
           <button
             type="button"
             onClick={() => setActiveTab('pickup')}
-            className={`pb-3.5 text-xs font-bold transition-colors flex items-center gap-2 relative cursor-pointer ${
+            className={`pb-2.5 text-xs font-semibold transition-colors flex items-center gap-1.5 relative cursor-pointer ${
               activeTab === 'pickup'
-                ? 'text-brand-orange border-b-2 border-brand-orange font-extrabold'
-                : 'text-gray-500 hover:text-gray-800'
+                ? 'text-brand-orange border-b-2 border-brand-orange font-bold'
+                : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <span>🏪 Store Pickup (38)</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+            <span>Store Pickup (38)</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('courier')}
-            className={`pb-3.5 text-xs font-bold transition-colors flex items-center gap-2 relative cursor-pointer ${
+            className={`pb-2.5 text-xs font-semibold transition-colors flex items-center gap-1.5 relative cursor-pointer ${
               activeTab === 'courier'
-                ? 'text-brand-orange border-b-2 border-brand-orange font-extrabold'
-                : 'text-gray-500 hover:text-gray-800'
+                ? 'text-brand-orange border-b-2 border-brand-orange font-bold'
+                : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <span>🚚 Courier Delivery (12)</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+              <rect x="1" y="3" width="15" height="13" />
+              <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
+              <circle cx="5.5" cy="18.5" r="2.5" />
+              <circle cx="18.5" cy="18.5" r="2.5" />
+            </svg>
+            <span>Courier Delivery (12)</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('history')}
-            className={`pb-3.5 text-xs font-bold transition-colors flex items-center gap-2 relative cursor-pointer ${
+            className={`pb-2.5 text-xs font-semibold transition-colors flex items-center gap-1.5 relative cursor-pointer ${
               activeTab === 'history'
-                ? 'text-brand-orange border-b-2 border-brand-orange font-extrabold'
-                : 'text-gray-500 hover:text-gray-800'
+                ? 'text-brand-orange border-b-2 border-brand-orange font-bold'
+                : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <span>⏱ Completed / History</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span>Completed / History</span>
           </button>
         </div>
 
-        {/* Filters Toolbar (Photo 4) */}
-        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs space-y-3">
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+        {/* Filters Toolbar */}
+        <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2.5">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2.5">
             {/* Search Input */}
             <div className="relative flex-1">
               <svg
@@ -327,7 +341,7 @@ export default function AdminFulfillment() {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
-                className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2"
+                className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"
               >
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -337,16 +351,16 @@ export default function AdminFulfillment() {
                 placeholder="Search order, customer, or batch..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-9 pl-9 pr-4 rounded-md bg-white border border-gray-200 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0 focus:border-gray-300"
+                className="w-full h-8 pl-8 pr-3 rounded-md bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-slate-300"
               />
             </div>
 
-            {/* Dropdown Filters (Clean without orange or black outlines) */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+            {/* Dropdown Filters */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="All">Status ▾</option>
                 <option value="Ready for Pickup">Ready for Pickup</option>
@@ -358,7 +372,7 @@ export default function AdminFulfillment() {
               <select
                 value={batchFilter}
                 onChange={(e) => setBatchFilter(e.target.value)}
-                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="All">Batch ▾</option>
                 <option value="BAT-0012">BAT-0012</option>
@@ -370,7 +384,7 @@ export default function AdminFulfillment() {
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="All">Order Category ▾</option>
                 <option value="Regular">Regular</option>
@@ -380,7 +394,7 @@ export default function AdminFulfillment() {
               <select
                 value={dateRangeFilter}
                 onChange={(e) => setDateRangeFilter(e.target.value)}
-                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="All">Date Range ▾</option>
                 <option value="Today">Today</option>
@@ -391,7 +405,7 @@ export default function AdminFulfillment() {
               <select
                 value={exceptionFilter}
                 onChange={(e) => setExceptionFilter(e.target.value)}
-                className="h-9 px-3 rounded-md border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-300 cursor-pointer"
+                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="All">Exception ▾</option>
                 <option value="Unclaimed">Unclaimed &gt; 24h</option>
@@ -401,14 +415,14 @@ export default function AdminFulfillment() {
               <button
                 type="button"
                 onClick={clearAllTags}
-                className="text-xs font-semibold text-gray-500 hover:text-brand-orange px-2 py-1 cursor-pointer"
+                className="text-xs font-semibold text-slate-500 hover:text-brand-orange px-1.5 py-1 cursor-pointer"
               >
                 Clear all
               </button>
 
               <button
                 type="button"
-                className="h-9 px-3.5 rounded-md border border-gray-200 bg-white hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
+                className="h-8 px-3 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shrink-0 cursor-pointer"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
                   <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
@@ -420,17 +434,17 @@ export default function AdminFulfillment() {
 
           {/* Active Filter Tags */}
           {activeTags.length > 0 && (
-            <div className="flex items-center gap-2 pt-2 border-t border-gray-100 flex-wrap">
+            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 flex-wrap">
               {activeTags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-medium border border-gray-200"
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200"
                 >
                   <span>{tag}</span>
                   <button
                     type="button"
                     onClick={() => removeTag(tag)}
-                    className="text-gray-400 hover:text-gray-700 cursor-pointer text-sm font-bold"
+                    className="text-slate-400 hover:text-slate-700 cursor-pointer text-sm font-bold"
                   >
                     ×
                   </button>
@@ -440,69 +454,82 @@ export default function AdminFulfillment() {
           )}
         </div>
 
-        {/* Selected Orders Banner & Batch Actions Dropdown (Photo 4) */}
+        {/* Selected Orders Banner & Batch Actions Dropdown */}
         {selectedIds.length > 0 && (
-          <div className="bg-orange-50/70 border border-orange-200/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <span className="text-xs font-extrabold text-orange-950">
+          <div className="bg-orange-50/70 border border-orange-200/80 rounded-md p-2.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-orange-950">
                 {selectedIds.length} orders selected
               </span>
 
-              {/* Batch Actions Dropdown - Rectangular Button */}
+              {/* Batch Actions Dropdown */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setShowBatchDropdown(!showBatchDropdown)}
-                  className="px-3.5 py-1.5 bg-white border border-gray-200 hover:border-gray-300 rounded-md text-xs font-semibold text-gray-800 flex items-center gap-2 shadow-2xs cursor-pointer focus:outline-none"
+                  className="h-8 px-3 bg-white border border-slate-200 hover:border-slate-300 rounded-md text-xs font-semibold text-slate-800 flex items-center gap-1.5 cursor-pointer focus:outline-none"
                 >
                   <span>Batch Actions</span>
-                  <span className="text-gray-400 text-xs">▾</span>
+                  <span className="text-slate-400 text-xs">▾</span>
                 </button>
 
                 {showBatchDropdown && (
-                  <div className="absolute left-0 mt-1.5 w-60 bg-white rounded-md shadow-xl border border-gray-200 py-1.5 z-40 animate-fade-in">
+                  <div className="absolute left-0 mt-1 w-56 bg-white rounded-md border border-slate-200 py-1 z-40 animate-fade-in">
                     <button
                       type="button"
                       onClick={() => handleBatchStatusUpdate('In Production')}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                      className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
                     >
-                      <span className="text-base">🛍</span>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500 shrink-0">
+                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                        <line x1="3" y1="6" x2="21" y2="6"/>
+                        <path d="M16 10a4 4 0 0 1-8 0"/>
+                      </svg>
                       <div>
-                        <p className="text-xs font-bold text-gray-900 leading-tight">Mark In Production</p>
-                        <p className="text-[10px] text-gray-400">Move to in production</p>
+                        <p className="text-xs font-semibold text-slate-900 leading-tight">Mark In Production</p>
+                        <p className="text-[10px] text-slate-400">Move to in production</p>
                       </div>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleBatchStatusUpdate('Preparing')}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                      className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
                     >
-                      <span className="text-base">📦</span>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500 shrink-0">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                        <line x1="12" y1="22.08" x2="12" y2="12"/>
+                      </svg>
                       <div>
-                        <p className="text-xs font-bold text-gray-900 leading-tight">Mark Preparing</p>
-                        <p className="text-[10px] text-gray-400">Move to preparing</p>
+                        <p className="text-xs font-semibold text-slate-900 leading-tight">Mark Preparing</p>
+                        <p className="text-[10px] text-slate-400">Move to preparing</p>
                       </div>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleBatchStatusUpdate('Ready for Pickup')}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                      className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
                     >
-                      <span className="text-base">🧺</span>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500 shrink-0">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
                       <div>
-                        <p className="text-xs font-bold text-gray-900 leading-tight">Mark Ready for Pickup</p>
-                        <p className="text-[10px] text-gray-400">Notify customers</p>
+                        <p className="text-xs font-semibold text-slate-900 leading-tight">Mark Ready for Pickup</p>
+                        <p className="text-[10px] text-slate-400">Notify customers</p>
                       </div>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleBatchStatusUpdate('Claimed')}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-start gap-3 cursor-pointer"
+                      className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
                     >
-                      <span className="text-base">✅</span>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600 shrink-0">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                      </svg>
                       <div>
-                        <p className="text-xs font-bold text-gray-900 leading-tight">Mark Claimed</p>
-                        <p className="text-[10px] text-gray-400">by customer</p>
+                        <p className="text-xs font-semibold text-slate-900 leading-tight">Mark Claimed</p>
+                        <p className="text-[10px] text-slate-400">by customer</p>
                       </div>
                     </button>
                   </div>
@@ -517,13 +544,13 @@ export default function AdminFulfillment() {
           </div>
         )}
 
-        {/* Table Container (Photo 4) */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden">
+        {/* Table Container */}
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-gray-700 border-collapse">
+            <table className="w-full text-left text-xs text-slate-700 border-collapse">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50/50 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                  <th className="p-4 w-10">
+                <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-2.5 px-3 w-10">
                     <input
                       type="checkbox"
                       className="rounded text-brand-orange focus:ring-0"
@@ -631,7 +658,10 @@ export default function AdminFulfillment() {
                       {/* Time In Stage */}
                       <td className="p-4">
                         <div className="flex items-center gap-1 font-bold text-xs">
-                          <span className="text-gray-400">⏱</span>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
                           <span
                             className={order.exceeds24h ? 'text-rose-600 font-black' : 'text-gray-800'}
                           >
@@ -655,15 +685,15 @@ export default function AdminFulfillment() {
                             onClick={() => handleOrderAction(order)}
                             className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
                               order.actionType === 'handover'
-                                ? 'bg-[#18181B] hover:bg-black text-white shadow-2xs'
-                                : 'bg-white border border-gray-200 hover:bg-gray-50 text-gray-800'
+                                ? 'bg-brand-orange hover:bg-brand-orange-dark text-white'
+                                : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-800'
                             }`}
                           >
                             {order.actionLabel}
                           </button>
                           <button
                             type="button"
-                            className="p-1.5 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 cursor-pointer"
+                            className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer"
                           >
                             ···
                           </button>
@@ -676,11 +706,11 @@ export default function AdminFulfillment() {
             </table>
           </div>
 
-          {/* Pagination Footer (Photo 4) */}
-          <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <span className="text-gray-500 font-medium">Showing 1–5 of 38 orders</span>
-            <div className="flex items-center gap-4">
-              <select className="h-8 px-2.5 rounded-md border border-gray-200 bg-white text-xs font-semibold text-gray-700 focus:outline-none focus:ring-0">
+          {/* Pagination Footer */}
+          <div className="p-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <span className="text-slate-500 font-medium">Showing 1–5 of 38 orders</span>
+            <div className="flex items-center gap-3">
+              <select className="h-7 px-2 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none focus:ring-0">
                 <option>10 per page</option>
                 <option>25 per page</option>
                 <option>50 per page</option>
@@ -689,13 +719,13 @@ export default function AdminFulfillment() {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  className="w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100"
+                  className="w-7 h-7 rounded-md border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
                 >
                   ‹
                 </button>
                 <button
                   type="button"
-                  className="w-8 h-8 rounded-md bg-brand-orange text-white font-bold flex items-center justify-center shadow-2xs"
+                  className="w-7 h-7 rounded-md bg-brand-orange text-white font-bold flex items-center justify-center"
                 >
                   1
                 </button>

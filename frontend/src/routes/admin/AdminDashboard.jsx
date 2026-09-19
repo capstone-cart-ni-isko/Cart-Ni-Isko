@@ -68,30 +68,30 @@ export default function AdminDashboard() {
 
   return (
     <AdminLayout>
-      <div className="space-y-8">
+      <div className="space-y-4">
         {/* Store Performance Hero Container */}
-        <section className="bg-slate-50/60 border border-slate-200/50 rounded-2xl p-6 lg:p-8 shadow-[0_1px_2px_rgba(0,0,0,0.02)] space-y-6">
-          {/* Banner Header Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <section className="bg-slate-50/70 border border-slate-200 rounded-lg p-3.5 sm:p-4 space-y-3.5">
+          {/* Compacted Banner Header Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div>
-              <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                 Store Performance
               </h1>
-              <p className="text-sm font-normal text-slate-500 mt-1">
+              <p className="text-xs font-normal text-slate-500 mt-0.5">
                 Monitor sales, orders, inventory, and store activity.
               </p>
             </div>
 
-            {/* Date Filter Segmented Control */}
-            <div className="inline-flex items-center bg-white/80 p-1 rounded-xl border border-slate-200/60 shadow-2xs self-start sm:self-auto">
+            {/* Date Filter Segmented Control (h-8) */}
+            <div className="inline-flex items-center h-8 bg-white p-0.5 rounded-md border border-slate-200 self-start sm:self-auto">
               {['Today', 'Week', 'Month'].map((tab) => (
                 <button
                   key={tab}
                   type="button"
                   onClick={() => setTimeRange(tab)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  className={`h-7 px-3 rounded text-xs font-medium transition-all cursor-pointer ${
                     timeRange === tab
-                      ? 'bg-[#FF6B00] text-white shadow-xs'
+                      ? 'bg-[#FF6B00] text-white'
                       : 'text-slate-600 hover:text-slate-900 bg-transparent'
                   }`}
                 >
@@ -102,7 +102,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Minimalist Metric Cards Grid (4 Columns) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard
               title="GROSS SALES"
               value={`₱ ${displayGrossSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
@@ -157,17 +157,17 @@ export default function AdminDashboard() {
         </section>
 
         {/* 2-Column Main Dashboard Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Main Left Column (2 Cols) */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4">
             {/* Fulfillment Overview Card */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.02)] space-y-4">
+            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-base font-semibold text-[#0F172A]">
+                  <h2 className="text-sm font-bold text-slate-900">
                     Fulfillment Overview
                   </h2>
-                  <p className="text-xs text-slate-500 font-normal mt-0.5">
+                  <p className="text-[11px] text-slate-500 font-normal">
                     Real-time view of order fulfillment stages
                   </p>
                 </div>
@@ -187,9 +187,9 @@ export default function AdminDashboard() {
             </div>
 
             {/* Sales Performance Category Chart */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-100/90 shadow-xs space-y-4">
+            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-black text-gray-900">
+                <h2 className="text-sm font-bold text-slate-900">
                   Sales Performance
                 </h2>
               </div>
@@ -201,49 +201,49 @@ export default function AdminDashboard() {
             </div>
 
             {/* Recent Orders Mini Table */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-100/90 shadow-xs space-y-4">
+            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-black text-gray-900">
+                <h2 className="text-sm font-bold text-slate-900">
                   Recent Orders
                 </h2>
                 <Link
                   to="/admin/orders"
-                  className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1"
+                  className="text-xs font-semibold text-brand-orange hover:underline flex items-center gap-1"
                 >
                   <span>View All</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </Link>
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[550px]">
+                <table className="w-full text-left border-collapse min-w-[500px]">
                   <thead>
-                    <tr className="border-b border-gray-100 text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
-                      <th className="pb-3">ORDER</th>
-                      <th className="pb-3">CUSTOMER</th>
-                      <th className="pb-3">TYPE</th>
-                      <th className="pb-3">FULFILLMENT</th>
-                      <th className="pb-3">STATUS</th>
-                      <th className="pb-3">AMOUNT</th>
-                      <th className="pb-3 text-right">TIME</th>
+                    <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <th className="pb-2">ORDER</th>
+                      <th className="pb-2">CUSTOMER</th>
+                      <th className="pb-2">TYPE</th>
+                      <th className="pb-2">FULFILLMENT</th>
+                      <th className="pb-2">STATUS</th>
+                      <th className="pb-2">AMOUNT</th>
+                      <th className="pb-2 text-right">TIME</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100 text-xs font-medium">
+                  <tbody className="divide-y divide-slate-100 text-xs font-medium">
                     {recentOrders.map((order) => (
-                      <tr key={order.id} className="hover:bg-gray-50/50">
-                        <td className="py-3 font-bold text-gray-900">{order.id}</td>
-                        <td className="py-3 text-gray-700 font-semibold">{order.customer}</td>
-                        <td className="py-3 text-gray-500">{order.type}</td>
-                        <td className="py-3 text-gray-500">{order.fulfillment}</td>
-                        <td className="py-3">
+                      <tr key={order.id} className="hover:bg-slate-50/50">
+                        <td className="py-2 font-bold text-slate-900">{order.id}</td>
+                        <td className="py-2 text-slate-700 font-medium">{order.customer}</td>
+                        <td className="py-2 text-slate-500">{order.type}</td>
+                        <td className="py-2 text-slate-500">{order.fulfillment}</td>
+                        <td className="py-2">
                           <StatusPill status={order.status} />
                         </td>
-                        <td className="py-3 font-bold text-gray-900">
+                        <td className="py-2 font-bold text-slate-900">
                           ₱{order.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-3 text-right text-gray-400 text-[11px]">
+                        <td className="py-2 text-right text-slate-400 text-[11px]">
                           {order.timeAgo || order.date}
                         </td>
                       </tr>
@@ -255,39 +255,39 @@ export default function AdminDashboard() {
           </div>
 
           {/* Right Column (Alerts, Quick Actions, On Duty) */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Alert Center */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.02)] space-y-4">
+            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-md bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
                       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                       <line x1="12" y1="9" x2="12" y2="13" />
                       <line x1="12" y1="17" x2="12.01" y2="17" />
                     </svg>
                   </div>
                   <div>
-                    <h2 className="text-base font-semibold text-[#0F172A]">
+                    <h2 className="text-xs font-bold text-slate-900">
                       Alert Center
                     </h2>
-                    <p className="text-[11px] text-slate-500 font-normal">
+                    <p className="text-[10px] text-slate-500 font-normal">
                       Requires immediate attention
                     </p>
                   </div>
                 </div>
                 {alerts.length > 0 && (
-                  <span className="text-xs font-bold bg-amber-500 text-white px-2.5 py-0.5 rounded-full shadow-2xs">
-                    {alerts.length}
+                  <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md">
+                    {alerts.length} Pending
                   </span>
                 )}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {alerts.map((alert) => (
                   <div
                     key={alert.id}
-                    className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${
+                    className={`p-2.5 rounded-md border flex items-center justify-between gap-2.5 ${
                       alert.severity === 'danger'
                         ? 'bg-rose-50/50 border-rose-200/80'
                         : alert.severity === 'warning'
@@ -296,7 +296,7 @@ export default function AdminDashboard() {
                     }`}
                   >
                     <div>
-                      <p className="text-xs font-semibold text-[#0F172A]">
+                      <p className="text-xs font-semibold text-slate-900">
                         {alert.title}
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
@@ -313,12 +313,12 @@ export default function AdminDashboard() {
                         }
                         resolveAlert(alert.id)
                       }}
-                      className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors shrink-0 shadow-2xs ${
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-md transition-colors shrink-0 cursor-pointer ${
                         alert.severity === 'danger'
                           ? 'bg-rose-600 text-white hover:bg-rose-700'
                           : alert.severity === 'warning'
                           ? 'bg-amber-600 text-white hover:bg-amber-700'
-                          : 'bg-slate-800 text-white hover:bg-slate-900'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
                       }`}
                     >
                       {alert.actionLabel}
@@ -333,7 +333,7 @@ export default function AdminDashboard() {
                   className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center justify-center gap-1 transition-colors"
                 >
                   <span>View All Alerts</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </Link>
@@ -341,32 +341,32 @@ export default function AdminDashboard() {
             </div>
 
             {/* Quick Actions Stack */}
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/60 shadow-[0_1px_2px_rgba(0,0,0,0.02)] space-y-3">
-              <h2 className="text-base font-semibold text-[#0F172A]">
+            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-2.5">
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                 Quick Actions
               </h2>
 
-              <div className="space-y-2.5">
-                {/* Primary Action Button */}
+              <div className="space-y-2">
+                {/* Primary Action Button (h-8) */}
                 <button
                   type="button"
                   onClick={() => navigate('/admin/pos')}
-                  className="w-full bg-[#FF6B00] hover:bg-[#E05E00] text-white font-semibold text-xs py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-[0.99]"
+                  className="w-full h-8 bg-[#FF6B00] hover:bg-[#E05E00] text-white font-semibold text-xs px-3 rounded-md flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                   <span>New POS Order</span>
                 </button>
 
-                {/* Secondary Ghost/Outline Action Buttons */}
+                {/* Secondary Action Buttons (h-8) */}
                 <button
                   type="button"
                   onClick={() => navigate('/admin/inventory')}
-                  className="w-full bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-medium text-xs py-2.5 px-4 rounded-xl border border-slate-200/80 flex items-center justify-center gap-2 transition-all shadow-2xs"
+                  className="w-full h-8 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-medium text-xs px-3 rounded-md border border-slate-200 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-slate-400">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-slate-400">
                     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                   </svg>
                   <span>Restock Inventory</span>
@@ -375,9 +375,9 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setShowAddProductModal(true)}
-                  className="w-full bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-medium text-xs py-2.5 px-4 rounded-xl border border-slate-200/80 flex items-center justify-center gap-2 transition-all shadow-2xs"
+                  className="w-full h-8 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-medium text-xs px-3 rounded-md border border-slate-200 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-slate-400">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-slate-400">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
@@ -387,9 +387,9 @@ export default function AdminDashboard() {
                 <button
                   type="button"
                   onClick={handleExportSales}
-                  className="w-full bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-medium text-xs py-2.5 px-4 rounded-xl border border-slate-200/80 flex items-center justify-center gap-2 transition-all shadow-2xs"
+                  className="w-full h-8 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-medium text-xs px-3 rounded-md border border-slate-200 flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-4 h-4 text-slate-400">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-slate-400">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
@@ -400,26 +400,26 @@ export default function AdminDashboard() {
             </div>
 
             {/* On Duty Today */}
-            <div className="bg-white rounded-2xl p-6 border border-gray-100/90 shadow-xs space-y-4">
-              <h2 className="text-base font-black text-gray-900">
+            <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                 On Duty Today
               </h2>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {onDuty.map((staff) => (
                   <div
                     key={staff.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100"
+                    className="flex items-center justify-between gap-2.5 p-2.5 rounded-md bg-slate-50 border border-slate-100"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-brand-orange/15 text-brand-orange font-black text-xs flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-brand-orange/15 text-brand-orange font-bold text-[10px] flex items-center justify-center shrink-0">
                         {staff.avatar}
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-gray-900">
+                        <p className="text-xs font-bold text-slate-900">
                           {staff.name}
                         </p>
-                        <p className="text-[10px] text-gray-500 font-medium">
+                        <p className="text-[10px] text-slate-500 font-medium">
                           {staff.role} • {staff.timeSlot}
                         </p>
                       </div>
@@ -429,13 +429,13 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              <div className="text-center pt-2">
+              <div className="text-center pt-1">
                 <Link
                   to="/admin/schedule"
-                  className="text-xs font-bold text-brand-orange hover:underline flex items-center justify-center gap-1"
+                  className="text-xs font-semibold text-brand-orange hover:underline flex items-center justify-center gap-1"
                 >
                   <span>View Full Schedule</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </Link>
@@ -448,39 +448,39 @@ export default function AdminDashboard() {
       {/* Add Product Modal */}
       {showAddProductModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-5">
+          <div className="bg-white rounded-lg p-4 max-w-md w-full border border-slate-200 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-gray-900">Quick Add Product</h3>
+              <h3 className="text-sm font-bold text-slate-900">Quick Add Product</h3>
               <button
                 type="button"
                 onClick={() => setShowAddProductModal(false)}
-                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200"
+                className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 cursor-pointer"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
             </div>
-            <form onSubmit={handleAddProductSubmit} className="space-y-4 text-xs font-medium">
+            <form onSubmit={handleAddProductSubmit} className="space-y-3 text-xs font-medium">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Product Name</label>
+                <label className="block font-semibold text-slate-700 mb-1">Product Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. BU Pride Pullover"
                   value={newProdName}
                   onChange={(e) => setNewProdName(e.target.value)}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Category</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Category</label>
                   <select
                     value={newProdCategory}
                     onChange={(e) => setNewProdCategory(e.target.value)}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                    className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
                   >
                     <option value="Hoodies">Hoodies</option>
                     <option value="Shirts">Shirts</option>
@@ -492,7 +492,7 @@ export default function AdminDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-gray-700 mb-1">Price (₱)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Price (₱)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -500,31 +500,31 @@ export default function AdminDashboard() {
                     placeholder="750.00"
                     value={newProdPrice}
                     onChange={(e) => setNewProdPrice(e.target.value)}
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                    className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
                   />
                 </div>
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Initial Stock Count</label>
+                <label className="block font-semibold text-slate-700 mb-1">Initial Stock Count</label>
                 <input
                   type="number"
                   placeholder="25"
                   value={newProdStock}
                   onChange={(e) => setNewProdStock(e.target.value)}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-1.5">
                 <button
                   type="button"
                   onClick={() => setShowAddProductModal(false)}
-                  className="px-4 py-2 bg-gray-100 rounded-xl font-bold text-gray-600 hover:bg-gray-200"
+                  className="h-8 px-3 bg-slate-100 rounded-md font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-brand-orange rounded-xl font-black text-white hover:bg-brand-orange-dark shadow-xs"
+                  className="h-8 px-3 bg-brand-orange rounded-md font-semibold text-white hover:bg-brand-orange-dark cursor-pointer"
                 >
                   Save Product
                 </button>

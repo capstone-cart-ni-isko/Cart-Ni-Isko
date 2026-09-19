@@ -2,15 +2,15 @@ function Input({ label, error, className = '', ...props }) {
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
+        <label className="block text-xs font-semibold text-gray-700 mb-1">{label}</label>
       )}
       <input
-        className={`w-full h-12 px-4 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-all ${
-          error ? 'border-red-400 focus:ring-red-300' : 'border-gray-300'
+        className={`w-full h-8 px-3 border rounded-md text-xs placeholder-gray-400 focus:outline-none focus:border-brand-orange transition-all ${
+          error ? 'border-red-400 focus:border-red-500' : 'border-slate-200'
         } ${className}`}
         {...props}
       />
-      {error && <p className="text-red-500 text-xs mt-1 font-semibold">{error}</p>}
+      {error && <p className="text-red-500 text-[11px] mt-1 font-semibold">{error}</p>}
     </div>
   )
 }

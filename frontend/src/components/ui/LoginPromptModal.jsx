@@ -21,37 +21,37 @@ function LoginPromptModal({ isOpen, onClose, message = 'You need to sign in to a
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/40 z-[9999] backdrop-blur-[2px] transition-opacity duration-300 animate-fade-in"
+        className="fixed inset-0 bg-black/60 z-[99999] backdrop-blur-md transition-opacity duration-300 animate-fade-in"
         onClick={onClose}
       />
       {/* Modal Container */}
-      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-sm bg-white rounded-3xl p-6 shadow-2xl z-[10000] border border-gray-100 flex flex-col items-center text-center animate-scale-in">
-        <div className="w-16 h-16 bg-brand-orange/10 rounded-full flex items-center justify-center p-2.5 mb-4">
-          <img src={logo} alt="Tindahan ni Isko" className="w-10 h-10 object-contain" />
+      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-sm bg-white rounded-lg p-4 border border-slate-200 z-[10000] flex flex-col items-center text-center animate-scale-in">
+        <div className="w-12 h-12 bg-orange-50 rounded-md border border-orange-100 flex items-center justify-center p-2 mb-3">
+          <img src={logo} alt="Tindahan ni Isko" className="w-8 h-8 object-contain" />
         </div>
 
-        <h3 className="text-lg font-black text-gray-900 mb-2 leading-tight">
+        <h3 className="text-base font-bold text-gray-900 mb-1 leading-tight">
           Sign in required
         </h3>
-        <p className="text-sm text-gray-500 font-semibold leading-relaxed mb-6 px-2">
+        <p className="text-xs text-gray-600 font-normal leading-relaxed mb-4 px-2">
           {message}
         </p>
 
-        <div className="w-full space-y-2.5">
-          <Button onClick={handleSignIn} className="w-full h-11 text-sm font-bold rounded-xl shadow-md">
+        <div className="w-full space-y-2">
+          <Button onClick={handleSignIn} className="w-full h-8 text-xs font-semibold rounded-md">
             Log In
           </Button>
           <Button
             variant="secondary"
             onClick={handleSignUp}
-            className="w-full h-11 text-sm font-bold rounded-xl border border-gray-200"
+            className="w-full h-8 text-xs font-semibold rounded-md border border-slate-200"
           >
             Create an Account
           </Button>
           <button
             type="button"
             onClick={onClose}
-            className="text-xs text-gray-400 hover:text-gray-600 font-bold transition-colors pt-2 block mx-auto"
+            className="text-xs text-gray-500 hover:text-gray-700 font-semibold transition-colors pt-1 block mx-auto cursor-pointer"
           >
             Maybe Later
           </button>

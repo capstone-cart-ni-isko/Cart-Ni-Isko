@@ -240,14 +240,14 @@ function Home() {
               placeholder="What are you looking for?"
               value={searchVal}
               onChange={(e) => setSearchVal(e.target.value)}
-              className="w-full h-12 pl-11 pr-4 rounded-full bg-white border border-gray-200 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/45 focus:border-brand-orange transition-all shadow-sm"
+              className="w-full h-8 pl-9 pr-3 rounded-md bg-white border border-slate-200 text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange"
             />
           </form>
         </div>
 
         {/* 1. Hero banner carousel */}
         <div className="px-4 py-2">
-          <div className="h-[220px] w-full bg-slate-900 rounded-3xl overflow-hidden relative shadow-md">
+          <div className="h-[200px] w-full bg-slate-900 rounded-lg overflow-hidden relative border border-slate-200">
             {/* Background elements */}
             <div className="absolute inset-0 opacity-[0.1] select-none pointer-events-none z-10 flex items-center justify-center overflow-hidden">
               <span className="text-8xl font-black text-white tracking-wider rotate-12">BU</span>
@@ -269,29 +269,28 @@ function Home() {
                 {/* Gradient overlay */}
                 <div className={`absolute inset-0 bg-gradient-to-br ${slide.gradient}`} />
 
-                <div className="relative z-10 p-5 flex flex-col justify-between h-full">
+                <div className="relative z-10 p-4 flex flex-col justify-between h-full">
                   <div>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1.5">
                       {slide.isLimitedStock ? (
-                        <span className="inline-block bg-red-600 text-white text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm animate-pulse">
+                        <span className="inline-block bg-red-600 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md animate-pulse">
                           Limited Stock
                         </span>
                       ) : (
-                        <span className="inline-block bg-brand-orange text-white text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border border-white/20 shadow-sm">
+                        <span className="inline-block bg-brand-orange text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-white/20">
                           {slide.pillText}
                         </span>
                       )}
-                      <span className="text-white/80 text-[11px] font-semibold">{slide.subtitle}</span>
+                      <span className="text-white/80 text-[11px] font-medium">{slide.subtitle}</span>
                     </div>
-                    <h2 className="text-white text-xl font-black max-w-[220px] leading-tight filter drop-shadow-sm mb-3">
+                    <h2 className="text-white text-lg font-bold max-w-[220px] leading-tight mb-2">
                       {slide.title}
                     </h2>
                     <Link
                       to={slide.ctaLink}
-                      className="inline-flex items-center gap-1 px-4 py-2 bg-brand-orange text-white text-xs font-black rounded-xl shadow-md active:scale-95 transition-transform"
+                      className="inline-flex items-center gap-1 h-7 px-3 bg-brand-orange text-white text-xs font-bold rounded-md"
                     >
                       <span>{slide.ctaText}</span>
-                      <span>➔</span>
                     </Link>
                   </div>
                   <div className="flex justify-end">
@@ -409,21 +408,21 @@ function Home() {
 
         {/* 5. Noticeable but Compact About Us Section (Mobile) */}
         <div className="px-4 pt-6">
-          <div className="rounded-3xl bg-slate-900 text-white p-6 shadow-md space-y-3">
-            <span className="inline-block text-[10px] font-black uppercase text-brand-orange tracking-widest">About Us</span>
-            <h2 className="text-lg font-black leading-snug">
+          <div className="rounded-lg bg-white border border-slate-200 text-slate-900 p-5 space-y-2.5">
+            <span className="inline-block text-[10px] font-bold uppercase text-brand-orange tracking-wider">About Us</span>
+            <h2 className="text-base font-extrabold leading-snug">
               More than merchandise. <br />
               <span className="text-brand-orange">It's BU pride you can wear.</span>
             </h2>
-            <p className="text-gray-300 text-xs leading-relaxed">
+            <p className="text-slate-600 text-xs leading-relaxed">
               Tindahan ni Isko is the official merchandise line of the Bicol University–University Student Council, created to celebrate BU identity and serve the university community.
             </p>
             <div className="pt-1">
               <Link
                 to="/about"
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-orange text-white text-xs font-black rounded-xl shadow-md active:scale-95 transition-transform"
+                className="inline-flex items-center justify-center h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold rounded-md transition-colors"
               >
-                Learn More About Us →
+                Learn More About Us
               </Link>
             </div>
           </div>
@@ -434,7 +433,7 @@ function Home() {
       <div className="hidden md:block pb-16">
         {/* 1. Wide Hero Banner with Refined CTA */}
         <div className="mb-12">
-          <div className="h-[430px] w-full bg-slate-900 rounded-3xl overflow-hidden relative shadow-lg text-white">
+          <div className="h-[400px] w-full bg-slate-900 rounded-lg overflow-hidden relative border border-slate-200 text-white">
             {/* Background elements */}
             <div className="absolute inset-0 opacity-[0.06] select-none pointer-events-none z-0 flex items-center justify-center overflow-hidden">
               <span className="text-[15rem] font-black text-white tracking-widest rotate-12">BU</span>
@@ -456,32 +455,31 @@ function Home() {
                 {/* Gradient overlay */}
                 <div className={`absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent`} />
 
-                <div className="relative z-10 h-full flex flex-col justify-end pb-14 px-12 lg:px-16">
-                  <div className="space-y-4 max-w-xl">
-                    <div className="flex items-center gap-3">
+                <div className="relative z-10 h-full flex flex-col justify-end pb-10 px-10 lg:px-12">
+                  <div className="space-y-3 max-w-xl">
+                    <div className="flex items-center gap-2.5">
                       {slide.isLimitedStock ? (
-                        <span className="inline-block bg-red-600 text-white text-[11px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-full shadow-sm animate-pulse">
+                        <span className="inline-block bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md animate-pulse">
                           Limited Stock
                         </span>
                       ) : (
-                        <span className="inline-block bg-brand-orange text-white text-[11px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-full shadow-sm">
+                        <span className="inline-block bg-brand-orange text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
                           {slide.pillText}
                         </span>
                       )}
-                      <span className="inline-block bg-white/90 backdrop-blur-xs text-gray-900 text-[11px] font-bold px-3.5 py-1.5 rounded-full shadow-sm">
+                      <span className="inline-block bg-white/90 backdrop-blur-xs text-slate-900 text-[10px] font-bold px-2.5 py-1 rounded-md">
                         {slide.subtitle}
                       </span>
                     </div>
-                    <h1 className="text-4xl lg:text-5xl font-black leading-tight tracking-wide drop-shadow-md">
+                    <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight tracking-wide">
                       {slide.title}
                     </h1>
                     <div>
                       <Link
                         to={slide.ctaLink}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-brand-orange hover:bg-brand-orange-light text-white font-black text-sm rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-98"
+                        className="inline-flex items-center justify-center h-8 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-xs rounded-md transition-colors"
                       >
                         <span>{slide.ctaText}</span>
-                        <span className="text-xs">➔</span>
                       </Link>
                     </div>
                   </div>
@@ -490,13 +488,13 @@ function Home() {
             ))}
 
             {/* Slide indicators bottom center */}
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
               {carouselSlides.map((_, dotIdx) => (
                 <button
                   key={dotIdx}
                   onClick={() => setSlideIndex(dotIdx)}
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    dotIdx === slideIndex ? 'w-6 bg-brand-orange' : 'w-2 bg-white/40 hover:bg-white'
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    dotIdx === slideIndex ? 'w-5 bg-brand-orange' : 'w-1.5 bg-white/40 hover:bg-white'
                   }`}
                 />
               ))}
@@ -508,11 +506,11 @@ function Home() {
         <section className="space-y-6 mb-16">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-black text-gray-900 tracking-tight">Shop by Category</h2>
-              <p className="text-sm text-gray-500 font-medium mt-0.5">Explore official merchandise crafted for BUeños</p>
+              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Shop by Category</h2>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Explore official merchandise crafted for BUeños</p>
             </div>
-            <Link to="/shop" className="text-sm font-black text-brand-orange hover:underline flex items-center gap-1">
-              Browse all <span className="text-xs">➔</span>
+            <Link to="/shop" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
+              Browse all →
             </Link>
           </div>
 
@@ -521,7 +519,7 @@ function Home() {
               <Link
                 key={cat.name}
                 to={`/shop?category=${encodeURIComponent(cat.slug)}`}
-                className="block bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow select-none relative group"
+                className="block bg-white rounded-lg border border-slate-200 overflow-hidden select-none relative group"
               >
                 {/* Category image container matching ProductCard */}
                 <div className="aspect-square w-full bg-white relative overflow-hidden flex items-center justify-center border-b border-gray-200 p-6">
@@ -555,11 +553,11 @@ function Home() {
         <section className="space-y-6 mb-16">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-black text-gray-900 tracking-tight">Featured Products</h2>
-              <p className="text-sm text-gray-500 font-medium mt-0.5">Top picks and popular campus designs</p>
+              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Featured Products</h2>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Top picks and popular campus designs</p>
             </div>
-            <Link to="/shop" className="text-sm font-black text-brand-orange hover:underline flex items-center gap-1">
-              See all <span className="text-xs">➔</span>
+            <Link to="/shop" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
+              See all →
             </Link>
           </div>
 
@@ -571,57 +569,57 @@ function Home() {
         </section>
 
         {/* 4. How It Works Section (Desktop) */}
-        <section className="mb-16 bg-white rounded-3xl p-10 lg:p-12 border border-gray-100 shadow-xs">
-          <div className="text-center max-w-xl mx-auto mb-10 space-y-2">
-            <span className="text-xs font-black uppercase text-brand-orange tracking-widest">Simple Ordering</span>
-            <h2 className="text-3xl font-black text-gray-900 tracking-tight">How It Works</h2>
-            <p className="text-sm text-gray-500 font-medium">Getting official BU merchandise is straightforward and transparent</p>
+        <section className="mb-12 bg-white rounded-lg p-6 lg:p-8 border border-slate-200">
+          <div className="text-center max-w-xl mx-auto mb-6 space-y-1.5">
+            <span className="text-xs font-bold uppercase text-brand-orange tracking-wider">Simple Ordering</span>
+            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">How It Works</h2>
+            <p className="text-xs text-slate-500 font-medium">Getting official BU merchandise is straightforward and transparent</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-8">
+          <div className="grid grid-cols-3 gap-6">
             {/* Step 1 */}
-            <div className="flex flex-col items-start p-6 rounded-2xl bg-gray-50/80 border border-gray-100 hover:border-brand-orange/30 transition-colors">
-              <div className="flex items-center justify-between w-full mb-4">
-                <span className="text-2xl font-black text-brand-orange">01</span>
-                <div className="w-10 h-10 rounded-xl bg-orange-100/70 text-brand-orange flex items-center justify-center">
-                  <ShirtIcon className="w-5 h-5" />
+            <div className="flex flex-col items-start p-4 rounded-md bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between w-full mb-3">
+                <span className="text-xl font-extrabold text-brand-orange">01</span>
+                <div className="w-8 h-8 rounded-md bg-orange-50 border border-orange-200 text-brand-orange flex items-center justify-center">
+                  <ShirtIcon className="w-4 h-4" />
                 </div>
               </div>
-              <h3 className="text-lg font-black text-gray-900 mb-2">Shop</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <h3 className="text-sm font-bold text-slate-900 mb-1">Shop</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
                 Browse official BU merchandise and choose what you want.
               </p>
             </div>
 
             {/* Step 2 */}
-            <div className="flex flex-col items-start p-6 rounded-2xl bg-gray-50/80 border border-gray-100 hover:border-brand-orange/30 transition-colors">
-              <div className="flex items-center justify-between w-full mb-4">
-                <span className="text-2xl font-black text-brand-orange">02</span>
-                <div className="w-10 h-10 rounded-xl bg-orange-100/70 text-brand-orange flex items-center justify-center">
-                  <PackageIcon className="w-5 h-5" />
+            <div className="flex flex-col items-start p-4 rounded-md bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between w-full mb-3">
+                <span className="text-xl font-extrabold text-brand-orange">02</span>
+                <div className="w-8 h-8 rounded-md bg-orange-50 border border-orange-200 text-brand-orange flex items-center justify-center">
+                  <PackageIcon className="w-4 h-4" />
                 </div>
               </div>
-              <h3 className="text-lg font-black text-gray-900 mb-2">Place Your Order</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <h3 className="text-sm font-bold text-slate-900 mb-1">Place Your Order</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
                 Select your preferred way to receive your order.
               </p>
             </div>
 
             {/* Step 3 */}
-            <div className="flex flex-col items-start p-6 rounded-2xl bg-gray-50/80 border border-gray-100 hover:border-brand-orange/30 transition-colors">
-              <div className="flex items-center justify-between w-full mb-4">
-                <span className="text-2xl font-black text-brand-orange">03</span>
-                <div className="w-10 h-10 rounded-xl bg-orange-100/70 text-brand-orange flex items-center justify-center">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+            <div className="flex flex-col items-start p-4 rounded-md bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between w-full mb-3">
+                <span className="text-xl font-extrabold text-brand-orange">03</span>
+                <div className="w-8 h-8 rounded-md bg-orange-50 border border-orange-200 text-brand-orange flex items-center justify-center">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
                     <rect x="1" y="3" width="15" height="13" />
-                    <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                    <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
                     <circle cx="5.5" cy="18.5" r="2.5" />
                     <circle cx="18.5" cy="18.5" r="2.5" />
                   </svg>
                 </div>
               </div>
-              <h3 className="text-lg font-black text-gray-900 mb-2">Track Your Order</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">
+              <h3 className="text-sm font-bold text-slate-900 mb-1">Track Your Order</h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
                 Stay updated as your order is prepared and becomes ready for pickup or delivery.
               </p>
             </div>
@@ -629,26 +627,25 @@ function Home() {
         </section>
 
         {/* 5. Noticeable but Compact About Us Section (Desktop) */}
-        <section className="mb-8 rounded-3xl bg-slate-900 text-white p-10 lg:p-14 relative overflow-hidden shadow-xl">
-          <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-10 select-none pointer-events-none flex items-center justify-end pr-12">
-            <span className="text-[14rem] font-black tracking-widest text-white rotate-12">BU</span>
+        <section className="mb-8 rounded-lg bg-white border border-slate-200 text-slate-900 p-6 lg:p-8 relative overflow-hidden">
+          <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-5 select-none pointer-events-none flex items-center justify-end pr-12">
+            <span className="text-[14rem] font-black tracking-widest text-slate-900 rotate-12">BU</span>
           </div>
-          <div className="relative z-10 max-w-2xl space-y-4">
-            <span className="inline-block text-xs font-black uppercase text-brand-orange tracking-widest">About Us</span>
-            <h2 className="text-3xl lg:text-4xl font-black leading-tight tracking-tight">
+          <div className="relative z-10 max-w-2xl space-y-3">
+            <span className="inline-block text-xs font-bold uppercase text-brand-orange tracking-wider">About Us</span>
+            <h2 className="text-2xl lg:text-3xl font-extrabold leading-tight tracking-tight">
               More than merchandise. <br />
               <span className="text-brand-orange">It's BU pride you can wear.</span>
             </h2>
-            <p className="text-gray-300 text-sm lg:text-base leading-relaxed">
+            <p className="text-slate-600 text-xs lg:text-sm leading-relaxed">
               Tindahan ni Isko is the official merchandise line of the Bicol University–University Student Council, created to celebrate BU identity and serve the university community.
             </p>
-            <div className="pt-2">
+            <div className="pt-1">
               <Link
                 to="/about"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-brand-orange hover:bg-brand-orange-light text-white text-sm font-black rounded-xl shadow-md transition-all active:scale-98"
+                className="inline-flex items-center justify-center h-8 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold rounded-md transition-colors"
               >
                 <span>Learn More About Us</span>
-                <span className="text-xs">➔</span>
               </Link>
             </div>
           </div>

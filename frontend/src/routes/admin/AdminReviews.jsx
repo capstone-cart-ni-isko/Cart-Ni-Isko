@@ -162,10 +162,10 @@ export default function AdminReviews() {
               <button
                 type="button"
                 onClick={() => setSelectedStar('all')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${
                   selectedStar === 'all'
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-brand-orange text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
                 }`}
               >
                 All

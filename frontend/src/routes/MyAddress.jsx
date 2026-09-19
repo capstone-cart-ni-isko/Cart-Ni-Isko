@@ -144,15 +144,27 @@ function MyAddress() {
 
   return (
     <AppShell>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in max-w-3xl mx-auto">
-        {/* Desktop Title */}
-        <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-black text-gray-900">My Address</h1>
+      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in max-w-5xl mx-auto">
+        {/* Desktop Header */}
+        <div className="hidden lg:flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-black text-gray-900">My Addresses</h1>
+            <p className="text-xs text-gray-500 font-medium mt-1">Manage your delivery and campus shipping destinations</p>
+          </div>
+          {!showForm && (
+            <button
+              type="button"
+              onClick={handleAddNew}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+            >
+              <span>+ Add New Address</span>
+            </button>
+          )}
         </div>
 
         {/* Mobile Title */}
         <div className="lg:hidden -mx-4 -mt-4 mb-4">
-          <PageHeader title="My Address" backTo="/settings" />
+          <PageHeader title="My Addresses" backTo="/settings" />
         </div>
 
         <div className="space-y-4">
@@ -165,17 +177,20 @@ function MyAddress() {
             </div>
           )}
 
-          {addresses.map((addr) => (
-            <AddressCard
-              key={addr.id}
-              address={addr}
-              defaultName={accountName}
-              defaultPhone={accountPhone}
-              onEdit={handleEdit}
-              onDelete={(id) => setDeleteTarget(id)}
-              onSetDefault={handleSetDefault}
-            />
-          ))}
+          {/* 2-Column Responsive Grid on Desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {addresses.map((addr) => (
+              <AddressCard
+                key={addr.id}
+                address={addr}
+                defaultName={accountName}
+                defaultPhone={accountPhone}
+                onEdit={handleEdit}
+                onDelete={(id) => setDeleteTarget(id)}
+                onSetDefault={handleSetDefault}
+              />
+            ))}
+          </div>
 
           {/* Add / Edit Form */}
           {showForm && (

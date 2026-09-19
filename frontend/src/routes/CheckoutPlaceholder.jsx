@@ -1,28 +1,48 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../hooks/useCart.js'
+import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import Button from '../components/ui/Button.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
-import { SparklesIcon } from '../components/ui/Icons.jsx'
+import { CheckIcon, TruckIcon } from '../components/ui/Icons.jsx'
+import { getImageUrl } from '../utils/imageUtils.js'
 
 function CheckoutPlaceholder() {
   const navigate = useNavigate()
-  const { clearSelectedItems, clearCart } = useCart()
+  const { cartItems, selectedItems, clearSelectedItems, clearCart } = useCart()
+  const { currentUser } = useAuth()
   const { showToast } = useToast()
+
+  // State: 'review' | 'confirmed'
+  const [step, setStep] = useState('review')
+  const [fulfillmentType, setFulfillmentType] = useState('Store Pickup')
   const [countdown, setCountdown] = useState(3)
 
-  useEffect(() => {
+  const itemsToCheckout = selectedItems.length > 0 ? selectedItems : cartItems
+  const orderSubtotal = itemsToCheckout.reduce(
+    (sum, item) => sum + (item.product?.price || item.price || 0) * (item.qty || 1),
+    0
+  )
+  const shippingFee = fulfillmentType === 'Courier Delivery' ? 50 : 0
+  const grandTotal = orderSubtotal + shippingFee
+
+  // Final order placement handler
+  const handleFinalPlaceOrder = () => {
     if (clearSelectedItems) {
       clearSelectedItems()
     } else {
       clearCart()
     }
     showToast('Order confirmed! Redirecting to your orders...', 'success')
-  }, [clearSelectedItems, clearCart, showToast])
+    setStep('confirmed')
+  }
 
+  // Countdown timer when step === 'confirmed'
   useEffect(() => {
+    if (step !== 'confirmed') return
+
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -35,41 +55,178 @@ function CheckoutPlaceholder() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [navigate])
+  }, [step, navigate])
 
   return (
     <AppShell showNav={false}>
-      <div className="min-h-dvh flex flex-col items-center justify-center p-8 text-center animate-fade-in">
-        <div className="w-28 h-28 bg-brand-orange/10 rounded-full flex items-center justify-center p-4 mb-6 shadow-inner relative">
-          <img src={logo} alt="Tindahan ni Isko" className="w-20 h-20 object-contain animate-bounce" />
-          <div className="absolute -top-1 -right-1 bg-white p-1.5 rounded-full shadow-md">
-            <SparklesIcon className="w-5 h-5 text-brand-orange" />
+      {step === 'review' ? (
+        /* ── STEP 1: ORDER CONFIRMATION / REVIEW VIEW ── */
+        <div className="min-h-dvh flex flex-col items-center justify-center p-4 md:p-8 animate-fade-in bg-slate-50/60">
+          <div className="w-full max-w-xl bg-white rounded-3xl p-6 md:p-8 border border-gray-100 shadow-xl space-y-6">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <img src={logo} alt="Tindahan ni Isko" className="h-8 object-contain" />
+                <div>
+                  <h1 className="text-lg font-black text-gray-900 leading-tight">Review &amp; Confirm Order</h1>
+                  <p className="text-xs text-gray-500">Please review your order details before placing</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold px-3 py-1 bg-orange-50 text-brand-orange border border-orange-100 rounded-full">
+                Step 2 of 2
+              </span>
+            </div>
+
+            {/* Customer & Fulfillment Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Customer Details</p>
+                <p className="font-bold text-gray-900">{currentUser?.fullName || 'Juan Dela Cruz'}</p>
+                <p className="text-gray-500">{currentUser?.email || 'jdcruz@student.u.edu.ph'}</p>
+                <p className="text-gray-500 font-mono">ID: {currentUser?.studentId || '2020-1234-5678'}</p>
+              </div>
+
+              <div className="p-3.5 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Fulfillment Method</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentType('Store Pickup')}
+                    className={`flex-1 py-1.5 px-2 rounded-xl font-bold text-xs border transition-all cursor-pointer ${
+                      fulfillmentType === 'Store Pickup'
+                        ? 'bg-brand-orange text-white border-brand-orange'
+                        : 'bg-white text-gray-600 border-gray-200'
+                    }`}
+                  >
+                    Store Pickup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentType('Courier Delivery')}
+                    className={`flex-1 py-1.5 px-2 rounded-xl font-bold text-xs border transition-all cursor-pointer ${
+                      fulfillmentType === 'Courier Delivery'
+                        ? 'bg-brand-orange text-white border-brand-orange'
+                        : 'bg-white text-gray-600 border-gray-200'
+                    }`}
+                  >
+                    Courier Delivery
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 pt-0.5">
+                  {fulfillmentType === 'Store Pickup'
+                    ? '📍 Pickup at BU Main Campus Student Center'
+                    : '🚚 Courier delivery to registered address (+₱50)'}
+                </p>
+              </div>
+            </div>
+
+            {/* Itemized Order Review List */}
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-gray-900 flex items-center justify-between">
+                <span>Order Items ({itemsToCheckout.length})</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/cart')}
+                  className="text-brand-orange text-[11px] font-bold hover:underline cursor-pointer"
+                >
+                  Edit Items
+                </button>
+              </p>
+              <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-2xl px-3 py-1 bg-white scrollbar-none">
+                {itemsToCheckout.map((item, idx) => {
+                  const product = item.product || item
+                  const itemPrice = Number(product.price || item.price || 0)
+                  const itemQty = Number(item.qty || 1)
+                  return (
+                    <div key={idx} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <img
+                          src={getImageUrl(product.image)}
+                          alt={product.name}
+                          className="w-9 h-9 rounded-lg object-contain bg-gray-50 p-1 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-900 truncate">{product.name}</p>
+                          <p className="text-[10px] text-gray-400">Qty: {itemQty} • ₱{itemPrice.toFixed(2)} each</p>
+                        </div>
+                      </div>
+                      <p className="font-black text-gray-900 shrink-0">₱{(itemPrice * itemQty).toFixed(2)}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Price Breakdown */}
+            <div className="p-4 bg-orange-50/50 rounded-2xl border border-orange-100 space-y-1.5 text-xs">
+              <div className="flex justify-between text-gray-600 font-medium">
+                <span>Items Subtotal</span>
+                <span>₱{orderSubtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600 font-medium">
+                <span>Fulfillment Fee</span>
+                <span>{shippingFee > 0 ? `₱${shippingFee.toFixed(2)}` : 'FREE (Pickup)'}</span>
+              </div>
+              <div className="flex justify-between text-sm font-black text-gray-900 pt-2 border-t border-orange-200/60">
+                <span>Grand Total</span>
+                <span className="text-base font-black text-brand-orange">₱{grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Confirmation Decision Buttons */}
+            <div className="space-y-2 pt-2">
+              <Button
+                onClick={handleFinalPlaceOrder}
+                className="w-full py-3.5 rounded-2xl font-black text-sm bg-brand-orange hover:bg-orange-600 text-white shadow-md active:scale-98 transition-all cursor-pointer"
+              >
+                Confirm &amp; Place Order • ₱{grandTotal.toFixed(2)}
+              </Button>
+              <button
+                type="button"
+                onClick={() => navigate('/cart')}
+                className="w-full py-2.5 text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
+              >
+                ← Back to Cart / Cancel
+              </button>
+            </div>
+
           </div>
         </div>
+      ) : (
+        /* ── STEP 2: ORDER PLACED SUCCESS VIEW ── */
+        <div className="min-h-dvh flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+          <div className="w-20 h-20 bg-orange-50 border border-orange-200 rounded-2xl flex items-center justify-center p-2.5 mb-4 relative shadow-sm">
+            <img src={logo} alt="Tindahan ni Isko" className="w-14 h-14 object-contain" />
+            <div className="absolute -top-1.5 -right-1.5 bg-brand-orange text-white p-1 rounded-full border-2 border-white shadow-sm">
+              <CheckIcon className="w-4 h-4 text-white" />
+            </div>
+          </div>
 
-        <h1 className="text-3xl font-black text-gray-900 mb-2">Order Placed!</h1>
-        <p className="text-sm text-gray-600 font-medium max-w-[340px] leading-relaxed mb-4">
-          Your order has been confirmed. We'll notify you via SMS/Email when it's ready for pick-up or out for courier delivery.
-        </p>
+          <h1 className="text-2xl font-black text-gray-900 mb-1">Order Placed!</h1>
+          <p className="text-xs text-gray-600 font-normal max-w-[340px] leading-relaxed mb-3">
+            Your order has been confirmed. We'll notify you via SMS/Email when it's ready for pick-up or out for courier delivery.
+          </p>
 
-        {/* Dynamic countdown indicator */}
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-200 text-brand-orange text-xs font-bold rounded-full mb-8 animate-pulse">
-          <span>Redirecting to your orders in {countdown}s...</span>
+          {/* Dynamic countdown indicator */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-orange-50 border border-orange-200 text-brand-orange text-xs font-bold rounded-xl mb-6">
+            <span>Redirecting to your orders in {countdown}s...</span>
+          </div>
+
+          <div className="w-full max-w-xs space-y-2">
+            <Button onClick={() => navigate('/orders')} className="w-full h-10 rounded-xl font-bold text-xs cursor-pointer shadow-2xs">
+              View My Orders Now
+            </Button>
+            <button
+              type="button"
+              onClick={() => navigate('/home')}
+              className="w-full text-xs font-semibold text-gray-500 hover:text-brand-orange transition-colors py-1 cursor-pointer"
+            >
+              Continue Shopping
+            </button>
+          </div>
         </div>
-
-        <div className="w-full max-w-xs space-y-3">
-          <Button onClick={() => navigate('/orders')} className="w-full h-12 rounded-xl font-bold shadow-md cursor-pointer">
-            View My Orders Now
-          </Button>
-          <button
-            type="button"
-            onClick={() => navigate('/home')}
-            className="w-full text-sm font-bold text-gray-500 hover:text-brand-orange transition-colors py-2 cursor-pointer"
-          >
-            Continue Shopping
-          </button>
-        </div>
-      </div>
+      )}
     </AppShell>
   )
 }

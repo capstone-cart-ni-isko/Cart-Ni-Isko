@@ -1,21 +1,21 @@
 import React from 'react'
 
 const STAGE_TONAL_COLORS = {
-  awaiting_production: '#94A3B8', // Slate 400 - Initial / awaiting
-  in_production: '#64748B',       // Slate 500 - In production
-  preparing: '#475569',           // Slate 600 - Preparing
-  ready_pickup: '#334155',        // Slate 700 - Ready for pickup
-  ready_dispatch: '#1E293B',      // Slate 800 - Ready for dispatch
-  in_transit: '#0F172A',          // Slate 900 - In transit
+  awaiting_production: '#94A3B8', // Slate 400
+  in_production: '#64748B',       // Slate 500
+  preparing: '#475569',           // Slate 600
+  ready_pickup: '#3B82F6',        // Brand blue accent
+  ready_dispatch: '#F97316',      // Brand orange accent
+  in_transit: '#475569',          // Slate 600
 }
 
 const DEFAULT_TONAL_PALETTE = [
   '#94A3B8',
   '#64748B',
   '#475569',
-  '#334155',
-  '#1E293B',
-  '#0F172A',
+  '#3B82F6',
+  '#F97316',
+  '#64748B',
 ]
 
 export default function BarChartStages({ stages = [] }) {

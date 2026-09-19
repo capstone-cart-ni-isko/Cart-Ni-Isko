@@ -17,14 +17,14 @@ function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 safe-bottom md:bottom-4 lg:hidden">
       <div className="mx-auto max-w-lg md:max-w-xl px-4">
-        <div className="flex items-center justify-around bg-white rounded-full shadow-lg px-2 py-2 border border-gray-100">
+        <div className="flex items-center justify-around bg-white rounded-lg px-2 py-1.5 border border-slate-200">
           {navItems.map(({ to, label, icon }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-full transition-colors min-w-[3.5rem] relative ${
-                  isActive ? 'text-brand-orange font-bold' : 'text-text-muted'
+                `flex flex-col items-center gap-0.5 px-2 py-1 rounded-md transition-colors min-w-[3.5rem] relative ${
+                  isActive ? 'text-brand-orange font-bold bg-orange-50/50' : 'text-text-muted'
                 }`
               }
             >
@@ -33,7 +33,7 @@ function BottomNav() {
                   <img
                     src={icon}
                     alt=""
-                    className="w-6 h-6"
+                    className="w-5 h-5"
                     style={{
                       filter: isActive
                         ? 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(100%) contrast(96%)'

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell.jsx'
+import { HelpIcon } from '../components/ui/Icons.jsx'
 
 // SVG Icons tailored for notification types
 function NotifTypeIcon({ icon, className = 'w-5 h-5' }) {
@@ -150,28 +151,28 @@ export default function Notifications() {
 
   return (
     <AppShell>
-      <div className="px-4 py-4 pb-32 lg:px-0 lg:py-0 lg:pb-16 max-w-[1280px] mx-auto animate-fade-in">
+      <div className="px-4 py-6 pb-32 lg:px-6 lg:py-6 lg:pb-16 max-w-7xl mx-auto animate-fade-in">
 
         {/* Header (Matching Photo 5 on desktop & Photo 2 on mobile) */}
-        <div className="flex items-start gap-3.5 mb-6">
-          <div className="w-11 h-11 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0 text-brand-orange shadow-2xs">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-5 h-5">
+        <div className="flex items-start gap-4 mb-8">
+          <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0 text-brand-orange shadow-2xs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-6 h-6">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Notifications</h1>
-            <p className="text-xs lg:text-sm text-gray-500 font-medium mt-0.5">
+            <h1 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">Notifications</h1>
+            <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
               Stay updated with your orders, production, and important announcements.
             </p>
           </div>
         </div>
 
         {/* Filter Pills and Mark as read toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 mb-7 pb-2 border-b border-slate-200">
           {/* Filter Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none">
             {[
               { label: 'All', count: countAll },
               { label: 'Orders', count: countOrders },
@@ -185,7 +186,7 @@ export default function Notifications() {
                   key={label}
                   type="button"
                   onClick={() => setActiveTab(label)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  className={`px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                     active
                       ? 'bg-orange-50 border-2 border-brand-orange text-brand-orange shadow-2xs'
                       : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
@@ -193,7 +194,7 @@ export default function Notifications() {
                 >
                   <span>{label}</span>
                   <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    className={`px-2 py-0.5 rounded-full text-xs font-black ${
                       active ? 'bg-brand-orange text-white' : 'bg-gray-100 text-gray-500'
                     }`}
                   >
@@ -209,9 +210,9 @@ export default function Notifications() {
             <button
               type="button"
               onClick={markAllRead}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 hover:text-brand-orange self-end sm:self-auto transition-colors cursor-pointer shrink-0"
+              className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-600 hover:text-brand-orange self-end sm:self-auto transition-colors cursor-pointer shrink-0"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-brand-orange">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-brand-orange">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               <span>Mark all as read</span>
@@ -222,34 +223,34 @@ export default function Notifications() {
         {/* Main Grid: Left Notification List + Right Caught-Up Card (Desktop) */}
         <div className="lg:grid lg:grid-cols-12 lg:gap-8 items-start">
           {/* Notifications Feed (or Mobile Empty State) */}
-          <div className="lg:col-span-8 space-y-3">
+          <div className="lg:col-span-8 space-y-3.5">
             {/* Mobile Empty / Caught Up State */}
             <div className={`md:hidden ${isMobileEmpty ? 'block' : 'hidden'}`}>
               {/* Illustration + Text — no card, sits on page bg */}
               <div className="flex flex-col items-center justify-center text-center pt-10 pb-8 px-6">
-                <CaughtUpIllustration className="w-52 h-52 mb-5" />
+                <CaughtUpIllustration className="w-56 h-56 mb-5" />
                 <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">You're all caught up!</h3>
-                <p className="text-sm text-gray-400 font-medium mt-2 max-w-[240px] leading-relaxed">
+                <p className="text-sm text-gray-400 font-medium mt-2 max-w-[260px] leading-relaxed">
                   No new notifications at the moment.
                 </p>
               </div>
 
               {/* Need help card — separate white card below */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-4 flex items-start gap-3">
-                <div className="w-9 h-9 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center shrink-0 mt-0.5">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-start gap-3.5 shadow-2xs">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center shrink-0 mt-0.5">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                     <path d="M9 18h6M10 22h4" />
                     <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-bold text-gray-900">Need help?</h4>
-                  <p className="text-xs text-gray-500 font-medium mt-0.5 leading-relaxed">
+                  <h4 className="text-sm font-bold text-slate-900">Need help?</h4>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
                     Check the Help Center for more information about your orders and fulfillment process.
                   </p>
                   <Link
                     to="/help"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-brand-orange hover:underline mt-2"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-orange hover:underline mt-2"
                   >
                     <span>Visit Help Center</span>
                     <span>→</span>
@@ -261,21 +262,28 @@ export default function Notifications() {
             {/* Notification Cards List (When not mobile empty) */}
             <div className={`space-y-3 ${isMobileEmpty ? 'hidden md:block' : 'block'}`}>
               {filteredItems.length === 0 ? (
-                <div className="hidden md:block text-center py-16 bg-white rounded-2xl border border-gray-100 p-8 shadow-xs">
-                  <p className="text-sm font-bold text-gray-500">No notifications found in this category.</p>
+                <div className="hidden md:block text-center py-16 bg-white rounded-xl border border-slate-200 p-8 shadow-2xs">
+                  <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-3 text-slate-400">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-bold text-slate-700">No notifications found in this category.</p>
+                  <p className="text-xs text-slate-400 mt-1">Updates regarding your orders, appointments, and campus store will appear here.</p>
                 </div>
               ) : (
                 filteredItems.map((item) => (
                   <article
                     key={item.id}
                     onClick={() => markRead(item.id, item.targetUrl)}
-                    className={`relative bg-white rounded-2xl border transition-all duration-200 p-4 sm:p-5 flex items-start gap-4 cursor-pointer hover:shadow-md hover:border-orange-200 group ${
-                      item.unread ? 'border-orange-200/90 bg-orange-50/10' : 'border-gray-200'
+                    className={`relative bg-white rounded-xl border transition-colors p-4 sm:p-5 flex items-start gap-4 cursor-pointer group shadow-2xs ${
+                      item.unread ? 'border-orange-200 bg-orange-50/15' : 'border-slate-200'
                     }`}
                   >
                     {/* Left Icon */}
                     <div
-                      className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${item.iconBg}`}
+                      className={`w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center shrink-0 ${item.iconBg}`}
                     >
                       <NotifTypeIcon icon={item.icon} className="w-5 h-5" />
                     </div>
@@ -283,30 +291,30 @@ export default function Notifications() {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <h3 className="text-sm font-black text-gray-900 truncate">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
                             {item.title}
                           </h3>
                           {item.unread && (
-                            <span className="w-2 h-2 rounded-full bg-brand-orange shrink-0 animate-pulse" />
+                            <span className="w-2.5 h-2.5 rounded-full bg-brand-orange shrink-0 animate-pulse" />
                           )}
                         </div>
-                        <span className="text-[11px] font-semibold text-gray-400 shrink-0">
+                        <span className="text-xs font-medium text-slate-400 shrink-0">
                           {item.time}
                         </span>
                       </div>
 
-                      <p className="text-xs text-gray-600 mt-1 leading-relaxed line-clamp-2">
+                      <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed line-clamp-2">
                         {item.message}
                       </p>
 
-                      <div className="flex items-center justify-between mt-2.5">
+                      <div className="flex items-center justify-between mt-3">
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${item.tagColor}`}
+                          className={`text-xs font-bold px-2.5 py-1 rounded-md capitalize ${item.tagColor}`}
                         >
                           {item.tag}
                         </span>
-                        <div className="text-gray-400 group-hover:text-brand-orange group-hover:translate-x-0.5 transition-all text-sm font-bold">
+                        <div className="text-slate-400 group-hover:text-brand-orange transition-colors text-sm font-bold">
                           ›
                         </div>
                       </div>
@@ -317,7 +325,7 @@ export default function Notifications() {
 
               {/* Showing count footer */}
               {filteredItems.length > 0 && (
-                <div className="text-xs text-gray-400 font-medium pt-2 text-center sm:text-left">
+                <div className="text-xs text-slate-400 font-medium pt-2 text-center sm:text-left">
                   Showing 1–{filteredItems.length} of {countAll} notifications
                 </div>
               )}
@@ -327,29 +335,29 @@ export default function Notifications() {
           {/* Desktop Right Column: Caught Up Card (Photo 5) */}
           <div className="hidden lg:block lg:col-span-4 sticky top-28 space-y-4">
             {isDesktopCaughtUp && (
-              <div className="bg-white rounded-3xl border border-gray-200 p-6 shadow-xs text-center flex flex-col items-center">
-                <CaughtUpIllustration className="w-48 h-48 mb-2" />
-                <h3 className="text-lg font-black text-gray-900 mt-1">You're all caught up!</h3>
-                <p className="text-xs text-gray-400 font-semibold mt-1">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 text-center flex flex-col items-center shadow-2xs">
+                <CaughtUpIllustration className="w-48 h-48 mb-3" />
+                <h3 className="text-lg font-black text-slate-900 mt-1">You're all caught up!</h3>
+                <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1">
                   No new notifications at the moment.
                 </p>
               </div>
             )}
 
             {/* Quick Link Card to Help Center */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs flex items-center justify-between">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between shadow-2xs">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center font-bold text-xs">
-                  💡
+                <div className="w-9 h-9 rounded-xl bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center font-bold text-sm shrink-0">
+                  <HelpIcon className="w-4 h-4 text-brand-orange" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-gray-900">Need order assistance?</h4>
-                  <p className="text-[11px] text-gray-400">Visit our student help desk</p>
+                  <h4 className="text-sm font-bold text-slate-900">Need order assistance?</h4>
+                  <p className="text-xs text-slate-400">Visit our student help desk</p>
                 </div>
               </div>
               <Link
                 to="/help"
-                className="text-xs font-bold text-brand-orange hover:underline px-2 py-1"
+                className="text-xs sm:text-sm font-bold text-brand-orange hover:underline px-2 py-1 shrink-0"
               >
                 Help Center →
               </Link>

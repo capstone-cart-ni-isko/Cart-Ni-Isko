@@ -199,7 +199,7 @@ export default function AdminAnalytics() {
                   to="/admin/orders"
                   className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1"
                 >
-                  View All <span className="text-[10px]">➔</span>
+                  View All <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </Link>
               </div>
 
@@ -291,7 +291,7 @@ export default function AdminAnalytics() {
                   to="/admin/inventory"
                   className="text-xs font-bold text-brand-orange hover:underline"
                 >
-                  View Full Inventory Report ➔
+                  View Full Inventory Report <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </Link>
               </div>
             </div>

@@ -10,6 +10,8 @@ export const DEFAULT_ADMIN_USERS = [
   {
     id: 'usr-1',
     name: 'Super Admin',
+    firstName: 'Super',
+    lastName: 'Admin',
     email: 'superadmin@bicol-u.edu.ph',
     phone: '+63 912 345 6789',
     role: 'Super Admin',
@@ -25,11 +27,14 @@ export const DEFAULT_ADMIN_USERS = [
   {
     id: 'usr-2',
     name: 'Maria Santos',
-    email: 'maria.santos@bicol-u.edu.ph',
+    firstName: 'Maria',
+    lastName: 'Santos',
+    email: 'm.santos@tindahan.nisko.edu.ph',
     phone: '+63 917 555 1234',
-    role: 'Admin',
+    role: 'Store Administrator',
     roleKey: 'ADMIN',
     avatar: 'MS',
+    avatarImage: '/src/assets/avatar.png',
     avatarBg: 'blue',
     status: 'Active',
     permissions: 'Products, Orders, Inventory, Schedule',
@@ -40,9 +45,11 @@ export const DEFAULT_ADMIN_USERS = [
   {
     id: 'usr-3',
     name: 'Juan Cruz',
-    email: 'juan.cruz@bicol-u.edu.ph',
+    firstName: 'Juan',
+    lastName: 'Cruz',
+    email: 'juan.cruz@tindahan.nisko.edu.ph',
     phone: '+63 918 555 4321',
-    role: 'Staff',
+    role: 'Staff Member',
     roleKey: 'STAFF',
     avatar: 'JC',
     avatarBg: 'purple',
@@ -55,9 +62,11 @@ export const DEFAULT_ADMIN_USERS = [
   {
     id: 'usr-4',
     name: 'Elena Reyes',
-    email: 'elena.reyes@bicol-u.edu.ph',
+    firstName: 'Elena',
+    lastName: 'Reyes',
+    email: 'elena.reyes@tindahan.nisko.edu.ph',
     phone: '+63 919 555 9876',
-    role: 'Staff',
+    role: 'Staff Member',
     roleKey: 'STAFF',
     avatar: 'ER',
     avatarBg: 'teal',
@@ -80,7 +89,7 @@ export function AdminProvider({ children }) {
     } catch (e) {
       console.warn('Failed to parse admin auth:', e)
     }
-    return DEFAULT_ADMIN_USERS[0]
+    return DEFAULT_ADMIN_USERS[1] // Maria Santos (Store Administrator)
   })
 
   // Admin Data State with complete fallback merge
@@ -186,6 +195,33 @@ export function AdminProvider({ children }) {
   const logoutAdmin = useCallback(() => {
     setCurrentAdminUser(null)
   }, [])
+
+  const switchAdminUser = useCallback((userId) => {
+    const users = adminState.adminUsers || DEFAULT_ADMIN_USERS
+    const target = users.find((u) => u.id === userId)
+    if (target) {
+      setCurrentAdminUser(target)
+    }
+  }, [adminState.adminUsers])
+
+  const updateCurrentAdminProfile = useCallback((updatedFields) => {
+    setCurrentAdminUser((prev) => {
+      if (!prev) return prev
+      const updated = { ...prev, ...updatedFields }
+      return updated
+    })
+
+    setAdminState((prev) => {
+      const currentId = currentAdminUser?.id
+      if (!currentId) return prev
+      return {
+        ...prev,
+        adminUsers: (prev.adminUsers || DEFAULT_ADMIN_USERS).map((u) =>
+          u.id === currentId ? { ...u, ...updatedFields } : u
+        ),
+      }
+    })
+  }, [currentAdminUser?.id])
 
   // ── SUPER ADMIN USER MANAGEMENT ACTIONS ──
   const addAdminUser = useCallback((userData) => {
@@ -607,6 +643,8 @@ export function AdminProvider({ children }) {
         isSuperAdmin,
         loginAdmin,
         logoutAdmin,
+        switchAdminUser,
+        updateCurrentAdminProfile,
         addAdminUser,
         updateAdminUser,
         deleteAdminUser,
