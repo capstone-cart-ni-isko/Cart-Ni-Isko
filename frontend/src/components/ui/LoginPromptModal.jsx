@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import Button from './Button.jsx'
 import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
@@ -17,15 +18,13 @@ function LoginPromptModal({ isOpen, onClose, message = 'You need to sign in to a
     navigate('/signup')
   }
 
-  return (
-    <>
-      {/* Backdrop */}
+  return createPortal(
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 pb-24 md:pb-4 isolate">
       <div
-        className="fixed inset-0 bg-black/60 z-[99999] backdrop-blur-md transition-opacity duration-300 animate-fade-in"
+        className="absolute inset-0 z-0 bg-black/50"
         onClick={onClose}
       />
-      {/* Modal Container */}
-      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-sm bg-white rounded-lg p-4 border border-slate-200 z-[10000] flex flex-col items-center text-center animate-scale-in">
+      <div className="relative z-10 w-full max-w-sm bg-white rounded-lg p-5 border border-gray-200 flex flex-col items-center text-center animate-scale-in">
         <div className="w-12 h-12 bg-orange-50 rounded-md border border-orange-100 flex items-center justify-center p-2 mb-3">
           <img src={logo} alt="Tindahan ni Isko" className="w-8 h-8 object-contain" />
         </div>
@@ -57,7 +56,8 @@ function LoginPromptModal({ isOpen, onClose, message = 'You need to sign in to a
           </button>
         </div>
       </div>
-    </>
+    </div>,
+    document.body
   )
 }
 

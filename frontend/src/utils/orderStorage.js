@@ -185,6 +185,19 @@ export function canChangeFulfillment(order) {
   return !isFulfillmentLocked(order)
 }
 
+/** Pickup can switch to delivery until locked. Delivery cannot switch back to store pickup. */
+export function canSwitchToPickup(order) {
+  if (!order) return false
+  if (order.fulfillment?.method === 'Courier Delivery') return false
+  return !isFulfillmentLocked(order)
+}
+
+export function canSwitchToDelivery(order) {
+  if (!order) return false
+  if (order.fulfillment?.method === 'Courier Delivery') return false
+  return !isFulfillmentLocked(order)
+}
+
 /**
  * Read all orders from localStorage (fallback to pre-seeded)
  */
@@ -246,6 +259,13 @@ export function switchFulfillment(orderId, targetMethod) {
     return {
       success: false,
       error: 'Delivery method locked. Your delivery payment has been completed, so the fulfillment method can no longer be changed.',
+    }
+  }
+
+  if (order.fulfillment?.method === 'Courier Delivery' && targetMethod === 'Store Pickup') {
+    return {
+      success: false,
+      error: 'This order is set for delivery and cannot be switched to store pickup.',
     }
   }
 

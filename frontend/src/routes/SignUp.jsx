@@ -168,28 +168,24 @@ function SignUp() {
     e.preventDefault()
     if (otp.length < 6) return
     setIsSubmitting(true)
-    setTimeout(() => {
+    setTimeout(async () => {
       setIsSubmitting(false)
       showToast('Phone verified!')
-      goToStep(4) // success page
+      if (form.role === 'Student') {
+        goToStep(5)
+      } else {
+        await handleCompleteNext()
+      }
     }, 800)
   }
 
-  const handleSuccessNext = () => {
-    if (form.role === 'Student') {
-      goToStep(5) // Academic details
-    } else {
-      goToStep(6) // Complete directly for Alumni/Faculty/Guest
-    }
-  }
-
-  const handleCollegeNext = (e) => {
+  const handleCollegeNext = async (e) => {
     e.preventDefault()
     if (!form.campus || !form.college || !form.course || !form.yearLevel) {
       showToast('Please select your academic details', 'error')
       return
     }
-    goToStep(6)
+    await handleCompleteNext()
   }
 
   const handleCompleteNext = async () => {
@@ -243,20 +239,15 @@ function SignUp() {
 
   const handleDesktopCredentialsSubmit = (e) => {
     e.preventDefault()
-    if (!form.username || !form.phone || !form.email || password.length < 8 || password !== confirmPassword) {
+    if (!form.firstName || !form.lastName || !form.username || !form.phone || !form.email || password.length < 8 || password !== confirmPassword) {
       showToast('Please complete all credential fields correctly', 'error')
       return
     }
-    goToStep(3) // Go to OTP verification
+    goToStep(3)
   }
 
   const handleDesktopPersonalizeSubmit = async (e) => {
     e.preventDefault()
-    if (!form.firstName.trim() || !form.lastName.trim()) {
-      showToast('Please enter your first and last name', 'error')
-      return
-    }
-
     if (form.role === 'Student' && (!form.college || !form.course || !form.yearLevel)) {
       showToast('Please fill out all academic details', 'error')
       return
@@ -524,24 +515,12 @@ function SignUp() {
               </form>
             )}
 
-            {/* STEP 4: Success */}
-            {step === 4 && (
-              <div className="text-center space-y-6 py-6 animate-fade-in">
-                <div className="w-24 h-24 bg-brand-orange/10 rounded-full flex items-center justify-center mx-auto">
-                  <img src={logo} alt="Tindahan ni Isko" className="w-16 animate-pulse" />
-                </div>
-                <h1 className="text-2xl font-black text-gray-900">Hey there, Isko!</h1>
-                <p className="text-sm text-gray-500 font-medium">Account created successfully.</p>
-                <Button onClick={handleSuccessNext} className="w-full h-12 rounded-full font-bold">Get Started</Button>
-              </div>
-            )}
-
             {/* STEP 5: College (Only shown for Student role) */}
             {step === 5 && (
               <form onSubmit={handleCollegeNext} className="space-y-5 animate-fade-in">
                 <div className="flex justify-between items-start">
                   <h1 className="text-2xl font-black text-gray-900">Your College</h1>
-                  <button type="button" onClick={() => goToStep(6)} className="text-xs font-black text-gray-400">Skip</button>
+                  <button type="button" onClick={handleCompleteNext} className="text-xs font-black text-gray-400">Skip</button>
                 </div>
                 <div className="space-y-4">
                   <select
@@ -606,7 +585,7 @@ function SignUp() {
                     </div>
                   </div>
                 </div>
-                <Button type="submit" disabled={!form.campus || !form.college || !form.course || !form.yearLevel} className="w-full h-12 rounded-full font-bold">Next</Button>
+                <Button type="submit" disabled={!form.campus || !form.college || !form.course || !form.yearLevel} className="w-full h-12 rounded-full font-bold">Go to Sign In</Button>
               </form>
             )}
 
@@ -687,6 +666,31 @@ function SignUp() {
                 </div>
 
                 <form onSubmit={handleDesktopCredentialsSubmit} className="space-y-4">
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">First Name</label>
+                      <input
+                        type="text"
+                        placeholder="First Name"
+                        value={form.firstName}
+                        onChange={(e) => updateForm({ firstName: e.target.value })}
+                        className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none bg-white"
+                        required
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Last Name</label>
+                      <input
+                        type="text"
+                        placeholder="Last Name"
+                        value={form.lastName}
+                        onChange={(e) => updateForm({ lastName: e.target.value })}
+                        className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none bg-white"
+                        required
+                      />
+                    </div>
+                  </div>
+
                   {/* Username */}
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">Username</label>
@@ -776,7 +780,7 @@ function SignUp() {
                   {/* Submit button */}
                   <Button
                     type="submit"
-                    disabled={!form.username || !form.phone || !form.email || password.length < 8 || password !== confirmPassword}
+                    disabled={!form.firstName || !form.lastName || !form.username || !form.phone || !form.email || password.length < 8 || password !== confirmPassword}
                     className="w-full h-12 font-bold rounded-xl shadow-md mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
                   >
                     Sign Up
@@ -805,11 +809,14 @@ function SignUp() {
                 </div>
 
                 <form
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault()
-                    if (otp.length === 6) {
-                      showToast('Phone verified!')
-                      goToStep(5) // Move to Personalization step
+                    if (otp.length !== 6) return
+                    showToast('Phone verified!')
+                    if (form.role === 'Student') {
+                      goToStep(5)
+                    } else {
+                      await handleCompleteNext()
                     }
                   }}
                   className="space-y-6"
@@ -833,49 +840,18 @@ function SignUp() {
             </div>
           )}
 
-          {/* STEP 5 - Personalization (Image 1: Hi, Isko!) */}
-          {step === 5 && (
+          {/* STEP 5 - Student academic details */}
+          {step === 5 && form.role === 'Student' && (
             <div className="p-10 animate-fade-in bg-white min-h-[520px] flex flex-col justify-between">
               <div>
                 <div className="mb-6">
-                  <h1 className="text-3xl font-black text-gray-900 leading-tight">
-                    Hi, {form.username || 'Isko'}!
-                  </h1>
+                  <h1 className="page-title text-gray-900">Academic Details</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2">
-                    Just a few more details to personalize your shopping experience.
+                    Tell us your campus, college, department, and year.
                   </p>
                 </div>
 
                 <form onSubmit={handleDesktopPersonalizeSubmit} className="space-y-4">
-                  {/* First Name & Last Name */}
-                  <div className="flex gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-bold text-gray-700 mb-2">First Name</label>
-                      <input
-                        type="text"
-                        placeholder="First Name"
-                        value={form.firstName}
-                        onChange={(e) => updateForm({ firstName: e.target.value })}
-                        className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
-                        required
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Last Name</label>
-                      <input
-                        type="text"
-                        placeholder="Last Name"
-                        value={form.lastName}
-                        onChange={(e) => updateForm({ lastName: e.target.value })}
-                        className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Academic Details - ONLY shown if role is Student */}
-                  {form.role === 'Student' && (
-                    <>
                       <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">Campus</label>
                         <select
@@ -960,13 +936,11 @@ function SignUp() {
                           />
                         </div>
                       </div>
-                    </>
-                  )}
 
                   <Button
                     type="submit"
-                    disabled={!form.firstName || !form.lastName || (form.role === 'Student' && (!form.college || !form.course || !form.yearLevel))}
-                    className="w-full h-12 font-bold rounded-xl shadow-md mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
+                    disabled={!form.college || !form.course || !form.yearLevel}
+                    className="w-full h-12 font-bold rounded-xl mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
                   >
                     Finish
                   </Button>

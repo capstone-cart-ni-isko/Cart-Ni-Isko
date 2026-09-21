@@ -9,13 +9,13 @@ const navItems = [
   { to: '/home', label: 'Home', icon: homeIcon },
   { to: '/orders', label: 'Orders', icon: ordersIcon },
   { to: '/wishlist', label: 'Wishlist', icon: wishlistIcon },
-  { to: '/cart', label: 'Cart', icon: cartIcon },
+  { to: '/cart', label: 'Bag', icon: cartIcon },
   { to: '/profile', label: 'Me', icon: profileIcon },
 ]
 
 function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 safe-bottom md:bottom-4 lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-[110000] safe-bottom md:bottom-4 lg:hidden">
       <div className="mx-auto max-w-lg md:max-w-xl px-4">
         <div className="flex items-center justify-around bg-white rounded-lg px-2 py-1.5 border border-slate-200">
           {navItems.map(({ to, label, icon }) => (
@@ -40,7 +40,7 @@ function BottomNav() {
                         : 'none',
                     }}
                   />
-                  <span className="text-[10px] font-medium leading-tight whitespace-nowrap">{label}</span>
+                  <span className="text-[11px] font-medium leading-tight whitespace-nowrap">{label}</span>
                 </>
               )}
             </NavLink>

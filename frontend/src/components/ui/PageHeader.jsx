@@ -3,7 +3,7 @@ import backIcon from '../../assets/icons/common/back.svg'
 
 function PageHeader({ title, backTo, rightAction }) {
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 lg:hidden">
+    <header className="sticky top-0 z-40 bg-white border-b border-gray-100 px-4 py-2.5 flex items-center gap-3 md:hidden">
       {backTo ? (
         <Link
           to={backTo}
@@ -14,7 +14,7 @@ function PageHeader({ title, backTo, rightAction }) {
       ) : (
         <div className="w-9 shrink-0" />
       )}
-      <h1 className="flex-1 text-lg font-semibold text-gray-900 text-center truncate">{title}</h1>
+      <h1 className="flex-1 text-base font-bold text-gray-900 text-center truncate">{title}</h1>
       <div className="w-9 shrink-0 flex justify-end">{rightAction}</div>
     </header>
   )

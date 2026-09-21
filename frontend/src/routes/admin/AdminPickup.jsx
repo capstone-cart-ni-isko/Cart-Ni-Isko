@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 
 // ─── Pickup Workflow ───────────────────────────────────────────────────────
@@ -267,7 +268,7 @@ function Avatar({ initials, size = 'sm' }) {
 // ─── Right Sidebar Panel (shared by Scheduled & Overview) ─────────────────
 function PickupScheduleSidebar({ onSchedule, onViewUnscheduled }) {
   return (
-    <div className="w-72 shrink-0 space-y-3">
+    <div className="w-80 shrink-0 space-y-3">
       {/* Schedule Panel */}
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
@@ -282,12 +283,14 @@ function PickupScheduleSidebar({ onSchedule, onViewUnscheduled }) {
         </div>
         <div className="divide-y divide-slate-100">
           {SCHEDULE_SLOTS.map((slot) => (
-            <div key={slot.time} className="flex items-center justify-between px-4 py-2">
-              <span className="text-[11px] font-medium text-slate-700 w-32 shrink-0">{slot.time}</span>
-              <span className={`text-[11px] font-semibold ${slot.count >= slot.max ? 'text-rose-500' : 'text-slate-500'}`}>
+            <div key={slot.time} className="flex items-center justify-between gap-2 px-4 py-2">
+              <span className="text-[11px] font-medium text-slate-700 w-28 shrink-0 whitespace-nowrap">{slot.time}</span>
+              <span className={`text-[11px] font-semibold shrink-0 whitespace-nowrap ${slot.count >= slot.max ? 'text-rose-500' : 'text-slate-500'}`}>
                 {slot.count}/{slot.max}
               </span>
-              <SlotStatusBadge status={slot.status} />
+              <span className="shrink-0 whitespace-nowrap">
+                <SlotStatusBadge status={slot.status} />
+              </span>
             </div>
           ))}
         </div>
@@ -357,7 +360,7 @@ function OverviewTab({ onSchedule, onViewUnscheduled }) {
       {/* Main content */}
       <div className="flex-1 space-y-4 min-w-0">
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
           {[
             { label: 'Ready for Pickup', value: '12', sub: 'orders',          color: 'emerald', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>) },
             { label: 'Unscheduled',      value: '5',  sub: 'orders',          color: 'amber',   icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/></svg>) },
@@ -394,22 +397,20 @@ function OverviewTab({ onSchedule, onViewUnscheduled }) {
             <table className="w-full text-xs text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/60 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  <th className="px-4 py-2.5">Time</th>
-                  <th className="px-4 py-2.5">Appointments</th>
-                  <th className="px-4 py-2.5">Capacity</th>
-                  <th className="px-4 py-2.5">Staff Available</th>
+                  <th className="px-4 py-2.5 w-40">Time</th>
+                  <th className="px-4 py-2.5 w-32">Appointments</th>
+                  <th className="px-4 py-2.5 w-28">Staff Available</th>
                   <th className="px-4 py-2.5">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {OVERVIEW_SCHEDULE_ROWS.map((row) => (
                   <tr key={row.time} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-2.5 font-medium text-slate-700">{row.time}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 font-medium text-slate-700 whitespace-nowrap">{row.time}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
                       <span className={`font-bold ${row.appts >= row.capacity ? 'text-rose-600' : 'text-slate-900'}`}>{row.appts}</span>
                       <span className="text-slate-400 font-normal"> / {row.capacity}</span>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-500">{row.capacity}</td>
                     <td className="px-4 py-2.5">
                       {row.staffOk === true  && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-emerald-500"><polyline points="20 6 9 17 4 12"/></svg>}
                       {row.staffOk === false && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-amber-500"><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/><circle cx="12" cy="12" r="10"/></svg>}
@@ -818,12 +819,13 @@ export default function AdminPickup() {
 
         {/* ── Page Header ── */}
         <div className="pb-4">
-          {/* Breadcrumb */}
+          {/* Breadcrumb — reflects the current section */}
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-2">
+            <Link to="/admin/dashboard" className="hover:text-slate-600 transition-colors">Fulfillment</Link>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
-              <polyline points="15 18 9 12 15 6" />
+              <polyline points="9 18 15 12 9 6" />
             </svg>
-            <span>Fulfillment</span>
+            <span className="text-slate-600 font-semibold">Pickup</span>
           </div>
 
           <div className="flex items-center gap-3">

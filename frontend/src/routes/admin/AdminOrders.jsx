@@ -9,45 +9,53 @@ import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
 export default function AdminOrders() {
   const { adminState, updateOrderStatus } = useAdmin()
 
-  // State for filters
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState('All')
   const [filterFulfillment, setFilterFulfillment] = useState('All')
   const [filterBatch, setFilterBatch] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
+  const [filterItem, setFilterItem] = useState('All')
   const [selectedOrderIds, setSelectedOrderIds] = useState([])
 
-  // Modal / Drawer state
   const [activeOrderDetail, setActiveOrderDetail] = useState(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkNewStatus, setBulkNewStatus] = useState('In Production')
 
   const orders = adminState.orders || []
 
-  // Compute live KPIs
   const totalOrders = orders.length
   const preOrdersCount = orders.filter((o) => o.type?.toLowerCase().includes('pre-order')).length
   const readyPickupCount = orders.filter((o) => o.status === 'Ready for Pickup').length
   const completedCount = orders.filter((o) => o.status === 'Completed').length
 
-  // Applied filter chips
+  // Every distinct product name that appears in any order, for the Item filter.
+  const itemOptions = useMemo(() => {
+    const names = new Set()
+    orders.forEach((o) => (o.items || []).forEach((i) => i?.name && names.add(i.name)))
+    ;(adminState.products || []).forEach((p) => p?.name && names.add(p.name))
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  }, [orders, adminState.products])
+
   const activeChips = useMemo(() => {
     const chips = []
     if (filterType !== 'All') chips.push({ key: 'type', label: `Type: ${filterType}`, reset: () => setFilterType('All') })
     if (filterFulfillment !== 'All') chips.push({ key: 'fulfillment', label: `Fulfillment: ${filterFulfillment}`, reset: () => setFilterFulfillment('All') })
     if (filterBatch !== 'All') chips.push({ key: 'batch', label: `Batch: ${filterBatch}`, reset: () => setFilterBatch('All') })
     if (filterStatus !== 'All') chips.push({ key: 'status', label: `Status: ${filterStatus}`, reset: () => setFilterStatus('All') })
+    if (filterItem !== 'All') chips.push({ key: 'item', label: `Item: ${filterItem}`, reset: () => setFilterItem('All') })
     return chips
-  }, [filterType, filterFulfillment, filterBatch, filterStatus])
+  }, [filterType, filterFulfillment, filterBatch, filterStatus, filterItem])
 
-  // Filtered orders list
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       const matchSearch =
         !searchQuery ||
         order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         order.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.batch?.toLowerCase().includes(searchQuery.toLowerCase())
+        order.batch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (order.items || []).some((i) =>
+          i?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
 
       const matchType =
         filterType === 'All' ||
@@ -62,20 +70,22 @@ export default function AdminOrders() {
       const matchBatch = filterBatch === 'All' || order.batch === filterBatch
       const matchStatus = filterStatus === 'All' || order.status === filterStatus
 
-      return matchSearch && matchType && matchFulfillment && matchBatch && matchStatus
-    })
-  }, [orders, searchQuery, filterType, filterFulfillment, filterBatch, filterStatus])
+      const matchItem =
+        filterItem === 'All' ||
+        (order.items || []).some(
+          (i) => i?.name?.toLowerCase() === filterItem.toLowerCase()
+        )
 
-  // Bulk update handler
-  const handleBulkUpdate = () => {
-    selectedOrderIds.forEach((id) => {
-      updateOrderStatus(id, bulkNewStatus)
+      return matchSearch && matchType && matchFulfillment && matchBatch && matchStatus && matchItem
     })
+  }, [orders, searchQuery, filterType, filterFulfillment, filterBatch, filterStatus, filterItem])
+
+  const handleBulkUpdate = () => {
+    selectedOrderIds.forEach((id) => updateOrderStatus(id, bulkNewStatus))
     setSelectedOrderIds([])
     setShowBulkModal(false)
   }
 
-  // Export CSV
   const handleExportCSV = () => {
     const csvContent =
       'data:text/csv;charset=utf-8,' +
@@ -87,16 +97,14 @@ export default function AdminOrders() {
           )
         )
         .join('\n')
-    const encodedUri = encodeURI(csvContent)
     const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
+    link.setAttribute('href', encodeURI(csvContent))
     link.setAttribute('download', `Tindahan_Orders_${Date.now()}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
   }
 
-  // Table columns definition
   const columns = [
     {
       header: 'ORDER ID',
@@ -106,20 +114,18 @@ export default function AdminOrders() {
           <button
             type="button"
             onClick={() => setActiveOrderDetail(row)}
-            className="font-bold text-gray-900 hover:text-brand-orange text-left"
+            className="font-semibold text-gray-900 hover:text-brand-orange text-left cursor-pointer"
           >
             {row.id}
           </button>
-          {row.batch && (
-            <p className="text-[10px] text-gray-400 font-semibold">{row.batch}</p>
-          )}
+          {row.batch && <p className="text-[10px] text-gray-400 font-medium">{row.batch}</p>}
         </div>
       ),
     },
     {
       header: 'CUSTOMER',
       key: 'customer',
-      render: (row) => <span className="font-semibold text-gray-800">{row.customer}</span>,
+      render: (row) => <span className="font-medium text-gray-800">{row.customer}</span>,
     },
     {
       header: 'DATE',
@@ -135,15 +141,25 @@ export default function AdminOrders() {
       header: 'FULFILLMENT',
       key: 'fulfillment',
       render: (row) => {
-        const isCourier = row.fulfillment?.toLowerCase().includes('courier') || row.fulfillment?.toLowerCase().includes('delivery')
+        const isCourier =
+          row.fulfillment?.toLowerCase().includes('courier') ||
+          row.fulfillment?.toLowerCase().includes('delivery')
         return (
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-gray-700 font-medium">{row.fulfillment}</span>
             {isCourier && (
-              <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-[9px] font-bold flex items-center gap-1" title="Delivery fee paid / Courier locked">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                <span>Locked</span>
-              </span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                title="Delivery fee paid — fulfillment method locked"
+                aria-label="Locked"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
             )}
           </div>
         )
@@ -158,7 +174,7 @@ export default function AdminOrders() {
       header: 'TOTAL',
       key: 'total',
       render: (row) => (
-        <span className="font-bold text-gray-900 text-xs">
+        <span className="font-semibold text-gray-900 text-xs">
           ₱{(Number(row?.total) || 0).toFixed(2)}
         </span>
       ),
@@ -167,19 +183,13 @@ export default function AdminOrders() {
       header: 'ACTION',
       key: 'actions',
       render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setActiveOrderDetail(row)}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            title="View Details"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveOrderDetail(row)}
+          className="h-7 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer whitespace-nowrap"
+        >
+          View details
+        </button>
       ),
     },
   ]
@@ -187,12 +197,10 @@ export default function AdminOrders() {
   return (
     <AdminLayout>
       <div className="space-y-4">
-        {/* Compacted Page Header */}
+        {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-              Orders
-            </h1>
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Orders</h1>
             <p className="text-xs font-normal text-slate-500 mt-0.5">
               Manage and track all online and in-store sales.
             </p>
@@ -218,20 +226,16 @@ export default function AdminOrders() {
                 onClick={() => setShowBulkModal(true)}
                 className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                <span>Bulk Update ({selectedOrderIds.length})</span>
+                <span>Bulk update ({selectedOrderIds.length})</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* 4 Stat Cards */}
+        {/* Stat cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
-            title="TOTAL ORDERS"
+            title="Total orders"
             value={totalOrders}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
@@ -245,7 +249,7 @@ export default function AdminOrders() {
             }
           />
           <StatCard
-            title="PRE-ORDERS"
+            title="Pre-orders"
             value={preOrdersCount}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
@@ -256,7 +260,7 @@ export default function AdminOrders() {
             iconBg="bg-amber-50 text-amber-600"
           />
           <StatCard
-            title="READY FOR PICKUP"
+            title="Ready for pickup"
             value={readyPickupCount}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
@@ -266,7 +270,7 @@ export default function AdminOrders() {
             iconBg="bg-emerald-50 text-emerald-600"
           />
           <StatCard
-            title="COMPLETED"
+            title="Completed"
             value={completedCount}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
@@ -278,10 +282,9 @@ export default function AdminOrders() {
           />
         </div>
 
-        {/* Filter Bar */}
+        {/* Filter bar */}
         <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
               <svg
                 viewBox="0 0 24 24"
@@ -295,18 +298,17 @@ export default function AdminOrders() {
               </svg>
               <input
                 type="search"
-                placeholder="Search orders, customers, batch..."
+                placeholder="Search orders, customers, items, batch..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full h-8 pl-8 pr-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange"
               />
             </div>
 
-            {/* Type Dropdown */}
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none"
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
             >
               <option value="All">Type: All</option>
               <option value="Regular">Online Regular</option>
@@ -314,11 +316,10 @@ export default function AdminOrders() {
               <option value="Onsite Regular">Onsite Regular</option>
             </select>
 
-            {/* Fulfillment Dropdown */}
             <select
               value={filterFulfillment}
               onChange={(e) => setFilterFulfillment(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none"
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
             >
               <option value="All">Fulfillment: All</option>
               <option value="Courier">Courier</option>
@@ -326,11 +327,24 @@ export default function AdminOrders() {
               <option value="Instant POS">Instant POS</option>
             </select>
 
-            {/* Batch Dropdown */}
+            {/* Product item filter */}
+            <select
+              value={filterItem}
+              onChange={(e) => setFilterItem(e.target.value)}
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none max-w-[190px]"
+            >
+              <option value="All">Item: All</option>
+              {itemOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+
             <select
               value={filterBatch}
               onChange={(e) => setFilterBatch(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none"
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
             >
               <option value="All">Batch: All</option>
               <option value="BAT-0012">BAT-0012</option>
@@ -341,11 +355,10 @@ export default function AdminOrders() {
               <option value="BAT-0017">BAT-0017</option>
             </select>
 
-            {/* Status Dropdown */}
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none"
+              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
             >
               <option value="All">Status: All</option>
               <option value="In Production">In Production</option>
@@ -355,7 +368,6 @@ export default function AdminOrders() {
               <option value="Completed">Completed</option>
             </select>
 
-            {/* Clear Filters Button */}
             {(searchQuery || activeChips.length > 0) && (
               <button
                 type="button"
@@ -365,6 +377,7 @@ export default function AdminOrders() {
                   setFilterFulfillment('All')
                   setFilterBatch('All')
                   setFilterStatus('All')
+                  setFilterItem('All')
                 }}
                 className="text-xs font-semibold text-rose-600 hover:underline px-2 cursor-pointer"
               >
@@ -373,22 +386,21 @@ export default function AdminOrders() {
             )}
           </div>
 
-          {/* Applied Filter Chips */}
           {activeChips.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                APPLIED:
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
+                Applied:
               </span>
               {activeChips.map((chip) => (
                 <span
                   key={chip.key}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 text-brand-orange text-[11px] font-semibold border border-orange-200/60"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 text-[11px] font-medium border border-slate-200"
                 >
-                  <span>{chip.label}</span>
+                  <span className="max-w-[160px] truncate">{chip.label}</span>
                   <button
                     type="button"
                     onClick={chip.reset}
-                    className="hover:text-rose-600 font-bold cursor-pointer"
+                    className="hover:text-rose-600 cursor-pointer"
                   >
                     ×
                   </button>
@@ -398,19 +410,18 @@ export default function AdminOrders() {
           )}
         </div>
 
-        {/* Data Table */}
         <DataTable
           columns={columns}
           data={filteredOrders}
           keyField="id"
-          selectable={true}
+          selectable
           selectedIds={selectedOrderIds}
           onSelectionChange={setSelectedOrderIds}
           defaultPageSize={10}
         />
       </div>
 
-      {/* Order Details Drawer */}
+      {/* Order details drawer */}
       <DrawerPanel
         isOpen={!!activeOrderDetail}
         onClose={() => setActiveOrderDetail(null)}
@@ -419,69 +430,65 @@ export default function AdminOrders() {
       >
         {activeOrderDetail && (
           <div className="space-y-6 text-xs">
-            {/* Status changer */}
             <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-              <p className="font-bold text-gray-600 uppercase text-[10px] tracking-wider">
-                Update Order Status
+              <p className="font-semibold text-gray-600 uppercase text-[10px] tracking-wider">
+                Update order status
               </p>
-              <div className="flex items-center gap-2">
-                <select
-                  value={activeOrderDetail.status}
-                  onChange={(e) => {
-                    updateOrderStatus(activeOrderDetail.id, e.target.value)
-                    setActiveOrderDetail({
-                      ...activeOrderDetail,
-                      status: e.target.value,
-                    })
-                  }}
-                  className="flex-1 p-2 bg-white border border-gray-200 rounded-xl font-bold text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange"
-                >
-                  <option value="Awaiting Production">Awaiting Production</option>
-                  <option value="In Production">In Production</option>
-                  <option value="Preparing">Preparing</option>
-                  <option value="Ready for Pickup">Ready for Pickup</option>
-                  <option value="In Transit">In Transit</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </div>
+              <select
+                value={activeOrderDetail.status}
+                onChange={(e) => {
+                  updateOrderStatus(activeOrderDetail.id, e.target.value)
+                  setActiveOrderDetail({ ...activeOrderDetail, status: e.target.value })
+                }}
+                className="w-full p-2 bg-white border border-gray-200 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+              >
+                <option value="Awaiting Production">Awaiting Production</option>
+                <option value="In Production">In Production</option>
+                <option value="Preparing">Preparing</option>
+                <option value="Ready for Pickup">Ready for Pickup</option>
+                <option value="In Transit">In Transit</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
             </div>
 
-            {/* Customer Details & Fulfillment Lock Status */}
             <div className="space-y-2">
-              <h4 className="font-black text-gray-900 text-sm">Customer &amp; Fulfillment Info</h4>
+              <h4 className="font-bold text-gray-900 text-sm">Customer &amp; fulfillment info</h4>
               <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100 space-y-2.5">
                 <div>
-                  <p className="font-bold text-gray-900">{activeOrderDetail.customer}</p>
-                  <p className="text-gray-500">Order Type: {activeOrderDetail.type}</p>
+                  <p className="font-semibold text-gray-900">{activeOrderDetail.customer}</p>
+                  <p className="text-gray-500">Order type: {activeOrderDetail.type}</p>
                   {activeOrderDetail.batch && (
-                    <p className="text-gray-500">Batch Code: {activeOrderDetail.batch}</p>
+                    <p className="text-gray-500">Batch code: {activeOrderDetail.batch}</p>
                   )}
                 </div>
 
                 <div className="pt-2 border-t border-gray-200/60 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-gray-700">Fulfillment Method</span>
-                    {activeOrderDetail.fulfillment?.toLowerCase().includes('courier') || activeOrderDetail.fulfillment?.toLowerCase().includes('delivery') ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[10px] font-black uppercase">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                        <span>Delivery Locked</span>
+                    <span className="font-semibold text-gray-700">Fulfillment method</span>
+                    {activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
+                    activeOrderDetail.fulfillment?.toLowerCase().includes('delivery') ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-medium">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        <span>Delivery locked</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase">
-                        Store Pickup
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-medium">
+                        Store pickup
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-600 font-semibold">{activeOrderDetail.fulfillment}</p>
-                  {(activeOrderDetail.fulfillment?.toLowerCase().includes('courier') || activeOrderDetail.fulfillment?.toLowerCase().includes('delivery')) && (
+                  <p className="text-gray-600 font-medium">{activeOrderDetail.fulfillment}</p>
+                  {(activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
+                    activeOrderDetail.fulfillment?.toLowerCase().includes('delivery')) && (
                     <div className="text-[11px] text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 mt-1 space-y-0.5">
-                      <p className="font-bold flex items-center gap-1">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3 text-amber-900"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                        <span>Method Locked</span>
-                      </p>
+                      <p className="font-semibold">Method locked</p>
                       <p className="text-amber-800">
-                        Delivery fee paid or Lalamove courier dispatch confirmed. The fulfillment method can no longer be switched to Store Pickup.
+                        Delivery fee paid or courier dispatch confirmed. The fulfillment method can no
+                        longer be switched to store pickup.
                       </p>
                     </div>
                   )}
@@ -489,19 +496,18 @@ export default function AdminOrders() {
               </div>
             </div>
 
-            {/* Ordered Items */}
             <div className="space-y-2">
-              <h4 className="font-black text-gray-900 text-sm">Ordered Items</h4>
+              <h4 className="font-bold text-gray-900 text-sm">Ordered items</h4>
               <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
                 {(activeOrderDetail.items || []).map((item, idx) => (
                   <div key={idx} className="p-3 bg-white flex items-center justify-between">
                     <div>
-                      <p className="font-bold text-gray-900">{item.name}</p>
+                      <p className="font-semibold text-gray-900">{item.name}</p>
                       <p className="text-gray-400 text-[10px]">
                         Qty: {item.qty} {item.size ? `• Size: ${item.size}` : ''}
                       </p>
                     </div>
-                    <span className="font-black text-gray-900">
+                    <span className="font-semibold text-gray-900">
                       ₱{((Number(item?.price) || 0) * (Number(item?.qty) || 1)).toFixed(2)}
                     </span>
                   </div>
@@ -509,10 +515,9 @@ export default function AdminOrders() {
               </div>
             </div>
 
-            {/* Total breakdown */}
-            <div className="p-4 bg-orange-50/50 rounded-2xl border border-orange-200/60 flex justify-between items-center text-sm font-black text-gray-900">
-              <span>Grand Total</span>
-              <span className="text-brand-orange text-base font-black">
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex justify-between items-center text-sm font-bold text-gray-900">
+              <span>Grand total</span>
+              <span className="text-base">
                 ₱{(Number(activeOrderDetail?.total) || 0).toFixed(2)}
               </span>
             </div>
@@ -520,12 +525,12 @@ export default function AdminOrders() {
         )}
       </DrawerPanel>
 
-      {/* Bulk Update Modal */}
+      {/* Bulk update modal */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 animate-fade-in">
           <div className="bg-white rounded-lg p-4 max-w-sm w-full border border-slate-200 space-y-3">
             <h3 className="text-sm font-bold text-slate-900">
-              Bulk Update ({selectedOrderIds.length} Orders)
+              Bulk update ({selectedOrderIds.length} orders)
             </h3>
             <p className="text-xs text-slate-500">
               Select a new status to apply to all selected orders.
@@ -533,7 +538,7 @@ export default function AdminOrders() {
             <select
               value={bulkNewStatus}
               onChange={(e) => setBulkNewStatus(e.target.value)}
-              className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-orange"
+              className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
             >
               <option value="Awaiting Production">Awaiting Production</option>
               <option value="In Production">In Production</option>
@@ -554,7 +559,7 @@ export default function AdminOrders() {
                 onClick={handleBulkUpdate}
                 className="h-8 px-3 bg-brand-orange rounded-md text-xs font-semibold text-white hover:bg-brand-orange-dark cursor-pointer"
               >
-                Apply to {selectedOrderIds.length} Orders
+                Apply to {selectedOrderIds.length} orders
               </button>
             </div>
           </div>

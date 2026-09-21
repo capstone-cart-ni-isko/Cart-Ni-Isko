@@ -29,8 +29,8 @@ export default function AdminLayout({ children, className = '' }) {
     <div className="admin-portal min-h-screen bg-[#F8F9FA] flex flex-row w-full font-sans antialiased text-gray-900">
       {/* Desktop Sidebar (Fixed Left) */}
       <div
-        className={`hidden md:block shrink-0 h-screen sticky top-0 z-30 transition-[width] duration-300 ease-in-out ${
-          isSidebarCollapsed ? 'w-20' : 'w-60'
+        className={`hidden md:block shrink-0 h-screen sticky top-0 z-30 transition-[width] duration-300 ease-in-out [&>aside]:w-full ${
+          isSidebarCollapsed ? 'w-16' : 'w-56'
         }`}
       >
         <AdminSidebar

@@ -15,6 +15,7 @@ import shirtCategoryImg from '../assets/Images/unnamed (11).png'
 import hoodieCategoryImg from '../assets/Images/unnamed (5).png'
 import varsityCategoryImg from '../assets/Images/unnamed (12).png'
 import accessoriesCategoryImg from '../assets/Images/unnamed (6).png'
+import ViewAllLink from '../components/ui/ViewAllLink.jsx'
 import {
   UserIcon,
   HeartIcon,
@@ -197,7 +198,7 @@ function Home() {
 
   // Get Featured products: 4 on mobile, 8 on desktop
   const featuredProductsMobile = productsData.slice(0, 4)
-  const featuredProductsDesktop = productsData.slice(0, 8)
+  const featuredProductsDesktop = productsData.slice(0, 10)
 
   return (
     <AppShell>
@@ -317,9 +318,7 @@ function Home() {
         <div className="px-4 pt-6 space-y-3">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Shop by Category</h2>
-            <Link to="/shop" className="text-xs font-black text-brand-orange hover:underline">
-              See all
-            </Link>
+            <ViewAllLink to="/shop">See all</ViewAllLink>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -358,9 +357,7 @@ function Home() {
         <div className="px-4 pt-6 space-y-4">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-base font-extrabold text-gray-900 tracking-wide">Featured Products</h2>
-            <Link to="/shop" className="text-xs font-black text-brand-orange hover:underline">
-              See all
-            </Link>
+            <ViewAllLink to="/shop">See all</ViewAllLink>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -509,9 +506,7 @@ function Home() {
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Shop by Category</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">Explore official merchandise crafted for BUeños</p>
             </div>
-            <Link to="/shop" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
-              Browse all →
-            </Link>
+            <ViewAllLink to="/shop">Browse all</ViewAllLink>
           </div>
 
           <div className="grid grid-cols-4 gap-6">
@@ -556,12 +551,10 @@ function Home() {
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Featured Products</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">Top picks and popular campus designs</p>
             </div>
-            <Link to="/shop" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
-              See all →
-            </Link>
+            <ViewAllLink to="/shop">See all</ViewAllLink>
           </div>
 
-          <div className="grid grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-5">
             {featuredProductsDesktop.map((prod) => (
               <ProductCard key={prod.id} product={prod} />
             ))}

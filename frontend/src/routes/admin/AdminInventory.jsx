@@ -495,23 +495,6 @@ export default function AdminInventory() {
                         </td>
                         <td className="p-4">
                           <div className="flex items-center gap-3">
-                            {/* Expand/collapse chevron */}
-                            <button
-                              type="button"
-                              onClick={() => toggleRow(prod.id)}
-                              className="text-gray-400 hover:text-brand-orange transition-transform cursor-pointer"
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90 text-brand-orange' : ''}`}
-                              >
-                                <polyline points="9 18 15 12 9 6" />
-                              </svg>
-                            </button>
-
                             {/* Product Thumbnail */}
                             <div className="w-11 h-11 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center p-1 shrink-0">
                               <img
@@ -527,10 +510,7 @@ export default function AdminInventory() {
                                 {prod.name}
                               </h4>
                               <p className="text-[10px] text-gray-400 font-semibold mt-0.5">
-                                SKU: {prod.sku} · {prod.variants.length} {prod.variants.length === 1 ? 'Variant' : 'Variants'}
-                              </p>
-                              <p className="text-[10px] text-gray-400 font-medium">
-                                {prod.categoryName} · {prod.collectionName}
+                                SKU: {prod.sku}
                               </p>
                             </div>
                           </div>
@@ -606,6 +586,34 @@ export default function AdminInventory() {
                         {/* Actions - Rectangular Buttons */}
                         <td className="p-4 text-right">
                           <div className="inline-flex items-center gap-2">
+                            {hasVariants && (
+                              <button
+                                type="button"
+                                onClick={() => toggleRow(prod.id)}
+                                aria-expanded={isExpanded}
+                                title={isExpanded ? 'Hide variants' : 'Show variants'}
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                                  isExpanded
+                                    ? 'bg-orange-100 text-orange-800'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                <span>
+                                  {prod.variants.length} {prod.variants.length === 1 ? 'Variant' : 'Variants'}
+                                </span>
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                >
+                                  <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
@@ -625,23 +633,23 @@ export default function AdminInventory() {
                         </td>
                       </tr>
 
-                      {/* Nested Variants (Photo 3) */}
+                      {/* Nested Variants drawer */}
                       {isExpanded && hasVariants && (
                         <tr className="bg-gray-50/40">
                           <td colSpan={9} className="p-0 border-b border-gray-200">
-                            <div className="p-4 pl-12 space-y-3">
-                              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-2xs">
+                            <div className="my-3 ml-10 mr-4 pl-4 border-l-2 border-orange-400 space-y-3">
+                              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                                 <table className="w-full text-left text-xs">
                                   <thead>
                                     <tr className="border-b border-gray-200 bg-gray-50/80 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                                      <th className="p-3 w-8" />
-                                      <th className="p-3">VARIANT</th>
-                                      <th className="p-3">SKU</th>
-                                      <th className="p-3">STOCK</th>
-                                      <th className="p-3">PRICE</th>
-                                      <th className="p-3">STATUS</th>
-                                      <th className="p-3">LAST UPDATED</th>
-                                      <th className="p-3 text-right">ACTIONS</th>
+                                      <th className="px-3 py-2 w-8" />
+                                      <th className="px-3 py-2">VARIANT</th>
+                                      <th className="px-3 py-2">SKU</th>
+                                      <th className="px-3 py-2">STOCK</th>
+                                      <th className="px-3 py-2">PRICE</th>
+                                      <th className="px-3 py-2">STATUS</th>
+                                      <th className="px-3 py-2">LAST UPDATED</th>
+                                      <th className="px-3 py-2 text-right">ACTIONS</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
@@ -654,7 +662,7 @@ export default function AdminInventory() {
                                             isVarSelected ? 'bg-orange-50/30' : ''
                                           }`}
                                         >
-                                          <td className="p-3">
+                                          <td className="px-3 py-2">
                                             <input
                                               type="checkbox"
                                               checked={isVarSelected}
@@ -662,16 +670,16 @@ export default function AdminInventory() {
                                               className="rounded text-brand-orange focus:ring-0"
                                             />
                                           </td>
-                                          <td className="p-3">
+                                          <td className="px-3 py-2">
                                             <div className="flex items-center gap-2">
                                               <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
                                               <span className="font-bold text-gray-800 text-xs">{variant.name}</span>
                                             </div>
                                           </td>
-                                          <td className="p-3 text-gray-500 font-medium text-xs">
+                                          <td className="px-3 py-2 text-gray-500 font-medium text-xs">
                                             {variant.sku}
                                           </td>
-                                          <td className="p-3">
+                                          <td className="px-3 py-2">
                                             {/* Stepper [- count +] - Rectangular */}
                                             <div className="inline-flex items-center border border-gray-200 rounded-md bg-white overflow-hidden shadow-2xs">
                                               <button
@@ -693,11 +701,11 @@ export default function AdminInventory() {
                                               </button>
                                             </div>
                                           </td>
-                                          <td className="p-3 font-extrabold text-gray-900 text-xs">
+                                          <td className="px-3 py-2 font-extrabold text-gray-900 text-xs">
                                             ₱{variant.price.toFixed(2)}
                                           </td>
                                           {/* Status - Rectangular */}
-                                          <td className="p-3">
+                                          <td className="px-3 py-2">
                                             <span
                                               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold ${
                                                 variant.stock === 0
@@ -719,10 +727,10 @@ export default function AdminInventory() {
                                               <span>{variant.status}</span>
                                             </span>
                                           </td>
-                                          <td className="p-3 text-[11px] text-gray-400 font-medium">
+                                          <td className="px-3 py-2 text-[11px] text-gray-400 font-medium">
                                             {variant.lastUpdated}
                                           </td>
-                                          <td className="p-3 text-right">
+                                          <td className="px-3 py-2 text-right">
                                             <button
                                               type="button"
                                               className="p-1 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-gray-700 cursor-pointer"

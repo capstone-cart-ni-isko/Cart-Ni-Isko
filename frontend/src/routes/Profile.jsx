@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
-import AppShell from '../components/layout/AppShell.jsx'
+import AccountLayout from '../components/layout/AccountLayout.jsx'
 import { mockUser, mockAppointments, mockQuickOverview } from '../data/mockUser.js'
 import avatarImg from '../assets/avatar.png'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
+import ViewAllLink from '../components/ui/ViewAllLink.jsx'
 
 import {
   UserIcon,
@@ -215,7 +216,7 @@ function Profile() {
   }
 
   return (
-    <AppShell>
+    <AccountLayout>
 
       {/* ── MOBILE LAYOUT (matching Image 2) ── */}
       <div className="md:hidden pb-28 bg-[#F8F9FA] min-h-dvh">
@@ -390,10 +391,7 @@ function Profile() {
                 </div>
                 <h2 className="text-base font-black text-gray-900">My Orders</h2>
               </div>
-              <Link to="/orders" className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1">
-                <span>View All Orders</span>
-                <span>→</span>
-              </Link>
+              <ViewAllLink to="/orders">View all</ViewAllLink>
             </div>
 
             <div className="flex items-center justify-between px-1">
@@ -448,9 +446,7 @@ function Profile() {
                 </div>
                 <h2 className="text-base font-black text-gray-900">My Appointments</h2>
               </div>
-              <Link to="/appointments" className="text-sm font-bold text-blue-600 hover:underline">
-                View Calendar
-              </Link>
+              <ViewAllLink to="/appointments">View calendar</ViewAllLink>
             </div>
 
             <div className="space-y-2.5">
@@ -548,7 +544,7 @@ function Profile() {
         <div className="rounded-2xl py-6 px-6 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
           <div className="absolute inset-0 opacity-[0.04] select-none pointer-events-none flex items-center justify-center">
             <span className="text-[5rem] font-black tracking-widest rotate-[4deg] whitespace-nowrap text-white">
-              CART NI ISKO
+              TINDAHAN NI ISKO
             </span>
           </div>
 
@@ -583,61 +579,11 @@ function Profile() {
           </div>
         </div>
 
-        {/* 2-Column Responsive Grid: Left Floating Sidebar Nav (3 cols), Main Content (9 cols) */}
-        <div className="grid grid-cols-12 gap-3.5 items-start">
+        {/* Main content (sidebar now comes from AccountLayout) */}
+        <div className="w-full">
+          <div className="space-y-3.5">
 
-          {/* ── LEFT: FLOATING SIDEBAR NAVIGATION (NO PROFILE PICTURE, COMPACT) ── */}
-          <div className="col-span-3 sticky top-20 space-y-3">
-            <div className="bg-white rounded-2xl p-3.5 border border-gray-100/90 shadow-xs space-y-2.5">
-              {/* Clean Sidebar Navigation Header - Redundancy Removed */}
-              <div className="pb-2 border-b border-gray-100 px-1">
-                <p className="text-[11px] font-black uppercase tracking-wider text-gray-400">Account Menu</p>
-              </div>
-
-              {/* Account Nav Links */}
-              <nav className="space-y-0.5">
-                {[
-                  { to: '/profile', label: 'Profile Overview', icon: <UserIcon className="w-4 h-4 text-brand-orange" />, active: true },
-                  { to: '/account', label: 'Account Information', icon: <PencilIcon className="w-4 h-4 text-gray-400" /> },
-                  { to: '/orders', label: 'My Orders', icon: <OrdersNavIcon className="w-4 h-4 text-gray-400" /> },
-                  { to: '/appointments', label: 'My Appointments', icon: <CalendarNavIcon className="w-4 h-4 text-gray-400" /> },
-                  { to: '/security', label: 'Security & Password', icon: <ShieldIcon className="w-4 h-4 text-gray-400" /> },
-                  { to: '/settings/address', label: 'My Addresses', icon: <ContactIcon className="w-4 h-4 text-gray-400" /> },
-                  { to: '/settings/notifications', label: 'Notifications', icon: <BellIcon className="w-4 h-4 text-gray-400" /> },
-                  { to: '/settings', label: 'Settings', icon: <SettingsIcon className="w-4 h-4 text-gray-400" /> },
-                ].map(({ to, label, icon, active }) => (
-                  <Link
-                    key={to}
-                    to={to}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                      active
-                        ? 'bg-orange-50 text-brand-orange shadow-2xs'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    {icon}
-                    <span className="truncate">{label}</span>
-                  </Link>
-                ))}
-              </nav>
-
-              <div className="pt-2 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setShowLogoutConfirm(true)}
-                  className="w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                >
-                  <LogOutIcon className="w-4 h-4 text-rose-500" />
-                  <span>Log Out</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* ── MAIN CONTENT AREA (9 cols, tightly spaced) ── */}
-          <div className="col-span-9 space-y-3.5">
-
-            {/* 1. Quick View of Order Statuses Card — RESIZED TO ALIGN WITH ABOUT ME CARD */}
+            {/* 1. Quick View of Order Statuses Card */}
             <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -649,9 +595,7 @@ function Profile() {
                     <p className="text-[10px] text-gray-400 font-medium">Active and recent purchases</p>
                   </div>
                 </div>
-                <Link to="/orders" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
-                  View All Orders →
-                </Link>
+                <ViewAllLink to="/orders">View all</ViewAllLink>
               </div>
 
               <div className="grid grid-cols-4 gap-2.5 pt-1">
@@ -738,7 +682,7 @@ function Profile() {
               </div>
             </div>
 
-            {/* 3. My Appointments — EXPANDED WITH MORE DETAILS, TIGHT SPACING */}
+            {/* 3. My Appointments */}
             <div className="bg-white rounded-2xl p-4.5 border border-gray-100/90 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -750,9 +694,7 @@ function Profile() {
                     <p className="text-[10px] text-gray-400 font-medium">Scheduled store visits &amp; pickup slots</p>
                   </div>
                 </div>
-                <Link to="/appointments" className="text-xs font-bold text-brand-orange hover:underline">
-                  View Calendar →
-                </Link>
+                <ViewAllLink to="/appointments">View calendar</ViewAllLink>
               </div>
 
               <div className="space-y-2.5">
@@ -822,62 +764,6 @@ function Profile() {
               </div>
             </div>
 
-            {/* 4. NEW CARD BENEATH THE APPOINTMENTS CARD */}
-            <div className="bg-white rounded-2xl p-4.5 border border-gray-100/90 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <ShieldIcon className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-gray-900">Campus Store Pickup Guidelines &amp; Digital Pass</h3>
-                    <p className="text-[10px] text-gray-400 font-medium">Essential claiming info for in-store pickups</p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 text-[11px] font-bold border border-blue-100">
-                  Pass ID: #SP-2026-992
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2.5 text-xs">
-                <div className="p-2.5 bg-[#F8F9FA] rounded-xl border border-gray-100">
-                  <p className="font-bold text-gray-900 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    Store Hours
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Mon – Fri: 8:00 AM – 5:00 PM</p>
-                </div>
-
-                <div className="p-2.5 bg-[#F8F9FA] rounded-xl border border-gray-100">
-                  <p className="font-bold text-gray-900 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-orange" />
-                    Requirements
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Valid Student ID + Order Ref #</p>
-                </div>
-
-                <div className="p-2.5 bg-[#F8F9FA] rounded-xl border border-gray-100">
-                  <p className="font-bold text-gray-900 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                    Proxy Claiming
-                  </p>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Auth letter + proxy ID required</p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-1 border-t border-gray-100 text-xs">
-                <p className="text-gray-500 text-[11px]">
-                  Need directions to the Student Center pickup counter?
-                </p>
-                <Link
-                  to="/help"
-                  className="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold rounded-lg border border-gray-200 transition-colors text-[11px]"
-                >
-                  Store Map &amp; Directions →
-                </Link>
-              </div>
-            </div>
-
           </div>
         </div>
       </div>
@@ -891,7 +777,7 @@ function Profile() {
         confirmText="Log Out"
         isDestructive={true}
       />
-    </AppShell>
+    </AccountLayout>
   )
 }
 

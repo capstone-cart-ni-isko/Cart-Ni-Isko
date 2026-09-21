@@ -21,17 +21,11 @@ export default function StatCard({
     >
       <div className="flex items-start justify-between gap-2.5">
         <div className="space-y-0.5">
-          <p className="text-[11px] font-medium tracking-wider text-slate-400 uppercase">
-            {title}
-          </p>
-          <p className="text-xl font-bold text-slate-900 tracking-tight">
-            {value}
-          </p>
+          <p className="text-[11px] font-medium text-slate-500">{title}</p>
+          <p className="text-xl font-bold text-slate-900 tracking-tight">{value}</p>
         </div>
         {icon && (
-          <div
-            className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${iconBg}`}
-          >
+          <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${iconBg}`}>
             {icon}
           </div>
         )}
@@ -69,9 +63,7 @@ export default function StatCard({
               {trend}
             </span>
           )}
-          {subtitle && (
-            <span className="text-slate-500 font-normal truncate">{subtitle}</span>
-          )}
+          {subtitle && <span className="text-slate-500 font-normal truncate">{subtitle}</span>}
         </div>
       )}
     </div>

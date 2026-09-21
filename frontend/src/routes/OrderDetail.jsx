@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
+import AccountLayout from '../components/layout/AccountLayout.jsx'
+import PageTitle from '../components/ui/PageTitle.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
@@ -15,6 +17,8 @@ import {
   retryLalamoveBooking,
   isFulfillmentLocked,
   canChangeFulfillment,
+  canSwitchToPickup,
+  canSwitchToDelivery,
 } from '../utils/orderStorage.js'
 
 function OrderDetail() {
@@ -39,10 +43,10 @@ function OrderDetail() {
 
   if (!order) {
     return (
-      <AppShell>
-        <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in max-w-3xl mx-auto">
-          <div className="hidden lg:block mb-8">
-            <h1 className="text-3xl font-black text-gray-900">Order Details</h1>
+      <AccountLayout>
+        <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in">
+          <div className="hidden md:block mb-5">
+            <PageTitle title="Order Details" />
           </div>
           <div className="lg:hidden -mx-4 -mt-4 mb-4">
             <PageHeader title="Order Details" backTo="/orders" />
@@ -61,12 +65,13 @@ function OrderDetail() {
             </button>
           </div>
         </div>
-      </AppShell>
+      </AccountLayout>
     )
   }
 
   const isLocked = isFulfillmentLocked(order)
-  const canSwitch = canChangeFulfillment(order)
+  const canSwitchPickup = canSwitchToPickup(order)
+  const canSwitchDelivery = canSwitchToDelivery(order)
   const isDelivery = order.fulfillment?.method === 'Courier Delivery'
   const isPickup = !isDelivery
 
@@ -135,23 +140,11 @@ function OrderDetail() {
   }
 
   return (
-    <AppShell>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in max-w-3xl mx-auto">
+    <AccountLayout>
+      <div className="px-4 py-4 pb-8 md:px-0 md:py-0 animate-fade-in">
         {/* Desktop Header */}
-        <div className="hidden lg:flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => navigate('/orders')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:text-brand-orange hover:border-brand-orange bg-white transition-all shadow-2xs cursor-pointer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              <span>Back to Orders</span>
-            </button>
-            <h1 className="text-3xl font-black text-gray-900">Order Details</h1>
-          </div>
+        <div className="hidden md:block mb-5">
+          <PageTitle title="Order Details" />
         </div>
 
         {/* Mobile Title */}
@@ -240,6 +233,10 @@ function OrderDetail() {
                     <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1">
                       <LockIcon className="w-2.5 h-2.5" /> Delivery Locked
                     </span>
+                  ) : isDelivery ? (
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold">
+                      Delivery only
+                    </span>
                   ) : (
                     <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
                       Can change method
@@ -258,7 +255,7 @@ function OrderDetail() {
             </div>
 
             {/* ── CASE 1: FLEXIBLE STORE PICKUP (Can switch to Delivery) ── */}
-            {canSwitch && isPickup && (
+            {canSwitchDelivery && isPickup && (
               <div className="pt-1 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
                 <p className="text-xs text-gray-500">
                   Prefer door-to-door delivery? You can switch to courier delivery anytime before pickup.
@@ -275,7 +272,8 @@ function OrderDetail() {
             )}
 
             {/* ── CASE 2: FLEXIBLE COURIER DELIVERY (Unpaid Quote, can switch to Pickup or Pay) ── */}
-            {canSwitch && isDelivery && !order.deliveryFeePaid && (
+            {/* ── CASE 2: COURIER DELIVERY (quote pending) — cannot switch to store pickup ── */}
+            {isDelivery && !order.deliveryFeePaid && !isLocked && (
               <div className="space-y-3 pt-1 border-t border-slate-100">
                 {/* Lalamove Quote Card */}
                 <div className="p-3.5 bg-orange-50/50 border border-orange-200/80 rounded-xl space-y-2">
@@ -312,22 +310,14 @@ function OrderDetail() {
                   <button
                     type="button"
                     onClick={() => setShowPayModal(true)}
-                    className="flex-1 min-w-[160px] py-2.5 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    className="flex-1 min-w-[160px] py-2.5 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <span>Pay ₱{(order.deliveryFee || 280).toFixed(2)} Delivery Fee</span>
-                    <span>→</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSwitchToPickup}
-                    className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
-                  >
-                    Switch to Pickup
                   </button>
                 </div>
 
                 <p className="text-[11px] text-gray-400 italic">
-                  * Note: As long as the delivery fee has not been paid, you can switch back to Store Pickup. Once paid, the fulfillment method will be locked.
+                  This order is set for delivery and cannot be switched to store pickup.
                 </p>
               </div>
             )}
@@ -620,7 +610,7 @@ function OrderDetail() {
           </div>
         </div>
       )}
-    </AppShell>
+    </AccountLayout>
   )
 }
 

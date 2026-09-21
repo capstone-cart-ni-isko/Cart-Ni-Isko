@@ -55,11 +55,11 @@ function Cart() {
   const handleRemoveWithUndo = (item) => {
     const removed = removeFromCart(item.cartItemId)
     if (removed) {
-      showToast(`Removed "${item.product.name}" from cart`, 'info', {
+      showToast(`Removed "${item.product.name}" from bag`, 'info', {
         label: 'Undo',
         onClick: () => {
           restoreItem(removed)
-          showToast(`Restored "${item.product.name}" to cart`)
+          showToast(`Restored "${item.product.name}" to bag`)
         },
       })
     }
@@ -85,6 +85,7 @@ function Cart() {
   }
 
   const [orderSuccessId, setOrderSuccessId] = useState(null)
+  const [confirmedSummary, setConfirmedSummary] = useState(null)
   const [selectedAddressIdx, setSelectedAddressIdx] = useState(0)
 
   const savedAddresses = [
@@ -94,6 +95,20 @@ function Cart() {
 
   const handleConfirmOrder = () => {
     setShowConfirmOrderModal(false)
+    // Snapshot for the confirmation screen (the bag is cleared right after)
+    setConfirmedSummary({
+      items: selectedItems.map((item) => ({
+        key: item.cartItemId,
+        name: item.product?.name,
+        qty: Number(item.qty || 1),
+        price: Number(item.product?.price || 0),
+        variant: [item.size !== 'One Size' ? item.size : null, item.color?.name].filter(Boolean).join(' • '),
+        image: item.color?.image || item.product?.images?.[0] || '',
+      })),
+      subtotal,
+      shippingFee,
+      total: grandTotal,
+    })
     const firstItem = selectedItems[0]
     const deliveryAddress = fulfillmentType === 'Courier Delivery'
       ? savedAddresses[selectedAddressIdx]?.line || (currentUser?.address || 'Door-to-door delivery · Legazpi City, Albay')
@@ -150,48 +165,91 @@ function Cart() {
   if (orderSuccessId) {
     return (
       <AppShell>
-        <div className="min-h-[60vh] flex items-center justify-center px-4 py-12 animate-fade-in">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full border border-gray-100 shadow-lg text-center space-y-5">
+        <div className="min-h-[60vh] flex items-center justify-center px-4 py-8 pb-28 lg:pb-8 animate-fade-in">
+          <div className="bg-white rounded-xl p-6 sm:p-8 max-w-lg w-full border border-slate-100 text-center space-y-5">
             {/* Success checkmark */}
-            <div className="w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-200 flex items-center justify-center mx-auto">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-8 h-8 text-emerald-500">
+            <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-emerald-500">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
 
-            <div className="space-y-1">
-              <h2 className="text-xl font-black text-gray-900">Order Placed!</h2>
-              <p className="text-sm text-gray-500">Your order has been successfully placed and is now being processed.</p>
-              <p className="text-xs font-mono text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 inline-block mt-1">
+            <div className="space-y-1.5">
+              <h2 className="text-xl font-bold text-gray-900">Order placed</h2>
+              <p className="text-sm text-gray-500">Your order has been placed and is now being processed.</p>
+              <p className="text-sm font-mono text-gray-500 bg-slate-50 rounded-md px-3 py-1.5 inline-block">
                 Order #{orderSuccessId}
               </p>
             </div>
 
-            <div className="p-3 bg-orange-50 rounded-2xl border border-orange-100 text-xs text-left space-y-0.5">
+            {/* Order recap */}
+            {confirmedSummary && (
+              <div className="text-left rounded-lg bg-slate-50 p-4 space-y-3">
+                <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto scrollbar-none">
+                  {confirmedSummary.items.map((it) => (
+                    <div key={it.key} className="py-2.5 first:pt-0 flex items-center justify-between gap-3 text-sm">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {it.image ? (
+                          <img
+                            src={getImageUrl(it.image)}
+                            alt={it.name}
+                            className="w-10 h-10 rounded-md object-contain bg-white p-1 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-md bg-white flex items-center justify-center shrink-0">
+                            <ShirtIcon className="w-5 h-5 text-slate-300" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{it.name}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {it.qty} × {formatPrice(it.price)}
+                            {it.variant ? ` · ${it.variant}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="font-bold text-gray-900 shrink-0">{formatPrice(it.price * it.qty)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-3 border-t border-slate-200 space-y-1 text-sm">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Subtotal</span>
+                    <span>{formatPrice(confirmedSummary.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Fulfillment fee</span>
+                    <span>{confirmedSummary.shippingFee > 0 ? formatPrice(confirmedSummary.shippingFee) : 'Free (Pickup)'}</span>
+                  </div>
+                  <div className="flex justify-between items-baseline pt-1.5 font-bold text-gray-900">
+                    <span>Total</span>
+                    <span className="text-lg text-brand-orange">{formatPrice(confirmedSummary.total)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="p-3.5 bg-orange-50/70 rounded-lg text-sm text-left space-y-0.5">
               <p className="font-bold text-gray-800">Fulfillment</p>
               <p className="text-gray-600">{fulfillmentType}</p>
               {fulfillmentType === 'Store Pickup' && (
-                <p className="text-gray-400">Tindahan ni Isko · BU Student Center Ground Floor</p>
+                <p className="text-gray-500">Tindahan ni Isko · BU Student Center Ground Floor</p>
               )}
               {fulfillmentType === 'Courier Delivery' && (
-                <p className="text-gray-400">You will be notified once the Lalamove quote is ready.</p>
+                <p className="text-gray-500">You will be notified once the Lalamove quote is ready.</p>
               )}
             </div>
 
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col sm:flex-row gap-2.5">
               <Link
                 to="/orders"
-                className="w-full py-3 rounded-2xl bg-brand-orange text-white font-black text-sm hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-3 rounded-lg bg-brand-orange text-white font-bold text-sm hover:bg-brand-orange-dark transition-colors flex items-center justify-center"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                  <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-                  <path d="m3.27 6.96 8.73 5.05 8.73-5.05" /><path d="M12 22.08V12" />
-                </svg>
                 View My Orders
               </Link>
               <Link
                 to="/shop"
-                className="w-full py-3 rounded-2xl bg-gray-100 text-gray-700 font-bold text-sm hover:bg-gray-200 transition-colors"
+                className="flex-1 py-3 rounded-lg bg-slate-100 text-gray-700 font-semibold text-sm hover:bg-slate-200 transition-colors flex items-center justify-center"
               >
                 Continue Shopping
               </Link>
@@ -203,10 +261,10 @@ function Cart() {
   }
 
   return (
-    <AppShell showBottomNav={false}>
+    <AppShell>
 
       <PageHeader
-        title={`Shopping Cart (${cartItems.length})`}
+        title={`Shopping Bag (${cartItems.length})`}
         backTo="/home"
         rightAction={
           <button
@@ -219,14 +277,14 @@ function Cart() {
         }
       />
 
-      <div className="px-4 py-4 pb-36 lg:px-4 lg:py-6 lg:pb-16 animate-fade-in max-w-7xl mx-auto">
-        {/* Desktop Top Nav & Page Title (Requirement 17: Item count beside Shopping Cart) */}
-        <div className="hidden lg:flex items-center justify-between mb-8 pb-2 border-b border-slate-200">
+      <div className="px-4 py-4 pb-44 md:px-0 md:py-2 lg:pb-16 animate-fade-in max-w-7xl mx-auto">
+        {/* Desktop Top Nav & Page Title (item count beside Shopping Bag) */}
+        <div className="hidden lg:flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-gray-600 hover:text-brand-orange hover:border-brand-orange bg-white transition-all shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white text-sm font-semibold text-gray-600 hover:text-brand-orange transition-colors cursor-pointer"
               title="Go back to previous page"
               aria-label="Go back"
             >
@@ -236,8 +294,8 @@ function Cart() {
               <span>Go Back</span>
             </button>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">Shopping Cart</h1>
-              <span className="px-3 py-1 rounded-full bg-orange-100 text-brand-orange text-xs font-black">
+              <h1 className="page-title text-gray-900">Shopping Bag</h1>
+              <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-brand-orange text-xs font-bold">
                 {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
               </span>
             </div>
@@ -246,7 +304,7 @@ function Cart() {
           <button
             type="button"
             onClick={() => navigate('/shop')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-brand-orange font-bold text-xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-brand-orange font-semibold text-sm transition-colors cursor-pointer"
             title="Browse university merchandise catalog"
           >
             <span>Continue Shopping</span>
@@ -257,12 +315,12 @@ function Cart() {
         </div>
 
         {cartItems.length === 0 ? (
-          /* Empty Cart State */
-          <div className="text-center py-12 flex flex-col items-center justify-center bg-white rounded-lg border border-slate-200 p-6">
-            <div className="w-12 h-12 bg-slate-50 rounded-md flex items-center justify-center border border-slate-200 mb-2">
+          /* Empty Bag State */
+          <div className="text-center py-12 flex flex-col items-center justify-center bg-white rounded-lg border border-slate-100 p-6">
+            <div className="w-12 h-12 bg-slate-50 rounded-md flex items-center justify-center mb-2">
               <CartIcon className="w-5 h-5 text-slate-400" />
             </div>
-            <h3 className="font-bold text-gray-800 mt-2 text-base">Your cart is empty</h3>
+            <h3 className="font-bold text-gray-800 mt-2 text-base">Your bag is empty</h3>
             <p className="text-xs text-gray-500 mt-1 max-w-[280px] mx-auto leading-relaxed">
               Explore our official BU hoodies, caps, varsity jackets, and campus essentials!
             </p>
@@ -284,11 +342,11 @@ function Cart() {
           </div>
         ) : (
           <div className="lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start">
-            {/* Left Column: Selection Bar + Cart Items List */}
+            {/* Left Column: Selection Bar + Bag Items List */}
             <div className="lg:col-span-7 space-y-3">
               {/* Mixed Items Guard Banner (Requirement 8 & 9) */}
               {hasMixedSelection && (
-                <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-900 animate-slide-up">
+                <div className="bg-amber-50 rounded-lg p-3.5 text-sm text-amber-900 animate-slide-up">
                   <div className="flex items-start gap-2">
                     <AlertTriangleIcon className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                     <div className="space-y-1 flex-1">
@@ -320,25 +378,25 @@ function Cart() {
               )}
 
               {/* Selection Bar (Requirement 2 & 3: Select All + Selected Count) */}
-              <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between select-none shadow-2xs">
+              <div className="bg-white rounded-lg border border-slate-100 px-4 py-3.5 flex items-center justify-between select-none">
                 <label className="flex items-center gap-3 text-sm font-semibold text-gray-800 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={handleToggleSelectAll}
-                    className="w-5 h-5 rounded text-brand-orange accent-brand-orange cursor-pointer"
-                    title="Select or deselect all items in cart"
-                    aria-label="Select all cart items"
+                    className="check-plain cursor-pointer"
+                    title="Select or deselect all items in bag"
+                    aria-label="Select all bag items"
                   />
                   <span>Select All ({cartItems.length} {cartItems.length === 1 ? 'item' : 'items'})</span>
                 </label>
 
-                <span className="text-xs font-bold text-brand-orange bg-orange-50 border border-orange-200 px-3 py-1 rounded-md">
+                <span className="text-sm font-semibold text-gray-600 bg-slate-100 px-3 py-1 rounded-md">
                   {selectedItems.length} selected
                 </span>
               </div>
 
-              {/* Cart Items List */}
+              {/* Bag Items List */}
               <div className="space-y-3.5">
                 {cartItems.map((item) => {
                   const isChecked = selectedItemIds.includes(item.cartItemId)
@@ -354,10 +412,8 @@ function Cart() {
                   return (
                     <article
                       key={item.cartItemId}
-                      className={`rounded-xl border p-4 sm:p-5 transition-colors flex gap-4 select-none ${
-                        isChecked
-                          ? 'border-brand-orange/50 bg-orange-50/15'
-                          : 'border-slate-200 bg-white'
+                      className={`rounded-lg border p-4 sm:p-5 transition-colors flex gap-4 select-none bg-white ${
+                        isChecked ? 'border-slate-300' : 'border-slate-100'
                       }`}
                     >
                       {/* Item Checkbox (Requirement 1 & 18) */}
@@ -366,7 +422,7 @@ function Cart() {
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggleSelectItem(item.cartItemId)}
-                          className="w-5 h-5 rounded text-brand-orange accent-brand-orange cursor-pointer"
+                          className="check-plain cursor-pointer"
                           title={isChecked ? 'Uncheck item' : 'Check item to include in checkout'}
                           aria-label={`Select ${item.product.name}`}
                         />
@@ -375,7 +431,7 @@ function Cart() {
                       {/* Actual Product / Variant Image (Requirement 11) */}
                       <Link
                         to={`/product/${item.product.id}`}
-                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden relative group"
+                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 overflow-hidden relative group"
                         title={`View ${item.product.name}`}
                       >
                         {resolvedVariantImg ? (
@@ -443,7 +499,7 @@ function Cart() {
                               type="button"
                               onClick={() => handleRemoveWithUndo(item)}
                               className="text-gray-400 hover:text-red-500 transition-colors shrink-0 p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer"
-                              title="Remove item from cart"
+                              title="Remove item from bag"
                               aria-label="Remove item"
                             >
                               <svg
@@ -498,8 +554,8 @@ function Cart() {
 
             {/* Right Column: Order Summary (Requirement 5, 6, 7, 15) */}
             <div className="lg:col-span-5 mt-6 lg:mt-0 space-y-4">
-              <div className="bg-white rounded-xl p-6 space-y-4 border border-slate-200 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="bg-white rounded-lg p-6 space-y-4 border border-slate-100">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
                     Order Summary
                   </h3>
@@ -518,7 +574,7 @@ function Cart() {
                   {/* Shipping = Calculated at checkout (Requirement 7) */}
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 font-medium">Shipping Estimate</span>
-                    <span className="font-semibold text-gray-700 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md text-xs">
+                    <span className="font-semibold text-gray-700 bg-slate-100 px-2.5 py-1 rounded-md text-xs">
                       Calculated at checkout
                     </span>
                   </div>
@@ -540,7 +596,7 @@ function Cart() {
                 </div>
 
                 {/* Fulfillment note (Requirement 15) */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-gray-600 space-y-1.5 leading-relaxed">
+                <div className="bg-slate-50 rounded-lg p-3.5 text-sm text-gray-600 space-y-1.5 leading-relaxed">
                   <p className="flex items-center gap-2 font-bold text-gray-800">
                     <TruckIcon className="w-4 h-4 text-brand-orange shrink-0" />
                     <span>Campus Pickup & Delivery</span>
@@ -555,7 +611,7 @@ function Cart() {
                   <Button
                     disabled={isNoneSelected || hasMixedSelection}
                     onClick={handleCheckout}
-                    className={`w-full h-12 rounded-xl font-bold text-sm sm:text-base transition-all ${
+                    className={`w-full h-12 rounded-lg font-bold text-sm sm:text-base transition-all ${
                       hasMixedSelection
                         ? 'opacity-60 cursor-not-allowed bg-amber-600'
                         : isNoneSelected
@@ -578,19 +634,19 @@ function Cart() {
 
       {/* Mobile Sticky Bottom Bar (Requirement 16: Better mobile selection behavior) */}
       {cartItems.length > 0 && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 px-4 py-3 safe-bottom shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+        <div className="lg:hidden fixed left-0 right-0 z-40 bg-white border-t border-slate-100 px-4 py-3 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] md:bottom-24">
           <div className="mx-auto max-w-lg flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <input
                 type="checkbox"
                 checked={allSelected}
                 onChange={handleToggleSelectAll}
-                className="w-5 h-5 rounded text-brand-orange accent-brand-orange cursor-pointer"
+                className="check-plain cursor-pointer"
                 title="Select All"
-                aria-label="Select all cart items"
+                aria-label="Select all bag items"
               />
               <div>
-                <p className="text-[11px] text-gray-500 font-bold uppercase">
+                <p className="text-xs text-gray-500 font-semibold uppercase">
                   {selectedItems.length} selected
                 </p>
                 <span className="text-base font-black text-brand-orange block leading-tight">
@@ -603,12 +659,12 @@ function Cart() {
               type="button"
               disabled={isNoneSelected || hasMixedSelection}
               onClick={handleCheckout}
-              className={`flex-1 h-11 rounded-xl font-bold text-xs sm:text-sm transition-all px-4 cursor-pointer ${
+              className={`flex-1 h-11 rounded-lg font-bold text-sm transition-all px-4 cursor-pointer ${
                 hasMixedSelection
                   ? 'bg-amber-500 text-white cursor-not-allowed'
                   : isNoneSelected
                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  : 'bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98 shadow-sm'
+                  : 'bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98'
               }`}
             >
               {hasMixedSelection
@@ -630,13 +686,14 @@ function Cart() {
 
       {/* ── CUSTOMER ORDER CONFIRMATION MODAL ── */}
       {showConfirmOrderModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-2xl md:rounded-3xl p-5 md:p-7 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100 space-y-4 animate-scale-in">
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 pb-28 md:pb-4 isolate">
+          <div className="absolute inset-0 z-0 bg-black/50" onClick={() => setShowConfirmOrderModal(false)} />
+          <div className="relative z-10 bg-white rounded-lg p-5 md:p-6 max-w-xl w-full max-h-[80vh] overflow-y-auto space-y-4 animate-scale-in">
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h3 className="text-base font-black text-gray-900">Review &amp; Confirm Order</h3>
-                <p className="text-xs text-gray-500">Please verify your items and fulfillment details</p>
+                <h3 className="text-lg font-bold text-gray-900">Review &amp; Confirm Order</h3>
+                <p className="text-sm text-gray-500">Please verify your items and fulfillment details</p>
               </div>
               <button
                 type="button"
@@ -650,24 +707,24 @@ function Cart() {
             </div>
 
             {/* Customer info & Fulfillment selector */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-              <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Recipient</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div className="p-3.5 bg-slate-50 rounded-lg space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Recipient</p>
                 <p className="font-bold text-gray-900 truncate">{currentUser?.fullName || 'Juan Dela Cruz'}</p>
                 <p className="text-gray-500 truncate">{currentUser?.email || 'jdcruz@student.u.edu.ph'}</p>
-                <p className="text-gray-400 font-mono text-[11px]">ID: {currentUser?.studentId || '2020-1234-5678'}</p>
+                <p className="text-gray-500 font-mono text-xs">ID: {currentUser?.studentId || '2020-1234-5678'}</p>
               </div>
 
-              <div className="p-3 bg-gray-50/80 rounded-2xl border border-gray-100 space-y-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Fulfillment Method</p>
+              <div className="p-3.5 bg-slate-50 rounded-lg space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Fulfillment Method</p>
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setFulfillmentType('Store Pickup')}
-                    className={`flex-1 py-1 px-1.5 rounded-xl font-bold text-[11px] border transition-all cursor-pointer ${
+                    className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
                       fulfillmentType === 'Store Pickup'
-                        ? 'bg-brand-orange text-white border-brand-orange shadow-2xs'
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        ? 'bg-brand-orange text-white border-brand-orange'
+                        : 'bg-white text-gray-600 border-slate-200 hover:bg-gray-50'
                     }`}
                   >
                     Store Pickup
@@ -675,16 +732,16 @@ function Cart() {
                   <button
                     type="button"
                     onClick={() => setFulfillmentType('Courier Delivery')}
-                    className={`flex-1 py-1 px-1.5 rounded-xl font-bold text-[11px] border transition-all cursor-pointer ${
+                    className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
                       fulfillmentType === 'Courier Delivery'
-                        ? 'bg-brand-orange text-white border-brand-orange shadow-2xs'
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        ? 'bg-brand-orange text-white border-brand-orange'
+                        : 'bg-white text-gray-600 border-slate-200 hover:bg-gray-50'
                     }`}
                   >
                     Delivery
                   </button>
                 </div>
-                <p className="text-[10px] text-gray-500 truncate">
+                <p className="text-xs text-gray-500 truncate">
                   {fulfillmentType === 'Store Pickup' ? 'BU Main Campus Center' : 'Courier delivery (+\u20b150)'}
                 </p>
               </div>
@@ -692,7 +749,7 @@ function Cart() {
 
             {/* Delivery Address Selector — shown only when Courier Delivery is selected */}
             {fulfillmentType === 'Courier Delivery' && (
-              <div className="space-y-1.5 text-xs">
+              <div className="space-y-2 text-sm">
                 <p className="font-bold text-gray-900">Delivery Address</p>
                 <div className="space-y-1.5">
                   {savedAddresses.map((addr, idx) => (
@@ -700,14 +757,14 @@ function Cart() {
                       key={addr.id}
                       type="button"
                       onClick={() => setSelectedAddressIdx(idx)}
-                      className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
+                      className={`w-full text-left p-3 rounded-lg border transition-colors cursor-pointer ${
                         selectedAddressIdx === idx
                           ? 'border-brand-orange bg-orange-50/60'
-                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                          : 'border-slate-100 bg-white hover:bg-gray-50'
                       }`}
                     >
                       <div className="flex items-center gap-2">
-                        <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
                           selectedAddressIdx === idx ? 'border-brand-orange' : 'border-gray-300'
                         }`}>
                           {selectedAddressIdx === idx && (
@@ -716,8 +773,8 @@ function Cart() {
                         </div>
                         <div className="min-w-0">
                           <span className="font-bold text-gray-800">{addr.label}</span>
-                          {addr.default && <span className="ml-1.5 text-[9px] font-bold text-brand-orange bg-orange-50 border border-orange-200 px-1 py-0.5 rounded uppercase">Default</span>}
-                          <p className="text-gray-500 text-[11px] truncate mt-0.5">{addr.line}</p>
+                          {addr.default && <span className="ml-1.5 text-xs font-semibold text-brand-orange bg-orange-50 px-1.5 py-0.5 rounded uppercase">Default</span>}
+                          <p className="text-gray-500 text-xs truncate mt-0.5">{addr.line}</p>
                         </div>
                       </div>
                     </button>
@@ -728,24 +785,24 @@ function Cart() {
 
             {/* Selected Items List */}
             <div className="space-y-1.5">
-              <p className="text-xs font-bold text-gray-900">Items to Order ({selectedItems.length})</p>
-              <div className="max-h-44 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-2xl px-3 py-1 bg-white scrollbar-none">
+              <p className="text-sm font-bold text-gray-900">Items to Order ({selectedItems.length})</p>
+              <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 rounded-lg px-3 py-1 bg-slate-50 scrollbar-none">
                 {selectedItems.map((item, idx) => {
                   const product = item.product || item
                   const itemPrice = Number(product.price || item.price || 0)
                   const itemQty = Number(item.qty || 1)
                   const variantText = [item.size, item.color?.name].filter(Boolean).join(' • ')
                   return (
-                    <div key={idx} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                    <div key={idx} className="py-2.5 flex items-center justify-between gap-3 text-sm">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <img
-                          src={getImageUrl(product.image)}
+                          src={getImageUrl(item.color?.image || product.images?.[0] || product.image)}
                           alt={product.name}
-                          className="w-9 h-9 rounded-lg object-contain bg-gray-50 p-1 shrink-0"
+                          className="w-10 h-10 rounded-md object-contain bg-white p-1 shrink-0"
                         />
                         <div className="min-w-0">
                           <p className="font-bold text-gray-900 truncate">{product.name}</p>
-                          <p className="text-[10px] text-gray-400">
+                          <p className="text-xs text-gray-500">
                             {itemQty}x {variantText ? `• ${variantText}` : ''} • ₱{itemPrice.toFixed(2)}
                           </p>
                         </div>
@@ -758,7 +815,7 @@ function Cart() {
             </div>
 
             {/* Totals Breakdown */}
-            <div className="p-3.5 bg-orange-50/60 rounded-2xl border border-orange-100 space-y-1 text-xs">
+            <div className="p-4 bg-orange-50/60 rounded-lg space-y-1.5 text-sm">
               <div className="flex justify-between text-gray-600 font-medium">
                 <span>Items Subtotal</span>
                 <span>₱{subtotal.toFixed(2)}</span>
@@ -767,9 +824,9 @@ function Cart() {
                 <span>Fulfillment Fee</span>
                 <span>{shippingFee > 0 ? `₱${shippingFee.toFixed(2)}` : 'FREE (Pickup)'}</span>
               </div>
-              <div className="flex justify-between text-sm font-black text-gray-900 pt-1.5 border-t border-orange-200/60">
+              <div className="flex justify-between items-baseline text-sm font-bold text-gray-900 pt-2 border-t border-orange-200/60">
                 <span>Grand Total</span>
-                <span className="text-base font-black text-brand-orange">₱{grandTotal.toFixed(2)}</span>
+                <span className="text-lg font-bold text-brand-orange">₱{grandTotal.toFixed(2)}</span>
               </div>
             </div>
 
@@ -778,13 +835,13 @@ function Cart() {
               <button
                 type="button"
                 onClick={() => setShowConfirmOrderModal(false)}
-                className="flex-1 py-3 text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer"
+                className="flex-1 py-3 text-sm font-semibold text-gray-600 hover:text-gray-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
               >
-                Back to Cart
+                Back to Bag
               </button>
               <Button
                 onClick={handleConfirmOrder}
-                className="flex-1 py-3 rounded-xl font-black text-xs bg-brand-orange hover:bg-orange-600 text-white shadow-md active:scale-98 transition-all cursor-pointer"
+                className="flex-1 py-3 rounded-lg font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98 transition-all cursor-pointer"
               >
                 Confirm &amp; Place Order
               </Button>

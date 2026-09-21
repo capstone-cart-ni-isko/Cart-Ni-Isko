@@ -5,6 +5,7 @@ import { useCart } from '../hooks/useCart.js'
 import { useWishlist } from '../hooks/useWishlist.js'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
+import ViewAllLink from '../components/ui/ViewAllLink.jsx'
 import QuantityStepper from '../components/ui/QuantityStepper.jsx'
 import PriceTag from '../components/ui/PriceTag.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
@@ -155,7 +156,7 @@ function ProductDetail() {
       return
     }
     addToCart(product, qty, selectedSize, selectedColor)
-    showToast(product.preOrder ? 'Pre-order placed in cart!' : 'Added to cart!')
+    showToast(product.preOrder ? 'Pre-order added to bag!' : 'Added to bag!')
   }
 
   const handleWishlistToggle = () => {
@@ -176,7 +177,7 @@ function ProductDetail() {
     ? 'Out of Stock'
     : product.preOrder
     ? 'Pre-order Now'
-    : 'Add to Cart'
+    : 'Add to Bag'
 
   // Related products
   const relatedProducts = productsData
@@ -581,12 +582,7 @@ function ProductDetail() {
                 <h2 className="text-xl font-black text-gray-900">Complete the BU Look</h2>
                 <p className="text-xs text-gray-400">Official BU merchandise you might like</p>
               </div>
-              <Link
-                to="/shop"
-                className="text-xs font-bold text-brand-orange hover:underline cursor-pointer"
-              >
-                View all →
-              </Link>
+             <ViewAllLink to="/shop">View all</ViewAllLink>
             </div>
 
             <div className="flex gap-4 overflow-x-auto scrollbar-none snap-x snap-mandatory pb-2 md:grid md:grid-cols-4 md:overflow-visible md:snap-none md:pb-0">
@@ -636,7 +632,7 @@ function ProductDetail() {
       <LoginPromptModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
-        message="Sign in to add items to your cart, save favorites, and checkout your BU campus merch."
+        message="Sign in to add items to your cart, save favorites, and checkout your Isko Drips."
       />
     </AppShell>
   )

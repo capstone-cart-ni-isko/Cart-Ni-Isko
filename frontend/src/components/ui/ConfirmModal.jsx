@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import Button from './Button.jsx'
 
 function ConfirmModal({
@@ -12,20 +13,26 @@ function ConfirmModal({
 }) {
   if (!isOpen) return null
 
-  return (
-    <>
-      {/* Backdrop overlay */}
+  return createPortal(
+
+    <div className="fixed inset-0 z-[120000] flex items-center justify-center p-4 isolate">
+
       <div
-        className="fixed inset-0 bg-black/60 z-[99999] backdrop-blur-md transition-opacity duration-300 animate-fade-in"
+        className="absolute inset-0 z-0 bg-black/50"
         onClick={onClose}
+        aria-hidden="true"
       />
-      {/* Centered Modal Card */}
-      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-sm bg-white rounded-lg p-4 border border-slate-200 z-[10000] flex flex-col justify-between animate-scale-in">
+      {/* Panel: always on top, always clickable */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative z-10 w-full max-w-sm bg-white rounded-lg p-5 border border-gray-200 flex flex-col justify-between animate-scale-in pointer-events-auto"
+      >
         <div>
           <h3 className="text-base font-bold text-gray-900 mb-1 leading-tight">
             {title}
           </h3>
-          <p className="text-xs text-gray-600 font-medium leading-relaxed mb-4">
+          <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">
             {message}
           </p>
         </div>
@@ -34,7 +41,7 @@ function ConfirmModal({
           <Button
             variant="secondary"
             onClick={onClose}
-            className="flex-1 h-8 text-xs font-semibold rounded-md"
+            className="flex-1 h-9 text-sm font-semibold rounded-md"
           >
             {cancelText}
           </Button>
@@ -43,7 +50,7 @@ function ConfirmModal({
               onConfirm()
               onClose()
             }}
-            className={`flex-1 h-8 text-xs font-semibold rounded-md text-white ${
+            className={`flex-1 h-9 text-sm font-semibold rounded-md text-white ${
               isDestructive
                 ? 'bg-red-600 hover:bg-red-700 active:bg-red-800'
                 : 'bg-brand-orange hover:bg-brand-orange-dark'
@@ -53,7 +60,8 @@ function ConfirmModal({
           </Button>
         </div>
       </div>
-    </>
+    </div>,
+    document.body
   )
 }
 

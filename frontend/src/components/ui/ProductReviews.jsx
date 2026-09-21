@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useToast } from '../../hooks/useToast.js'
 import LoginPromptModal from './LoginPromptModal.jsx'
+import ViewAllLink from './ViewAllLink.jsx'
 import { CloseIcon } from './Icons.jsx'
 
 export default function ProductReviews({ product }) {
@@ -64,13 +65,7 @@ export default function ProductReviews({ product }) {
           </span>
         </h2>
 
-        <button
-          type="button"
-          onClick={handleOpenWrite}
-          className="w-max text-xs font-bold text-brand-orange hover:underline cursor-pointer flex items-center gap-1"
-        >
-          <span>View all reviews →</span>
-        </button>
+        <ViewAllLink onClick={handleOpenWrite}>View all reviews</ViewAllLink>
       </div>
 
       {hasReviews ? (

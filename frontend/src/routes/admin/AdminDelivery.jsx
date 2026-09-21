@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 
 // ─── Delivery Workflow ─────────────────────────────────────────────────────
@@ -99,8 +99,6 @@ const ISSUE_ORDERS = [
   },
 ]
 
-const COURIERS = ['Jun M.', 'Ana P.', 'Carlo D.', 'Bea S.', 'Erika L.']
-
 // ─── Avatar helper ─────────────────────────────────────────────────────────
 function Avatar({ initials, size = 'sm' }) {
   const colors = {
@@ -123,15 +121,14 @@ function Avatar({ initials, size = 'sm' }) {
   )
 }
 
-// ─── Assign Courier Modal ──────────────────────────────────────────────────
-function AssignCourierModal({ order, onClose, onAssign }) {
-  const [selected, setSelected] = useState('')
+// ─── Dispatch Confirmation Modal ───────────────────────────────────────────
+function DispatchConfirmModal({ order, onClose, onConfirm }) {
   return (
     <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
-      <div className="bg-white rounded-xl border border-slate-200 w-full max-w-sm shadow-xl animate-scale-in overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 w-full max-w-sm animate-scale-in overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Assign Courier</h3>
+            <h3 className="text-sm font-bold text-slate-900">Dispatch this order?</h3>
             <p className="text-xs text-slate-500 mt-0.5">{order?.customer} · {order?.id}</p>
           </div>
           <button type="button" onClick={onClose} className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">
@@ -140,37 +137,17 @@ function AssignCourierModal({ order, onClose, onAssign }) {
             </svg>
           </button>
         </div>
-        <div className="px-5 py-4 space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3">Available Couriers</p>
-          {COURIERS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setSelected(c)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer
-                ${selected === c ? 'bg-orange-50 border-brand-orange text-brand-orange font-bold' : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'}`}
-            >
-              <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 shrink-0">
-                {c.split(' ').map(w => w[0]).join('')}
-              </div>
-              {c}
-              {selected === c && (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-brand-orange ml-auto">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
-            </button>
-          ))}
+        <div className="px-5 py-4">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            A delivery request will be sent to the third-party courier (Lalamove) for pickup at the store.
+            This cannot be undone once the courier accepts the booking.
+          </p>
+          <p className="text-[11px] text-slate-400 mt-2 truncate">Deliver to: {order?.address}</p>
         </div>
         <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/40">
           <button type="button" onClick={onClose} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer">Cancel</button>
-          <button
-            type="button"
-            disabled={!selected}
-            onClick={() => selected && onAssign(selected)}
-            className={`h-8 px-4 rounded-md text-xs font-bold transition-colors cursor-pointer ${selected ? 'bg-brand-orange hover:bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-          >
-            Dispatch
+          <button type="button" onClick={onConfirm} className="h-8 px-4 rounded-md text-xs font-bold bg-brand-orange hover:bg-orange-600 text-white transition-colors cursor-pointer">
+            Confirm dispatch
           </button>
         </div>
       </div>
@@ -201,23 +178,6 @@ function OverviewTab({ onGoToQueue, onGoToTransit }) {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={onGoToQueue} className="h-8 px-4 bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold rounded-md transition-colors cursor-pointer flex items-center gap-2">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-            <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
-            <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
-          </svg>
-          Dispatch Queue
-        </button>
-        <button type="button" onClick={onGoToTransit} className="h-8 px-4 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer flex items-center gap-2">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
-          Track In Transit
-        </button>
       </div>
 
       {/* Active Deliveries Summary */}
@@ -276,7 +236,8 @@ function OverviewTab({ onGoToQueue, onGoToTransit }) {
 }
 
 // ─── Tab: Queue (Ready for Dispatch) ──────────────────────────────────────
-function QueueTab({ onAssign }) {
+function QueueTab({ onDispatch, dispatchingId, onOpenOrder, dispatchedIds = [] }) {
+  const queue = DISPATCH_QUEUE.filter((o) => !dispatchedIds.includes(o.id))
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3 bg-amber-50 border border-amber-200/60 rounded-lg px-4 py-3">
@@ -285,11 +246,11 @@ function QueueTab({ onAssign }) {
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
           </svg>
           <p className="text-xs font-medium text-amber-800">
-            These orders are packed and ready for courier dispatch. Assign a courier and dispatch to begin delivery.
+            These orders are packed and ready for courier dispatch. Dispatch to begin third-party courier delivery.
           </p>
         </div>
         <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[11px] font-bold border border-amber-200/60">
-          {DISPATCH_QUEUE.length} orders
+          {queue.length} orders
         </span>
       </div>
 
@@ -302,14 +263,17 @@ function QueueTab({ onAssign }) {
                 <th className="px-4 py-3">Order #</th>
                 <th className="px-4 py-3">Delivery Address</th>
                 <th className="px-4 py-3">Items</th>
-                <th className="px-4 py-3">Fee &amp; Lock Status</th>
-                <th className="px-4 py-3">Ready At</th>
+                <th className="px-4 py-3">Fee Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {DISPATCH_QUEUE.map((order) => (
-                <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
+              {queue.map((order) => (
+                <tr
+                  key={order.id}
+                  onClick={() => onOpenOrder(order)}
+                  className="hover:bg-slate-50/50 transition-colors cursor-pointer"
+                >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <Avatar initials={order.avatar} />
@@ -319,7 +283,16 @@ function QueueTab({ onAssign }) {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 font-extrabold text-slate-800">{order.id}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onOpenOrder(order) }}
+                      className="font-extrabold text-slate-800 hover:underline cursor-pointer"
+                    >
+                      {order.id}
+                    </button>
+                    <p className="text-[10px] text-slate-400 font-normal mt-0.5">Ready at {order.readyAt}</p>
+                  </td>
                   <td className="px-4 py-3 max-w-[180px]">
                     <p className="text-slate-700 font-medium truncate">{order.address}</p>
                   </td>
@@ -328,42 +301,20 @@ function QueueTab({ onAssign }) {
                     <p className="text-[10px] text-slate-400 mt-0.5 max-w-[140px] truncate">{order.itemLabel}</p>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="space-y-0.5">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                        ₱280 Paid
-                      </span>
-                      <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5 text-slate-500"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        Locked
-                      </p>
-                    </div>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                      ₱280 Paid
+                    </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 text-slate-600 font-medium">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-400">
-                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                      </svg>
-                      {order.readyAt}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end">
                       <button
                         type="button"
-                        onClick={() => onAssign(order)}
-                        className="h-8 px-3 bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold rounded-md transition-colors cursor-pointer flex items-center gap-1.5"
+                        disabled={dispatchingId === order.id}
+                        onClick={(e) => { e.stopPropagation(); onDispatch(order) }}
+                        className="h-8 px-3 bg-brand-orange hover:bg-orange-600 disabled:opacity-70 disabled:cursor-wait text-white text-xs font-bold rounded-md transition-colors cursor-pointer"
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                          <rect x="1" y="3" width="15" height="13"/>
-                          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
-                          <circle cx="5.5" cy="18.5" r="2.5"/>
-                          <circle cx="18.5" cy="18.5" r="2.5"/>
-                        </svg>
-                        Dispatch
+                        {dispatchingId === order.id ? 'Dispatching...' : 'Dispatch'}
                       </button>
-                      <button type="button" className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer">View Order</button>
-                      <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer text-sm font-bold">⋯</button>
                     </div>
                   </td>
                 </tr>
@@ -632,7 +583,9 @@ const TABS = ['Overview', 'Queue', 'In Transit', 'Completed', 'Issues']
 
 export default function AdminDelivery() {
   const [activeTab, setActiveTab] = useState('Overview')
-  const [assignModal, setAssignModal] = useState({ open: false, order: null })
+  const [confirmOrder, setConfirmOrder] = useState(null)
+  const [dispatchingId, setDispatchingId] = useState(null)
+  const [dispatchedIds, setDispatchedIds] = useState([])
   const [issueOrders, setIssueOrders] = useState(ISSUE_ORDERS)
   const [toast, setToast] = useState('')
 
@@ -641,13 +594,22 @@ export default function AdminDelivery() {
     setTimeout(() => setToast(''), 3500)
   }
 
-  const openAssignModal = (order) => setAssignModal({ open: true, order })
-  const closeAssignModal = () => setAssignModal({ open: false, order: null })
+  // Order # / row click opens the order detail (toast placeholder until a detail drawer exists)
+  const handleOpenOrder = (order) => showToast(`Opening order ${order.id}`)
 
-  const handleAssign = (courier) => {
-    const o = assignModal.order
-    showToast(`${o?.id} dispatched to ${courier}`)
-    closeAssignModal()
+  // Dispatch click asks for confirmation first, then calls the 3PL dispatch request
+  const handleDispatchClick = (order) => setConfirmOrder(order)
+
+  const handleConfirmDispatch = () => {
+    const order = confirmOrder
+    if (!order) return
+    setConfirmOrder(null)
+    setDispatchingId(order.id)
+    setTimeout(() => {
+      setDispatchingId(null)
+      setDispatchedIds((prev) => [...prev, order.id])
+      showToast(`${order.id} dispatched via Lalamove`)
+    }, 1200)
   }
 
   const handleRetryBooking = (order) => {
@@ -663,7 +625,7 @@ export default function AdminDelivery() {
     'Issues':      (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>),
   }
 
-  const TAB_COUNTS = { 'Overview': null, 'Queue': 5, 'In Transit': 4, 'Completed': 5, 'Issues': issueOrders.length }
+  const TAB_COUNTS = { 'Overview': null, 'Queue': DISPATCH_QUEUE.length - dispatchedIds.length, 'In Transit': 4, 'Completed': 5, 'Issues': issueOrders.length }
 
   return (
     <AdminLayout>
@@ -676,12 +638,12 @@ export default function AdminDelivery() {
           </div>
         )}
 
-        {/* Assign Courier Modal */}
-        {assignModal.open && (
-          <AssignCourierModal
-            order={assignModal.order}
-            onClose={closeAssignModal}
-            onAssign={handleAssign}
+        {/* Dispatch Confirmation */}
+        {confirmOrder && (
+          <DispatchConfirmModal
+            order={confirmOrder}
+            onClose={() => setConfirmOrder(null)}
+            onConfirm={handleConfirmDispatch}
           />
         )}
 
@@ -689,10 +651,19 @@ export default function AdminDelivery() {
         <div className="pb-4">
           {/* Breadcrumb */}
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-2">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
             <span>Fulfillment</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            <button type="button" onClick={() => setActiveTab('Overview')} className="hover:text-slate-600 transition-colors cursor-pointer">Delivery</button>
+            {activeTab !== 'Overview' && (
+              <>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+                <span className="text-slate-600 font-semibold">{activeTab}</span>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -741,7 +712,7 @@ export default function AdminDelivery() {
         {/* ── Tab Content ── */}
         <div className="flex-1 overflow-y-auto pb-6 scrollbar-none">
           {activeTab === 'Overview'   && <OverviewTab   onGoToQueue={() => setActiveTab('Queue')} onGoToTransit={() => setActiveTab('In Transit')} />}
-          {activeTab === 'Queue'      && <QueueTab      onAssign={openAssignModal} />}
+          {activeTab === 'Queue'      && <QueueTab      onDispatch={handleDispatchClick} dispatchingId={dispatchingId} onOpenOrder={handleOpenOrder} dispatchedIds={dispatchedIds} />}
           {activeTab === 'In Transit' && <InTransitTab />}
           {activeTab === 'Completed'  && <CompletedTab />}
           {activeTab === 'Issues'     && <IssuesTab     issueOrders={issueOrders} onRetryBooking={handleRetryBooking} />}

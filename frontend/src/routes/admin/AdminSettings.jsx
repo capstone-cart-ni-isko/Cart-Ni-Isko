@@ -34,7 +34,6 @@ const NAV_SECTIONS = [
   {
     group: 'Store',
     items: [
-      { id: 'store-info',        label: 'Store Information' },
       { id: 'store-operations',  label: 'Store Operations'  },
       { id: 'pickup-delivery',   label: 'Pickup & Delivery' },
     ],
@@ -131,15 +130,7 @@ export default function AdminSettings() {
 
   const storeSettings = adminState?.storeSettings || {}
 
-  const [activeSection, setActiveSection] = useState('store-info')
-
-  // Store Information
-  const [storeName, setStoreName]             = useState(storeSettings.storeName        || 'Tindahan ni Nisko')
-  const [storeDescription, setStoreDescription] = useState(storeSettings.storeDescription || 'Your campus store for school essentials, apparel, supplies, and more.')
-  const [contactEmail, setContactEmail]       = useState(storeSettings.contactEmail     || 'support@tindahan.nisko.edu.ph')
-  const [contactNumber, setContactNumber]     = useState(storeSettings.contactNumber    || '+63 9XX XXX XXXX')
-  const [storeLocation, setStoreLocation]     = useState(storeSettings.storeLocation    || 'BU Main Campus')
-  const [storeAddress, setStoreAddress]       = useState(storeSettings.storeAddress     || 'Bicol University Main Campus, Legazpi City, Albay')
+  const [activeSection, setActiveSection] = useState('store-operations')
 
   // Store Operations
   const [isStoreOpen, setIsStoreOpen]           = useState(storeSettings.isStoreOpen         ?? true)
@@ -151,11 +142,6 @@ export default function AdminSettings() {
 
   const mark = () => setHasUnsavedChanges(true)
 
-  const handleFieldChange = (setter) => (e) => {
-    setter(e.target.value)
-    mark()
-  }
-
   const handleToggle = (setter, current, label) => (val) => {
     setter(val)
     mark()
@@ -163,12 +149,6 @@ export default function AdminSettings() {
   }
 
   const handleDiscard = () => {
-    setStoreName(storeSettings.storeName        || 'Tindahan ni Nisko')
-    setStoreDescription(storeSettings.storeDescription || 'Your campus store for school essentials, apparel, supplies, and more.')
-    setContactEmail(storeSettings.contactEmail  || 'support@tindahan.nisko.edu.ph')
-    setContactNumber(storeSettings.contactNumber || '+63 9XX XXX XXXX')
-    setStoreLocation(storeSettings.storeLocation || 'BU Main Campus')
-    setStoreAddress(storeSettings.storeAddress  || 'Bicol University Main Campus, Legazpi City, Albay')
     setIsStoreOpen(storeSettings.isStoreOpen    ?? true)
     setAcceptOnlineOrders(storeSettings.acceptOnlineOrders ?? true)
     setAllowInStorePickup(storeSettings.allowInStorePickups ?? true)
@@ -179,8 +159,6 @@ export default function AdminSettings() {
 
   const handleSave = () => {
     updateStoreSettings({
-      storeName, storeDescription, contactEmail, contactNumber,
-      storeLocation, storeAddress,
       isStoreOpen, acceptOnlineOrders,
       allowInStorePickups: allowInStorePickup,
       allowDelivery,
@@ -188,11 +166,6 @@ export default function AdminSettings() {
     setHasUnsavedChanges(false)
     showToast('Settings saved successfully!', 'success')
   }
-
-  // ── Input & textarea shared classes ────────────────────────────────────
-  const inputCls = 'w-full h-10 px-3.5 rounded-lg border border-slate-200 text-sm text-slate-900 bg-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all'
-  const textareaCls = 'w-full p-3.5 rounded-lg border border-slate-200 text-sm text-slate-900 bg-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all resize-none'
-  const labelCls = 'block text-xs font-semibold text-slate-700 mb-1.5'
 
   return (
     <AdminLayout>
@@ -245,102 +218,7 @@ export default function AdminSettings() {
           {/* RIGHT: Main Content */}
           <main className="flex-1 min-w-0 space-y-5">
 
-            {/* ── Card 1: Store Information ── */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center flex-shrink-0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4.5 h-4.5 text-brand-orange">
-                      <path d="M2 9h20" /><path d="M2 9l3-6h14l3 6" />
-                      <path d="M4 9v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9" />
-                      <path d="M9 22V14h6v8" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-gray-900">Store Information</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Manage the basic information customers and staff use to identify your store.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="px-6 py-6 space-y-5">
-                {/* Store Name */}
-                <div>
-                  <label className={labelCls}>Store Name</label>
-                  <input
-                    type="text"
-                    value={storeName}
-                    onChange={handleFieldChange(setStoreName)}
-                    placeholder="Tindahan ni Nisko"
-                    className={inputCls}
-                  />
-                </div>
-
-                {/* Store Description */}
-                <div>
-                  <label className={labelCls}>Store Description</label>
-                  <textarea
-                    rows={3}
-                    value={storeDescription}
-                    onChange={handleFieldChange(setStoreDescription)}
-                    placeholder="Describe your store..."
-                    className={textareaCls}
-                  />
-                </div>
-
-                {/* Contact Email & Number */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Contact Email</label>
-                    <input
-                      type="email"
-                      value={contactEmail}
-                      onChange={handleFieldChange(setContactEmail)}
-                      placeholder="support@tindahan.nisko.edu.ph"
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Contact Number</label>
-                    <input
-                      type="text"
-                      value={contactNumber}
-                      onChange={handleFieldChange(setContactNumber)}
-                      placeholder="+63 9XX XXX XXXX"
-                      className={inputCls}
-                    />
-                  </div>
-                </div>
-
-                {/* Store Location & Address */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Store Location</label>
-                    <input
-                      type="text"
-                      value={storeLocation}
-                      onChange={handleFieldChange(setStoreLocation)}
-                      placeholder="BU Main Campus"
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Store Address</label>
-                    <input
-                      type="text"
-                      value={storeAddress}
-                      onChange={handleFieldChange(setStoreAddress)}
-                      placeholder="Bicol University Main Campus, Legazpi City, Albay"
-                      className={inputCls}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Card 2: Store Operations ── */}
+            {/* ── Store Operations ── */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
               <div className="px-6 py-5 border-b border-slate-100">
                 <div className="flex items-center gap-3">
@@ -390,7 +268,7 @@ export default function AdminSettings() {
                   {[
                     {
                       label: 'Accept Online Orders',
-                      desc: 'Cart checkout available',
+                      desc: 'Bag checkout available',
                       checked: acceptOnlineOrders,
                       setter: setAcceptOnlineOrders,
                       name: 'Online Orders',
@@ -429,7 +307,7 @@ export default function AdminSettings() {
               </div>
             </div>
 
-            {/* ── Row 3: Preview Cards ── */}
+            {/* ── Preview Cards ── */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <PreviewCard
                 title="Order Preferences"

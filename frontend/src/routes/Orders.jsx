@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
-import AppShell from '../components/layout/AppShell.jsx'
+import AccountLayout from '../components/layout/AccountLayout.jsx'
+import PageTitle from '../components/ui/PageTitle.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
@@ -45,7 +46,10 @@ function Orders() {
   }
 
   return (
-    <AppShell>
+    <AccountLayout>
+      <div className="hidden md:block">
+        <PageTitle title="My Orders" subtitle="Track and manage your merchandise orders" />
+      </div>
       <PageHeader title="My Orders" backTo="/profile" />
 
       {/* Tabs Filter Bar (Sticky) */}
@@ -320,7 +324,7 @@ function Orders() {
           })
         )}
       </div>
-    </AppShell>
+    </AccountLayout>
   )
 }
 

@@ -1,18 +1,15 @@
-import { Link, useNavigate } from 'react-router-dom'
-import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth.js'
+import { useToast } from '../../hooks/useToast.js'
+import ConfirmModal from '../ui/ConfirmModal.jsx'
+import { useState } from 'react'
 import {
   HelpIcon,
   SettingsIcon,
+  UserIcon,
+  BellIcon,
+  LogOutIcon,
 } from '../ui/Icons.jsx'
-
-function HomeNavIcon({ className = 'w-4.5 h-4.5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  )
-}
 
 function OrdersNavIcon({ className = 'w-4.5 h-4.5' }) {
   return (
@@ -50,11 +47,10 @@ function MapPinNavIcon({ className = 'w-4.5 h-4.5' }) {
   )
 }
 
-function WalletNavIcon({ className = 'w-4.5 h-4.5' }) {
+function ShieldNavIcon({ className = 'w-4.5 h-4.5' }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="2" y="5" width="20" height="14" rx="2" />
-      <line x1="2" y1="10" x2="22" y2="10" />
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   )
 }
@@ -68,78 +64,99 @@ function HeadsetIcon({ className = 'w-4 h-4' }) {
   )
 }
 
-export default function DesktopAccountSidebar({ activeTab = 'overview', onTabChange = null }) {
+const navItems = [
+  { id: 'overview', label: 'Overview', icon: UserIcon, path: '/profile', match: (p) => p === '/profile' },
+  { id: 'account', label: 'Account Information', icon: UserIcon, path: '/account', match: (p) => p.startsWith('/account') },
+  { id: 'orders', label: 'My Orders', icon: OrdersNavIcon, path: '/orders', match: (p) => p.startsWith('/orders') },
+  { id: 'appointments', label: 'My Appointments', icon: CalendarNavIcon, path: '/appointments', match: (p) => p.startsWith('/appointments') },
+  { id: 'saved', label: 'Saved Items', icon: StarNavIcon, path: '/wishlist', match: (p) => p.startsWith('/wishlist') },
+  { id: 'security', label: 'Security & Password', icon: ShieldNavIcon, path: '/security', match: (p) => p.startsWith('/security') || p.startsWith('/settings/change-password') },
+  { id: 'address', label: 'My Addresses', icon: MapPinNavIcon, path: '/settings/address', match: (p) => p.startsWith('/settings/address') },
+  { id: 'notifications', label: 'Notifications', icon: BellIcon, path: '/settings/notifications', match: (p) => p.startsWith('/settings/notifications') },
+  { id: 'settings', label: 'Settings', icon: SettingsIcon, path: '/settings', match: (p) => p === '/settings' },
+  { id: 'help', label: 'Help & Support', icon: HelpIcon, path: '/help', match: (p) => p.startsWith('/help') },
+]
+
+export default function DesktopAccountSidebar() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { logout } = useAuth()
+  const { showToast } = useToast()
+  const [showLogout, setShowLogout] = useState(false)
 
-  const navItems = [
-    { id: 'overview', label: 'Overview', icon: HomeNavIcon, path: '/profile' },
-    { id: 'orders', label: 'My Orders', icon: OrdersNavIcon, path: '/orders' },
-    { id: 'appointments', label: 'My Appointments', icon: CalendarNavIcon, path: '/appointments' },
-    { id: 'saved', label: 'Saved Items', icon: StarNavIcon, path: '/wishlist' },
-    { id: 'settings', label: 'Account Settings', icon: SettingsIcon, path: '/settings' },
-    { id: 'help', label: 'Help & Support', icon: HelpIcon, path: '/help' },
-  ]
-
-  const handleClick = (item) => {
-    if (onTabChange) {
-      onTabChange(item.id)
-    } else {
-      navigate(item.path)
-    }
+  const handleLogout = () => {
+    logout()
+    showToast('Signed out successfully')
+    navigate('/')
   }
 
   return (
-    <aside className="w-60 shrink-0 flex flex-col justify-between space-y-5">
-      {/* Top Nav Card */}
-      <div className="bg-white rounded-3xl p-3.5 border border-gray-100/90 shadow-xs">
-        {/* Brand logo at top of sidebar */}
-        <div className="px-3 pt-2 pb-3 mb-1 border-b border-gray-50 flex items-center">
-          <Link to="/home" className="flex items-center">
-            <img src={logo} alt="Tindahan ni Isko" className="h-8 object-contain" />
+    <>
+      <aside className="w-full shrink-0 flex flex-col space-y-4">
+        <div className="bg-white rounded-xl p-4 border border-gray-100">
+          <div className="px-2 pt-1 pb-2 mb-1 border-b border-gray-100">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Account Menu</p>
+          </div>
+
+          <nav className="space-y-1">
+            {navItems.map(({ id, label, icon: Icon, path, match }) => {
+              const isActive = match(location.pathname)
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => navigate(path)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors text-left ${
+                    isActive
+                      ? 'bg-[#FFF4EC] text-[#FF6A00]'
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#FF6A00]' : 'text-gray-400'}`} />
+                  <span className="truncate">{label}</span>
+                </button>
+              )
+            })}
+          </nav>
+
+          <div className="pt-2 mt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setShowLogout(true)}
+              className="w-full text-left flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+            >
+              <LogOutIcon className="w-4 h-4 text-rose-500" />
+              <span>Log Out</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
+          <div>
+            <p className="font-bold text-sm text-gray-900">Need Help?</p>
+            <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+              We're here to help with your orders and account.
+            </p>
+          </div>
+          <Link
+            to="/help"
+            className="w-full py-2 px-3 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF6A00] font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
+          >
+            <HeadsetIcon className="w-4 h-4 text-[#FF6A00]" />
+            <span>Contact Support</span>
           </Link>
         </div>
+      </aside>
 
-        <nav className="space-y-0.5">
-          {navItems.map(({ id, label, icon: Icon, path }) => {
-            const isActive = activeTab === id
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleClick({ id, path })}
-                className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-2xl text-sm font-semibold transition-all text-left relative ${
-                  isActive
-                    ? 'bg-[#FFF4EC] text-[#FF6A00] font-extrabold'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-[#FF6A00] rounded-r-full" />
-                )}
-                <Icon className={`w-4.5 h-4.5 shrink-0 ${isActive ? 'text-[#FF6A00]' : 'text-gray-400'}`} />
-                <span className="truncate">{label}</span>
-              </button>
-            )
-          })}
-        </nav>
-      </div>
-
-      {/* Need Help? Card at bottom */}
-      <div className="bg-white rounded-3xl p-5 border border-gray-100/90 shadow-xs space-y-3">
-        <div>
-          <p className="font-extrabold text-base text-gray-900">Need Help?</p>
-          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-            We're here to help with your orders and account.
-          </p>
-        </div>
-        <Link
-          to="/help"
-          className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-white hover:bg-orange-50/60 text-[#FF6A00] font-bold text-sm flex items-center justify-center gap-2 transition-colors shadow-2xs"
-        >
-          <HeadsetIcon className="w-4 h-4 text-[#FF6A00]" />
-          <span>Contact Support</span>
-        </Link>
-      </div>
-    </aside>
+      <ConfirmModal
+        isOpen={showLogout}
+        onClose={() => setShowLogout(false)}
+        onConfirm={handleLogout}
+        title="Log Out?"
+        message="Are you sure you want to sign out of your Tindahan ni Isko account?"
+        confirmText="Log Out"
+        isDestructive
+      />
+    </>
   )
 }

@@ -48,7 +48,7 @@ function DesktopHeader() {
 
   return (
     <header className="hidden md:block w-full bg-white border-b border-gray-100 sticky top-0 z-40">
-      <div className="w-full max-w-[1600px] mx-auto px-8 lg:px-12 h-20 flex items-center justify-between gap-8">
+      <div className="w-full max-w-7xl mx-auto px-8 lg:px-10 h-16 flex items-center justify-between gap-6">
         {/* Logo Left */}
         <Link to="/home" className="flex items-center shrink-0">
           <img src={logo} alt="Tindahan ni Isko" className="h-11 md:h-12 object-contain hover:opacity-90 transition-opacity" />
@@ -119,7 +119,7 @@ function DesktopHeader() {
               className={`p-2.5 rounded-xl hover:bg-slate-100 transition-all relative flex items-center justify-center ${
                 isCartPage ? 'bg-slate-100' : ''
               }`}
-              aria-label="Cart"
+              aria-label="Shopping bag"
             >
               <img
                 src={cartIcon}
@@ -135,7 +135,7 @@ function DesktopHeader() {
             </Link>
             {/* Tooltip */}
             <span className="pointer-events-none absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[11px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
-              Cart
+              Bag
             </span>
           </div>
 
