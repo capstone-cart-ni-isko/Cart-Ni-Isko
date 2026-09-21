@@ -8,14 +8,13 @@ import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import searchIcon from '../assets/icons/common/search.svg'
 import notificationIcon from '../assets/icons/common/notification.svg'
 import avatarImg from '../assets/avatar.png'
-import carouselImg1 from '../assets/Images/carousel-1.png'
-import carouselImg2 from '../assets/Images/carousel-2.png'
-import carouselImg3 from '../assets/Images/carousel-3.png'
-import shirtCategoryImg from '../assets/Images/shirt.png'
-import hoodieCategoryImg from '../assets/Images/hoodie.png'
-import varsityCategoryImg from '../assets/Images/varsity.png'
-import accessoriesCategoryImg from '../assets/Images/accessories.png'
-import ViewAllLink from '../components/ui/ViewAllLink.jsx'
+import carouselImg1 from '../assets/Images/unnamed (1).png'
+import carouselImg2 from '../assets/Images/unnamed (2).png'
+import carouselImg3 from '../assets/Images/unnamed (3).png'
+import shirtCategoryImg from '../assets/Images/unnamed (11).png'
+import hoodieCategoryImg from '../assets/Images/unnamed (5).png'
+import varsityCategoryImg from '../assets/Images/unnamed (12).png'
+import accessoriesCategoryImg from '../assets/Images/unnamed (6).png'
 import {
   UserIcon,
   HeartIcon,
@@ -198,7 +197,7 @@ function Home() {
 
   // Get Featured products: 4 on mobile, 8 on desktop
   const featuredProductsMobile = productsData.slice(0, 4)
-  const featuredProductsDesktop = productsData.slice(0, 10)
+  const featuredProductsDesktop = productsData.slice(0, 8)
 
   return (
     <AppShell>
@@ -318,7 +317,9 @@ function Home() {
         <div className="px-4 pt-6 space-y-3">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Shop by Category</h2>
-            <ViewAllLink to="/shop">See all</ViewAllLink>
+            <Link to="/shop" className="text-xs font-black text-brand-orange hover:underline">
+              See all
+            </Link>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -357,7 +358,9 @@ function Home() {
         <div className="px-4 pt-6 space-y-4">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-base font-extrabold text-gray-900 tracking-wide">Featured Products</h2>
-            <ViewAllLink to="/shop">See all</ViewAllLink>
+            <Link to="/shop" className="text-xs font-black text-brand-orange hover:underline">
+              See all
+            </Link>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -506,7 +509,9 @@ function Home() {
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Shop by Category</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">Explore official merchandise crafted for BUeños</p>
             </div>
-            <ViewAllLink to="/shop">Browse all</ViewAllLink>
+            <Link to="/shop" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
+              Browse all →
+            </Link>
           </div>
 
           <div className="grid grid-cols-4 gap-6">
@@ -551,10 +556,12 @@ function Home() {
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Featured Products</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">Top picks and popular campus designs</p>
             </div>
-            <ViewAllLink to="/shop">See all</ViewAllLink>
+            <Link to="/shop" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
+              See all →
+            </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-5">
+          <div className="grid grid-cols-4 gap-6">
             {featuredProductsDesktop.map((prod) => (
               <ProductCard key={prod.id} product={prod} />
             ))}
