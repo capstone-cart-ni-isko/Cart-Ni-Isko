@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
-import AppShell from '../components/layout/AppShell.jsx'
+import AccountLayout from '../components/layout/AccountLayout.jsx'
 import { mockUser } from '../data/mockUser.js'
 import avatarImg from '../assets/avatar.png'
 import hoodieImg from '../assets/Images/unnamed (11).png'
@@ -143,7 +143,7 @@ function CheckmarkCircleIcon({ className = 'w-8 h-8' }) {
   )
 }
 
-export default function Appointments() {
+function Appointments() {
   const { currentUser } = useAuth()
   const navigate = useNavigate()
   const [activeFilter, setActiveFilter] = useState('all')
@@ -169,7 +169,7 @@ export default function Appointments() {
   ]
 
   return (
-    <AppShell>
+    <AccountLayout>
       {/* ── MOBILE VIEW (< md) matching Image 1 ── */}
       <div className="md:hidden pb-28 bg-[#F8F9FA] min-h-dvh">
         {/* Mobile Header: Logo Left, Search + Hamburger Right */}
@@ -512,8 +512,8 @@ export default function Appointments() {
         </div>
       </div>
 
-      {/* ── DESKTOP VIEW (No Sidebar) ── */}
-      <div className="hidden md:block w-full max-w-5xl mx-auto space-y-5 py-2 animate-fade-in">
+      {/* ── DESKTOP VIEW ── */}
+      <div className="hidden md:block w-full space-y-4 py-1 animate-fade-in">
         {/* Top Profile Banner - Compact */}
         <div className="rounded-lg p-4 md:py-4 md:px-5 flex items-center justify-between text-white relative overflow-hidden bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
           <div className="absolute inset-0 opacity-[0.04] select-none pointer-events-none flex items-center justify-center">
@@ -837,7 +837,9 @@ export default function Appointments() {
               </div>
             </div>
           </div>
-        </div>
-    </AppShell>
+      </div>
+    </AccountLayout>
   )
 }
+
+export default Appointments

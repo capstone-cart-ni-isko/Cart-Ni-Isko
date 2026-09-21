@@ -192,7 +192,7 @@ function SignIn() {
                 placeholder="0912345678"
                 value={form.phone}
                 onChange={handleChange}
-                className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
+                className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
               />
               <p className="text-xs text-gray-400 mt-2 font-medium">
                 We'll send a verification code to this number.
@@ -210,7 +210,7 @@ function SignIn() {
                   placeholder="Create password"
                   value={form.password}
                   onChange={handleChange}
-                  className="w-full h-12 px-4 pr-12 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
+                  className="w-full h-12 px-4 pr-12 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
                 />
                 <button
                   type="button"
@@ -250,3 +250,4 @@ function SignIn() {
 }
 
 export default SignIn
+

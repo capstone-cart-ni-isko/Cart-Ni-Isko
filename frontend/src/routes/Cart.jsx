@@ -277,7 +277,7 @@ function Cart() {
         }
       />
 
-      <div className="px-4 py-4 pb-44 md:px-0 md:py-2 lg:pb-16 animate-fade-in max-w-7xl mx-auto">
+      <div className="px-4 py-4 pb-44 md:px-0 md:py-2 lg:pb-16 animate-fade-in max-w-5xl mx-auto">
         {/* Desktop Top Nav & Page Title (item count beside Shopping Bag) */}
         <div className="hidden lg:flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-4">

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import AppShell from '../components/layout/AppShell.jsx'
+import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import { mockUser } from '../data/mockUser.js'
 import collegesData from '../data/colleges.json'
@@ -100,7 +100,7 @@ function AccountInfo() {
   const selectClasses = 'w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer transition-all appearance-none'
 
   return (
-    <AppShell>
+    <AccountLayout>
       {/* ── MOBILE LAYOUT ── */}
       <div className="md:hidden px-4 pb-28 animate-fade-in">
         <div className="-mx-4 -mt-0 mb-4">
@@ -190,7 +190,7 @@ function AccountInfo() {
       </div>
 
       {/* ── DESKTOP LAYOUT ── */}
-      <div className="hidden md:block w-full max-w-4xl mx-auto space-y-6 py-4 animate-fade-in">
+      <div className="hidden md:block w-full space-y-5 py-1 animate-fade-in">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm">
           <Link to="/settings" className="text-gray-400 hover:text-gray-600 transition-colors">Account Settings</Link>
@@ -320,7 +320,7 @@ function AccountInfo() {
             </div>
           </form>
         </div>
-    </AppShell>
+    </AccountLayout>
   )
 }
 

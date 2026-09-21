@@ -89,6 +89,7 @@ const shopCategories = [
 ]
 
 function ProfileMenu({ open, onClose, user, onLogout }) {
+  const navigate = useNavigate()
   if (!open) return null
 
   return (
@@ -149,6 +150,7 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
                   onClick={() => {
                     onLogout()
                     onClose()
+                    navigate('/signin')
                   }}
                   className="w-full text-left flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all"
                 >

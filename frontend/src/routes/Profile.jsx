@@ -212,7 +212,7 @@ function Profile() {
   const handleLogout = () => {
     logout()
     showToast('Signed out successfully')
-    navigate('/')
+    navigate('/signin')
   }
 
   return (
@@ -234,12 +234,6 @@ function Profile() {
               <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white">
                 3
               </span>
-            </Link>
-            <Link to="/account" className="p-1 text-gray-700 hover:text-brand-orange" aria-label="Account">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
             </Link>
           </div>
         </div>

@@ -29,10 +29,10 @@ function AccountLayout({ children, className = '' }) {
 
       <main className="flex-1 flex flex-col w-full min-h-[calc(100vh-80px)]">
         <div
-          className={`app-container relative flex-1 w-full bg-[#F8F9FA] max-w-7xl mx-auto px-4 md:px-8 lg:px-10 md:py-6 lg:flex lg:items-start lg:gap-6 ${className}`}
+          className={`app-container relative flex-1 w-full bg-[#F8F9FA] max-w-7xl mx-auto px-4 md:px-6 lg:px-8 md:py-6 lg:flex lg:items-start lg:gap-6 ${className}`}
         >
           {/* Sidebar stays visible while navigating between account pages (desktop only) */}
-          <div className="hidden lg:block w-64 shrink-0 sticky top-24 self-start">
+          <div className="hidden lg:block w-64 shrink-0 sticky top-18 self-start">
             <DesktopAccountSidebar />
           </div>
 

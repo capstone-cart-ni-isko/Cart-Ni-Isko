@@ -76,7 +76,7 @@ function Welcome() {
 
           <Link
             to="/signin"
-            className="block w-full h-12 leading-[2.75rem] text-center border border-gray-250 hover:border-brand-orange hover:text-brand-orange text-gray-700 font-bold rounded-xl transition-all duration-200 active:scale-98"
+            className="block w-full h-12 leading-[2.75rem] text-center border border-gray-200 hover:border-brand-orange hover:text-brand-orange text-gray-700 font-bold rounded-xl transition-all duration-200 active:scale-98"
           >
             Sign In
           </Link>
@@ -97,3 +97,4 @@ function Welcome() {
 }
 
 export default Welcome
+

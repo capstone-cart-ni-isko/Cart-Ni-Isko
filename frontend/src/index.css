@@ -47,7 +47,7 @@
 }
 
 html {
-  font-size: 106.25%;
+  font-size: 100%;
   font-family: var(--font-sans);
 }
 
@@ -137,28 +137,13 @@ body {
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ── Customer-side readability scale (admin is untouched) ── */
-.customer-desktop-scale .text-\[9px\],
-.customer-desktop-scale .text-\[10px\] {
-  font-size: 0.8125rem;
-}
-
-.customer-desktop-scale .text-\[11px\],
-.customer-desktop-scale .text-xs {
-  font-size: 0.84rem;
-}
-
-.customer-desktop-scale .text-sm {
-  font-size: 0.95rem;
-}
-
-/* ── Centered, slightly wider container so 1280–1920px doesn't feel empty ── */
+/* ── Sleek, constrained desktop container width ── */
 .customer-desktop-scale .app-container.max-w-7xl {
-  max-width: 90rem;
+  max-width: 76rem;
 }
 
 .customer-desktop-scale .app-container .max-w-3xl {
-  max-width: 56rem;
+  max-width: 48rem;
 }
 
 /* ── Soft outlines: no thick or dark borders on customer pages ── */

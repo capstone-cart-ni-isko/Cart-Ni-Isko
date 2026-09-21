@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
-import AppShell from '../components/layout/AppShell.jsx'
+import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Input from '../components/ui/Input.jsx'
 import Button from '../components/ui/Button.jsx'
@@ -143,8 +143,8 @@ function MyAddress() {
   const isFormValid = form.addressLine?.trim() && form.city?.trim() && form.province?.trim()
 
   return (
-    <AppShell>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in max-w-5xl mx-auto">
+    <AccountLayout>
+      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
         {/* Desktop Header */}
         <div className="hidden lg:flex items-center justify-between mb-8">
           <div>
@@ -266,7 +266,7 @@ function MyAddress() {
         confirmText="Delete"
         isDestructive={true}
       />
-    </AppShell>
+    </AccountLayout>
   )
 }
 

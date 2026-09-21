@@ -151,7 +151,7 @@ export default function Notifications() {
 
   return (
     <AppShell>
-      <div className="px-4 py-6 pb-32 lg:px-6 lg:py-6 lg:pb-16 max-w-7xl mx-auto animate-fade-in">
+      <div className="px-4 py-6 pb-32 lg:px-6 lg:py-6 lg:pb-16 max-w-5xl mx-auto animate-fade-in">
 
         {/* Header (Matching Photo 5 on desktop & Photo 2 on mobile) */}
         <div className="flex items-start gap-4 mb-8">

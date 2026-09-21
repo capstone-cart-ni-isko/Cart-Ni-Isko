@@ -526,7 +526,7 @@ function SignUp() {
                   <select
                     value={form.campus}
                     onChange={(e) => updateForm({ campus: e.target.value })}
-                    className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
+                    className="w-full h-11 px-3.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
                     style={selectStyle}
                   >
                     <option value="">Select Campus</option>
@@ -536,7 +536,7 @@ function SignUp() {
                     value={form.college}
                     onChange={(e) => updateForm({ college: e.target.value })}
                     disabled={!form.campus}
-                    className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50 transition-all appearance-none"
+                    className="w-full h-11 px-3.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50 transition-all appearance-none"
                     style={selectStyle}
                   >
                     <option value="">Select College</option>
@@ -546,7 +546,7 @@ function SignUp() {
                     value={form.course}
                     onChange={(e) => updateForm({ course: e.target.value })}
                     disabled={!form.college}
-                    className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50 transition-all appearance-none"
+                    className="w-full h-11 px-3.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer disabled:opacity-50 transition-all appearance-none"
                     style={selectStyle}
                   >
                     <option value="">Select Course</option>
@@ -558,7 +558,7 @@ function SignUp() {
                       <select
                         value={form.yearLevel}
                         onChange={(e) => updateForm({ yearLevel: e.target.value })}
-                        className="w-full h-11 px-3.5 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
+                        className="w-full h-11 px-3.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
                         style={selectStyle}
                       >
                         <option value="">Select Year</option>
@@ -634,7 +634,7 @@ function SignUp() {
                         className={`h-14 rounded-xl border font-bold text-sm transition-all flex items-center justify-center cursor-pointer ${
                           form.role === role
                             ? 'bg-brand-blue border-brand-blue text-white shadow-md'
-                            : 'border-gray-250 bg-white text-gray-700 hover:border-gray-400'
+                            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
                         }`}
                       >
                         {role}
@@ -699,7 +699,7 @@ function SignUp() {
                       placeholder="Enter username"
                       value={form.username}
                       onChange={(e) => updateForm({ username: e.target.value })}
-                      className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                      className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
                       required
                     />
                   </div>
@@ -712,7 +712,7 @@ function SignUp() {
                       placeholder="0912345678"
                       value={form.phone}
                       onChange={(e) => updateForm({ phone: e.target.value })}
-                      className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                      className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
                       required
                     />
                     <p className="text-xs text-gray-400 mt-1.5 font-medium">
@@ -728,7 +728,7 @@ function SignUp() {
                       placeholder="student@bicol-u.edu.ph"
                       value={form.email}
                       onChange={(e) => updateForm({ email: e.target.value })}
-                      className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                      className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
                       required
                     />
                   </div>
@@ -742,7 +742,7 @@ function SignUp() {
                         placeholder="Create password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full h-12 px-4 pr-12 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                        className="w-full h-12 px-4 pr-12 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
                         required
                       />
                       <button
@@ -764,7 +764,7 @@ function SignUp() {
                         placeholder="Re-enter your password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full h-12 px-4 pr-12 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                        className="w-full h-12 px-4 pr-12 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
                         required
                       />
                       <button
@@ -857,7 +857,7 @@ function SignUp() {
                         <select
                           value={form.campus}
                           onChange={(e) => updateForm({ campus: e.target.value })}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
+                          className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
                           style={selectStyle}
                           required
                         >
@@ -874,7 +874,7 @@ function SignUp() {
                           value={form.college}
                           onChange={(e) => updateForm({ college: e.target.value })}
                           disabled={!form.campus}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer disabled:opacity-50"
+                          className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer disabled:opacity-50"
                           style={selectStyle}
                           required
                         >
@@ -891,7 +891,7 @@ function SignUp() {
                           value={form.course}
                           onChange={(e) => updateForm({ course: e.target.value })}
                           disabled={!form.college}
-                          className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer disabled:opacity-50"
+                          className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer disabled:opacity-50"
                           style={selectStyle}
                           required
                         >
@@ -908,7 +908,7 @@ function SignUp() {
                           <select
                             value={form.yearLevel}
                             onChange={(e) => updateForm({ yearLevel: e.target.value })}
-                            className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
+                            className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 transition-all appearance-none cursor-pointer"
                             style={selectStyle}
                             required
                           >
@@ -932,7 +932,7 @@ function SignUp() {
                                 updateForm({ block: val });
                               }
                             }}
-                            className="w-full h-12 px-4 border border-gray-250 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
+                            className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white"
                           />
                         </div>
                       </div>
@@ -962,3 +962,4 @@ function SignUp() {
 }
 
 export default SignUp
+
