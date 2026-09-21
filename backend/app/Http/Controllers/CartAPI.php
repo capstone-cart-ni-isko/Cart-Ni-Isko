@@ -67,11 +67,14 @@
                         ], 400);
                     }
 
-                    $product = Product::where('prod_id', $item['prod_id'])->first();
+                    $product = is_numeric($item['prod_id'])
+                        ? Product::where('prod_id', $item['prod_id'])->first()
+                        : Product::where('prod_tag', $item['prod_id'])->first();
+
                     if (!$product) {
                         return response()->json([
                             'success' => false,
-                            'message' => 'Product with ID ' . $item['prod_id'] . ' not found'
+                            'message' => 'Product with ID/Tag ' . $item['prod_id'] . ' not found'
                         ], 404);
                     }
 

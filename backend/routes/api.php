@@ -84,8 +84,8 @@ Route::put('/settings/update', [SettingsAPI::class, 'updateSettings']);
 // Wishlist API Routes
 Route::post('/wishlist/add', [WishlistAPI::class, 'addWishlistItem']);
 Route::post('/wishlist/to_order', [WishlistAPI::class, 'addWishlistToOrder']);
-Route::get('/wishlist/display', [WishlistAPI::class, 'displayWishlist']);
-Route::delete('/wishlist/remove', [WishlistAPI::class, 'removeWishlistItem']);
+Route::match(['get', 'post'], '/wishlist/display', [WishlistAPI::class, 'displayWishlist']);
+Route::match(['delete', 'post'], '/wishlist/remove', [WishlistAPI::class, 'removeWishlistItem']);
 Route::put('/wishlist/update', [WishlistAPI::class, 'updateWishlistItem']);
 
 Route::middleware('auth:sanctum')->group(function () {

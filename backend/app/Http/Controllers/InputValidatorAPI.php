@@ -135,19 +135,35 @@ class InputValidatorAPI extends Controller
 
     public function phone(Request $json)
     {
+        if ($json->has('phone')) {
+            $cleaned = preg_replace('/[^0-9]/', '', (string)$json->input('phone'));
+            if (strlen($cleaned) >= 12 && strpos($cleaned, '63') === 0) {
+                $cleaned = '0' . substr($cleaned, 2);
+            }
+            $json->merge(['phone' => $cleaned]);
+        }
+
         return $this->validateFields($json, [
-            'phone' => 'nullable|regex:/^[0-9]{11}$/'
+            'phone' => 'nullable|regex:/^[0-9]{10,11}$/'
         ], [
-            'phone.regex' => 'Phone number must be exactly 11 digits.'
+            'phone.regex' => 'Phone number must be 10 to 11 digits.'
         ]);
     }
 
     public function backupPhone(Request $json)
     {
+        if ($json->has('backupphone')) {
+            $cleaned = preg_replace('/[^0-9]/', '', (string)$json->input('backupphone'));
+            if (strlen($cleaned) >= 12 && strpos($cleaned, '63') === 0) {
+                $cleaned = '0' . substr($cleaned, 2);
+            }
+            $json->merge(['backupphone' => $cleaned]);
+        }
+
         return $this->validateFields($json, [
-            'backupphone' => 'nullable|regex:/^[0-9]{11}$/'
+            'backupphone' => 'nullable|regex:/^[0-9]{10,11}$/'
         ], [
-            'backupphone.regex' => 'Backup phone number must be exactly 11 digits.'
+            'backupphone.regex' => 'Backup phone number must be 10 to 11 digits.'
         ]);
     }
 
@@ -158,21 +174,21 @@ class InputValidatorAPI extends Controller
                 'nullable',
                 'string',
                 'min:8',
-                'regex:/^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/'
+                'regex:/^[^\s\x00-\x1F\x7F]+$/'
             ]
         ], [
             'password.min'   => 'Password must be at least 8 characters.',
-            'password.regex' => 'Password must contain at least one letter, one number, and one special character.'
+            'password.regex' => 'Password contains invalid control characters.'
         ]);
     }
 
     public function nickname(Request $json)
     {
         return $this->validateFields($json, [
-            'nickname' => 'nullable|string|min:4|regex:/^[A-Za-z0-9_]+$/'
+            'nickname' => 'nullable|string|min:2|regex:/^[A-Za-z0-9_\s\.\-]+$/'
         ], [
-            'nickname.min'   => 'Nickname must be at least 4 characters.',
-            'nickname.regex' => 'Nickname can only contain letters, numbers, and underscores.'
+            'nickname.min'   => 'Nickname must be at least 2 characters.',
+            'nickname.regex' => 'Nickname contains invalid characters.'
         ]);
     }
 
