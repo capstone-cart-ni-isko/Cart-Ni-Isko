@@ -130,9 +130,6 @@ function AboutUs() {
         {/* 6. Our Community & 7. Sustainability / Impact */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-lg p-6 md:p-8 border border-slate-200 space-y-3">
-            <div className="w-8 h-8 rounded-md bg-orange-50 border border-orange-200 text-brand-orange flex items-center justify-center">
-              <UsersGroupIcon className="w-4 h-4 text-brand-orange" />
-            </div>
             <h3 className="text-lg font-extrabold text-slate-900">Our Community</h3>
             <p className="text-slate-600 text-xs md:text-sm leading-relaxed">
               We proudly serve the vibrant communities across all Bicol University campuses:
@@ -148,9 +145,6 @@ function AboutUs() {
           </div>
 
           <div className="bg-white rounded-lg p-6 md:p-8 border border-slate-200 space-y-3">
-            <div className="w-8 h-8 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
-              <LeafIcon className="w-4 h-4 text-emerald-600" />
-            </div>
             <h3 className="text-lg font-extrabold text-slate-900">Sustainability & Impact</h3>
             <p className="text-slate-600 text-xs md:text-sm leading-relaxed">
               We practice intentional production through pre-orders and carefully planned inventory runs to minimize textile waste and excess manufacturing.

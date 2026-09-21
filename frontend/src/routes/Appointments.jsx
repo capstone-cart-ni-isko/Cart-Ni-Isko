@@ -178,24 +178,15 @@ function Appointments() {
             <img src={logo} alt="Tindahan ni Isko" className="h-7 object-contain" />
           </Link>
           <div className="flex items-center gap-3">
-            <Link to="/shop" className="p-1 text-gray-700 hover:text-brand-orange" aria-label="Search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <Link to="/notifications" className="relative p-1.5 text-gray-700 hover:text-brand-orange" aria-label="Notifications">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
+              <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white">
+                3
+              </span>
             </Link>
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              className="p-1 text-gray-700 hover:text-brand-orange"
-              aria-label="Menu"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </svg>
-            </button>
           </div>
         </div>
 
@@ -242,9 +233,6 @@ function Appointments() {
           {/* Section Title & Subtitle */}
           <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
-                <CalendarHeaderIcon className="w-4 h-4" />
-              </div>
               <div>
                 <h2 className="text-base font-extrabold text-slate-900 tracking-tight">My Appointments</h2>
                 <p className="text-xs text-slate-500 leading-relaxed mt-0.5">
@@ -560,9 +548,6 @@ function Appointments() {
               {/* Header Title + Subtitle */}
               <div className="bg-white rounded-lg p-5 border border-slate-200 space-y-3">
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-md bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
-                    <CalendarHeaderIcon className="w-5 h-5" />
-                  </div>
                   <div>
                     <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">My Appointments</h2>
                     <p className="text-xs text-slate-500 font-normal leading-relaxed mt-0.5">

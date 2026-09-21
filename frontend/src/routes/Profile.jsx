@@ -285,9 +285,6 @@ function Profile() {
           {/* 1. Quick Overview - 2x2 Responsive Grid */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                <TrendUpIcon className="w-4 h-4" />
-              </div>
               <h3 className="text-base font-black text-gray-900">Quick Overview</h3>
             </div>
 
@@ -346,9 +343,6 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                  <UserIcon className="w-4 h-4" />
-                </div>
                 <h2 className="text-base font-black text-gray-900">About Me</h2>
               </div>
               <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
@@ -380,9 +374,6 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                  <OrdersNavIcon className="w-4 h-4" />
-                </div>
                 <h2 className="text-base font-black text-gray-900">My Orders</h2>
               </div>
               <ViewAllLink to="/orders">View all</ViewAllLink>
@@ -435,9 +426,6 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                  <CalendarNavIcon className="w-4 h-4" />
-                </div>
                 <h2 className="text-base font-black text-gray-900">My Appointments</h2>
               </div>
               <ViewAllLink to="/appointments">View calendar</ViewAllLink>
@@ -471,9 +459,6 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                  <ContactIcon className="w-4 h-4" />
-                </div>
                 <h3 className="text-base font-black text-gray-900">Contact Information</h3>
               </div>
               <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
@@ -489,9 +474,6 @@ function Profile() {
           {/* 6. Help Center */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-orange-50 text-[#FF6A00] flex items-center justify-center">
-                <HelpIcon className="w-4 h-4 text-[#FF6A00]" />
-              </div>
               <h3 className="text-base font-black text-gray-900">Need Help?</h3>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">
@@ -510,9 +492,6 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                  <ShieldIcon className="w-4 h-4" />
-                </div>
                 <h3 className="text-base font-black text-gray-900">Account Security</h3>
               </div>
               <Link to="/security" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
@@ -581,9 +560,6 @@ function Profile() {
             <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-orange-50 text-brand-orange flex items-center justify-center">
-                    <OrdersNavIcon className="w-3.5 h-3.5" />
-                  </div>
                   <div>
                     <h2 className="text-sm font-black text-gray-900">Quick Order Statuses</h2>
                     <p className="text-[10px] text-gray-400 font-medium">Active and recent purchases</p>
@@ -639,9 +615,6 @@ function Profile() {
             <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                    <UserIcon className="w-3.5 h-3.5" />
-                  </div>
                   <div>
                     <h2 className="text-sm font-black text-gray-900">About Me</h2>
                     <p className="text-[10px] text-gray-400 font-medium">Academic profile &amp; department</p>
@@ -680,9 +653,6 @@ function Profile() {
             <div className="bg-white rounded-2xl p-4.5 border border-gray-100/90 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-orange-50 text-brand-orange flex items-center justify-center">
-                    <CalendarNavIcon className="w-4 h-4" />
-                  </div>
                   <div>
                     <h2 className="text-sm font-black text-gray-900">My Appointments</h2>
                     <p className="text-[10px] text-gray-400 font-medium">Scheduled store visits &amp; pickup slots</p>

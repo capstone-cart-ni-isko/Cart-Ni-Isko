@@ -229,12 +229,7 @@ function AccountInfo() {
             {/* Personal Information Section */}
             <div className="px-7 py-6 border-b border-gray-100 space-y-5">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                    <UserIcon className="w-4 h-4" />
-                  </div>
-                  <h2 className="text-base font-black text-gray-900">Personal Information</h2>
-                </div>
+                <h2 className="text-base font-black text-gray-900">Personal Information</h2>
                 <p className="text-xs text-gray-400"><span className="text-red-500">*</span> Fields marked with an asterisk are required.</p>
               </div>
 
@@ -264,12 +259,7 @@ function AccountInfo() {
 
             {/* Academic Information Section */}
             <div className="px-7 py-6 border-b border-gray-100 space-y-5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#ECFDF5] text-[#059669] flex items-center justify-center">
-                  <GlobeIcon className="w-4 h-4" />
-                </div>
-                <h2 className="text-base font-black text-gray-900">Academic Information</h2>
-              </div>
+              <h2 className="text-base font-black text-gray-900">Academic Information</h2>
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
