@@ -10,6 +10,8 @@ use App\Http\Controllers\CartAPI;
 use App\Http\Controllers\CheckoutAPI;
 use App\Http\Controllers\OrdersAPI;
 use App\Http\Controllers\PosAPI;
+use App\Http\Controllers\NotifAPI;
+use App\Http\Controllers\TrackingAPI;
 use App\Http\Controllers\ProductsAPI;
 use App\Http\Controllers\ReviewsAPI;
 use App\Http\Controllers\SettingsAPI;
@@ -36,6 +38,16 @@ Route::post('/pos/add', [PosAPI::class, 'addProductToOrder']);
 Route::post('/pos/checkout', [PosAPI::class, 'checkoutOrder']);
 Route::put('/pos/update', [PosAPI::class, 'updateOrderDetails']);
 Route::delete('/pos/remove', [PosAPI::class, 'removeProductFromOrder']);
+
+// Notif API Routes
+Route::post('/notif/create', [NotifAPI::class, 'createNotification']);
+Route::post('/notif/distribute', [NotifAPI::class, 'distributeNotifications']);
+Route::put('/notif/update', [NotifAPI::class, 'updateNotificationStatus']);
+
+// Tracking API Routes
+Route::post('/tracking/create', [TrackingAPI::class, 'createFulfillmentTrack']);
+Route::put('/tracking/update', [TrackingAPI::class, 'updateFulfillmentStatus']);
+Route::put('/tracking/close', [TrackingAPI::class, 'closeFulfillmentTrack']);
 
 
 
