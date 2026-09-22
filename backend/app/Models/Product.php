@@ -1,4 +1,5 @@
 <?php
+
     namespace App\Models;
     use Illuminate\Database\Eloquent\Model;
 
@@ -25,5 +26,28 @@
             'prod_peakdate',
             'prod_todayqty',
             'prod_todaysold',
+            'prod_sizes',
+            'prod_colors',
+            'prod_images',
+            'prod_preorder',
+            'prod_status',
+            'prod_preorder_info',
+            'prod_stock_matrix',
+            'prod_details',
+            'prod_rating',
+            'prod_review_count',
+            'prod_rating_breakdown',
+            'prod_reviews',
+        ];
+
+        protected $casts = [
+            'prod_sizes' => 'array',
+            'prod_colors' => 'array',
+            'prod_images' => 'array',
+            'prod_preorder_info' => 'array',
+            'prod_stock_matrix' => 'array',
+            'prod_details' => 'array',
+            'prod_rating_breakdown' => 'array',
+            'prod_reviews' => 'array',
         ];
     }

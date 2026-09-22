@@ -3,6 +3,8 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "serve": "php artisan serve --host=127.0.0.1 --port=8000",
+        "test": "php artisan test",
         "build": "vite build",
         "dev": "vite"
     },

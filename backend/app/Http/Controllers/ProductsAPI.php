@@ -43,6 +43,18 @@
                     'prod_peakdate' => now(),
                     'prod_todayqty' => $qty,
                     'prod_todaysold' => 0.00,
+                    'prod_sizes' => $json->input('prod_sizes') ?? null,
+                    'prod_colors' => $json->input('prod_colors') ?? null,
+                    'prod_images' => $json->input('prod_images') ?? null,
+                    'prod_preorder' => $json->input('prod_preorder') ?? false,
+                    'prod_status' => $json->input('prod_status') ?? ($qty > 0 ? 'In Stock' : 'Out of Stock'),
+                    'prod_preorder_info' => $json->input('prod_preorder_info') ?? null,
+                    'prod_stock_matrix' => $json->input('prod_stock_matrix') ?? null,
+                    'prod_details' => $json->input('prod_details') ?? null,
+                    'prod_rating' => $json->input('prod_rating') ?? 0,
+                    'prod_review_count' => $json->input('prod_review_count') ?? 0,
+                    'prod_rating_breakdown' => $json->input('prod_rating_breakdown') ?? null,
+                    'prod_reviews' => $json->input('prod_reviews') ?? null,
                 ]);
 
                 return response()->json([
@@ -228,10 +240,13 @@
                 $query = Product::whereNull('prod_deleted');
 
                 if ($q) {
-                    $query->where(function($query) use ($q) {
-                        $query->where('prod_name', 'ilike', "%{$q}%")
-                              ->orWhere('prod_tag', 'ilike', "%{$q}%")
-                              ->orWhere('prod_desc', 'ilike', "%{$q}%");
+                    // ilike is PostgreSQL-only; SQLite/MySQL use LIKE, which is
+                    // already case-insensitive for ASCII.
+                    $op = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+                    $query->where(function($query) use ($q, $op) {
+                        $query->where('prod_name', $op, "%{$q}%")
+                              ->orWhere('prod_tag', $op, "%{$q}%")
+                              ->orWhere('prod_desc', $op, "%{$q}%");
                     });
                 }
 
@@ -321,7 +336,7 @@
                 }
 
                 $updateData = [];
-                $fields = ['prod_name', 'prod_tag', 'prod_categ', 'prod_price', 'prod_qty', 'prod_desc'];
+                $fields = ['prod_name', 'prod_tag', 'prod_categ', 'prod_price', 'prod_qty', 'prod_desc', 'prod_sizes', 'prod_colors', 'prod_images', 'prod_preorder', 'prod_status', 'prod_preorder_info', 'prod_stock_matrix', 'prod_details', 'prod_rating', 'prod_review_count', 'prod_rating_breakdown', 'prod_reviews'];
 
                 foreach ($fields as $field) {
                     if ($json->has($field)) {
@@ -334,6 +349,7 @@
                     if ($updateData['prod_qty'] > $product->prod_peakqty) {
                         $updateData['prod_peakqty'] = $updateData['prod_qty'];
                     }
+                    $updateData['prod_status'] = $updateData['prod_qty'] > 0 ? 'In Stock' : 'Out of Stock';
                 }
 
                 $product->update($updateData);

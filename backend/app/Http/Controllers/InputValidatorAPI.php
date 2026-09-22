@@ -117,8 +117,10 @@ class InputValidatorAPI extends Controller
 
     public function email(Request $json)
     {
+        // Syntax check only: the `dns` variant rejected valid addresses on
+        // transient DNS failures and null-MX domains, blocking signup with 400.
         return $this->validateFields($json, [
-            'email' => 'nullable|email:rfc,dns'
+            'email' => 'nullable|email:rfc'
         ], [
             'email.email' => 'Invalid email format.'
         ]);
@@ -127,7 +129,7 @@ class InputValidatorAPI extends Controller
     public function backupEmail(Request $json)
     {
         return $this->validateFields($json, [
-            'backupemail' => 'nullable|email:rfc,dns'
+            'backupemail' => 'nullable|email:rfc'
         ], [
             'backupemail.email' => 'Invalid backup email format.'
         ]);
