@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node scripts/check-product-fallback.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

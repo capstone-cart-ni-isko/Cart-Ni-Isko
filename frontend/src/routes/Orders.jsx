@@ -6,7 +6,6 @@ import PageTitle from '../components/ui/PageTitle.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
-import productsData from '../data/products.json'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon, AlertTriangleIcon } from '../components/ui/Icons.jsx'
 import { getStoredOrders, isFulfillmentLocked } from '../utils/orderStorage.js'
@@ -107,10 +106,7 @@ function Orders() {
           </div>
         ) : (
           filteredOrders.map((order) => {
-            const matchedProduct = productsData.find((p) => p.id === order.productId)
-            const productImage =
-              order.image ||
-              (matchedProduct?.images?.[0] ? matchedProduct.images[0] : null)
+            const productImage = order.image || null
             const isLocked = isFulfillmentLocked(order)
             const isDelivery = order.fulfillment?.method === 'Courier Delivery'
             const deliveryFee = isDelivery ? (order.deliveryFee || 280) : 0

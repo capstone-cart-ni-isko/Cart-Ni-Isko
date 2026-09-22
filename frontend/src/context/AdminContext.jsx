@@ -1,5 +1,7 @@
 import { createContext, useState, useEffect, useCallback } from 'react'
 import { INITIAL_ADMIN_DATA } from '../data/adminMockData.js'
+import { employeeLogin, mapEmployee } from '../services/auth.js'
+import { ApiError } from '../services/api.js'
 
 export const AdminContext = createContext(null)
 
@@ -168,17 +170,25 @@ export function AdminProvider({ children }) {
   }, [currentAdminUser])
 
   // ── ADMIN AUTHENTICATION ACTIONS ──
-  const loginAdmin = useCallback((emailOrUsername, password) => {
+  const loginAdmin = useCallback(async (emailOrUsername, password) => {
     const users = adminState.adminUsers || DEFAULT_ADMIN_USERS
     const cleanInput = (emailOrUsername || '').trim().toLowerCase()
+
+    try {
+      const employee = await employeeLogin(emailOrUsername.trim(), password)
+      const mapped = mapEmployee(employee)
+      setCurrentAdminUser(mapped)
+      return { success: true, user: mapped }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        return { success: false, error: err.message || 'Invalid staff credentials. Access denied.' }
+      }
+    }
 
     const found = users.find(
       (u) =>
         u.email.toLowerCase() === cleanInput ||
-        u.name.toLowerCase() === cleanInput ||
-        cleanInput.includes('superadmin') ||
-        cleanInput.includes('admin') ||
-        cleanInput.includes('staff')
+        u.name.toLowerCase() === cleanInput
     )
 
     if (found) {
@@ -186,10 +196,7 @@ export function AdminProvider({ children }) {
       return { success: true, user: found }
     }
 
-    // Default fallback to Super Admin
-    const superAdmin = users[0] || DEFAULT_ADMIN_USERS[0]
-    setCurrentAdminUser(superAdmin)
-    return { success: true, user: superAdmin }
+    return { success: false, error: 'Invalid staff credentials. Access denied.' }
   }, [adminState.adminUsers])
 
   const logoutAdmin = useCallback(() => {

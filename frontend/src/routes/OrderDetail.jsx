@@ -7,7 +7,6 @@ import PageTitle from '../components/ui/PageTitle.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
-import productsData from '../data/products.json'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, MessageSquareIcon, LockIcon } from '../components/ui/Icons.jsx'
 import {
@@ -409,10 +408,7 @@ function OrderDetail() {
               Items Ordered
             </h3>
             {(() => {
-              const matchedProduct = productsData.find((p) => p.id === order.productId)
-              const productImage =
-                order.image ||
-                (matchedProduct?.images?.[0] ? matchedProduct.images[0] : null)
+                const productImage = order.image || null
 
               return (
                 <div className="flex gap-3.5 items-center">

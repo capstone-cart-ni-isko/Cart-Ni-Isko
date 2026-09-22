@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import FiltersModal from '../components/ui/FiltersModal.jsx'
-import productsData from '../data/products.json'
+import { useCatalog } from '../hooks/useCatalog.js'
 import backIcon from '../assets/icons/common/back.svg'
 import searchIcon from '../assets/icons/common/search.svg'
 
@@ -12,6 +12,7 @@ const categories = ['All', 'Shirts', 'Hoodie', 'Varsity Jacket', 'Accessories', 
 function Shop() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { products: productsData, loading } = useCatalog()
 
   const [query, setQuery] = useState('')
   const [filterModalOpen, setFilterModalOpen] = useState(false)
@@ -239,7 +240,11 @@ function Shop() {
 
         {/* Results grid */}
         <div className="px-4 py-4 lg:px-0 lg:py-0">
-          {filteredProducts.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-20">
+              <p className="text-sm font-semibold text-gray-500">Loading catalog…</p>
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="text-center py-20 animate-fade-in">
               <div className="w-16 h-16 bg-gray-55 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-gray-400">

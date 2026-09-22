@@ -10,8 +10,14 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons.svg', 'apple-touch-icon.png', 'logo-192x192.png', 'logo-512x512.png'],
+      srcDir: 'src',
+      filename: 'sw.js',
       devOptions: {
-        enabled: true,
+        // Disabled on purpose: a dev service worker kept serving a stale
+        // bundle after code changes, so live edits never showed up in the
+        // browser. Production builds still get the PWA via workbox above.
+        enabled: false,
+        type: 'module',
       },
       manifest: {
         name: 'Tindahan ni Isko',

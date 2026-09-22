@@ -2,44 +2,44 @@ import { createContext, useState, useEffect } from 'react'
 
 export const AuthContext = createContext(null)
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api'
-
 const DEFAULT_USER = {
-  firstName: 'Juan',
-  lastName: 'Dela Cruz',
-  fullName: 'Juan Dela Cruz',
-  email: 'jdcruz@student.u.edu.ph',
-  phone: '+63 912 345 6789',
-  username: 'juandc',
-  studentId: '2020-1234-5678',
-  yearLevel: '1st Year',
-  campus: 'Main Campus',
-  college: 'College of Engineering',
-  course: 'Mechanical Engineering',
-  bio: '1st Year Student at the College of Engineering, taking up Mechanical Engineering.',
-  role: 'Student',
+  firstName: '',
+  lastName: '',
+  fullName: '',
+  email: '',
+  phone: '',
+  username: '',
+  studentId: '',
+  yearLevel: '',
+  campus: '',
+  college: '',
+  course: '',
+  bio: '',
+  role: '',
   avatar: null,
-  preferredContact: 'Email',
+  preferredContact: '',
 }
 
-const DEFAULT_ADDRESSES = [
-  {
-    id: 1,
-    recipient: 'Juan Dela Cruz',
-    phone: '09123456789',
-    addressLine: 'Bicol University Main Campus, Rizal Street',
-    barangay: 'Brgy. 14 - Centro Occidental',
-    city: 'Legazpi City',
-    province: 'Albay',
-    postalCode: '4500',
-    isDefault: true,
-  },
-]
+const DEFAULT_ADDRESSES = []
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('isko_session')
-    return saved ? JSON.parse(saved) : null
+    if (!saved) return null
+    try {
+      const session = JSON.parse(saved)
+      // Self-heal: sessions created by the old mock/local login carry no
+      // cust_id, so every backend call (wishlist, orders) would fail. Drop them
+      // and force a real sign-in against the API.
+      if (!session || session.cust_id === undefined || session.cust_id === null) {
+        localStorage.removeItem('isko_session')
+        return null
+      }
+      return session
+    } catch {
+      localStorage.removeItem('isko_session')
+      return null
+    }
   })
 
   const [addresses, setAddresses] = useState(() => {
@@ -47,7 +47,6 @@ export function AuthProvider({ children }) {
     return saved ? JSON.parse(saved) : DEFAULT_ADDRESSES
   })
 
-  // Sync user changes to localStorage
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('isko_session', JSON.stringify(currentUser))
@@ -56,14 +55,13 @@ export function AuthProvider({ children }) {
     }
   }, [currentUser])
 
-  // Sync addresses to localStorage
   useEffect(() => {
     localStorage.setItem('isko_addresses', JSON.stringify(addresses))
   }, [addresses])
 
   const login = async (phone, password) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/cust_login`, {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'}/auth/cust_login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, password }),
@@ -84,24 +82,15 @@ export function AuthProvider({ children }) {
         return { user: null, error: data.message }
       }
     } catch (err) {
-      console.warn('Backend server not reached (http://127.0.0.1:8000), using local authentication fallback:', err.message)
+      console.error('Backend login failed:', err.message)
+      return { user: null, error: 'Unable to connect to server' }
     }
-
-    // Fallback local mock login if backend API server is offline
-    const isEmail = (phone || '').includes('@')
-    const user = {
-      ...DEFAULT_USER,
-      email: isEmail ? phone : DEFAULT_USER.email,
-      phone: isEmail ? DEFAULT_USER.phone : phone,
-    }
-    setCurrentUser(user)
-    return { user, error: null }
   }
 
   const register = async (details) => {
     const fullName = `${details.firstName || ''} ${details.lastName || ''}`.trim() || details.username || 'User'
     try {
-      const res = await fetch(`${API_BASE_URL}/auth/cust_signup`, {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'}/auth/cust_signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,25 +108,24 @@ export function AuthProvider({ children }) {
         const user = {
           ...DEFAULT_USER,
           ...details,
+          // cust_id is the key every backend endpoint keys off - it must come
+          // from the API response, never from the signup form.
+          ...data.data,
+          cust_id: data.data?.cust_id,
           fullName,
           phone: data.data?.cust_phone || details.phone,
           email: data.data?.cust_email || details.email,
+          role: data.data?.cust_type || details.role || 'Student',
         }
+        setCurrentUser(user)
         return { user, error: null }
       } else if (data.message) {
         return { user: null, error: data.message }
       }
     } catch (err) {
-      console.warn('Backend server not reached (http://127.0.0.1:8000), using local registration fallback:', err.message)
+      console.error('Backend registration failed:', err.message)
+      return { user: null, error: 'Unable to connect to server' }
     }
-
-    // Fallback local mock registration if backend API server is offline
-    const user = {
-      ...DEFAULT_USER,
-      ...details,
-      fullName,
-    }
-    return { user, error: null }
   }
 
   const updateProfile = (details) => {

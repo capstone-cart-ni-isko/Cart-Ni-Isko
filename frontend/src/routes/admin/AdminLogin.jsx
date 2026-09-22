@@ -12,7 +12,7 @@ export default function AdminLogin() {
   const [errorMsg, setErrorMsg] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
     if (!username.trim() || !password.trim()) {
       setErrorMsg('Please enter your staff username/email and password.')
@@ -22,15 +22,13 @@ export default function AdminLogin() {
     setLoading(true)
     setErrorMsg('')
 
-    setTimeout(() => {
-      const res = loginAdmin(username.trim(), password)
-      setLoading(false)
-      if (res.success) {
-        navigate('/admin/dashboard')
-      } else {
-        setErrorMsg('Invalid staff credentials. Access denied.')
-      }
-    }, 400)
+    const res = await loginAdmin(username.trim(), password)
+    setLoading(false)
+    if (res.success) {
+      navigate('/admin/dashboard')
+    } else {
+      setErrorMsg(res.error || 'Invalid staff credentials. Access denied.')
+    }
   }
 
   return (

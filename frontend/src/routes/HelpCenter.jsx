@@ -1,8 +1,16 @@
 import { useState } from 'react'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
-import { helpCategories } from '../data/mockUser.js'
 import searchIcon from '../assets/icons/common/search.svg'
+
+const helpCategories = [
+  'Orders & Delivery',
+  'Payments & Refunds',
+  'Account & Profile',
+  'Appointments',
+  'Store Locations',
+  'Contact Support',
+]
 
 function HelpCenter() {
   const [query, setQuery] = useState('')
@@ -74,4 +82,3 @@ function HelpCenter() {
 }
 
 export default HelpCenter
-

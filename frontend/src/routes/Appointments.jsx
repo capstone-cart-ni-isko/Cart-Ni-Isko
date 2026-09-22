@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
-import { mockUser } from '../data/mockUser.js'
 import avatarImg from '../assets/avatar.png'
 import hoodieImg from '../assets/Images/unnamed (11).png'
 import jacketImg from '../assets/Images/unnamed (12).png'
@@ -148,13 +147,13 @@ function Appointments() {
   const navigate = useNavigate()
   const [activeFilter, setActiveFilter] = useState('all')
 
-  const baseUser = currentUser || mockUser
-  const rawEmail = baseUser.email || mockUser.email
-  const rawPhone = baseUser.phone || mockUser.phone
+  const baseUser = currentUser || {}
+  const rawEmail = baseUser.email || ''
+  const rawPhone = baseUser.phone || ''
   const isRawPhoneActuallyEmail = rawPhone && rawPhone.includes('@')
-  const email = isRawPhoneActuallyEmail ? rawPhone : (rawEmail || 'jdc2026-1234-5678@bicol-u.edu.ph')
-  const studentId = baseUser.studentId || mockUser.studentId || '2020-1234-5678'
-  const fullName = baseUser.fullName || mockUser.fullName || 'Juan Dela Cruz'
+  const email = isRawPhoneActuallyEmail ? rawPhone : (rawEmail || '')
+  const studentId = baseUser.studentId || ''
+  const fullName = baseUser.fullName || 'User'
 
   const filteredAppointments = MOCK_APPOINTMENTS.filter((appt) => {
     if (activeFilter === 'all') return true

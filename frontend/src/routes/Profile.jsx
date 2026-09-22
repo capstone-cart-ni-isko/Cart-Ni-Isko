@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
-import { mockUser, mockAppointments, mockQuickOverview } from '../data/mockUser.js'
 import avatarImg from '../assets/avatar.png'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
@@ -188,26 +187,25 @@ function Profile() {
   const navigate = useNavigate()
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
-  const baseUser = currentUser || mockUser
+  const baseUser = currentUser || {}
 
-  // Robust field fallbacks to prevent swapped email/phone
-  const rawEmail = baseUser.email || mockUser.email
-  const rawPhone = baseUser.phone || mockUser.phone
+  const rawEmail = baseUser.email || ''
+  const rawPhone = baseUser.phone || ''
 
   const isRawPhoneActuallyEmail = rawPhone && rawPhone.includes('@')
-  const email = isRawPhoneActuallyEmail ? rawPhone : (rawEmail || 'jdcruz@student.u.edu.ph')
-  const phone = isRawPhoneActuallyEmail ? '+63 912 345 6789' : (rawPhone || '+63 912 345 6789')
+  const email = isRawPhoneActuallyEmail ? rawPhone : (rawEmail || '')
+  const phone = isRawPhoneActuallyEmail ? '+63 912 345 6789' : (rawPhone || '')
 
-  const studentId = baseUser.studentId || mockUser.studentId || '2020-1234-5678'
-  const yearLevel = baseUser.yearLevel || mockUser.yearLevel || '1st Year'
-  const course = baseUser.course || mockUser.course || 'Mechanical Engineering'
-  const campus = baseUser.campus || mockUser.campus || 'Main Campus'
-  const college = baseUser.college || mockUser.college || 'College of Engineering'
-  const bio = baseUser.bio || mockUser.bio || '1st Year Student at the College of Engineering, taking up Mechanical Engineering.'
-  const preferredContact = baseUser.preferredContact || mockUser.preferredContact || 'Email'
-  const fullName = baseUser.fullName || mockUser.fullName || 'Juan Dela Cruz'
+  const studentId = baseUser.studentId || ''
+  const yearLevel = baseUser.yearLevel || ''
+  const course = baseUser.course || ''
+  const campus = baseUser.campus || ''
+  const college = baseUser.college || ''
+  const bio = baseUser.bio || ''
+  const preferredContact = baseUser.preferredContact || ''
+  const fullName = baseUser.fullName || 'User'
 
-  const overview = mockQuickOverview
+  const [appointments, setAppointments] = useState([])
 
   const handleLogout = () => {
     logout()
@@ -432,7 +430,7 @@ function Profile() {
             </div>
 
             <div className="space-y-2.5">
-              {mockAppointments.map((appt) => (
+              {appointments.map((appt) => (
                 <div
                   key={appt.id}
                   className="flex items-center justify-between p-3.5 rounded-2xl border border-gray-100 bg-white shadow-2xs"
@@ -662,7 +660,7 @@ function Profile() {
               </div>
 
               <div className="space-y-2.5">
-                {mockAppointments.map((appt) => (
+                {appointments.map((appt) => (
                   <div
                     key={appt.id}
                     className="p-3.5 rounded-xl border border-gray-100 bg-white hover:border-orange-200 transition-all shadow-2xs space-y-2.5"

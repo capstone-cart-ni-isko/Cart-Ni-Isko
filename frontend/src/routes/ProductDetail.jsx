@@ -13,7 +13,7 @@ import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
 import SizeGuideModal from '../components/ui/SizeGuideModal.jsx'
 import ProductAccordion from '../components/ui/ProductAccordion.jsx'
 import ProductReviews from '../components/ui/ProductReviews.jsx'
-import productsData from '../data/products.json'
+import { fetchCatalog, fetchProduct } from '../services/products.js'
 import backIcon from '../assets/icons/common/back.svg'
 import { ShirtIcon, CalendarIcon, StoreIcon, RefreshCwIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
@@ -26,35 +26,66 @@ function ProductDetail() {
   const { toggleWishlist, isInWishlist } = useWishlist()
   const { showToast } = useToast()
 
-  // Find product by route parameter id
-  const product = productsData.find((p) => p.id === id)
+  const [product, setProduct] = useState(null)
+  const [relatedProducts, setRelatedProducts] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  // Track the current product ID to reset variant selections cleanly without useEffect
-  const [prevId, setPrevId] = useState(id)
-  const [selectedSize, setSelectedSize] = useState(product?.sizes?.[0] || '')
-  const [selectedColor, setSelectedColor] = useState(product?.colors?.[0] || null)
-  const [activeImage, setActiveImage] = useState(
-    product?.colors?.[0]?.image || product?.images?.[0] || ''
-  )
+  const [selectedSize, setSelectedSize] = useState('')
+  const [selectedColor, setSelectedColor] = useState(null)
+  const [activeImage, setActiveImage] = useState('')
   const [qty, setQty] = useState(1)
 
   // Modals state
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [showSizeGuide, setShowSizeGuide] = useState(false)
 
-  // Always scroll to top when landing on product or clicking suggested products
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   }, [id])
 
-  // Clean state reset when switching to a different product id (e.g. clicking related items)
-  if (id !== prevId) {
-    setPrevId(id)
-    const newColor = product?.colors?.[0] || null
-    setSelectedColor(newColor)
-    setSelectedSize(product?.sizes?.[0] || '')
-    setActiveImage(newColor?.image || product?.images?.[0] || '')
-    setQty(1)
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+
+    Promise.all([fetchProduct(id), fetchCatalog()])
+      .then(([item, catalog]) => {
+        if (cancelled) return
+        setProduct(item)
+        setRelatedProducts(
+          catalog
+            .filter((p) => p.id !== item?.id && p.prodId !== item?.prodId)
+            .sort((a) => (a.category === item?.category ? -1 : 1))
+            .slice(0, 4)
+        )
+        const newColor = item?.colors?.[0] || null
+        setSelectedColor(newColor)
+        setSelectedSize(item?.sizes?.[0] || '')
+        setActiveImage(newColor?.image || item?.images?.[0] || '')
+        setQty(1)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProduct(null)
+          setRelatedProducts([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  if (loading) {
+    return (
+      <AppShell showNav={true}>
+        <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center">
+          <p className="text-sm font-semibold text-gray-500">Loading product…</p>
+        </div>
+      </AppShell>
+    )
   }
 
   if (!product) {
@@ -114,7 +145,9 @@ function ProductDetail() {
         if (values.length > 0) return values[0]
       }
     }
-    return product.preOrder ? (product.preOrderInfo?.maxPreOrderQty || 10) : 15
+    return product.preOrder
+      ? (product.preOrderInfo?.maxPreOrderQty || 10)
+      : (product.qty ?? 15)
   }
 
   const availableStock = calculateStock(selectedColor, selectedSize)
@@ -178,12 +211,6 @@ function ProductDetail() {
     : product.preOrder
     ? 'Pre-order Now'
     : 'Add to Bag'
-
-  // Related products
-  const relatedProducts = productsData
-    .filter((p) => p.id !== product.id)
-    .sort((a) => (a.category === product.category ? -1 : 1))
-    .slice(0, 4)
 
   return (
     <AppShell showBottomNav={false}>

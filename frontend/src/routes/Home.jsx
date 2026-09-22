@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
-import productsData from '../data/products.json'
+import { useCatalog } from '../hooks/useCatalog.js'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import searchIcon from '../assets/icons/common/search.svg'
 import notificationIcon from '../assets/icons/common/notification.svg'
@@ -197,7 +197,7 @@ function Home() {
     }
   }
 
-  // Get Featured products: 4 on mobile, 8 on desktop
+  const { products: productsData } = useCatalog()
   const featuredProductsMobile = productsData.slice(0, 4)
   const featuredProductsDesktop = productsData.slice(0, 8)
 

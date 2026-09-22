@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
-import { mockUser } from '../data/mockUser.js'
 import collegesData from '../data/colleges.json'
 import avatarImg from '../assets/avatar.png'
-import { UserIcon } from '../components/ui/Icons.jsx'
+import { useAuth } from '../hooks/useAuth.js'
 
 const selectStyle = {
   backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
@@ -38,16 +37,17 @@ function GlobeIcon({ className = 'w-5 h-5' }) {
 
 function AccountInfo() {
   const navigate = useNavigate()
+  const { currentUser } = useAuth()
   const [form, setForm] = useState({
-    firstName: mockUser.firstName,
-    lastName: mockUser.lastName,
-    username: mockUser.username,
-    email: mockUser.email,
-    phone: mockUser.phone,
-    yearLevel: mockUser.yearLevel || '1st Year Student',
-    campus: mockUser.campus || 'Main Campus',
-    college: mockUser.college || 'College of Engineering',
-    course: mockUser.course || 'Computer Engineering',
+    firstName: currentUser?.firstName || '',
+    lastName: currentUser?.lastName || '',
+    username: currentUser?.username || '',
+    email: currentUser?.email || '',
+    phone: currentUser?.phone || '',
+    yearLevel: currentUser?.yearLevel || '',
+    campus: currentUser?.campus || '',
+    college: currentUser?.college || '',
+    course: currentUser?.course || '',
   })
   const [saved, setSaved] = useState(false)
   const [availableColleges, setAvailableColleges] = useState([])
