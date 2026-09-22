@@ -49,6 +49,7 @@
             // Inserts to database using Models
             try {
                 // Create new Customer
+                $type = $json->input('type') ?? 'Student';
                 $customer = Customer::create([
                     'cust_created' => now(),
                     'cust_password' => Hash::make($password),
@@ -61,7 +62,8 @@
                     'cust_callcode' => $json->input('callcode') ?? '+63',
                     'cust_phone' => $phone,
                     'cust_email' => $json->input('email') ?? '',
-                    'cust_type' => $json->input('type') ?? 'Student',
+                    'cust_type' => $type,
+                    'cust_college' => ($type === 'Student') ? ($json->input('college') ?? '') : '',
                     'cust_wishlist' => 0,
                     'cust_cart' => 0,
                     'cust_orders' => 0,

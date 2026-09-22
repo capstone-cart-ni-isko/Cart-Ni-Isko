@@ -48,10 +48,14 @@ export function apiGet(path, params = {}) {
   return apiRequest(`${path}${suffix}`)
 }
 
-export function apiSend(path, method, body) {
-  return apiRequest(path, { method, body })
-}
-
 export function apiPost(path, body) {
   return apiRequest(path, { method: 'POST', body })
+}
+
+export function apiPut(path, body) {
+  return apiRequest(path, { method: 'PUT', body })
+}
+
+export function apiDelete(path, body) {
+  return apiRequest(path, { method: 'DELETE', body })
 }

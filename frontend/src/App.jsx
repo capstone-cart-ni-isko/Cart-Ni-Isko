@@ -34,11 +34,11 @@ import Appointments from './routes/Appointments.jsx'
 
 // Admin Screen Routes
 import AdminLogin from './routes/admin/AdminLogin.jsx'
+import RequireAdmin from './components/admin/RequireAdmin.jsx'
 import AdminDashboard from './routes/admin/AdminDashboard.jsx'
 import AdminPos from './routes/admin/AdminPos.jsx'
 import AdminOrders from './routes/admin/AdminOrders.jsx'
 import AdminInventory from './routes/admin/AdminInventory.jsx'
-import AdminFulfillment from './routes/admin/AdminFulfillment.jsx'
 import AdminPickup from './routes/admin/AdminPickup.jsx'
 import AdminDelivery from './routes/admin/AdminDelivery.jsx'
 import AdminAnalytics from './routes/admin/AdminAnalytics.jsx'
@@ -90,24 +90,26 @@ function App() {
 
                 {/* ── Admin & Staff Routes ── */}
                 <Route path="/admin/login" element={<AdminLogin />} />
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                <Route path="/admin/pos" element={<AdminPos />} />
-                <Route path="/admin/orders" element={<AdminOrders />} />
-                <Route path="/admin/inventory" element={<AdminInventory />} />
-                {/* /admin/fulfillment → redirect to the new Pickup module */}
-                <Route path="/admin/fulfillment" element={<Navigate to="/admin/pickup" replace />} />
-                <Route path="/admin/pickup" element={<AdminPickup />} />
-                <Route path="/admin/delivery" element={<AdminDelivery />} />
-                <Route path="/admin/analytics" element={<AdminAnalytics />} />
-                <Route path="/admin/customization" element={<AdminStoreCustomization />} />
-                <Route path="/admin/settings" element={<AdminSettings />} />
-                <Route path="/admin/schedule" element={<AdminSchedule />} />
-                <Route path="/admin/appointments" element={<AdminAppointments />} />
-                <Route path="/admin/reviews" element={<AdminReviews />} />
-                <Route path="/admin/users" element={<AdminUsers />} />
-                <Route path="/admin/account" element={<AdminAccount />} />
-                <Route path="/admin/profile" element={<AdminAccount />} />
+                <Route element={<RequireAdmin />}>
+                  <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                  <Route path="/admin/pos" element={<AdminPos />} />
+                  <Route path="/admin/orders" element={<AdminOrders />} />
+                  <Route path="/admin/inventory" element={<AdminInventory />} />
+                  {/* /admin/fulfillment → redirect to the new Pickup module */}
+                  <Route path="/admin/fulfillment" element={<Navigate to="/admin/pickup" replace />} />
+                  <Route path="/admin/pickup" element={<AdminPickup />} />
+                  <Route path="/admin/delivery" element={<AdminDelivery />} />
+                  <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                  <Route path="/admin/customization" element={<AdminStoreCustomization />} />
+                  <Route path="/admin/settings" element={<AdminSettings />} />
+                  <Route path="/admin/schedule" element={<AdminSchedule />} />
+                  <Route path="/admin/appointments" element={<AdminAppointments />} />
+                  <Route path="/admin/reviews" element={<AdminReviews />} />
+                  <Route path="/admin/users" element={<AdminUsers />} />
+                  <Route path="/admin/account" element={<AdminAccount />} />
+                  <Route path="/admin/profile" element={<AdminAccount />} />
+                </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

@@ -22,15 +22,25 @@ class InputValidatorAPI extends Controller
 
     public function customerSignup(Request $json)
     {
+        $type = $json->input('type') ?? 'Student';
+
         // Required Fields for Customer Signup
-        $requiredCheck = $this->validateFields($json, [
+        $requiredFields = [
             'phone'    => 'required',
             'password' => 'required',
             'nickname' => 'required',
-        ], [
+        ];
+
+        // Academic fields are only required for Student type
+        if ($type === 'Student') {
+            $requiredFields['college'] = 'required';
+        }
+
+        $requiredCheck = $this->validateFields($json, $requiredFields, [
             'phone.required'    => 'Phone number is required.',
             'password.required' => 'Password is required.',
             'nickname.required' => 'Nickname is required.',
+            'college.required'  => 'College is required.',
         ]);
         if ($requiredCheck) return $requiredCheck;
 

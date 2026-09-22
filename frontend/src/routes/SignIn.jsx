@@ -158,7 +158,7 @@ function SignIn() {
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
               }`}
             >
-              {isSubmitting ? 'Signing in...' : 'Continue'}
+              {isSubmitting ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
         </div>
@@ -207,7 +207,7 @@ function SignIn() {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   name="password"
-                  placeholder="Create password"
+                  placeholder="Enter your password"
                   value={form.password}
                   onChange={handleChange}
                   className="w-full h-12 px-4 pr-12 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"

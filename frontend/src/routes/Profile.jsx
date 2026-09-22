@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
+import { apiGet } from '../services/api.js'
 import avatarImg from '../assets/avatar.png'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
@@ -206,12 +207,43 @@ function Profile() {
   const fullName = baseUser.fullName || 'User'
 
   const [appointments, setAppointments] = useState([])
+  const [overview, setOverview] = useState({
+    totalOrders: 0,
+    completedOrders: 0,
+    appointments: 0,
+    savedItems: 0,
+  })
 
   const handleLogout = () => {
     logout()
     showToast('Signed out successfully')
     navigate('/signin')
   }
+
+  // Fetch appointments from the backend
+  useEffect(() => {
+    const custId = currentUser?.cust_id ?? currentUser?.id ?? null
+    if (!custId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const data = await apiGet('/appoint/display', { cust_id: custId })
+        if (!cancelled) setAppointments(data?.data || [])
+      } catch { /* keep empty */ }
+    })()
+    return () => { cancelled = true }
+  }, [currentUser?.cust_id])
+
+  // Derive overview stats from appointments
+  useEffect(() => {
+    setOverview((prev) => ({
+      ...prev,
+      totalOrders: appointments.length,
+      appointments: appointments.filter((a) => !a.appoint_closed).length,
+      completedOrders: appointments.filter((a) => a.appoint_closed || a.appoint_type === 'completed').length,
+      savedItems: 0,
+    }))
+  }, [appointments])
 
   return (
     <AccountLayout>

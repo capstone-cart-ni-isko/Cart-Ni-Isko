@@ -1,7 +1,8 @@
 import { createContext, useState, useEffect, useCallback } from 'react'
 import { INITIAL_ADMIN_DATA } from '../data/adminMockData.js'
-import { employeeLogin, mapEmployee } from '../services/auth.js'
-import { ApiError } from '../services/api.js'
+import { adminLogin } from '../services/adminAuth.js'
+import { useToast } from '../hooks/useToast.js'
+import { fetchAdminProducts, createAdminProduct, updateAdminProduct as updateAdminProductAPI, removeAdminProduct as removeAdminProductAPI } from '../services/adminProducts.js'
 
 export const AdminContext = createContext(null)
 
@@ -81,7 +82,9 @@ export const DEFAULT_ADMIN_USERS = [
 ]
 
 export function AdminProvider({ children }) {
-  // Admin Authentication State
+  const { showToast } = useToast()
+
+  // Admin Authentication State (null until a staff member logs in)
   const [currentAdminUser, setCurrentAdminUser] = useState(() => {
     try {
       const savedAuth = localStorage.getItem(AUTH_STORAGE_KEY)
@@ -91,10 +94,10 @@ export function AdminProvider({ children }) {
     } catch (e) {
       console.warn('Failed to parse admin auth:', e)
     }
-    return DEFAULT_ADMIN_USERS[1] // Maria Santos (Store Administrator)
+    return null
   })
 
-  // Admin Data State with complete fallback merge
+  // Admin Data State (products are fetched from backend; other data from localStorage)
   const [adminState, setAdminState] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -109,7 +112,6 @@ export function AdminProvider({ children }) {
           analyticsKPIs: { ...INITIAL_ADMIN_DATA.analyticsKPIs, ...(parsed.analyticsKPIs || {}) },
           storeSettings: { ...INITIAL_ADMIN_DATA.storeSettings, ...(parsed.storeSettings || {}) },
           orders: Array.isArray(parsed.orders) && parsed.orders.length > 0 ? parsed.orders : INITIAL_ADMIN_DATA.orders,
-          products: Array.isArray(parsed.products) && parsed.products.length > 0 ? parsed.products : INITIAL_ADMIN_DATA.products,
           logisticsOrders: Array.isArray(parsed.logisticsOrders) && parsed.logisticsOrders.length > 0 ? parsed.logisticsOrders : INITIAL_ADMIN_DATA.logisticsOrders,
           reviews: Array.isArray(parsed.reviews) && parsed.reviews.length > 0 ? parsed.reviews : INITIAL_ADMIN_DATA.reviews,
           officers: Array.isArray(parsed.officers) && parsed.officers.length > 0 ? parsed.officers : INITIAL_ADMIN_DATA.officers,
@@ -127,30 +129,33 @@ export function AdminProvider({ children }) {
     }
   })
 
-  // POS in-memory cart state
-  const [posCart, setPosCart] = useState([
-    {
-      id: 'prod-11',
-      name: 'Tatak BUEÑO Cap',
-      variant: 'One Size, Black',
-      price: 300.0,
-      qty: 1,
-      image: '/src/assets/Branding/Copy of cap.png',
-    },
-    {
-      id: 'prod-7',
-      name: 'BUnique Pins',
-      variant: 'Standard Metallic',
-      price: 50.0,
-      qty: 1,
-      image: '/src/assets/Branding/Copy of badge.png',
-    },
-  ])
+  // Products state - fetched from backend
+  const [products, setProducts] = useState([])
+  const [productsRefreshKey, setProductsRefreshKey] = useState(0)
 
-  // Sync admin state to localStorage
+  // POS in-memory cart state
+  const [posCart, setPosCart] = useState([])
+
+  // Fetch products from backend whenever admin is logged in or refresh key changes
+  useEffect(() => {
+    if (!currentAdminUser) return
+    let cancelled = false
+    fetchAdminProducts()
+      .then((rows) => { if (!cancelled) setProducts(rows) })
+      .catch(() => { if (!cancelled) setProducts([]) })
+    return () => { cancelled = true }
+  }, [currentAdminUser, productsRefreshKey])
+
+  const refreshProducts = useCallback(() => {
+    setProductsRefreshKey((k) => k + 1)
+  }, [])
+
+  // Sync admin state to localStorage (products not included - they come from backend)
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(adminState))
+      const stateToSave = { ...adminState }
+      delete stateToSave.products
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave))
     } catch (e) {
       console.warn('Failed to save admin state:', e)
     }
@@ -171,36 +176,16 @@ export function AdminProvider({ children }) {
 
   // ── ADMIN AUTHENTICATION ACTIONS ──
   const loginAdmin = useCallback(async (emailOrUsername, password) => {
-    const users = adminState.adminUsers || DEFAULT_ADMIN_USERS
-    const cleanInput = (emailOrUsername || '').trim().toLowerCase()
-
-    try {
-      const employee = await employeeLogin(emailOrUsername.trim(), password)
-      const mapped = mapEmployee(employee)
-      setCurrentAdminUser(mapped)
-      return { success: true, user: mapped }
-    } catch (err) {
-      if (err instanceof ApiError) {
-        return { success: false, error: err.message || 'Invalid staff credentials. Access denied.' }
-      }
+    const result = await adminLogin(emailOrUsername.trim(), password)
+    if (result.success && result.user) {
+      setCurrentAdminUser(result.user)
     }
-
-    const found = users.find(
-      (u) =>
-        u.email.toLowerCase() === cleanInput ||
-        u.name.toLowerCase() === cleanInput
-    )
-
-    if (found) {
-      setCurrentAdminUser(found)
-      return { success: true, user: found }
-    }
-
-    return { success: false, error: 'Invalid staff credentials. Access denied.' }
-  }, [adminState.adminUsers])
+    return result
+  }, [])
 
   const logoutAdmin = useCallback(() => {
     setCurrentAdminUser(null)
+    setProducts([])
   }, [])
 
   const switchAdminUser = useCallback((userId) => {
@@ -374,68 +359,91 @@ export function AdminProvider({ children }) {
     }))
   }, [])
 
-  // ── PRODUCT & INVENTORY ACTIONS ──
-  const toggleProductPublished = useCallback((productId) => {
-    setAdminState((prev) => ({
-      ...prev,
-      products: (prev.products || []).map((p) =>
-        p.id === productId
-          ? {
-              ...p,
-              published: !p.published,
-              status: !p.published ? 'Published' : 'Draft',
-            }
-          : p
-      ),
-    }))
-  }, [])
+  // ── PRODUCT & INVENTORY ACTIONS (backend-driven) ──
+  const toNumericProductId = (productId) => {
+    const numericId = parseInt(String(productId).replace('prod-', ''), 10)
+    return Number.isFinite(numericId) ? numericId : null
+  }
 
-  const addProduct = useCallback((product) => {
-    const newProduct = {
-      id: `prod-${Date.now()}`,
-      orders: 0,
-      published: true,
-      status: 'Published',
-      image: '/src/assets/Images/unnamed (1).png',
-      ...product,
+  const toggleProductPublished = useCallback(async (productId) => {
+    const numericId = toNumericProductId(productId)
+    if (numericId === null) return
+    const current = products.find((p) => p.id === productId)
+    const nextStatus = current && current.status !== 'Draft' ? 'Draft' : 'Published'
+    try {
+      await updateAdminProductAPI(numericId, { prod_status: nextStatus })
+      refreshProducts()
+    } catch (e) {
+      console.error('Failed to toggle product status:', e)
+      showToast('Failed to update product status.', 'error')
+      refreshProducts()
     }
-    setAdminState((prev) => ({
-      ...prev,
-      products: [newProduct, ...(prev.products || [])],
-    }))
-    return newProduct
-  }, [])
+  }, [products, refreshProducts, showToast])
 
-  const updateProduct = useCallback((productId, updatedFields) => {
-    setAdminState((prev) => ({
-      ...prev,
-      products: (prev.products || []).map((p) =>
-        p.id === productId ? { ...p, ...updatedFields } : p
-      ),
-    }))
-  }, [])
+  const addProduct = useCallback(async (productData) => {
+    try {
+      await createAdminProduct({
+        name: productData.name,
+        sku: productData.sku || `SKU-${Date.now()}`,
+        category: productData.category || 'Shirts',
+        price: Number(productData.price) || 300,
+        stock: Number(productData.stock) || 10,
+        desc: productData.desc || '',
+      })
+      showToast('Product added to catalog successfully!', 'success')
+      refreshProducts()
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to add product:', e)
+      showToast(e.message || 'Failed to add product.', 'error')
+      return { success: false, error: e.message || 'Failed to add product.' }
+    }
+  }, [refreshProducts, showToast])
 
-  const deleteProduct = useCallback((productId) => {
-    setAdminState((prev) => ({
-      ...prev,
-      products: (prev.products || []).filter((p) => p.id !== productId),
-    }))
-  }, [])
+  const updateProduct = useCallback(async (productId, updatedFields) => {
+    const numericId = toNumericProductId(productId)
+    if (numericId === null) return { success: false, error: 'Invalid product ID.' }
+    try {
+      await updateAdminProductAPI(numericId, updatedFields)
+      showToast('Product updated successfully!', 'success')
+      refreshProducts()
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to update product:', e)
+      showToast(e.message || 'Failed to update product.', 'error')
+      refreshProducts()
+      return { success: false, error: e.message || 'Failed to update product.' }
+    }
+  }, [refreshProducts, showToast])
 
-  const adjustStock = useCallback((productId, newStock) => {
-    setAdminState((prev) => ({
-      ...prev,
-      products: (prev.products || []).map((p) =>
-        p.id === productId
-          ? {
-              ...p,
-              stock: Math.max(0, newStock),
-              status: newStock === 0 ? 'Out of Stock' : p.published ? 'Published' : 'Draft',
-            }
-          : p
-      ),
-    }))
-  }, [])
+  const deleteProduct = useCallback(async (productId) => {
+    const numericId = toNumericProductId(productId)
+    if (numericId === null) return { success: false, error: 'Invalid product ID.' }
+    try {
+      await removeAdminProductAPI(numericId)
+      showToast('Product removed from the catalog.', 'success')
+      refreshProducts()
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to delete product:', e)
+      showToast(e.message || 'Failed to remove product.', 'error')
+      refreshProducts()
+      return { success: false, error: e.message || 'Failed to remove product.' }
+    }
+  }, [refreshProducts, showToast])
+
+  const adjustStock = useCallback(async (productId, newStock) => {
+    const numericId = toNumericProductId(productId)
+    if (numericId === null) return
+    try {
+      await updateAdminProductAPI(numericId, { prod_qty: Math.max(0, newStock) })
+      refreshProducts()
+    } catch (e) {
+      console.error('Failed to adjust stock:', e)
+      showToast(e.message || 'Failed to adjust stock.', 'error')
+      refreshProducts()
+    }
+  }, [refreshProducts, showToast])
 
   // ── REVIEWS MODERATION ACTIONS ──
   const approveReview = useCallback((reviewId) => {
@@ -461,11 +469,7 @@ export function AdminProvider({ children }) {
       ...prev,
       reviews: (prev.reviews || []).map((r) =>
         r.id === reviewId
-          ? {
-              ...r,
-              status: 'assigned_support',
-              supportNote: note || 'Assigned to Customer Support Tier 2',
-            }
+          ? { ...r, status: 'assigned_support', supportNote: note || 'Assigned to Customer Support Tier 2' }
           : r
       ),
     }))
@@ -508,10 +512,7 @@ export function AdminProvider({ children }) {
             ? {
                 ...off,
                 availability: req.requestedShift,
-                shifts: [
-                  ...(off.shifts || []),
-                  { time: '1:00 PM - 3:00 PM', type: 'desk_duty', title: 'Desk Duty' },
-                ],
+                shifts: [...(off.shifts || []), { time: '1:00 PM - 3:00 PM', type: 'desk_duty', title: 'Desk Duty' }],
               }
             : off
         ),
@@ -646,6 +647,7 @@ export function AdminProvider({ children }) {
       value={{
         adminState,
         posCart,
+        products,
         currentAdminUser,
         isSuperAdmin,
         loginAdmin,
@@ -678,6 +680,7 @@ export function AdminProvider({ children }) {
         posRemoveItem,
         posClearCart,
         posCheckout,
+        refreshProducts,
       }}
     >
       {children}

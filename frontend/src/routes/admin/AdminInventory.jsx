@@ -1,88 +1,14 @@
 import React, { useState, useMemo } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 
-// Realistic inventory product catalog matching Photo 3
-const INITIAL_INVENTORY_PRODUCTS = [
-  {
-    id: 'prod-01',
-    name: 'Classic University Tee',
-    sku: 'UPT-01',
-    categoryName: 'Shirts',
-    collectionName: 'Core Classics',
-    availability: 'Regular',
-    totalStock: 29,
-    price: 450.0,
-    orders: 142,
-    status: 'Published',
-    image: 'shirt',
-    variants: [
-      { id: 'var-1', name: 'Blue / Small', sku: 'TEE-BS', stock: 8, price: 450.0, status: 'In Stock', lastUpdated: 'May 24, 2025 2:30 PM' },
-      { id: 'var-2', name: 'Blue / Medium', sku: 'TEE-BM', stock: 12, price: 450.0, status: 'In Stock', lastUpdated: 'May 24, 2025 2:30 PM' },
-      { id: 'var-3', name: 'Blue / Large', sku: 'TEE-BL', stock: 9, price: 450.0, status: 'In Stock', lastUpdated: 'May 24, 2025 2:30 PM' },
-      { id: 'var-4', name: 'Blue / XL', sku: 'TEE-BXL', stock: 0, price: 450.0, status: 'Out of Stock', lastUpdated: 'May 24, 2025 2:30 PM' },
-    ],
-  },
-  {
-    id: 'prod-02',
-    name: 'Centennial Edition Hoodie',
-    sku: 'HOD-CE',
-    categoryName: 'Hoodies',
-    collectionName: '2026 Collection',
-    availability: 'Pre-order',
-    totalStock: 16,
-    preorderTarget: '16 / 25 complete',
-    price: 1200.0,
-    orders: 45,
-    status: 'Published',
-    image: 'jacket',
-    variants: [
-      { id: 'var-5', name: 'Maroon / Medium', sku: 'HOD-MM', stock: 8, price: 1200.0, status: 'In Stock', lastUpdated: 'May 22, 2025 11:15 AM' },
-      { id: 'var-6', name: 'Maroon / Large', sku: 'HOD-ML', stock: 5, price: 1200.0, status: 'In Stock', lastUpdated: 'May 22, 2025 11:15 AM' },
-      { id: 'var-7', name: 'Maroon / XL', sku: 'HOD-MXL', stock: 3, price: 1200.0, status: 'In Stock', lastUpdated: 'May 22, 2025 11:15 AM' },
-    ],
-  },
-  {
-    id: 'prod-03',
-    name: 'Premium Woven Lanyard',
-    sku: 'LAN-02',
-    categoryName: 'Lanyards',
-    collectionName: 'Core Classics',
-    availability: 'Regular',
-    totalStock: 4,
-    price: 150.0,
-    orders: 892,
-    status: 'Published',
-    image: 'lanyard',
-    variants: [
-      { id: 'var-8', name: 'Standard (BU Orange)', sku: 'LAN-STD', stock: 4, price: 150.0, status: 'Low Stock', lastUpdated: 'May 20, 2025 4:00 PM' },
-    ],
-  },
-  {
-    id: 'prod-04',
-    name: 'Heritage Campus Cap',
-    sku: 'CAP-04',
-    categoryName: 'Caps',
-    collectionName: 'Core Classics',
-    availability: 'Regular',
-    totalStock: 35,
-    price: 380.0,
-    orders: 110,
-    status: 'Published',
-    image: 'cap',
-    variants: [
-      { id: 'var-9', name: 'Navy / Adjustable', sku: 'CAP-NAV', stock: 20, price: 380.0, status: 'In Stock', lastUpdated: 'May 18, 2025 9:00 AM' },
-      { id: 'var-10', name: 'White / Adjustable', sku: 'CAP-WHT', stock: 15, price: 380.0, status: 'In Stock', lastUpdated: 'May 18, 2025 9:00 AM' },
-    ],
-  },
-]
-
 export default function AdminInventory() {
-  const { addProduct, updateProduct, deleteProduct } = useAdmin()
+  const { addProduct, updateProduct, deleteProduct, adjustStock, products: backendProducts } = useAdmin()
 
-  // Product data state
-  const [productsList, setProductsList] = useState(INITIAL_INVENTORY_PRODUCTS)
+  // Product data state - synced directly from backend (refetched on every change)
+  const productsList = backendProducts
   const [expandedRows, setExpandedRows] = useState({ 'prod-01': true }) // Row 1 expanded by default (Photo 3)
   const [selectedVariantIds, setSelectedVariantIds] = useState(['var-1', 'var-2']) // Two selected by default (Photo 3)
   const [selectedProductIds, setSelectedProductIds] = useState([])
@@ -112,6 +38,15 @@ export default function AdminInventory() {
   const [newProdStock, setNewProdStock] = useState('20')
   const [newCatName, setNewCatName] = useState('')
 
+  // Edit / Delete product state (backend-driven)
+  const [showEditProductModal, setShowEditProductModal] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [editCategory, setEditCategory] = useState('Shirts')
+  const [editPrice, setEditPrice] = useState('')
+  const [editStock, setEditStock] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+
   // Toggle expand row
   const toggleRow = (id) => {
     setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -124,43 +59,37 @@ export default function AdminInventory() {
     )
   }
 
-  // Stock stepper increment / decrement
+  // Stock stepper increment / decrement (calls backend)
   const handleVariantStockChange = (prodId, varId, delta) => {
-    setProductsList((prev) =>
-      prev.map((p) => {
-        if (p.id !== prodId) return p
-        const updatedVariants = p.variants.map((v) => {
-          if (v.id !== varId) return v
-          const newStock = Math.max(0, v.stock + delta)
-          const newStatus = newStock === 0 ? 'Out of Stock' : newStock < 5 ? 'Low Stock' : 'In Stock'
-          return { ...v, stock: newStock, status: newStatus }
-        })
-        const newTotalStock = updatedVariants.reduce((sum, v) => sum + v.stock, 0)
-        return { ...p, variants: updatedVariants, totalStock: newTotalStock }
-      })
-    )
+    const product = productsList.find((p) => p.id === prodId)
+    if (!product) return
+    const newTotal = Math.max(0, product.totalStock + delta)
+    adjustStock(prodId, newTotal)
   }
 
-  // Batch Apply stock change
+  // Batch Apply stock change (calls backend)
   const handleApplyBatchStock = () => {
     const qty = parseInt(batchQtyInput, 10)
-    if (isNaN(qty) || qty <= 0) return
+    if (isNaN(qty) || qty < 0) return
 
-    setProductsList((prev) =>
-      prev.map((p) => {
-        const updatedVariants = p.variants.map((v) => {
-          if (!selectedVariantIds.includes(v.id)) return v
-          let newStock = v.stock
-          if (batchActionType === 'add') newStock += qty
-          if (batchActionType === 'subtract') newStock = Math.max(0, newStock - qty)
-          if (batchActionType === 'set') newStock = qty
-          const newStatus = newStock === 0 ? 'Out of Stock' : newStock < 5 ? 'Low Stock' : 'In Stock'
-          return { ...v, stock: newStock, status: newStatus }
-        })
-        const newTotalStock = updatedVariants.reduce((sum, v) => sum + v.stock, 0)
-        return { ...p, variants: updatedVariants, totalStock: newTotalStock }
-      })
-    )
+    // Group requested adjustments per product to avoid stale-overwrite issues
+    const adjustments = new Map()
+    selectedVariantIds.forEach((varId) => {
+      const product = productsList.find((p) =>
+        (p.variants || []).some((v) => v.id === varId)
+      )
+      if (!product || adjustments.has(product.id)) return
+      const base = Number(product.totalStock) || 0
+      const nextTotal =
+        batchActionType === 'set'
+          ? qty
+          : batchActionType === 'subtract'
+          ? base - qty
+          : base + qty
+      adjustments.set(product.id, Math.max(0, nextTotal))
+    })
+
+    adjustments.forEach((newTotal, prodId) => adjustStock(prodId, newTotal))
     setBatchQtyInput('')
   }
 
@@ -172,45 +101,51 @@ export default function AdminInventory() {
     setActiveTags([])
   }
 
-  // Add Product Form submit
+  // Add Product Form submit (calls backend)
   const handleCreateProduct = (e) => {
     e.preventDefault()
     if (!newProdName) return
-    const newProd = {
-      id: `prod-${Date.now()}`,
+    addProduct({
       name: newProdName,
       sku: `SKU-${Math.floor(100 + Math.random() * 900)}`,
-      categoryName: newProdCategory,
-      collectionName: 'Core Classics',
-      availability: 'Regular',
-      totalStock: parseInt(newProdStock, 10) || 10,
+      category: newProdCategory,
       price: parseFloat(newProdPrice) || 300,
-      orders: 0,
-      status: 'Published',
-      image: 'shirt',
-      variants: [
-        {
-          id: `var-${Date.now()}-1`,
-          name: 'Standard',
-          sku: `SKU-STD`,
-          stock: parseInt(newProdStock, 10) || 10,
-          price: parseFloat(newProdPrice) || 300,
-          status: 'In Stock',
-          lastUpdated: 'Just now',
-        },
-      ],
-    }
-    setProductsList([newProd, ...productsList])
-    if (addProduct) {
-      addProduct({
-        name: newProdName,
-        category: newProdCategory,
-        price: parseFloat(newProdPrice) || 300,
-        stock: parseInt(newProdStock, 10) || 10,
-      })
-    }
+      stock: parseInt(newProdStock, 10) || 10,
+      desc: '',
+    })
     setShowAddProductModal(false)
     setNewProdName('')
+  }
+
+  // Open Edit Product modal pre-filled with current values
+  const openEditModal = (prod) => {
+    setEditTarget(prod)
+    setEditName(prod.name)
+    setEditCategory(prod.categoryName || 'Shirts')
+    setEditPrice(String(prod.price ?? ''))
+    setEditStock(String(prod.totalStock ?? ''))
+    setShowEditProductModal(true)
+  }
+
+  // Edit Product Form submit (calls backend)
+  const handleUpdateProduct = (e) => {
+    e.preventDefault()
+    if (!editTarget) return
+    updateProduct(editTarget.id, {
+      prod_name: editName,
+      prod_categ: editCategory,
+      prod_price: parseFloat(editPrice) || 0,
+      prod_qty: parseInt(editStock, 10) || 0,
+    })
+    setShowEditProductModal(false)
+    setEditTarget(null)
+  }
+
+  // Delete Product (calls backend soft-delete)
+  const handleDeleteProduct = () => {
+    if (!deleteTarget) return
+    deleteProduct(deleteTarget.id)
+    setDeleteTarget(null)
   }
 
   // Filtered list
@@ -270,7 +205,7 @@ export default function AdminInventory() {
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">TOTAL PRODUCTS</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">195</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{filteredProducts.length}</h3>
             </div>
           </div>
 
@@ -616,16 +551,16 @@ export default function AdminInventory() {
                             )}
                             <button
                               type="button"
-                              onClick={() => {
-                                alert(`Editing ${prod.name}`)
-                              }}
+                              onClick={() => openEditModal(prod)}
                               className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
                             >
                               Edit
                             </button>
                             <button
                               type="button"
-                              className="p-1 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-50 cursor-pointer"
+                              onClick={() => setDeleteTarget(prod)}
+                              title="Delete product"
+                              className="p-1 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
                             >
                               ···
                             </button>
@@ -994,6 +929,109 @@ export default function AdminInventory() {
           </div>
         </div>
       )}
+    {/* Edit Product Modal */}
+      {showEditProductModal && editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-lg p-4 max-w-md w-full border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900">Edit Product</h3>
+              <button
+                type="button"
+                onClick={() => { setShowEditProductModal(false); setEditTarget(null) }}
+                className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleUpdateProduct} className="space-y-2.5 text-xs">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Product Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full h-8 px-2.5 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Category</label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  className="w-full h-8 px-2 rounded-md border border-slate-200 text-xs bg-white focus:ring-1 focus:ring-brand-orange"
+                >
+                  <option value="Shirts">Shirts</option>
+                  <option value="Hoodies">Hoodies</option>
+                  <option value="Varsity Jacket">Varsity Jacket</option>
+                  <option value="Lanyards">Lanyards</option>
+                  <option value="Caps">Caps</option>
+                  <option value="Pins">Pins</option>
+                  <option value="Accessories">Accessories</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Price (₱)</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                    className="w-full h-8 px-2.5 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Stock</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={editStock}
+                    onChange={(e) => setEditStock(e.target.value)}
+                    className="w-full h-8 px-2.5 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                  />
+                </div>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditProductModal(false); setEditTarget(null) }}
+                  className="h-8 px-3 rounded-md border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Product Confirmation */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteProduct}
+        title="Remove product?"
+        message={
+          deleteTarget
+            ? `"${deleteTarget.name}" will be removed from the catalog (soft delete). You can still re-list it later.`
+            : 'This product will be removed from the catalog.'
+        }
+        confirmText="Delete Product"
+        cancelText="Cancel"
+        isDestructive
+      />
     </AdminLayout>
   )
 }

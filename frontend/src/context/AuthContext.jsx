@@ -89,6 +89,8 @@ export function AuthProvider({ children }) {
 
   const register = async (details) => {
     const fullName = `${details.firstName || ''} ${details.lastName || ''}`.trim() || details.username || 'User'
+    const role = details.role || 'Student'
+    const isStudent = role === 'Student'
     try {
       const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'}/auth/cust_signup`, {
         method: 'POST',
@@ -98,9 +100,8 @@ export function AuthProvider({ children }) {
           password: details.password,
           nickname: fullName,
           email: details.email,
-          type: details.role || 'Student',
-          city: details.campus || '',
-          province: details.college || '',
+          type: role,
+          ...(isStudent ? { college: details.college || '' } : {}),
         }),
       })
       const data = await res.json()

@@ -248,9 +248,13 @@ function SignUp() {
 
   const handleDesktopPersonalizeSubmit = async (e) => {
     e.preventDefault()
-    if (form.role === 'Student' && (!form.college || !form.course || !form.yearLevel)) {
-      showToast('Please fill out all academic details', 'error')
-      return
+
+    // Academic details are only required for Student role
+    if (form.role === 'Student') {
+      if (!form.college || !form.course || !form.yearLevel) {
+        showToast('Please fill out all academic details', 'error')
+        return
+      }
     }
 
     const combinedYearLevel = form.role === 'Student'

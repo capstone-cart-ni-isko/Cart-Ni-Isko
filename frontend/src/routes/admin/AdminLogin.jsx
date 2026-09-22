@@ -1,16 +1,23 @@
-import React, { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
-  const { loginAdmin } = useAdmin()
+  const { loginAdmin, currentAdminUser } = useAdmin()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Already authenticated → skip straight into the portal
+  useEffect(() => {
+    if (currentAdminUser) {
+      navigate('/admin/dashboard', { replace: true })
+    }
+  }, [currentAdminUser, navigate])
 
   const handleLogin = async (e) => {
     e.preventDefault()

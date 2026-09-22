@@ -34,7 +34,7 @@ function CardHeader({ title, action }) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const { adminState = {}, resolveAlert } = useAdmin()
+  const { adminState = {}, resolveAlert, products = [] } = useAdmin()
   const [timeRange, setTimeRange] = useState('Today')
 
   const kpi = adminState?.dashboardKPIs || INITIAL_ADMIN_DATA.dashboardKPIs

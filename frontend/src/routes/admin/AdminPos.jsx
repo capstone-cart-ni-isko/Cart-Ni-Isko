@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
@@ -15,13 +15,13 @@ const CATEGORIES = [
 
 export default function AdminPos() {
   const {
-    adminState,
     posCart,
     posAddToCart,
     posUpdateQty,
     posRemoveItem,
     posClearCart,
     posCheckout,
+    products: backendProducts = [],
   } = useAdmin()
 
   // Mobile state: 'products' | 'cart'
@@ -47,18 +47,21 @@ export default function AdminPos() {
 
   const [showConfirmSaleModal, setShowConfirmSaleModal] = useState(false) // confirmation view before placing order
 
-  const products = adminState.products || []
+  const products = backendProducts
 
-  // Filter products by category and search
+  // Filter products by category and search (tolerant to singular/plural labels)
   const filteredProducts = useMemo(() => {
+    const normalizeCat = (value) => String(value || '').trim().toLowerCase().replace(/s$/, '')
+    const selected = normalizeCat(selectedCategory)
     return products.filter((p) => {
+      const cat = normalizeCat(p.category)
       const matchCat =
-        selectedCategory === 'All Items' ||
-        p.category.toLowerCase() === selectedCategory.toLowerCase()
+        selectedCategory === 'All Items' || cat === selected || cat.includes(selected) || selected.includes(cat)
       const matchSearch =
         !searchQuery ||
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.category.toLowerCase().includes(searchQuery.toLowerCase())
+        String(p.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        cat.includes(searchQuery.toLowerCase())
       return matchCat && matchSearch
     })
   }, [products, selectedCategory, searchQuery])

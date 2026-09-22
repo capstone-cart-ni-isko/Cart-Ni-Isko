@@ -35,9 +35,11 @@
                     return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
                 }
 
+                // Only these two columns are read below - skip the heavy
+                // review/detail JSON blobs on this lookup.
                 $product = is_numeric($prodId)
-                    ? Product::where('prod_id', $prodId)->first()
-                    : Product::where('prod_tag', $prodId)->first();
+                    ? Product::where('prod_id', $prodId)->first(['prod_id', 'prod_price'])
+                    : Product::where('prod_tag', $prodId)->first(['prod_id', 'prod_price']);
 
                 if (!$product) {
                     return response()->json(['success' => false, 'message' => 'Product not found'], 404);
@@ -106,9 +108,11 @@
                 $prodId = $json->input('prod_id');
                 $qty = $json->input('item_qty', 1);
 
+                // Only these three columns are read below - skip the heavy
+                // review/detail JSON blobs on this lookup.
                 $product = is_numeric($prodId)
-                    ? Product::where('prod_id', $prodId)->first()
-                    : Product::where('prod_tag', $prodId)->first();
+                    ? Product::where('prod_id', $prodId)->first(['prod_id', 'prod_disabled', 'prod_deleted'])
+                    : Product::where('prod_tag', $prodId)->first(['prod_id', 'prod_disabled', 'prod_deleted']);
 
                 if (!$product) {
                     return response()->json(['success' => false, 'message' => 'Product not found'], 404);
@@ -162,8 +166,9 @@
                     return response()->json(['success' => false, 'message' => 'Customer ID is required'], 400);
                 }
 
-                $customer = Customer::where('cust_id', $custId)->first();
-                if (!$customer) {
+                // Existence check only: an EXISTS probe avoids hydrating the
+                // whole customer row on every wishlist fetch.
+                if (!Customer::where('cust_id', $custId)->exists()) {
                     return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
                 }
 
@@ -205,11 +210,12 @@
                 $custId = $json->input('cust_id');
                 $prodId = $json->input('prod_id');
 
-                $product = is_numeric($prodId)
-                    ? Product::where('prod_id', $prodId)->first()
-                    : Product::where('prod_tag', $prodId)->first();
-
-                $resolvedProdId = $product ? $product->prod_id : $prodId;
+                // Resolve the id with a single-column lookup instead of
+                // hydrating the whole product row (incl. the review blobs).
+                $resolvedProdId = (is_numeric($prodId)
+                    ? Product::where('prod_id', $prodId)->value('prod_id')
+                    : Product::where('prod_tag', $prodId)->value('prod_id'))
+                    ?? $prodId;
 
                 Wishlist::where('cust_id', $custId)->where('prod_id', $resolvedProdId)->delete();
 
@@ -255,11 +261,12 @@
                 $custId = $json->input('cust_id');
                 $prodId = $json->input('prod_id');
 
-                $product = is_numeric($prodId)
-                    ? Product::where('prod_id', $prodId)->first()
-                    : Product::where('prod_tag', $prodId)->first();
-
-                $resolvedProdId = $product ? $product->prod_id : $prodId;
+                // Resolve the id with a single-column lookup instead of
+                // hydrating the whole product row (incl. the review blobs).
+                $resolvedProdId = (is_numeric($prodId)
+                    ? Product::where('prod_id', $prodId)->value('prod_id')
+                    : Product::where('prod_tag', $prodId)->value('prod_id'))
+                    ?? $prodId;
 
                 $updateData = [];
                 if ($json->has('item_qty')) $updateData['item_qty'] = $json->input('item_qty');
