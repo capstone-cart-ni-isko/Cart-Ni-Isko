@@ -607,6 +607,160 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
+    // ==========================================
+    // ORDERS API VALIDATORS
+    // ==========================================
+
+    public function addProductToOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'  => 'required',
+            'prod_id' => 'required',
+        ], [
+            'ord_id.required'  => 'Order ID is required.',
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    public function updateOrderDetails(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+        ]);
+    }
+
+    public function removeProductFromOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'  => 'required',
+            'prod_id' => 'required',
+        ], [
+            'ord_id.required'  => 'Order ID is required.',
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    // ==========================================
+    // POS API VALIDATORS
+    // ==========================================
+
+    public function posAddProductToOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'prod_id' => 'required',
+        ], [
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    public function posCheckoutOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'    => 'required',
+            'pay_given' => 'required|numeric|min:0',
+        ], [
+            'ord_id.required'    => 'Order ID is required.',
+            'pay_given.required' => 'Payment given amount is required.',
+            'pay_given.numeric'  => 'Payment given must be a numeric amount.',
+            'pay_given.min'      => 'Payment given cannot be negative.',
+        ]);
+    }
+
+    public function posUpdateOrderDetails(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+        ]);
+    }
+
+
+    // ==========================================
+    // NOTIF API VALIDATORS
+    // ==========================================
+
+    public function createNotification(Request $json)
+    {
+        return $this->validateFields($json, [
+            'recipient_type' => 'required|in:customer,employee',
+            'recipient_id'   => 'required',
+            'notif_msg'      => 'required',
+        ], [
+            'recipient_type.required' => 'Recipient type is required.',
+            'recipient_type.in'       => 'Recipient type must be either customer or employee.',
+            'recipient_id.required'   => 'Recipient ID is required.',
+            'notif_msg.required'      => 'Notification message is required.',
+        ]);
+    }
+
+    public function distributeNotifications(Request $json)
+    {
+        return $this->validateFields($json, [
+            'recipient_type' => 'required|in:customer,employee',
+            'notif_msg'      => 'required',
+        ], [
+            'recipient_type.required' => 'Recipient type is required.',
+            'recipient_type.in'       => 'Recipient type must be either customer or employee.',
+            'notif_msg.required'      => 'Notification message is required.',
+        ]);
+    }
+
+    public function updateNotificationStatus(Request $json)
+    {
+        return $this->validateFields($json, [
+            'notif_id'       => 'required',
+            'recipient_type' => 'required|in:customer,employee',
+        ], [
+            'notif_id.required'       => 'Notification ID is required.',
+            'recipient_type.required' => 'Recipient type is required.',
+            'recipient_type.in'       => 'Recipient type must be either customer or employee.',
+        ]);
+    }
+
+    // ==========================================
+    // TRACKING API VALIDATORS
+    // ==========================================
+
+    public function createFulfillmentTrack(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'     => 'required',
+            'track_type' => 'required|in:pickup,delivery',
+        ], [
+            'ord_id.required'      => 'Order ID is required.',
+            'track_type.required'  => 'Track type is required.',
+            'track_type.in'        => 'Track type must be either pickup or delivery.',
+        ]);
+    }
+
+    public function updateFulfillmentStatus(Request $json)
+    {
+        return $this->validateFields($json, [
+            'track_id'   => 'required',
+            'track_type' => 'required|in:pickup,delivery',
+            'status'     => 'required',
+        ], [
+            'track_id.required'    => 'Track ID is required.',
+            'track_type.required'  => 'Track type is required.',
+            'track_type.in'        => 'Track type must be either pickup or delivery.',
+            'status.required'      => 'Status is required.',
+        ]);
+    }
+
+    public function closeFulfillmentTrack(Request $json)
+    {
+        return $this->validateFields($json, [
+            'track_id'   => 'required',
+            'track_type' => 'required|in:pickup,delivery',
+        ], [
+            'track_id.required'    => 'Track ID is required.',
+            'track_type.required'  => 'Track type is required.',
+            'track_type.in'        => 'Track type must be either pickup or delivery.',
+        ]);
+    }
 
 
     // ==========================================
