@@ -591,6 +591,75 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
+    // ==========================================
+    // ORDERS API VALIDATORS
+    // ==========================================
+
+    public function addProductToOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'  => 'required',
+            'prod_id' => 'required',
+        ], [
+            'ord_id.required'  => 'Order ID is required.',
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    public function updateOrderDetails(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+        ]);
+    }
+
+    public function removeProductFromOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'  => 'required',
+            'prod_id' => 'required',
+        ], [
+            'ord_id.required'  => 'Order ID is required.',
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    // ==========================================
+    // POS API VALIDATORS
+    // ==========================================
+
+    public function posAddProductToOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'prod_id' => 'required',
+        ], [
+            'prod_id.required' => 'Product ID is required.',
+        ]);
+    }
+
+    public function posCheckoutOrder(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'    => 'required',
+            'pay_given' => 'required|numeric|min:0',
+        ], [
+            'ord_id.required'    => 'Order ID is required.',
+            'pay_given.required' => 'Payment given amount is required.',
+            'pay_given.numeric'  => 'Payment given must be a numeric amount.',
+            'pay_given.min'      => 'Payment given cannot be negative.',
+        ]);
+    }
+
+    public function posUpdateOrderDetails(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+        ]);
+    }
 
 
     // ==========================================

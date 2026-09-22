@@ -8,6 +8,8 @@ use App\Http\Controllers\AppointAPI;
 use App\Http\Controllers\AuthAPI;
 use App\Http\Controllers\CartAPI;
 use App\Http\Controllers\CheckoutAPI;
+use App\Http\Controllers\OrdersAPI;
+use App\Http\Controllers\PosAPI;
 use App\Http\Controllers\ProductsAPI;
 use App\Http\Controllers\ReviewsAPI;
 use App\Http\Controllers\SettingsAPI;
@@ -23,6 +25,17 @@ Route::delete('/cart/remove', [CartAPI::class, 'removeOrder']);
 // Checkout API Routes
 Route::post('/checkout/dispatch', [CheckoutAPI::class, 'determineDispatchDetails']);
 Route::post('/checkout/payment', [CheckoutAPI::class, 'integratePayment']);
+
+// Orders API Routes
+Route::post('/orders/add', [OrdersAPI::class, 'addProductToOrder']);
+Route::put('/orders/update', [OrdersAPI::class, 'updateOrderDetails']);
+Route::delete('/orders/remove', [OrdersAPI::class, 'removeProductFromOrder']);
+
+// POS API Routes
+Route::post('/pos/add', [PosAPI::class, 'addProductToOrder']);
+Route::post('/pos/checkout', [PosAPI::class, 'checkoutOrder']);
+Route::put('/pos/update', [PosAPI::class, 'updateOrderDetails']);
+Route::delete('/pos/remove', [PosAPI::class, 'removeProductFromOrder']);
 
 
 
