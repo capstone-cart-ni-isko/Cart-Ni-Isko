@@ -9,9 +9,12 @@ class ProductSeeder extends Seeder
 {
     public function run(): void
     {
-        $jsonPath = base_path('../frontend/src/data/products.json');
+        $jsonPath = database_path('data/products.json');
         if (!file_exists($jsonPath)) {
-            $this->command->error("products.json not found at: {$jsonPath}");
+            $jsonPath = base_path('../frontend/src/data/products.json');
+        }
+        if (!file_exists($jsonPath)) {
+            $this->command->error("products.json not found");
             return;
         }
 
