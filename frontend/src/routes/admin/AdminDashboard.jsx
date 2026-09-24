@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -7,13 +7,26 @@ import StatusPill from '../../components/admin/StatusPill.jsx'
 import BarChartStages from '../../components/admin/BarChartStages.jsx'
 import SalesBarChart from '../../components/admin/SalesBarChart.jsx'
 
-import { INITIAL_ADMIN_DATA } from '../../data/adminMockData.js'
+import {
+  fetchDashboardSnapshot,
+  mapOrderRows,
+  filterOrdersByRange,
+  summarizeSales,
+  countByStatus,
+  buildTrendLabel,
+  buildCategorySales,
+  buildFulfillmentStages,
+  buildOnDuty,
+} from '../../services/dashboard.js'
 
 /* ── Shared card primitives (single typographic baseline) ── */
 const CARD = 'bg-white rounded-lg p-4 border border-slate-200 space-y-3'
-const CARD_TITLE = 'text-sm font-bold tracking-normal text-slate-900'
+const CARD_TITLE = 'text-sm font-medium tracking-normal text-slate-900'
 const ACTION_LINK =
-  'text-xs font-semibold text-slate-500 hover:text-slate-900 flex items-center gap-1 transition-colors shrink-0'
+  'text-sm font-medium text-slate-500 hover:text-slate-900 flex items-center gap-1.5 transition-colors shrink-0'
+
+// SRS refresh cadence for the staff dashboard (REQ-SD-02)
+const REFRESH_MS = 30000
 
 function Chevron({ className = 'w-3.5 h-3.5' }) {
   return (
@@ -34,23 +47,59 @@ function CardHeader({ title, action }) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const { adminState = {}, resolveAlert, products = [] } = useAdmin()
+  const {
+    resolveAlert,
+    orders: rawOrders = [],
+    refreshOrders,
+    alerts = [],
+  } = useAdmin()
   const [timeRange, setTimeRange] = useState('Today')
+  const [snapshot, setSnapshot] = useState(null)
 
-  const kpi = adminState?.dashboardKPIs || INITIAL_ADMIN_DATA.dashboardKPIs
-  const stages = adminState?.fulfillmentStages || INITIAL_ADMIN_DATA.fulfillmentStages
-  const categorySales = adminState?.categorySales || INITIAL_ADMIN_DATA.categorySales
-  const orders = adminState?.orders || INITIAL_ADMIN_DATA.orders || []
+  // Live data: the shared order list (AdminContext) plus the dashboard
+  // aggregation snapshot, both re-polled every 30s (REQ-SD-02).
+  const syncData = useCallback(() => {
+    refreshOrders()
+    fetchDashboardSnapshot()
+      .then((next) => setSnapshot(next))
+      .catch(() => {
+        // Transient API failure: keep the last snapshot on screen.
+      })
+  }, [refreshOrders])
+
+  useEffect(() => {
+    syncData()
+    const timer = setInterval(syncData, REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [syncData])
+
+  const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
+  const rangeOrders = useMemo(
+    () => filterOrdersByRange(orders, timeRange),
+    [orders, timeRange]
+  )
+  const sales = useMemo(() => summarizeSales(rangeOrders), [rangeOrders])
+  const salesTrend = useMemo(() => buildTrendLabel(orders, timeRange), [orders, timeRange])
+  const ordersTrend = useMemo(
+    () => buildTrendLabel(orders, timeRange, () => 1),
+    [orders, timeRange]
+  )
+  const stages = useMemo(() => buildFulfillmentStages(orders), [orders])
+  const categorySales = useMemo(() => buildCategorySales(rangeOrders), [rangeOrders])
+  const onDuty = useMemo(() => buildOnDuty(snapshot?.accounts || {}), [snapshot])
+
   const recentOrders = orders.slice(0, 5)
-  const alerts = adminState?.alerts || INITIAL_ADMIN_DATA.alerts || []
-  const onDuty = adminState?.onDutyToday || INITIAL_ADMIN_DATA.onDutyToday || []
+  const preOrders = rangeOrders.filter(
+    (order) => order.preorder && !['CLAIMED', 'CANCELLED', 'RETURNED', 'UNCLAIMED'].includes(order.rawStatus)
+  ).length
+  const readyForPickup = countByStatus(rangeOrders, 'TO CLAIM')
 
   const handleExportSales = () => {
     const csvContent =
       'data:text/csv;charset=utf-8,' +
       ['Order ID,Customer,Date,Type,Fulfillment,Status,Total']
         .concat(
-          orders.map(
+          rangeOrders.map(
             (o) => `${o.id},${o.customer},${o.date},${o.type},${o.fulfillment},${o.status},₱${o.total}`
           )
         )
@@ -72,9 +121,6 @@ export default function AdminDashboard() {
     resolveAlert(alert.id)
   }
 
-  const displayGrossSales = kpi.grossSales === 124500 ? 126610.0 : (kpi.grossSales ?? 126610.0)
-  const displayTotalOrders = kpi.totalOrders === 142 ? 144 : (kpi.totalOrders ?? 144)
-
   return (
     <AdminLayout>
       <div className="space-y-4">
@@ -85,7 +131,7 @@ export default function AdminDashboard() {
               <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                 Store performance
               </h1>
-              <p className="text-xs font-normal text-slate-500 mt-0.5">
+              <p className="text-sm font-normal text-slate-500 mt-0.5">
                 Monitor sales, orders, inventory, and store activity.
               </p>
             </div>
@@ -96,7 +142,7 @@ export default function AdminDashboard() {
                   key={tab}
                   type="button"
                   onClick={() => setTimeRange(tab)}
-                  className={`h-7 px-3 rounded text-xs font-medium transition-all cursor-pointer ${
+                  className={`h-7 px-3 rounded text-sm font-medium transition-all cursor-pointer ${
                     timeRange === tab
                       ? 'bg-[#FF6B00] text-white'
                       : 'text-slate-600 hover:text-slate-900 bg-transparent'
@@ -111,9 +157,9 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard
               title="Gross sales"
-              value={`₱ ${displayGrossSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-              trend={kpi.grossSalesTrend || '+14% vs last period'}
-              trendPositive
+              value={`₱ ${sales.gross.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+              trend={salesTrend.label}
+              trendPositive={salesTrend.positive}
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                   <line x1="12" y1="1" x2="12" y2="23" />
@@ -124,9 +170,9 @@ export default function AdminDashboard() {
             />
             <StatCard
               title="Total orders"
-              value={displayTotalOrders}
-              trend={kpi.totalOrdersTrend || '+8% vs last period'}
-              trendPositive
+              value={sales.count.toLocaleString('en-US')}
+              trend={ordersTrend.label}
+              trendPositive={ordersTrend.positive}
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                   <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
@@ -138,8 +184,8 @@ export default function AdminDashboard() {
             />
             <StatCard
               title="Pre-orders"
-              value={kpi.preOrders ?? 8}
-              subtitle={kpi.preOrdersSubtitle || 'Requires production'}
+              value={preOrders}
+              subtitle="Requires production"
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                   <circle cx="12" cy="12" r="10" />
@@ -150,8 +196,8 @@ export default function AdminDashboard() {
             />
             <StatCard
               title="Ready for pickup"
-              value={kpi.readyForPickup ?? 12}
-              subtitle={kpi.readyForPickupSubtitle || 'Awaiting customer claim'}
+              value={readyForPickup}
+              subtitle="Awaiting customer claim"
               icon={
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                   <polyline points="20 6 9 17 4 12" />
@@ -223,6 +269,13 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                    {recentOrders.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-400 font-medium">
+                          No orders yet. New orders appear here automatically.
+                        </td>
+                      </tr>
+                    )}
                     {recentOrders.map((order) => (
                       <tr
                         key={order.id}
@@ -270,6 +323,11 @@ export default function AdminDashboard() {
               </div>
 
               <div className="space-y-2">
+                {alerts.length === 0 && (
+                  <p className="text-xs text-slate-400 py-3 text-center">
+                    All systems operating normally.
+                  </p>
+                )}
                 {alerts.map((alert) => (
                   <button
                     key={alert.id}
@@ -317,6 +375,8 @@ export default function AdminDashboard() {
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-3.5 h-3.5 text-slate-400">
                     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                    <line x1="12" y1="22.08" x2="12" y2="12" />
                   </svg>
                   <span>Restock inventory</span>
                 </button>
@@ -362,6 +422,11 @@ export default function AdminDashboard() {
               />
 
               <div className="space-y-2">
+                {onDuty.length === 0 && (
+                  <p className="text-xs text-slate-400 py-3 text-center">
+                    No staff currently marked in store.
+                  </p>
+                )}
                 {onDuty.map((staff) => (
                   <div
                     key={staff.id}

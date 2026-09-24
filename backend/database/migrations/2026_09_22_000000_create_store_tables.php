@@ -28,6 +28,7 @@ return new class extends Migration
                 $table->string('cust_brgy');
                 $table->string('cust_city');
                 $table->string('cust_province');
+                $table->string('cust_country')->nullable()->default('');
                 $table->string('cust_callcode');
                 $table->string('cust_phone');
                 $table->string('cust_email')->nullable();
@@ -56,7 +57,7 @@ return new class extends Migration
                 $table->string('emp_givname');
                 $table->string('emp_midname')->nullable();
                 $table->string('emp_suffix')->nullable();
-                $table->string('emp_studnum');
+                $table->string('emp_studnum')->nullable();
                 $table->string('emp_pronoun');
                 $table->date('emp_birthday');
                 $table->string('emp_brgy');
@@ -64,7 +65,7 @@ return new class extends Migration
                 $table->string('emp_province');
                 $table->string('emp_country')->default('');
                 $table->string('emp_callcode')->default('+63');
-                $table->string('emp_phone');
+                $table->string('emp_phone')->nullable();
                 $table->string('emp_email');
                 $table->string('emp_backupcallcode')->nullable();
                 $table->string('emp_backupphone')->nullable();
@@ -99,7 +100,7 @@ return new class extends Migration
         if (!Schema::hasTable('orders')) {
             Schema::create('orders', function (Blueprint $table) {
                 $table->bigIncrements('ord_id');
-                $table->bigInteger('cust_id');
+                $table->bigInteger('cust_id')->nullable();
                 $table->timestampTz('ord_created')->useCurrent();
                 $table->timestamp('ord_completed')->nullable();
                 $table->string('ord_tag');
@@ -141,8 +142,8 @@ return new class extends Migration
             });
         }
 
-        if (!Schema::hasTable('appointments')) {
-            Schema::create('appointments', function (Blueprint $table) {
+        if (!Schema::hasTable('appointment')) {
+            Schema::create('appointment', function (Blueprint $table) {
                 $table->bigIncrements('appoint_id');
                 $table->bigInteger('cust_id');
                 $table->timestampTz('appoint_created')->useCurrent();
@@ -158,7 +159,7 @@ return new class extends Migration
             Schema::create('pickup', function (Blueprint $table) {
                 $table->bigIncrements('pickup_id');
                 $table->bigInteger('ord_id');
-                $table->bigInteger('appoint_id');
+                $table->bigInteger('appoint_id')->nullable();
                 $table->bigInteger('pay_id');
                 $table->timestamp('pickup_created');
                 $table->timestamp('pickup_completed')->nullable();
@@ -167,15 +168,14 @@ return new class extends Migration
 
         if (!Schema::hasTable('delivery')) {
             Schema::create('delivery', function (Blueprint $table) {
-                $table->bigIncrements('delivery_id');
-                $table->timestampTz('delivery_created')->useCurrent();
-                $table->timestamp('delivery_closed')->nullable();
-                $table->string('delivery_ref');
-                $table->date('delivery_date');
-                $table->string('delivery_address');
-                $table->string('delivery_status');
-                $table->string('delivery_qr');
-                $table->text('delivery_desc')->nullable();
+                $table->bigIncrements('deliver_id');
+                $table->timestampTz('deliver_created')->useCurrent();
+                $table->timestamp('deliver_deleted')->nullable();
+                $table->string('delvier_ref');
+                $table->dateTime('deliver_date');
+                $table->string('deliver_address');
+                $table->string('deliver_status')->default('TRANSIT');
+                $table->string('deliver_qr');
             });
         }
 
@@ -183,7 +183,7 @@ return new class extends Migration
             Schema::create('parcel', function (Blueprint $table) {
                 $table->bigIncrements('parcel_id');
                 $table->bigInteger('ord_id');
-                $table->bigInteger('delivery_id');
+                $table->bigInteger('deliver_id');
                 $table->bigInteger('pay_id');
                 $table->timestamp('parcel_created');
                 $table->timestamp('parcel_completed')->nullable();
@@ -202,7 +202,7 @@ return new class extends Migration
 
         if (!Schema::hasTable('custnotif')) {
             Schema::create('custnotif', function (Blueprint $table) {
-                $table->bigIncrements('custnotif_');
+                $table->bigIncrements('custnotif_id');
                 $table->bigInteger('cust_id');
                 $table->timestampTz('custnotif_created')->useCurrent();
                 $table->timestamp('custnotif_read')->nullable();
@@ -237,7 +237,7 @@ return new class extends Migration
                 $table->timestampTz('report_created')->useCurrent();
                 $table->string('report_file');
                 $table->text('report_title');
-                $table->text('report_desc')->nullable();
+                $table->text('report_text')->nullable();
             });
         }
 

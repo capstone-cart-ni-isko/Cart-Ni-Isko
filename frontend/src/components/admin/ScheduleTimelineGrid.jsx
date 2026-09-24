@@ -1,5 +1,3 @@
-import React from 'react'
-
 const TIME_SLOTS = [
   '7:00 AM',
   '8:00 AM',

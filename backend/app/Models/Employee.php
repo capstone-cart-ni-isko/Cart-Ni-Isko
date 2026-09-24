@@ -1,9 +1,13 @@
 <?php
     namespace App\Models;
-    use Illuminate\Database\Eloquent\Model;
+    use Illuminate\Foundation\Auth\User as Authenticatable;
+    use Laravel\Sanctum\HasApiTokens;
 
-    class Employee extends Model
+    class Employee extends Authenticatable
     {
+        // Issue personal access tokens so auth:sanctum can resolve the account
+        use HasApiTokens;
+
         // Define the table name, primary key, and timestamps
         protected $table = 'employee';
         protected $primaryKey = 'emp_id';
@@ -20,6 +24,10 @@
             'emp_midname',
             'emp_suffix',
             'emp_studnum',
+            'emp_college',
+            'emp_program',
+            'emp_year',
+            'emp_bloc',
             'emp_pronoun',
             'emp_birthday',
             'emp_brgy',
@@ -29,6 +37,7 @@
             'emp_callcode',
             'emp_phone',
             'emp_email',
+            'emp_cred_changed',
             'emp_backupcallcode',
             'emp_backupphone',
             'emp_backupemail',
@@ -39,5 +48,12 @@
         // Define the hidden attributes that should not be visible in JSON responses
         protected $hidden = [
             'emp_password',
+        ];
+
+        protected $casts = [
+            'emp_created' => 'datetime',
+            'emp_cred_changed' => 'datetime',
+            'emp_year' => 'integer',
+            'emp_instore' => 'boolean',
         ];
     }

@@ -1,22 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import { apiGet } from '../services/api.js'
-import avatarImg from '../assets/avatar.png'
+import Avatar from '../components/ui/Avatar.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import ViewAllLink from '../components/ui/ViewAllLink.jsx'
 
-import {
-  UserIcon,
-  LockIcon,
-  BellIcon,
-  HelpIcon,
-  SettingsIcon,
-  LogOutIcon
-} from '../components/ui/Icons.jsx'
+import { SettingsIcon } from '../components/ui/Icons.jsx'
 
 /* ──────────────────────────────────────────────
    SVG Icon Components for Layout
@@ -46,35 +39,6 @@ function PencilIcon({ className = 'w-4 h-4' }) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  )
-}
-
-function TrendUpIcon({ className = 'w-5 h-5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-      <polyline points="17 6 23 6 23 12" />
-    </svg>
-  )
-}
-
-function ShieldIcon({ className = 'w-5 h-5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
-  )
-}
-
-function ContactIcon({ className = 'w-5 h-5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <circle cx="9" cy="10" r="2" />
-      <path d="M15 8h2" />
-      <path d="M15 12h2" />
-      <path d="M7 16h10" />
     </svg>
   )
 }
@@ -125,60 +89,6 @@ function PipelineIcon({ id, className = 'w-5 h-5' }) {
 }
 
 /* ──────────────────────────────────────────────
-   Mobile Drawer Menu
-   ────────────────────────────────────────────── */
-
-function DrawerMenu({ open, onClose, user, onLogout }) {
-  if (!open) return null
-  const menuItems = [
-    { to: '/account', label: 'Account Info', icon: <UserIcon className="w-5 h-5 text-gray-450" /> },
-    { to: '/security', label: 'Security', icon: <LockIcon className="w-5 h-5 text-gray-450" /> },
-    { to: '/settings/notifications', label: 'Notifications', icon: <BellIcon className="w-5 h-5 text-gray-450" /> },
-    { to: '/help', label: 'Help & Support', icon: <HelpIcon className="w-5 h-5 text-gray-450" /> },
-    { to: '/settings', label: 'Settings', icon: <SettingsIcon className="w-5 h-5 text-gray-450" /> },
-  ]
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-50 animate-fade-in" onClick={onClose} />
-      <aside className="fixed top-0 left-0 bottom-0 w-72 bg-white z-50 shadow-2xl flex flex-col justify-between rounded-r-2xl overflow-hidden animate-slide-right">
-        <div>
-          <div className="gradient-orange-header px-6 pt-12 pb-8 text-white">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full border-2 border-white overflow-hidden bg-blue-100">
-                <img src={avatarImg} alt="" className="w-full h-full object-cover" />
-              </div>
-              <div>
-                <p className="font-bold text-lg leading-tight">{user?.fullName || 'Guest Isko'}</p>
-                <p className="text-white/80 text-xs truncate max-w-[170px]">{user?.email || 'Browse campus merch'}</p>
-              </div>
-            </div>
-          </div>
-          <nav className="p-4 space-y-1">
-            {menuItems.map(({ to, label, icon }) => (
-              <Link key={to} to={to} onClick={onClose}
-                className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all">
-                {icon}
-                <span>{label}</span>
-              </Link>
-            ))}
-            <button onClick={() => { onLogout(); onClose() }}
-              className="w-full text-left flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all">
-              <LogOutIcon className="w-5 h-5 text-red-500" />
-              <span>Log Out</span>
-            </button>
-          </nav>
-        </div>
-        <div className="p-6 border-t border-gray-100 text-center">
-          <p className="text-xs text-gray-400 font-medium">Tindahan ni Isko v1.0.0</p>
-        </div>
-      </aside>
-    </>
-  )
-}
-
-
-
-/* ──────────────────────────────────────────────
    Main Profile Component
    ────────────────────────────────────────────── */
 
@@ -195,7 +105,6 @@ function Profile() {
 
   const isRawPhoneActuallyEmail = rawPhone && rawPhone.includes('@')
   const email = isRawPhoneActuallyEmail ? rawPhone : (rawEmail || '')
-  const phone = isRawPhoneActuallyEmail ? '+63 912 345 6789' : (rawPhone || '')
 
   const studentId = baseUser.studentId || ''
   const yearLevel = baseUser.yearLevel || ''
@@ -203,16 +112,10 @@ function Profile() {
   const campus = baseUser.campus || ''
   const college = baseUser.college || ''
   const bio = baseUser.bio || ''
-  const preferredContact = baseUser.preferredContact || ''
   const fullName = baseUser.fullName || 'User'
+  const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
   const [appointments, setAppointments] = useState([])
-  const [overview, setOverview] = useState({
-    totalOrders: 0,
-    completedOrders: 0,
-    appointments: 0,
-    savedItems: 0,
-  })
 
   const handleLogout = () => {
     logout()
@@ -222,28 +125,24 @@ function Profile() {
 
   // Fetch appointments from the backend
   useEffect(() => {
-    const custId = currentUser?.cust_id ?? currentUser?.id ?? null
-    if (!custId) return
+    if (!custId) return undefined
     let cancelled = false
-    ;(async () => {
-      try {
-        const data = await apiGet('/appoint/display', { cust_id: custId })
+    apiGet('/appoint/display', { cust_id: custId })
+      .then((data) => {
         if (!cancelled) setAppointments(data?.data || [])
-      } catch { /* keep empty */ }
-    })()
+      })
+      .catch(() => {
+        if (!cancelled) setAppointments([])
+      })
     return () => { cancelled = true }
-  }, [currentUser?.cust_id])
+  }, [custId])
 
-  // Derive overview stats from appointments
-  useEffect(() => {
-    setOverview((prev) => ({
-      ...prev,
-      totalOrders: appointments.length,
-      appointments: appointments.filter((a) => !a.appoint_closed).length,
-      completedOrders: appointments.filter((a) => a.appoint_closed || a.appoint_type === 'completed').length,
-      savedItems: 0,
-    }))
-  }, [appointments])
+  const overview = useMemo(() => ({
+    totalOrders: appointments.length,
+    appointments: appointments.filter((a) => !a.appoint_closed).length,
+    completedOrders: appointments.filter((a) => a.appoint_closed || a.appoint_type === 'completed').length,
+    savedItems: 0,
+  }), [appointments])
 
   return (
     <AccountLayout>
@@ -281,7 +180,7 @@ function Profile() {
             <div className="flex items-start justify-between gap-3 relative z-10">
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm">
-                  <img src={avatarImg} alt={fullName} className="w-full h-full object-cover scale-120" />
+                  <Avatar name={fullName} size={64} className="w-full h-full scale-125" />
                 </div>
                 <div className="min-w-0 text-white">
                   <h1 className="text-lg font-black tracking-tight leading-tight truncate">{fullName}</h1>
@@ -509,13 +408,9 @@ function Profile() {
             <p className="text-xs text-gray-500 leading-relaxed">
               We're here to assist with your BU merch orders, campus pickups, and sizing queries.
             </p>
-            <Link
-              to="/help"
-              className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 hover:bg-orange-100 text-[#FF6A00] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <HelpIcon className="w-4 h-4 text-[#FF6A00]" />
-              <span>Visit Help Center</span>
-            </Link>
+            <span className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 text-[#FF6A00] font-bold text-xs flex items-center justify-center gap-2">
+              Contact Support
+            </span>
           </div>
 
           {/* 7. Account Security */}
@@ -524,7 +419,7 @@ function Profile() {
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-gray-900">Account Security</h3>
               </div>
-              <Link to="/security" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
+              <Link to="/settings/change-password" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
                 <PencilIcon className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -554,7 +449,7 @@ function Profile() {
           {/* Left: Avatar + Info */}
           <div className="flex items-center gap-4 relative z-10">
             <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm border-2 border-white/40">
-              <img src={avatarImg} alt={fullName} className="w-full h-full object-cover scale-125" />
+              <Avatar name={fullName} size={64} className="w-full h-full scale-125" />
             </div>
             <div className="text-white">
               <h1 className="text-xl md:text-2xl font-black tracking-tight leading-tight">{fullName}</h1>

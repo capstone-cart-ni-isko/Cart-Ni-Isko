@@ -1,10 +1,9 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useToast } from '../../hooks/useToast.js'
 import ConfirmModal from '../ui/ConfirmModal.jsx'
 import { useState } from 'react'
 import {
-  HelpIcon,
   SettingsIcon,
   UserIcon,
   LogOutIcon,
@@ -38,32 +37,13 @@ function MapPinNavIcon({ className = 'w-4.5 h-4.5' }) {
   )
 }
 
-function ShieldNavIcon({ className = 'w-4.5 h-4.5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
-  )
-}
-
-function HeadsetIcon({ className = 'w-4 h-4' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-      <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-    </svg>
-  )
-}
-
 const navItems = [
   { id: 'overview', label: 'Overview', icon: UserIcon, path: '/profile', match: (p) => p === '/profile' },
   { id: 'account', label: 'Edit Profile', icon: UserIcon, path: '/account', match: (p) => p.startsWith('/account') },
   { id: 'orders', label: 'My Orders', icon: OrdersNavIcon, path: '/orders', match: (p) => p.startsWith('/orders') },
   { id: 'appointments', label: 'My Appointments', icon: CalendarNavIcon, path: '/appointments', match: (p) => p.startsWith('/appointments') },
-  { id: 'security', label: 'Security & Password', icon: ShieldNavIcon, path: '/security', match: (p) => p.startsWith('/security') || p.startsWith('/settings/change-password') },
   { id: 'address', label: 'My Addresses', icon: MapPinNavIcon, path: '/settings/address', match: (p) => p.startsWith('/settings/address') },
   { id: 'settings', label: 'Settings', icon: SettingsIcon, path: '/settings', match: (p) => p === '/settings' },
-  { id: 'help', label: 'Help & Support', icon: HelpIcon, path: '/help', match: (p) => p.startsWith('/help') },
 ]
 
 export default function DesktopAccountSidebar() {
@@ -120,32 +100,16 @@ export default function DesktopAccountSidebar() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg p-3 border border-gray-100 space-y-2">
-          <div>
-            <p className="font-bold text-xs text-gray-900">Need Help?</p>
-            <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
-              We're here to help with your orders and account.
-            </p>
-          </div>
-          <Link
-            to="/help"
-            className="w-full py-1.5 px-2.5 rounded-md bg-orange-50 hover:bg-orange-100 text-[#FF6A00] font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
-          >
-            <HeadsetIcon className="w-3.5 h-3.5 text-[#FF6A00]" />
-            <span>Contact Support</span>
-          </Link>
-        </div>
+        <ConfirmModal
+          isOpen={showLogout}
+          onClose={() => setShowLogout(false)}
+          onConfirm={handleLogout}
+          title="Log Out?"
+          message="Are you sure you want to sign out of your Tindahan ni Isko account?"
+          confirmText="Log Out"
+          isDestructive
+        />
       </aside>
-
-      <ConfirmModal
-        isOpen={showLogout}
-        onClose={() => setShowLogout(false)}
-        onConfirm={handleLogout}
-        title="Log Out?"
-        message="Are you sure you want to sign out of your Tindahan ni Isko account?"
-        confirmText="Log Out"
-        isDestructive
-      />
     </>
   )
 }

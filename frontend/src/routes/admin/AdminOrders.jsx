@@ -1,62 +1,151 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import StatCard from '../../components/admin/StatCard.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import DataTable from '../../components/admin/DataTable.jsx'
 import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
+import { searchOrders, sortOrders } from '../../services/orders.js'
+import {
+  mapOrderRows,
+  isCartRow,
+  titleCaseStatus,
+  parseDate,
+} from '../../services/dashboard.js'
+
+// SRS order status vocabulary (staff dashboard / REQ-SD-02)
+const STATUS_OPTIONS = [
+  'To Process',
+  'To Claim',
+  'To Receive',
+  'Claimed',
+  'Unclaimed',
+  'Cancelled',
+  'Returned',
+  'Refunded',
+]
+
+// Sort select choices - backed by GET /cart/sort (sort_by: date|status|id)
+const SORT_OPTIONS = [
+  { value: 'date:desc', label: 'Sort: Newest first', sortBy: 'date', dir: 'desc' },
+  { value: 'date:asc', label: 'Sort: Oldest first', sortBy: 'date', dir: 'asc' },
+  { value: 'status:asc', label: 'Sort: Status A-Z', sortBy: 'status', dir: 'asc' },
+  { value: 'id:asc', label: 'Sort: Order ID (low to high)', sortBy: 'id', dir: 'asc' },
+]
+
+const REFRESH_MS = 30000
+
+function sortClientSide(rows, sortValue) {
+  const [sortBy, dir] = String(sortValue).split(':')
+  const factor = dir === 'asc' ? 1 : -1
+  return [...rows].sort((a, b) => {
+    if (sortBy === 'status') return factor * String(a.rawStatus).localeCompare(String(b.rawStatus))
+    if (sortBy === 'id') return factor * ((a.ordId || 0) - (b.ordId || 0))
+    const at = parseDate(a.createdAt)?.getTime() ?? 0
+    const bt = parseDate(b.createdAt)?.getTime() ?? 0
+    return factor * (at - bt)
+  })
+}
 
 export default function AdminOrders() {
-  const { adminState, updateOrderStatus } = useAdmin()
+  const { orders: rawOrders = [], refreshOrders, updateOrderStatus, products = [] } = useAdmin()
+  const { showToast } = useToast()
 
   const [searchQuery, setSearchQuery] = useState('')
+  const [sortValue, setSortValue] = useState('date:desc')
   const [filterType, setFilterType] = useState('All')
   const [filterFulfillment, setFilterFulfillment] = useState('All')
-  const [filterBatch, setFilterBatch] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
   const [filterItem, setFilterItem] = useState('All')
   const [selectedOrderIds, setSelectedOrderIds] = useState([])
 
   const [activeOrderDetail, setActiveOrderDetail] = useState(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
-  const [bulkNewStatus, setBulkNewStatus] = useState('In Production')
+  const [bulkNewStatus, setBulkNewStatus] = useState('To Process')
+  const [actionBusy, setActionBusy] = useState(false)
 
-  const orders = adminState.orders || []
+  // Server-backed search (/cart/search) and sort (/cart/sort) results.
+  // null = fall back to the shared order list from AdminContext.
+  const [searchRows, setSearchRows] = useState(null)
+  const [sortedRows, setSortedRows] = useState(null)
+
+  const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
+
+  // Keep the order list fresh on mount and every 30s (REQ-SD-02).
+  useEffect(() => {
+    refreshOrders()
+    const timer = setInterval(refreshOrders, REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [refreshOrders])
+
+  // Debounced server-side search. The empty-query reset happens in the input's
+  // onChange (an event handler), never synchronously inside this effect.
+  useEffect(() => {
+    const query = searchQuery.trim()
+    if (!query) return undefined
+    let cancelled = false
+    const timer = setTimeout(() => {
+      searchOrders(query)
+        .then((res) => {
+          if (cancelled) return
+          setSearchRows((res?.data || []).filter((row) => !isCartRow(row)))
+        })
+        .catch(() => {
+          if (!cancelled) setSearchRows([])
+        })
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [searchQuery])
+
+  // Server-side sort (skipped while a search result set is on screen - those
+  // rows are sorted locally with the same criteria). The default-sort reset is
+  // done in the select's onChange handler, not here.
+  useEffect(() => {
+    if (searchQuery.trim()) return undefined
+    const option = SORT_OPTIONS.find((o) => o.value === sortValue) || SORT_OPTIONS[0]
+    if (option.sortBy === 'date' && option.dir === 'desc') return undefined
+    let cancelled = false
+    sortOrders(option.sortBy, option.dir)
+      .then((res) => {
+        if (!cancelled) setSortedRows((res?.data || []).filter((row) => !isCartRow(row)))
+      })
+      .catch(() => {
+        if (!cancelled) setSortedRows(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sortValue, searchQuery])
 
   const totalOrders = orders.length
-  const preOrdersCount = orders.filter((o) => o.type?.toLowerCase().includes('pre-order')).length
-  const readyPickupCount = orders.filter((o) => o.status === 'Ready for Pickup').length
-  const completedCount = orders.filter((o) => o.status === 'Completed').length
+  const preOrdersCount = orders.filter((o) => o.preorder).length
+  const readyPickupCount = orders.filter((o) => o.rawStatus === 'TO CLAIM').length
+  const completedCount = orders.filter((o) => o.rawStatus === 'CLAIMED').length
 
   // Every distinct product name that appears in any order, for the Item filter.
   const itemOptions = useMemo(() => {
     const names = new Set()
     orders.forEach((o) => (o.items || []).forEach((i) => i?.name && names.add(i.name)))
-    ;(adminState.products || []).forEach((p) => p?.name && names.add(p.name))
+    ;(products || []).forEach((p) => p?.name && names.add(p.name))
     return Array.from(names).sort((a, b) => a.localeCompare(b))
-  }, [orders, adminState.products])
+  }, [orders, products])
 
   const activeChips = useMemo(() => {
     const chips = []
     if (filterType !== 'All') chips.push({ key: 'type', label: `Type: ${filterType}`, reset: () => setFilterType('All') })
     if (filterFulfillment !== 'All') chips.push({ key: 'fulfillment', label: `Fulfillment: ${filterFulfillment}`, reset: () => setFilterFulfillment('All') })
-    if (filterBatch !== 'All') chips.push({ key: 'batch', label: `Batch: ${filterBatch}`, reset: () => setFilterBatch('All') })
     if (filterStatus !== 'All') chips.push({ key: 'status', label: `Status: ${filterStatus}`, reset: () => setFilterStatus('All') })
     if (filterItem !== 'All') chips.push({ key: 'item', label: `Item: ${filterItem}`, reset: () => setFilterItem('All') })
     return chips
-  }, [filterType, filterFulfillment, filterBatch, filterStatus, filterItem])
+  }, [filterType, filterFulfillment, filterStatus, filterItem])
 
   const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const matchSearch =
-        !searchQuery ||
-        order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.batch?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (order.items || []).some((i) =>
-          i?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-
+    const base = searchRows ?? sortedRows ?? orders
+    const rows = base.filter((order) => {
       const matchType =
         filterType === 'All' ||
         (filterType === 'Pre-order' && order.type?.toLowerCase().includes('pre-order')) ||
@@ -67,24 +156,58 @@ export default function AdminOrders() {
         filterFulfillment === 'All' ||
         order.fulfillment?.toLowerCase().includes(filterFulfillment.toLowerCase())
 
-      const matchBatch = filterBatch === 'All' || order.batch === filterBatch
       const matchStatus = filterStatus === 'All' || order.status === filterStatus
 
       const matchItem =
         filterItem === 'All' ||
-        (order.items || []).some(
-          (i) => i?.name?.toLowerCase() === filterItem.toLowerCase()
-        )
+        (order.items || []).some((i) => i?.name?.toLowerCase() === filterItem.toLowerCase())
 
-      return matchSearch && matchType && matchFulfillment && matchBatch && matchStatus && matchItem
+      return matchType && matchFulfillment && matchStatus && matchItem
     })
-  }, [orders, searchQuery, filterType, filterFulfillment, filterBatch, filterStatus, filterItem])
 
-  const handleBulkUpdate = () => {
-    selectedOrderIds.forEach((id) => updateOrderStatus(id, bulkNewStatus))
+    // Server search always returns newest-first; honour the sort select there.
+    return searchRows ? sortClientSide(rows, sortValue) : rows
+  }, [orders, searchRows, sortedRows, sortValue, filterType, filterFulfillment, filterStatus, filterItem])
+
+  const applyStatus = useCallback(
+    async (order, nextStatus) => {
+      setActionBusy(true)
+      const result = await updateOrderStatus(order.ordId, nextStatus)
+      setActionBusy(false)
+      if (result.success) {
+        setActiveOrderDetail({
+          ...order,
+          rawStatus: String(nextStatus).toUpperCase(),
+          status: titleCaseStatus(nextStatus),
+        })
+        showToast(`${order.id} is now ${titleCaseStatus(nextStatus)}.`, 'success')
+      } else {
+        showToast(result.error || 'Failed to update the order.', 'error')
+      }
+      return result
+    },
+    [updateOrderStatus, showToast]
+  )
+
+  const handleBulkUpdate = useCallback(async () => {
+    setActionBusy(true)
+    let updated = 0
+    let lastError = ''
+    // selectedOrderIds are display ids ("#ORD-0042"); resolve them to rows.
+    const byId = new Map(orders.map((o) => [o.id, o]))
+    for (const displayId of selectedOrderIds) {
+      const order = byId.get(displayId)
+      if (!order) continue
+      const res = await updateOrderStatus(order.ordId, bulkNewStatus)
+      if (res.success) updated += 1
+      else lastError = res.error || ''
+    }
+    setActionBusy(false)
     setSelectedOrderIds([])
     setShowBulkModal(false)
-  }
+    if (updated > 0) showToast(`${updated} order${updated > 1 ? 's' : ''} updated to ${titleCaseStatus(bulkNewStatus)}.`, 'success')
+    if (lastError) showToast(lastError, 'error')
+  }, [orders, selectedOrderIds, bulkNewStatus, updateOrderStatus, showToast])
 
   const handleExportCSV = () => {
     const csvContent =
@@ -194,6 +317,10 @@ export default function AdminOrders() {
     },
   ]
 
+  const pendingAction =
+    activeOrderDetail &&
+    ['CANCEL REQUESTED', 'RETURN REQUESTED'].includes(activeOrderDetail.rawStatus)
+
   return (
     <AdminLayout>
       <div className="space-y-4">
@@ -300,7 +427,16 @@ export default function AdminOrders() {
                 type="search"
                 placeholder="Search orders, customers, items, batch..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setSearchQuery(value)
+                  if (!value.trim()) {
+                    // Clearing the search falls back to the sorted/default list.
+                    setSearchRows(null)
+                    const option = SORT_OPTIONS.find((o) => o.value === sortValue) || SORT_OPTIONS[0]
+                    if (option.sortBy === 'date' && option.dir === 'desc') setSortedRows(null)
+                  }
+                }}
                 className="w-full h-8 pl-8 pr-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange"
               />
             </div>
@@ -341,18 +477,22 @@ export default function AdminOrders() {
               ))}
             </select>
 
+            {/* Server-backed sort (/cart/sort) - replaces the old hardcoded Batch filter */}
             <select
-              value={filterBatch}
-              onChange={(e) => setFilterBatch(e.target.value)}
+              value={sortValue}
+              onChange={(e) => {
+                const value = e.target.value
+                setSortValue(value)
+                const option = SORT_OPTIONS.find((o) => o.value === value) || SORT_OPTIONS[0]
+                if (option.sortBy === 'date' && option.dir === 'desc') setSortedRows(null)
+              }}
               className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
             >
-              <option value="All">Batch: All</option>
-              <option value="BAT-0012">BAT-0012</option>
-              <option value="BAT-0013">BAT-0013</option>
-              <option value="BAT-0014">BAT-0014</option>
-              <option value="BAT-0015">BAT-0015</option>
-              <option value="BAT-0016">BAT-0016</option>
-              <option value="BAT-0017">BAT-0017</option>
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
 
             <select
@@ -361,11 +501,11 @@ export default function AdminOrders() {
               className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
             >
               <option value="All">Status: All</option>
-              <option value="In Production">In Production</option>
-              <option value="Awaiting Production">Awaiting Production</option>
-              <option value="Preparing">Preparing</option>
-              <option value="Ready for Pickup">Ready for Pickup</option>
-              <option value="Completed">Completed</option>
+              {STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
             </select>
 
             {(searchQuery || activeChips.length > 0) && (
@@ -373,9 +513,9 @@ export default function AdminOrders() {
                 type="button"
                 onClick={() => {
                   setSearchQuery('')
+                  setSearchRows(null)
                   setFilterType('All')
                   setFilterFulfillment('All')
-                  setFilterBatch('All')
                   setFilterStatus('All')
                   setFilterItem('All')
                 }}
@@ -436,20 +576,58 @@ export default function AdminOrders() {
               </p>
               <select
                 value={activeOrderDetail.status}
-                onChange={(e) => {
-                  updateOrderStatus(activeOrderDetail.id, e.target.value)
-                  setActiveOrderDetail({ ...activeOrderDetail, status: e.target.value })
-                }}
-                className="w-full p-2 bg-white border border-gray-200 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                disabled={actionBusy}
+                onChange={(e) => applyStatus(activeOrderDetail, e.target.value)}
+                className="w-full p-2 bg-white border border-gray-200 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange disabled:opacity-60"
               >
-                <option value="Awaiting Production">Awaiting Production</option>
-                <option value="In Production">In Production</option>
-                <option value="Preparing">Preparing</option>
-                <option value="Ready for Pickup">Ready for Pickup</option>
-                <option value="In Transit">In Transit</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
+                {!STATUS_OPTIONS.includes(activeOrderDetail.status) && (
+                  <option value={activeOrderDetail.status}>{activeOrderDetail.status}</option>
+                )}
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
               </select>
+
+              {pendingAction && (
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={actionBusy}
+                    onClick={() =>
+                      applyStatus(
+                        activeOrderDetail,
+                        activeOrderDetail.rawStatus === 'CANCEL REQUESTED'
+                          ? 'Cancelled'
+                          : 'Returned'
+                      )
+                    }
+                    className="flex-1 h-8 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    Approve {activeOrderDetail.rawStatus === 'CANCEL REQUESTED' ? 'cancel' : 'return'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={actionBusy}
+                    onClick={() =>
+                      applyStatus(
+                        activeOrderDetail,
+                        activeOrderDetail.rawStatus === 'CANCEL REQUESTED'
+                          ? 'To Process'
+                          : 'Claimed'
+                      )
+                    }
+                    className="flex-1 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    Reject request
+                  </button>
+                </div>
+              )}
+
+              <p className="text-[10px] text-gray-400 pt-1">
+                Status changes are saved on the server and the list re-syncs automatically.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -458,6 +636,9 @@ export default function AdminOrders() {
                 <div>
                   <p className="font-semibold text-gray-900">{activeOrderDetail.customer}</p>
                   <p className="text-gray-500">Order type: {activeOrderDetail.type}</p>
+                  {activeOrderDetail.custPhone && (
+                    <p className="text-gray-500">Contact: {activeOrderDetail.custPhone}</p>
+                  )}
                   {activeOrderDetail.batch && (
                     <p className="text-gray-500">Batch code: {activeOrderDetail.batch}</p>
                   )}
@@ -504,14 +685,17 @@ export default function AdminOrders() {
                     <div>
                       <p className="font-semibold text-gray-900">{item.name}</p>
                       <p className="text-gray-400 text-[10px]">
-                        Qty: {item.qty} {item.size ? `• Size: ${item.size}` : ''}
+                        Qty: {item.qty} {item.category ? `• ${item.category}` : ''}
                       </p>
                     </div>
                     <span className="font-semibold text-gray-900">
-                      ₱{((Number(item?.price) || 0) * (Number(item?.qty) || 1)).toFixed(2)}
+                      ₱{(Number(item?.lineTotal) || 0).toFixed(2)}
                     </span>
                   </div>
                 ))}
+                {(activeOrderDetail.items || []).length === 0 && (
+                  <p className="p-3 bg-white text-gray-400 text-xs">No items recorded.</p>
+                )}
               </div>
             </div>
 
@@ -540,11 +724,11 @@ export default function AdminOrders() {
               onChange={(e) => setBulkNewStatus(e.target.value)}
               className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
             >
-              <option value="Awaiting Production">Awaiting Production</option>
-              <option value="In Production">In Production</option>
-              <option value="Preparing">Preparing</option>
-              <option value="Ready for Pickup">Ready for Pickup</option>
-              <option value="Completed">Completed</option>
+              {['To Process', 'To Claim', 'To Receive', 'Cancelled'].map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
             </select>
             <div className="flex justify-end gap-2 pt-1.5">
               <button
@@ -556,8 +740,9 @@ export default function AdminOrders() {
               </button>
               <button
                 type="button"
+                disabled={actionBusy}
                 onClick={handleBulkUpdate}
-                className="h-8 px-3 bg-brand-orange rounded-md text-xs font-semibold text-white hover:bg-brand-orange-dark cursor-pointer"
+                className="h-8 px-3 bg-brand-orange rounded-md text-xs font-semibold text-white hover:bg-brand-orange-dark cursor-pointer disabled:opacity-60"
               >
                 Apply to {selectedOrderIds.length} orders
               </button>

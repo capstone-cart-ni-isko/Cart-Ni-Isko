@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import React from 'react'
 import { useCart } from '../../hooks/useCart.js'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
 import ordersIcon from '../../assets/icons/navigation-bar/orders.svg'
@@ -76,6 +77,6 @@ function SideNav() {
   )
 }
 
-export default SideNav
+export default React.memo(SideNav)
 
 

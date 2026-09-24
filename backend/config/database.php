@@ -96,7 +96,13 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'sslmode' => env('DB_SSLMODE', 'prefer'), // Supabase requires 'require'
+            // Reuse the TCP+TLS session across requests (each handshake to
+            // Supabase costs ~1.2 s); stale handles are auto-retried by
+            // Laravel's lost-connection detector.
+            'options' => array_filter([
+                \PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false) ?: null,
+            ]),
         ],
 
         'sqlsrv' => [

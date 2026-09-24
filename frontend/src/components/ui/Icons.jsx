@@ -1,5 +1,3 @@
-import React from 'react'
-
 export const ShirtIcon = ({ className = 'w-6 h-6' }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M20.38 3.46 16 7.5V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v3.5L3.62 3.46a2 2 0 0 0-2.3.38l-1 1a2 2 0 0 0-.38 2.3L4 14v6c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-6l4.06-6.86a2 2 0 0 0-.38-2.3l-1-1a2 2 0 0 0-2.3-.38z" />
@@ -119,14 +117,6 @@ export const BackArrowIcon = ({ className = 'w-4 h-4' }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <line x1="19" y1="12" x2="5" y2="12" />
     <polyline points="12 19 5 12 12 5" />
-  </svg>
-)
-
-export const DownloadCloudIcon = ({ className = 'w-4 h-4' }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <polyline points="8 17 12 21 16 17" />
-    <line x1="12" y1="12" x2="12" y2="21" />
-    <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29" />
   </svg>
 )
 

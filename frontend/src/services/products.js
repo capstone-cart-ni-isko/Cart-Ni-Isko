@@ -74,22 +74,20 @@ export function mapProduct(row) {
   const category = normalizeCategory(row.prod_categ, row.prod_name || '')
   const qty = Number(row.prod_qty ?? 0)
   const preOrder = row.prod_preorder === true || (qty <= 0 && row.prod_preorder !== false)
-
-  const extras = {
-    sizes: row.prod_sizes || defaultPresentation(row, category).sizes,
-    colors: row.prod_colors || defaultPresentation(row, category).colors,
-    images: row.prod_images || defaultPresentation(row, category).images,
-    preOrder: row.prod_preorder ?? (qty <= 0),
-    details: row.prod_details || defaultPresentation(row, category).details,
-    rating: row.prod_rating ?? 0,
-    reviewCount: row.prod_review_count ?? 0,
-    ratingBreakdown: row.prod_rating_breakdown || { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
-    reviews: row.prod_reviews || [],
-    stockMatrix: row.prod_stock_matrix || {},
-  }
+  const fallback = defaultPresentation(row, category)
 
   return {
-    ...extras,
+    ...fallback,
+    sizes: row.prod_sizes || fallback.sizes,
+    colors: row.prod_colors || fallback.colors,
+    images: row.prod_images || fallback.images,
+    preOrder: row.prod_preorder ?? preOrder,
+    details: row.prod_details || fallback.details,
+    rating: row.prod_rating ?? 0,
+    reviewCount: row.prod_review_count ?? 0,
+    ratingBreakdown: row.prod_rating_breakdown || fallback.ratingBreakdown,
+    reviews: row.prod_reviews || [],
+    stockMatrix: row.prod_stock_matrix || {},
     id: tag,
     prodId: row.prod_id,
     name: row.prod_name || tag,
@@ -97,7 +95,6 @@ export function mapProduct(row) {
     category,
     description: row.prod_desc || '',
     qty,
-    preOrder,
     status: preOrder ? 'For Pre-order' : qty > 0 ? 'In Stock' : 'Out of Stock',
     tag: row.prod_tag || undefined,
     prod_desc: row.prod_desc || undefined,

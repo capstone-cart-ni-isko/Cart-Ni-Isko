@@ -2,10 +2,27 @@
 
     namespace App\Http\Controllers;
 
+    use App\Models\Setting;
     use Illuminate\Http\Request;
 
     class SettingsAPI extends Controller
     {
+        // Built-in store configuration used until a value is persisted
+        private function defaults(): array
+        {
+            return [
+                'store_name'         => 'Tindahan ni Isko',
+                'operating_hours'    => '08:00 - 18:00',
+                'max_claiming_slots' => 10,
+                'max_visit_slots'    => 1,
+                'visit_slot_duration'=> 10,
+                'claim_slot_duration'=> 30,
+                'min_in_store_staff' => 2,
+                'low_stock_threshold'=> 5,
+                'maintenance_mode'   => false,
+            ];
+        }
+
         /*
             Displaying system settings
             ----------
@@ -14,17 +31,17 @@
         public function displaySettings(Request $json)
         {
             try {
-                // Return default store configuration parameters
-                $settings = [
-                    'store_name' => 'Tindahan ni Isko',
-                    'operating_hours' => '08:00 - 17:00',
-                    'max_claiming_slots' => 10,
-                    'visit_slot_duration' => 10,
-                    'claim_slot_duration' => 30,
-                    'min_in_store_staff' => 2,
-                    'low_stock_threshold' => 5,
-                    'maintenance_mode' => false,
-                ];
+                // Defaults first, then every persisted key on top so pages
+                // that store their own keys (store slides, banners, toggles)
+                // read back exactly what they saved
+                $settings = $this->defaults();
+                try {
+                    foreach (Setting::all() as $row) {
+                        $settings[$row->key] = Setting::getValue($row->key, $row->value);
+                    }
+                } catch (\Throwable $e) {
+                    // Settings table not migrated yet: defaults still apply
+                }
 
                 return response()->json([
                     'success' => true,
@@ -56,10 +73,22 @@
             try {
                 $newSettings = $json->input('settings');
 
+                // Persist each key so later reads (and other endpoints that
+                // consume these values) observe the updated configuration
+                foreach ($newSettings as $key => $value) {
+                    Setting::setValue((string) $key, $value);
+                }
+
+                // Return the merged view (stored values + untouched defaults)
+                $settings = [];
+                foreach ($this->defaults() as $key => $default) {
+                    $settings[$key] = Setting::getValue($key, $default);
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => 'System settings updated successfully',
-                    'data' => $newSettings
+                    'data' => $settings
                 ], 200);
 
             } catch (\Exception $e) {

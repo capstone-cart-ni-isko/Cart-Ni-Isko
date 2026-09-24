@@ -22,29 +22,19 @@ class InputValidatorAPI extends Controller
 
     public function customerSignup(Request $json)
     {
-        $type = $json->input('type') ?? 'Student';
-
-        // Required Fields for Customer Signup
-        $requiredFields = [
-            'phone'    => 'required',
+        $requiredCheck = $this->validateFields($json, [
+            'phone' => 'required',
             'password' => 'required',
             'nickname' => 'required',
-        ];
-
-        // Academic fields are only required for Student type
-        if ($type === 'Student') {
-            $requiredFields['college'] = 'required';
-        }
-
-        $requiredCheck = $this->validateFields($json, $requiredFields, [
-            'phone.required'    => 'Phone number is required.',
+        ], [
+            'phone.required' => 'Phone number is required.',
             'password.required' => 'Password is required.',
             'nickname.required' => 'Nickname is required.',
-            'college.required'  => 'College is required.',
         ]);
-        if ($requiredCheck) return $requiredCheck;
+        if ($requiredCheck) {
+            return $requiredCheck;
+        }
 
-        // Run Format Validations (Nullable fields validated if present)
         return $this->validateAllFormats($json);
     }
 
@@ -66,19 +56,41 @@ class InputValidatorAPI extends Controller
     {
         // Required Fields for Employee Signup
         $requiredCheck = $this->validateFields($json, [
-            'email'    => 'required',
-            'password' => 'required',
-            'surname'  => 'required',
-            'givname'  => 'required',
-            'studnum'  => 'required',
+            'email' => 'required',
+            'phone' => 'required',
+            'surname' => 'required',
+            'givname' => 'required',
+            'studnum' => 'required',
+            'college' => 'required',
+            'program' => 'required',
+            'year' => 'required',
+            'bloc' => 'required',
+            'type' => 'required|in:STAFF,ADMIN,SUPER ADMIN',
         ], [
-            'email.required'    => 'Email is required.',
-            'password.required' => 'Password is required.',
-            'surname.required'  => 'Surname is required.',
-            'givname.required'  => 'Given name is required.',
-            'studnum.required'  => 'Student number is required.',
+            'email.required' => 'University email is required.',
+            'phone.required' => 'Phone number is required.',
+            'surname.required' => 'Surname is required.',
+            'givname.required' => 'Given name is required.',
+            'studnum.required' => 'Student number is required.',
+            'college.required' => 'College or institute is required.',
+            'program.required' => 'Program is required.',
+            'year.required' => 'Year is required.',
+            'bloc.required' => 'Bloc is required.',
         ]);
-        if ($requiredCheck) return $requiredCheck;
+        if ($requiredCheck) {
+            return $requiredCheck;
+        }
+
+        $emailCheck = $this->validateFields($json, [
+            'email' => 'required|email:rfc|ends_with:bicol-u.edu.ph',
+        ], [
+            'email.required' => 'University email is required.',
+            'email.email' => 'Invalid email format.',
+            'email.ends_with' => 'Use a Bicol University email address.',
+        ]);
+        if ($emailCheck) {
+            return $emailCheck;
+        }
 
         return $this->validateAllFormats($json);
     }
@@ -151,6 +163,9 @@ class InputValidatorAPI extends Controller
             $cleaned = preg_replace('/[^0-9]/', '', (string)$json->input('phone'));
             if (strlen($cleaned) >= 12 && strpos($cleaned, '63') === 0) {
                 $cleaned = '0' . substr($cleaned, 2);
+            }
+            if ($cleaned === '0000000000') {
+                return $this->fail('Phone number is reserved.', 422);
             }
             $json->merge(['phone' => $cleaned]);
         }
@@ -250,6 +265,9 @@ class InputValidatorAPI extends Controller
             'country'  => 'nullable|string|max:100',
             'type'     => 'nullable|string|max:50',
             'college'  => 'nullable|string|max:100',
+            'program'  => 'nullable|string|max:100',
+            'year'     => 'nullable|integer|min:1|max:5',
+            'bloc'     => 'nullable|string|max:50',
             'studnum'  => 'nullable|string|max:50',
         ]);
     }
@@ -378,10 +396,12 @@ class InputValidatorAPI extends Controller
         return $this->validateFields($json, [
             'user_id'      => 'required',
             'account_type' => 'required|in:customer,employee',
+            'reason'       => 'required',
         ], [
             'user_id.required'      => 'User ID is required.',
             'account_type.required' => 'Account type is required.',
             'account_type.in'       => 'Account type must be customer or employee.',
+            'reason.required'       => 'A reason for disabling the account is required.',
         ]);
     }
 
@@ -426,8 +446,10 @@ class InputValidatorAPI extends Controller
     {
         return $this->validateFields($json, [
             'appoint_id' => 'required',
+            'reason'     => 'nullable|string|max:500',
         ], [
             'appoint_id.required' => 'Appointment ID is required.',
+            'reason.string'       => 'Reason must be a string.',
         ]);
     }
 
@@ -442,14 +464,7 @@ class InputValidatorAPI extends Controller
 
     public function backupCredentials(Request $json)
     {
-        return $this->validateFields($json, [
-            'user_id'      => 'required',
-            'account_type' => 'required|in:customer,employee',
-        ], [
-            'user_id.required'      => 'User ID is required.',
-            'account_type.required' => 'Account type is required.',
-            'account_type.in'       => 'Account type must be customer or employee.',
-        ]);
+        return $this->validateAllFormats($json);
     }
 
     public function recoverCredentials(Request $json)
@@ -466,29 +481,35 @@ class InputValidatorAPI extends Controller
 
     public function updateCredentials(Request $json)
     {
-        return $this->validateFields($json, [
-            'user_id'      => 'required',
-            'account_type' => 'required|in:customer,employee',
-            'new_password' => 'required',
+        $credentials = $this->validateFields($json, [
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|regex:/^[^\s\x00-\x1F\x7F]+$/',
         ], [
-            'user_id.required'      => 'User ID is required.',
-            'account_type.required' => 'Account type is required.',
-            'account_type.in'       => 'Account type must be customer or employee.',
+            'current_password.required' => 'Current password is required.',
             'new_password.required' => 'New password is required.',
+            'new_password.min' => 'New password must be at least 8 characters.',
+            'new_password.regex' => 'New password contains invalid characters.',
         ]);
+        if ($credentials) {
+            return $credentials;
+        }
+
+        return $this->validateAllFormats($json);
     }
 
     public function createReview(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id'     => 'required',
+            'ord_id'     => 'required_without:prod_id',
+            'prod_id'    => 'required_without:ord_id',
             'ord_rating' => 'required|numeric|min:1|max:5',
         ], [
-            'ord_id.required'     => 'Order ID is required.',
-            'ord_rating.required' => 'Rating score is required.',
-            'ord_rating.numeric'  => 'Rating must be a number.',
-            'ord_rating.min'      => 'Rating score must be at least 1.',
-            'ord_rating.max'      => 'Rating score cannot exceed 5.',
+            'ord_id.required_without'     => 'Order ID or product ID is required.',
+            'prod_id.required_without'    => 'Order ID or product ID is required.',
+            'ord_rating.required'         => 'Rating score is required.',
+            'ord_rating.numeric'          => 'Rating must be a number.',
+            'ord_rating.min'              => 'Rating score must be at least 1.',
+            'ord_rating.max'              => 'Rating score cannot exceed 5.',
         ]);
     }
 
@@ -594,28 +615,40 @@ class InputValidatorAPI extends Controller
     public function determineDispatchDetails(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id'        => 'required',
+            'ord_id' => 'required|integer',
             'dispatch_type' => 'required|in:pickup,delivery',
+            'speed' => 'nullable|in:priority,standard,saver',
+            'deliver_address' => 'required_if:dispatch_type,delivery|string|max:500',
+            'appoint_id' => 'required_if:dispatch_type,pickup|integer',
         ], [
-            'ord_id.required'        => 'Order ID is required.',
+            'ord_id.required' => 'Order ID is required.',
             'dispatch_type.required' => 'Dispatch type (pickup or delivery) is required.',
-            'dispatch_type.in'       => 'Dispatch type must be either pickup or delivery.',
+            'dispatch_type.in' => 'Dispatch type must be either pickup or delivery.',
+            'speed.in' => 'Delivery speed must be priority, standard, or saver.',
+            'deliver_address.required_if' => 'Delivery address is required.',
+            'appoint_id.required_if' => 'An order-claiming appointment is required.',
         ]);
     }
 
     public function integratePayment(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id'        => 'required',
-            'pay_given'     => 'required|numeric|min:0',
+            'ord_id' => 'required|integer',
+            'pay_given' => 'required|numeric|min:0',
             'dispatch_type' => 'required|in:pickup,delivery',
+            'speed' => 'nullable|in:priority,standard,saver',
+            'deliver_address' => 'required_if:dispatch_type,delivery|string|max:500',
+            'appoint_id' => 'required_if:dispatch_type,pickup|integer',
         ], [
-            'ord_id.required'        => 'Order ID is required.',
-            'pay_given.required'     => 'Payment given amount is required.',
-            'pay_given.numeric'      => 'Payment given must be a numeric amount.',
-            'pay_given.min'          => 'Payment given cannot be negative.',
+            'ord_id.required' => 'Order ID is required.',
+            'pay_given.required' => 'Payment given amount is required.',
+            'pay_given.numeric' => 'Payment given must be a numeric amount.',
+            'pay_given.min' => 'Payment given cannot be negative.',
             'dispatch_type.required' => 'Dispatch type (pickup or delivery) is required.',
-            'dispatch_type.in'       => 'Dispatch type must be either pickup or delivery.',
+            'dispatch_type.in' => 'Dispatch type must be either pickup or delivery.',
+            'speed.in' => 'Delivery speed must be priority, standard, or saver.',
+            'deliver_address.required_if' => 'Delivery address is required.',
+            'appoint_id.required_if' => 'An order-claiming appointment is required.',
         ]);
     }
 
@@ -733,8 +766,32 @@ class InputValidatorAPI extends Controller
     }
 
     // ==========================================
+    // APPOINTMENT SLOT VALIDATORS
+    // ==========================================
+
+    public function displaySlots(Request $json)
+    {
+        return $this->validateFields($json, [
+            'date' => 'required|date_format:Y-m-d',
+        ], [
+            'date.required'           => 'A valid date (YYYY-MM-DD) is required.',
+            'date.date_format'        => 'A valid date (YYYY-MM-DD) is required.',
+        ]);
+    }
+
+    // ==========================================
     // TRACKING API VALIDATORS
     // ==========================================
+
+    public function scanCode(Request $json)
+    {
+        return $this->validateFields($json, [
+            'code'       => 'required',
+            'scanned_by' => 'nullable|string|max:255',
+        ], [
+            'code.required' => 'QR code is required.',
+        ]);
+    }
 
     public function createFulfillmentTrack(Request $json)
     {

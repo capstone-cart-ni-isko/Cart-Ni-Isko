@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import AdminSidebar from './AdminSidebar.jsx'
 import AdminTopBar from './AdminTopBar.jsx'
-import PwaInstallPrompt from '../ui/PwaInstallPrompt.jsx'
 
 export default function AdminLayout({ children, className = '' }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -64,8 +63,6 @@ export default function AdminLayout({ children, className = '' }) {
         <main className={`flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 w-full mx-auto ${className}`}>
           {children}
         </main>
-
-        <PwaInstallPrompt />
       </div>
     </div>
   )

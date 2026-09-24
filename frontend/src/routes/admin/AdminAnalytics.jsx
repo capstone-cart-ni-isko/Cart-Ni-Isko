@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -6,21 +6,111 @@ import StatCard from '../../components/admin/StatCard.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 
-import { INITIAL_ADMIN_DATA } from '../../data/adminMockData.js'
+import {
+  fetchDashboardSnapshot,
+  mapOrderRows,
+  filterOrdersByRange,
+  summarizeSales,
+  rangeBounds,
+  parseDate,
+  buildSalesTrend,
+  buildTrendLabel,
+  buildTopProducts,
+  buildConversion,
+} from '../../services/dashboard.js'
+
+// SRS refresh cadence for staff analytics (REQ-SD-02)
+const REFRESH_MS = 30000
+
+/** % change of *customer* orders (active buyers) vs the previous window. */
+function customerTrend(rows, range) {
+  const { from, duration } = rangeBounds(range)
+  const current = new Set()
+  const previous = new Set()
+
+  rows.forEach((row) => {
+    if (row.custId === null || row.custId === undefined) return
+    const date = parseDate(row.createdAt)
+    if (!date) return
+    const time = date.getTime()
+    if (time >= from && time < from + duration) current.add(row.custId)
+    else if (time >= from - duration && time < from) previous.add(row.custId)
+  })
+
+  if (previous.size === 0) {
+    return {
+      label: current.size > 0 ? 'New buyers this period' : 'No buyers yet',
+      positive: true,
+    }
+  }
+  const pct = ((current.size - previous.size) / previous.size) * 100
+  return {
+    label: `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% vs last period`,
+    positive: pct >= 0,
+  }
+}
 
 export default function AdminAnalytics() {
   const navigate = useNavigate()
-  const { adminState = {} } = useAdmin()
+  const { orders: rawOrders = [], refreshOrders, products = [] } = useAdmin()
   const [timeRange, setTimeRange] = useState('7D') // 'Today' | '7D' | '30D'
+  const [snapshot, setSnapshot] = useState(null)
 
-  const analytics = adminState?.analytics || INITIAL_ADMIN_DATA.analytics || {}
-  const orders = adminState?.orders || INITIAL_ADMIN_DATA.orders || []
-  const topProducts = analytics.topProducts || []
-  const recentOrders = orders.slice(0, 4)
+  const syncData = useCallback(() => {
+    refreshOrders()
+    fetchDashboardSnapshot()
+      .then((next) => setSnapshot(next))
+      .catch(() => {
+        // Transient API failure: keep the last snapshot on screen.
+      })
+  }, [refreshOrders])
 
-  // Chart data points
-  const trendData = analytics.salesTrend || []
+  useEffect(() => {
+    syncData()
+    const timer = setInterval(syncData, REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [syncData])
+
+  const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
+  const rangeOrders = useMemo(() => filterOrdersByRange(orders, timeRange), [orders, timeRange])
+  const sales = useMemo(() => summarizeSales(rangeOrders), [rangeOrders])
+  const baseline = useMemo(
+    () => summarizeSales(filterOrdersByRange(orders, '30D')).avg,
+    [orders]
+  )
+  const salesTrend = useMemo(() => buildTrendLabel(orders, timeRange), [orders, timeRange])
+  const ordersTrend = useMemo(() => buildTrendLabel(orders, timeRange, () => 1), [orders, timeRange])
+  const buyersTrend = useMemo(() => customerTrend(orders, timeRange), [orders, timeRange])
+
+  const activeCustomers = useMemo(() => {
+    const ids = new Set(
+      rangeOrders.map((row) => row.custId).filter((id) => id !== null && id !== undefined)
+    )
+    return ids.size
+  }, [rangeOrders])
+
+  const avgOrderValue = sales.avg
+  const avgProgress = baseline > 0 ? Math.min(100, Math.round((avgOrderValue / baseline) * 100)) : 0
+
+  // Chart data points (Online vs Walk-in POS per bucket)
+  const trendData = useMemo(() => buildSalesTrend(rangeOrders, timeRange), [rangeOrders, timeRange])
   const maxSales = Math.max(...trendData.map((d) => d.total || 0), 1)
+  const peakPoint = useMemo(
+    () => trendData.reduce((best, point) => (point.total > (best?.total || 0) ? point : best), null),
+    [trendData]
+  )
+  const firstPoint = trendData[0]
+  const lastPoint = trendData[trendData.length - 1]
+
+  const recentOrders = orders.slice(0, 4)
+  const topProducts = useMemo(
+    () => buildTopProducts(rangeOrders, products),
+    [rangeOrders, products]
+  )
+  const conversion = useMemo(
+    () => buildConversion({ orders, cartRows: snapshot?.cartRows || [], accounts: snapshot?.accounts || {} }),
+    [orders, snapshot]
+  )
 
   return (
     <AdminLayout>
@@ -59,9 +149,9 @@ export default function AdminAnalytics() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="TOTAL SALES"
-            value="₱45,231.00"
-            trend="+12.5% vs yesterday"
-            trendPositive={true}
+            value={`₱${sales.gross.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+            trend={salesTrend.label}
+            trendPositive={salesTrend.positive}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                 <line x1="12" y1="1" x2="12" y2="23" />
@@ -71,22 +161,23 @@ export default function AdminAnalytics() {
           />
           <StatCard
             title="TOTAL ORDERS"
-            value="1,204"
-            trend="+8.2% vs yesterday"
-            trendPositive={true}
+            value={sales.count.toLocaleString('en-US')}
+            trend={ordersTrend.label}
+            trendPositive={ordersTrend.positive}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                 <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
                 <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 0 1-8 0" />
               </svg>
             }
             iconBg="bg-blue-50 text-blue-600"
           />
           <StatCard
             title="ACTIVE CUSTOMERS"
-            value="892"
-            trend="-1.4% vs yesterday"
-            trendPositive={false}
+            value={activeCustomers.toLocaleString('en-US')}
+            trend={buyersTrend.label}
+            trendPositive={buyersTrend.positive}
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -99,9 +190,11 @@ export default function AdminAnalytics() {
           />
           <StatCard
             title="AVG. ORDER VALUE"
-            value="₱145.50"
-            progressBar={65}
-            subtitle="65% target reached"
+            value={`₱${avgOrderValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+            progressBar={avgProgress}
+            subtitle={
+              baseline > 0 ? `${avgProgress}% of 30-day average` : 'No 30-day baseline yet'
+            }
             icon={
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                 <rect x="2" y="5" width="20" height="14" rx="2" />
@@ -123,7 +216,7 @@ export default function AdminAnalytics() {
                     Sales Overview
                   </h2>
                   <p className="text-xs text-gray-400 font-medium">
-                    Daily revenue breakdown (Online vs In-Store POS)
+                    Revenue breakdown (Online vs In-Store POS)
                   </p>
                 </div>
                 <div className="flex items-center gap-4 text-xs font-bold">
@@ -141,8 +234,12 @@ export default function AdminAnalytics() {
               {/* Interactive SVG Area Chart */}
               <div className="pt-6 pb-2">
                 <div className="h-64 flex items-end justify-between gap-3 px-2 border-b border-gray-100 relative">
+                  {trendData.length === 0 && (
+                    <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-gray-400">
+                      No sales recorded in this period.
+                    </div>
+                  )}
                   {trendData.map((point) => {
-                    const totalH = Math.round((point.total / maxSales) * 100)
                     const onlineH = Math.round((point.online / maxSales) * 100)
                     const posH = Math.round((point.pos / maxSales) * 100)
 
@@ -182,9 +279,9 @@ export default function AdminAnalytics() {
                 </div>
 
                 <div className="flex justify-between items-center text-[10px] text-gray-400 font-semibold pt-2">
-                  <span>Mon (Week Start)</span>
-                  <span>Mid-Week Peak</span>
-                  <span>Sun (Distribution Closes)</span>
+                  <span>{firstPoint ? `${firstPoint.date} (Start)` : '—'}</span>
+                  <span>{peakPoint ? `Peak: ${peakPoint.date}` : '—'}</span>
+                  <span>{lastPoint ? `${lastPoint.date} (Latest)` : '—'}</span>
                 </div>
               </div>
             </div>
@@ -215,6 +312,13 @@ export default function AdminAnalytics() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-xs font-medium">
+                    {recentOrders.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-gray-400 font-semibold">
+                          No orders yet.
+                        </td>
+                      </tr>
+                    )}
                     {recentOrders.map((o) => (
                       <tr key={o.id} className="hover:bg-gray-50/50">
                         <td className="py-3 font-bold text-gray-900">{o.id}</td>
@@ -251,6 +355,11 @@ export default function AdminAnalytics() {
               </div>
 
               <div className="space-y-3.5">
+                {topProducts.length === 0 && (
+                  <p className="text-xs text-gray-400 py-3 text-center">
+                    No sales in this period yet.
+                  </p>
+                )}
                 {topProducts.map((prod, rank) => {
                   const resolvedImg = getImageUrl(prod.image)
                   return (
@@ -279,7 +388,7 @@ export default function AdminAnalytics() {
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-xs font-black text-gray-900">{prod.sales}</p>
-                        <p className="text-[10px] text-gray-400 uppercase font-semibold">sales</p>
+                        <p className="text-[10px] text-gray-400 uppercase font-semibold">units</p>
                       </div>
                     </div>
                   )
@@ -304,19 +413,19 @@ export default function AdminAnalytics() {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-gray-600">
                   <span>Store Visitors</span>
-                  <span className="font-bold text-gray-900">{analytics.conversionMetrics.visitors}</span>
+                  <span className="font-bold text-gray-900">{conversion.visitors.toLocaleString('en-US')}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Added to Cart</span>
-                  <span className="font-bold text-gray-900">{analytics.conversionMetrics.addedToCart}</span>
+                  <span className="font-bold text-gray-900">{conversion.addedToCart.toLocaleString('en-US')}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Completed Checkouts</span>
-                  <span className="font-bold text-emerald-600">{analytics.conversionMetrics.checkouts}</span>
+                  <span className="font-bold text-emerald-600">{conversion.checkouts.toLocaleString('en-US')}</span>
                 </div>
                 <div className="pt-2 border-t border-gray-100 flex justify-between font-black text-gray-900">
                   <span>Conversion Rate</span>
-                  <span className="text-brand-orange">{analytics.conversionMetrics.conversionRate}</span>
+                  <span className="text-brand-orange">{conversion.conversionRate}</span>
                 </div>
               </div>
             </div>

@@ -2,12 +2,17 @@
 
     namespace App\Http\Controllers;
 
+    use App\Exceptions\InsufficientStockException;
+    use App\Models\Appointment;
+    use App\Models\Customer;
     use App\Models\Item;
     use App\Models\Order;
     use App\Models\Payment;
     use App\Models\Pickup;
     use App\Models\Product;
     use Illuminate\Http\Request;
+    use Illuminate\Support\Facades\DB;
+    use Illuminate\Support\Facades\Hash;
     use Illuminate\Support\Str;
 
     class PosAPI extends Controller
@@ -43,16 +48,20 @@
                     ], 400);
                 }
 
-                $qty    = max(1, (int)$json->input('item_qty', 1));
-                $amount = $json->input('item_amount') !== null
-                    ? (float)$json->input('item_amount')
-                    : ((float)$product->prod_price * $qty);
+                $qty = max(1, (int) $json->input('item_qty', 1));
+                $amount = round((float) $product->prod_price * $qty, 2);
 
                 // If ord_id provided, add to existing POS order
                 if ($ordId) {
                     $order = Order::where('ord_id', $ordId)->first();
-                    if (!$order) {
+                    if (! $order) {
                         return response()->json(['success' => false, 'message' => 'POS order not found'], 404);
+                    }
+                    if (! str_starts_with((string) $order->ord_tag, 'POS-') || $order->ord_status !== 'TO PROCESS') {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'This POS order is no longer editable.',
+                        ], 409);
                     }
 
                     // If product already in order, update qty & amount
@@ -92,7 +101,7 @@
 
                 // No ord_id — create a brand new anonymous POS order
                 $order = Order::create([
-                    'cust_id'       => null,
+                    'cust_id'       => $this->walkInCustomer()->cust_id,
                     'ord_created'   => now(),
                     'ord_completed' => null,
                     'ord_tag'       => 'POS-' . strtoupper(Str::random(8)),
@@ -146,11 +155,30 @@
                 $payGiven = (float)$json->input('pay_given');
 
                 $order = Order::with(['items.product'])->where('ord_id', $ordId)->first();
-                if (!$order) {
+                if (! $order) {
                     return response()->json(['success' => false, 'message' => 'POS order not found'], 404);
                 }
+                if (! str_starts_with((string) $order->ord_tag, 'POS-')) {
+                    return response()->json(['success' => false, 'message' => 'Order is not a POS order.'], 409);
+                }
 
-                $totalDue = round((float)$order->items->sum('item_amount'), 2);
+                $existingPickup = Pickup::where('ord_id', $ordId)->first();
+                if ($existingPickup && in_array($order->ord_status, ['TO CLAIM', 'CLAIMED'], true)) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'POS order was already checked out.',
+                        'data' => [
+                            'payment' => Payment::find($existingPickup->pay_id),
+                            'pickup_id' => $existingPickup->pickup_id,
+                            'order' => $order,
+                        ],
+                    ]);
+                }
+                if ($order->ord_status !== 'TO PROCESS') {
+                    return response()->json(['success' => false, 'message' => 'POS order cannot be checked out.'], 409);
+                }
+
+                $totalDue = round((float) $order->items->sum('item_amount'), 2);
 
                 if ($payGiven < $totalDue) {
                     return response()->json([
@@ -162,52 +190,109 @@
                 $payChange = round($payGiven - $totalDue, 2);
                 $payRef    = $json->input('pay_ref') ?? ('POS-PAY-' . strtoupper(Str::random(8)));
 
-                // 1. Create Payment record
-                $payment = Payment::create([
-                    'pay_created' => now(),
-                    'pay_ref'     => $payRef,
-                    'pay_given'   => $payGiven,
-                    'pay_due'     => $totalDue,
-                    'pay_change'  => $payChange,
-                ]);
+                // Whole POS checkout runs in one transaction so a failure
+                // (e.g. insufficient stock) rolls everything back
+                $result = DB::transaction(function () use ($json, $order, $payGiven, $payChange, $payRef, $totalDue) {
+                    $walkIn = $this->walkInCustomer();
 
-                // 2. Create Pickup record (POS is always in-store pickup)
-                $appointId = $json->input('appoint_id');
-                $pickup = Pickup::create([
-                    'ord_id'           => $ordId,
-                    'appoint_id'       => $appointId ?? null,
-                    'pay_id'           => $payment->pay_id,
-                    'pickup_created'   => now(),
-                    'pickup_completed' => null,
-                ]);
+                    // Attach the order to the walk-in account
+                    if ($order->cust_id != $walkIn->cust_id) {
+                        $order->cust_id = $walkIn->cust_id;
+                    }
 
-                // 3. Update order status
-                $order->update([
-                    'ord_status'    => 'TO CLAIM',
-                    'ord_completed' => now(),
-                ]);
+                    // 1. Create Payment record
+                    $payment = Payment::create([
+                        'pay_created' => now(),
+                        'pay_ref'     => $payRef,
+                        'pay_given'   => $payGiven,
+                        'pay_due'     => $totalDue,
+                        'pay_change'  => $payChange,
+                    ]);
 
-                // 4. Deduct inventory stocks & update sales metrics
-                foreach ($order->items as $item) {
-                    $product = Product::where('prod_id', $item->prod_id)->first();
-                    if ($product) {
+                    // 2. Create Pickup record (POS is always in-store pickup)
+                    $appointId = $json->input('appoint_id');
+                    if (! $appointId) {
+                        $appointment = Appointment::create([
+                            'cust_id' => $walkIn->cust_id,
+                            'appoint_created' => now(),
+                            'appoint_closed' => now(),
+                            'appoint_date' => now(),
+                            'appoint_type' => 'VISIT',
+                            'appoint_qr' => 'QR-POS-' . strtoupper(Str::random(10)),
+                            'appoint_desc' => 'Immediate POS order',
+                        ]);
+                        $appointId = $appointment->appoint_id;
+                    }
+                    $pickup = Pickup::create([
+                        'ord_id'           => $order->ord_id,
+                        'appoint_id'       => $appointId,
+                        'pay_id'           => $payment->pay_id,
+                        'pickup_created'   => now(),
+                        'pickup_completed' => null,
+                    ]);
+
+                    // 3. Update order status: the walk-in order is picked up
+                    //    in store, so it waits in TO CLAIM like any other
+                    //    in-store pickup until it is handed over.
+                    $order->ord_status = 'TO CLAIM';
+                    $order->ord_completed = now();
+                    $order->save();
+
+                    // 4. Verify stock, then deduct inventory & update sales metrics
+                    $lowStockThreshold = (int) $this->settingValue('low_stock_threshold', 5);
+                    $lowStockProducts = [];
+
+                    foreach ($order->items as $item) {
+                        $product = Product::where('prod_id', $item->prod_id)->lockForUpdate()->first();
+                        if (!$product) continue;
+
+                        if ($product->prod_qty < $item->item_qty) {
+                            throw new InsufficientStockException('Insufficient stock for ' . $product->prod_name);
+                        }
+
+                        $newQty = $product->prod_qty - $item->item_qty;
                         $product->update([
-                            'prod_qty'       => max(0, $product->prod_qty - $item->item_qty),
+                            'prod_qty'       => $newQty,
                             'prod_peaksold'  => (float)$product->prod_peaksold + (float)$item->item_amount,
                             'prod_todaysold' => (float)$product->prod_todaysold + (float)$item->item_amount,
                         ]);
+
+                        if ($newQty <= $lowStockThreshold) {
+                            $lowStockProducts[] = ['name' => $product->prod_name, 'qty' => $newQty];
+                        }
                     }
-                }
+
+                    // Priority low-stock alerts for admins (REQ-IM-03)
+                    foreach ($lowStockProducts as $low) {
+                        $this->notifyEmployeesByType(
+                            ['ADMIN', 'SUPER ADMIN'],
+                            '[PRIORITY] Low stock: "' . $low['name'] . '" is now down to ' . $low['qty'] . ' unit(s).'
+                        );
+                    }
+
+                    return [
+                        'payment'   => $payment,
+                        'pickup_id' => $pickup->pickup_id,
+                        'walk_in'   => $walkIn,
+                    ];
+                });
 
                 return response()->json([
                     'success' => true,
                     'message' => 'POS order checked out successfully',
                     'data' => [
-                        'payment'   => $payment,
-                        'pickup_id' => $pickup->pickup_id,
+                        'payment'   => $result['payment'],
+                        'pickup_id' => $result['pickup_id'],
+                        'walk_in'   => ['cust_id' => $result['walk_in']->cust_id, 'cust_nickname' => $result['walk_in']->cust_nickname],
                         'order'     => $order->fresh(),
                     ]
                 ], 201);
+
+            } catch (InsufficientStockException $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage()
+                ], 409);
 
             } catch (\Exception $e) {
                 return response()->json([
@@ -293,8 +378,14 @@
                 $prodId = $json->input('prod_id');
 
                 $order = Order::where('ord_id', $ordId)->first();
-                if (!$order) {
+                if (! $order) {
                     return response()->json(['success' => false, 'message' => 'POS order not found'], 404);
+                }
+                if (! str_starts_with((string) $order->ord_tag, 'POS-') || $order->ord_status !== 'TO PROCESS') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This POS order is no longer editable.',
+                    ], 409);
                 }
 
                 $item = Item::where('ord_id', $ordId)->where('prod_id', $prodId)->first();
@@ -323,5 +414,30 @@
                     'error'   => $e->getMessage()
                 ], 500);
             }
+        }
+
+        private function walkInCustomer(): Customer
+        {
+            return Customer::firstOrCreate(
+                ['cust_phone' => '0000000000'],
+                [
+                    'cust_created' => now(),
+                    'cust_password' => Hash::make(Str::random(32)),
+                    'cust_nickname' => 'Walk-in',
+                    'cust_pronoun' => 'they/them',
+                    'cust_birthday' => '2000-01-01',
+                    'cust_brgy' => '',
+                    'cust_city' => '',
+                    'cust_province' => '',
+                    'cust_country' => 'PH',
+                    'cust_callcode' => '+63',
+                    'cust_email' => null,
+                    'cust_type' => 'WALK-IN',
+                    'cust_wishlist' => 0,
+                    'cust_cart' => 0,
+                    'cust_orders' => 0,
+                    'cust_appoints' => 0,
+                ]
+            );
         }
     }

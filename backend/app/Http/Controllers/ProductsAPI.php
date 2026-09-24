@@ -57,6 +57,13 @@
                     'prod_reviews' => $json->input('prod_reviews') ?? null,
                 ]);
 
+                if ((int) $product->prod_qty <= (int) $this->settingValue('low_stock_threshold', 5)) {
+                    $this->notifyEmployeesByType(
+                        ['ADMIN', 'SUPER ADMIN'],
+                        '[PRIORITY] Low stock: "' . $product->prod_name . '" is now down to ' . $product->prod_qty . ' unit(s).'
+                    );
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Product added to catalog successfully',
@@ -141,6 +148,10 @@
                 $lowStockThreshold = $json->input('low_stock_threshold', 5);
 
                 $query = Product::query();
+                $isEmployee = $this->isEmployee($json->user('sanctum'));
+                if (! $isEmployee) {
+                    $status = 'active';
+                }
 
                 if ($categ) {
                     $query->where('prod_categ', $categ);
@@ -200,22 +211,13 @@
                     return response()->json(['success' => false, 'message' => 'Product not found'], 404);
                 }
 
-                if ($json->input('hard_delete')) {
-                    $product->delete();
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Product permanently removed from database'
-                    ], 200);
-                } else {
-                    $product->update([
-                        'prod_deleted' => now()
-                    ]);
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Product soft-deleted successfully',
-                        'data' => $product
-                    ], 200);
-                }
+                $product->update(['prod_deleted' => now()]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Product removed from the catalog',
+                    'data' => $product,
+                ]);
 
             } catch (\Exception $e) {
                 return response()->json([
@@ -237,7 +239,10 @@
         {
             try {
                 $q = $json->input('q');
-                $query = Product::whereNull('prod_deleted');
+                $query = Product::query();
+                if (! $this->isEmployee($json->user('sanctum'))) {
+                    $query->whereNull('prod_disabled')->whereNull('prod_deleted');
+                }
 
                 if ($q) {
                     // ilike is PostgreSQL-only; SQLite/MySQL use LIKE, which is
@@ -292,9 +297,11 @@
                 $column = $columnMap[$sortBy] ?? 'prod_name';
                 $order = strtolower($order) === 'desc' ? 'desc' : 'asc';
 
-                $products = Product::whereNull('prod_deleted')
-                    ->orderBy($column, $order)
-                    ->get();
+                $query = Product::query();
+                if (! $this->isEmployee($json->user('sanctum'))) {
+                    $query->whereNull('prod_disabled')->whereNull('prod_deleted');
+                }
+                $products = $query->orderBy($column, $order)->get();
 
                 return response()->json([
                     'success' => true,
@@ -354,6 +361,16 @@
 
                 $product->update($updateData);
 
+                if (array_key_exists('prod_qty', $updateData)) {
+                    $threshold = (int) $this->settingValue('low_stock_threshold', 5);
+                    if ((int) $product->prod_qty <= $threshold) {
+                        $this->notifyEmployeesByType(
+                            ['ADMIN', 'SUPER ADMIN'],
+                            '[PRIORITY] Low stock: "' . $product->prod_name . '" is now down to ' . $product->prod_qty . ' unit(s).'
+                        );
+                    }
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Product details updated successfully',
@@ -384,6 +401,9 @@
                 $prodTag = $json->input('prod_tag');
 
                 $query = Product::query();
+                if (! $this->isEmployee($json->user('sanctum'))) {
+                    $query->whereNull('prod_disabled')->whereNull('prod_deleted');
+                }
 
                 if ($prodId) {
                     $query->where('prod_id', $prodId);

@@ -30,8 +30,18 @@
 
                 // Verify order exists
                 $order = Order::where('ord_id', $ordId)->first();
-                if (!$order) {
+                if (! $order) {
                     return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                }
+                $customerId = $this->customerId($json);
+                if ($customerId === null || (int) $order->cust_id !== $customerId) {
+                    return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                }
+                if (! str_starts_with(strtoupper((string) $order->ord_tag), 'CART-')) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Products cannot be changed after checkout.',
+                    ], 409);
                 }
 
                 // Verify product exists and is active
@@ -46,10 +56,8 @@
                     ], 400);
                 }
 
-                $qty    = max(1, (int)$json->input('item_qty', 1));
-                $amount = $json->input('item_amount') !== null
-                    ? (float)$json->input('item_amount')
-                    : ((float)$product->prod_price * $qty);
+                $qty = max(1, (int) $json->input('item_qty', 1));
+                $amount = round((float) $product->prod_price * $qty, 2);
 
                 // Check if product already exists in the order — if so, update qty & amount
                 $existingItem = Item::where('ord_id', $ordId)->where('prod_id', $prodId)->first();
@@ -116,22 +124,50 @@
                     return response()->json(['success' => false, 'message' => 'Order not found'], 404);
                 }
 
-                // Only update fields that were sent in the request
-                $updatable = [];
-                if ($json->has('ord_tag'))       $updatable['ord_tag']       = $json->input('ord_tag');
-                if ($json->has('ord_status'))    $updatable['ord_status']    = $json->input('ord_status');
-                if ($json->has('ord_rating'))    $updatable['ord_rating']    = (int)$json->input('ord_rating');
-                if ($json->has('ord_review'))    $updatable['ord_review']    = $json->input('ord_review');
-                if ($json->has('ord_completed')) $updatable['ord_completed'] = $json->input('ord_completed');
+                $status = strtoupper((string) $json->input('ord_status'));
+                $allowed = [
+                    'TO PROCESS' => ['TO CLAIM', 'TO RECEIVE', 'CANCELLED'],
+                    'TO CLAIM' => ['CLAIMED', 'UNCLAIMED', 'CANCELLED'],
+                    'TO RECEIVE' => ['CLAIMED', 'UNCLAIMED', 'CANCELLED'],
+                    'CLAIMED' => ['RETURNED', 'REFUNDED'],
+                    'RETURNED' => ['REFUNDED', 'CLAIMED'],
+                ];
 
-                if (empty($updatable)) {
+                if ($this->customerId($json) !== null) {
+                    if ((int) $order->cust_id !== $this->customerId($json)) {
+                        return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                    }
+                    $canRequestCancellation = $status === 'CANCEL REQUESTED'
+                        && in_array($order->ord_status, ['TO PROCESS', 'TO CLAIM', 'TO RECEIVE'], true);
+                    if (! $canRequestCancellation) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'This order change requires staff review.',
+                        ], 403);
+                    }
+                } elseif (! $this->isAdmin($json->user('sanctum'))) {
+                    return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
+                } elseif (! in_array($status, $allowed[$order->ord_status] ?? [], true)) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'No updatable fields provided'
-                    ], 400);
+                        'message' => 'Invalid order status transition.',
+                    ], 409);
                 }
 
+                $updatable = ['ord_status' => $status];
+                if (in_array($status, ['CLAIMED', 'CANCELLED', 'RETURNED', 'REFUNDED'], true)) {
+                    $updatable['ord_completed'] = now();
+                }
                 $order->update($updatable);
+
+                // REQ-OT-01: "to claim"/"to receive" changes are not regular
+                // notifications (they are driven by the QR scan instead).
+                if ((int) $order->cust_id > 0 && ! in_array($status, ['CANCEL REQUESTED', 'TO CLAIM', 'TO RECEIVE'], true)) {
+                    $this->notifyCustomer(
+                        (int) $order->cust_id,
+                        'Order ' . $order->ord_tag . ' status changed to ' . $status . '.'
+                    );
+                }
 
                 return response()->json([
                     'success' => true,
@@ -167,8 +203,18 @@
 
                 // Verify order exists
                 $order = Order::where('ord_id', $ordId)->first();
-                if (!$order) {
+                if (! $order) {
                     return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                }
+                $customerId = $this->customerId($json);
+                if ($customerId === null || (int) $order->cust_id !== $customerId) {
+                    return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                }
+                if (! str_starts_with(strtoupper((string) $order->ord_tag), 'CART-')) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Products cannot be changed after checkout.',
+                    ], 409);
                 }
 
                 // Verify item exists in the order

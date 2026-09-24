@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
+import { updateCredentials } from '../services/auth.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Button from '../components/ui/Button.jsx'
@@ -34,8 +36,10 @@ function PasswordField({ label, name, value, onChange, placeholder }) {
 function ChangePassword() {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { logout } = useAuth()
 
   const [form, setForm] = useState({ current: '', newPass: '', confirm: '' })
+  const [saving, setSaving] = useState(false)
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -45,11 +49,22 @@ function ChangePassword() {
   const matchValid = form.newPass === form.confirm && form.confirm.length > 0
   const canSubmit = form.current.length > 0 && newValid && matchValid
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!canSubmit) return
-    showToast('Password updated successfully!')
-    navigate('/settings')
+    if (!canSubmit || saving) return
+    setSaving(true)
+    const { error } = await updateCredentials({
+      current_password: form.current,
+      new_password: form.newPass,
+    })
+    setSaving(false)
+    if (error) {
+      showToast(error, 'error')
+      return
+    }
+    await logout()
+    showToast('Password updated. Please sign in again.')
+    navigate('/signin')
   }
 
   return (
@@ -102,10 +117,10 @@ function ChangePassword() {
             <div className="pt-2">
               <Button
                 type="submit"
-                disabled={!canSubmit}
+                disabled={!canSubmit || saving}
                 className="w-full h-12 rounded-full font-bold shadow-md"
               >
-                Update Password
+                {saving ? 'Updating…' : 'Update Password'}
               </Button>
             </div>
           </form>

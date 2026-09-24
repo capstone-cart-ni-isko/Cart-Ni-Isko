@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 
@@ -21,8 +22,10 @@ export default function AdminPos() {
     posRemoveItem,
     posClearCart,
     posCheckout,
+    refreshOrders,
     products: backendProducts = [],
   } = useAdmin()
+  const { showToast } = useToast()
 
   // Mobile state: 'products' | 'cart'
   const [mobileView, setMobileView] = useState('products')
@@ -46,8 +49,11 @@ export default function AdminPos() {
   const [variantQty, setVariantQty] = useState(1)
 
   const [showConfirmSaleModal, setShowConfirmSaleModal] = useState(false) // confirmation view before placing order
+  const [checkoutBusy, setCheckoutBusy] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
 
-  const products = backendProducts
+  // POS sells only currently offered products (unlisted ones stay hidden)
+  const products = backendProducts.filter((p) => !p.disabled)
 
   // Filter products by category and search (tolerant to singular/plural labels)
   const filteredProducts = useMemo(() => {
@@ -101,13 +107,11 @@ export default function AdminPos() {
     setVariantQty(1)
   }
 
-  // Confirm variant selection -> Add to cart
+  // Confirm variant selection -> Add to cart (one call, one server sync)
   const handleConfirmVariantAdd = () => {
     if (!variantModalProduct) return
     const variantLabel = `${selectedSize}${selectedColor !== 'Default' ? `, ${selectedColor}` : ''}`
-    for (let i = 0; i < variantQty; i++) {
-      posAddToCart(variantModalProduct, variantLabel)
-    }
+    posAddToCart(variantModalProduct, variantLabel, variantQty)
     setVariantModalProduct(null)
   }
 
@@ -115,26 +119,43 @@ export default function AdminPos() {
   const handleInitiateCheckout = (e) => {
     if (e) e.preventDefault()
     if (posCart.length === 0) return
+    setCheckoutError('')
     setShowConfirmSaleModal(true)
   }
 
-  // Finalize POS Sale after staff confirmation
-  const handleFinalConfirmCheckout = () => {
-    const order = posCheckout({
-      paymentMethod,
-      customerName: customerName.trim() || 'Walk-in Student',
-      studentId: studentId.trim() || '2026-N/A',
-      amountTendered: tenderedNum || total,
-    })
+  // Finalize POS Sale after staff confirmation (POST /pos/checkout).
+  // The confirmation modal stays open when the server rejects the checkout.
+  const handleFinalConfirmCheckout = async () => {
+    if (checkoutBusy) return
+    setCheckoutError('')
+    setCheckoutBusy(true)
+    try {
+      const result = await posCheckout({
+        paymentMethod,
+        customerName: customerName.trim() || 'Walk-in',
+        studentId: studentId.trim() || 'N/A',
+        amountTendered: tenderedNum || total,
+      })
 
-    setLastPlacedOrder(order)
-    setShowConfirmSaleModal(false)
-    setShowReceiptModal(true)
-    setCustomerName('')
-    setStudentId('')
-    setAmountTendered('')
-    setShowCustomerInput(false)
-    setMobileView('products')
+      if (!result?.success) {
+        const message = result?.error || 'Failed to checkout the POS order.'
+        setCheckoutError(message)
+        showToast(message, 'error')
+        return // keep the confirmation modal open for a retry
+      }
+
+      setLastPlacedOrder(result.order)
+      setShowConfirmSaleModal(false)
+      setShowReceiptModal(true)
+      setCustomerName('')
+      setStudentId('')
+      setAmountTendered('')
+      setShowCustomerInput(false)
+      setMobileView('products')
+      refreshOrders()
+    } finally {
+      setCheckoutBusy(false)
+    }
   }
 
   const handlePrint = () => {
@@ -1023,7 +1044,7 @@ export default function AdminPos() {
             <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 p-3 rounded-2xl border border-gray-100">
               <div>
                 <p className="text-[10px] text-gray-400 font-bold uppercase">Customer</p>
-                <p className="font-bold text-gray-900">{customerName.trim() || 'Walk-in Student'}</p>
+                <p className="font-bold text-gray-900">{customerName.trim() || 'Walk-in'}</p>
                 <p className="text-[10px] text-gray-500">ID: {studentId.trim() || 'N/A'}</p>
               </div>
               <div>
@@ -1057,6 +1078,10 @@ export default function AdminPos() {
               <span className="text-lg font-black text-gray-900">₱{total.toFixed(2)}</span>
             </div>
 
+            {checkoutError && (
+              <p className="text-[11px] font-semibold text-rose-600 -mt-1">{checkoutError}</p>
+            )}
+
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
@@ -1068,9 +1093,10 @@ export default function AdminPos() {
               <button
                 type="button"
                 onClick={handleFinalConfirmCheckout}
-                className="flex-1 py-3 bg-brand-orange hover:bg-orange-600 text-white font-black text-xs rounded-xl shadow-xs cursor-pointer"
+                disabled={checkoutBusy}
+                className="flex-1 py-3 bg-brand-orange hover:bg-orange-600 disabled:opacity-60 disabled:cursor-wait text-white font-black text-xs rounded-xl shadow-xs cursor-pointer"
               >
-                Confirm &amp; Place Sale
+                {checkoutBusy ? 'Placing Sale…' : 'Confirm & Place Sale'}
               </button>
             </div>
           </div>
@@ -1101,7 +1127,13 @@ export default function AdminPos() {
             <div className="border-t border-b border-dashed border-gray-200 py-3 space-y-2 text-xs">
               <div className="flex justify-between text-gray-500 text-[11px]">
                 <span>Customer:</span>
-                <span className="font-bold text-gray-900">{lastPlacedOrder.customer}</span>
+                <span className="font-bold text-gray-900">
+                  {lastPlacedOrder.customer}
+                  {/* REQ-POS-01: walk-ins are listed under "Walk-in" with phone 0000000000 */}
+                  {lastPlacedOrder.customer === 'Walk-in' && (
+                    <span className="ml-1 font-normal text-gray-400">• 0000000000</span>
+                  )}
+                </span>
               </div>
               <div className="flex justify-between text-gray-500 text-[11px]">
                 <span>Payment:</span>

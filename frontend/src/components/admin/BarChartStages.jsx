@@ -1,5 +1,3 @@
-import React from 'react'
-
 const STAGE_TONAL_COLORS = {
   awaiting_production: '#94A3B8', // Slate 400
   in_production: '#64748B',       // Slate 500

@@ -25,7 +25,10 @@
             "App\\": "app/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
-        }
+        },
+        "exclude-from-classmap": [
+            "app/Http/Controllers/Backups/"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
@@ -37,7 +40,6 @@
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
-            "@php artisan migrate --force",
             "npm install",
             "npm run build"
         ],

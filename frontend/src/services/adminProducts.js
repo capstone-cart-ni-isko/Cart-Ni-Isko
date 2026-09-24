@@ -34,16 +34,18 @@ export function mapAdminProduct(row) {
   if (!row) return null
   const category = normalizeCategory(row.prod_categ)
   const qty = Number(row.prod_qty ?? 0)
-  const image = categoryImage(category)
+  const image = (Array.isArray(row.prod_images) && row.prod_images[0]) || categoryImage(category)
   // Normalize backend status vocabulary ('In Stock' / 'Out of Stock') into the
   // inventory UI's publication vocabulary ('Published' / 'Draft' / 'Out of Stock').
+  const disabled = !!row.prod_disabled
   const rawStatus = String(row.prod_status || '').trim()
-  const status =
-    rawStatus === 'In Stock'
-      ? 'Published'
-      : rawStatus === 'Out of Stock'
-      ? 'Out of Stock'
-      : rawStatus || (qty > 0 ? 'Published' : 'Out of Stock')
+  const status = disabled
+    ? 'Unlisted'
+    : rawStatus === 'In Stock'
+    ? 'Published'
+    : rawStatus === 'Out of Stock'
+    ? 'Out of Stock'
+    : rawStatus || (qty > 0 ? 'Published' : 'Out of Stock')
   const availability = qty > 0 ? 'Regular' : 'Out of Stock'
   const variants = (row.prod_sizes || []).map((size, i) => ({
     id: `var-${row.prod_id}-${i}`,
@@ -69,16 +71,22 @@ export function mapAdminProduct(row) {
     status,
     image,
     variants,
-    published: status !== 'Draft',
+    disabled,
+    description: row.prod_desc || '',
+    published: !disabled && status !== 'Draft',
   }
 }
 
 /**
- * GET /products/filter - Fetch all active products from the backend.
+ * GET /products/filter - Fetch active AND unlisted products, so the admin
+ * catalog keeps showing disabled rows and can sell (relist) them again.
  */
 export async function fetchAdminProducts() {
-  const data = await apiGet('/products/filter', { status: 'active' })
-  const rows = Array.isArray(data.data) ? data.data : []
+  const [active, unlisted] = await Promise.all([
+    apiGet('/products/filter', { status: 'active' }),
+    apiGet('/products/filter', { status: 'disabled' }),
+  ])
+  const rows = [...(active.data || []), ...(unlisted.data || [])]
   return rows.map(mapAdminProduct).filter(Boolean)
 }
 
@@ -93,6 +101,7 @@ export function createAdminProduct(productData) {
     prod_price: productData.price,
     prod_qty: productData.stock,
     prod_desc: productData.desc || '',
+    prod_images: productData.photo ? [productData.photo] : null,
   })
 }
 

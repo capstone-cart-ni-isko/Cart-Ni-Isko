@@ -39,19 +39,13 @@ function DesktopFooter() {
             <h4 className="text-[11px] font-bold text-gray-900 uppercase tracking-wider mb-1.5">SUPPORT</h4>
             <ul className="space-y-1">
               <li>
-                <Link to="/help" className="text-[11px] text-gray-500 hover:text-brand-orange transition-colors font-medium">
-                  FAQ &amp; Size Guide
-                </Link>
+                <span className="text-[11px] text-gray-500 font-medium">FAQ &amp; Size Guide</span>
               </li>
               <li>
-                <Link to="/help" className="text-[11px] text-gray-500 hover:text-brand-orange transition-colors font-medium">
-                  Shipping, Pickups &amp; Returns
-                </Link>
+                <span className="text-[11px] text-gray-500 font-medium">Shipping, Pickups &amp; Returns</span>
               </li>
               <li>
-                <Link to="/help" className="text-[11px] text-gray-500 hover:text-brand-orange transition-colors font-medium">
-                  Contact Support
-                </Link>
+                <span className="text-[11px] text-gray-500 font-medium">Contact Support</span>
               </li>
             </ul>
           </div>
@@ -61,19 +55,12 @@ function DesktopFooter() {
             <h4 className="text-[11px] font-bold text-gray-900 uppercase tracking-wider mb-1.5">INFORMATION</h4>
             <ul className="space-y-1">
               <li>
-                <Link to="/about" className="text-[11px] text-gray-500 hover:text-brand-orange transition-colors font-medium">
-                  About Us
-                </Link>
-              </li>
-              <li>
                 <Link to="/orders" className="text-[11px] text-gray-500 hover:text-brand-orange transition-colors font-medium">
                   Order Tracking
                 </Link>
               </li>
               <li>
-                <Link to="/help" className="text-[11px] text-gray-500 hover:text-brand-orange transition-colors font-medium">
-                  Terms &amp; Privacy
-                </Link>
+                <span className="text-[11px] text-gray-500 font-medium">Terms &amp; Privacy</span>
               </li>
             </ul>
           </div>

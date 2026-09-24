@@ -1,129 +1,91 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import LoadingSpinner from '../../components/ui/LoadingSpinner.jsx'
+import { useAdmin } from '../../hooks/useAdmin.js'
+import {
+  fetchAppointments,
+  fetchSlots,
+  createAppointment,
+  SLOT_RULES,
+} from '../../services/appointments.js'
+import { fetchAccounts } from '../../services/accounts.js'
+import { getTrack, scanQr } from '../../services/tracking.js'
+import {
+  mapOrderRows,
+  parseDate,
+  normalizeSlots,
+  normalizeAccounts,
+} from '../../services/dashboard.js'
 
-// ─── Pickup Workflow ───────────────────────────────────────────────────────
-// Order Preparing → Ready for Pickup → Unscheduled → Scheduled → Claimed → Completed
-//                                                            ↘ No-show (missed window)
+// ─── Pickup Workflow (live data) ───────────────────────────────────────────
+// Unscheduled = orders in "TO CLAIM" without an open CLAIM appointment.
+// Scheduled   = open CLAIM appointments grouped by date.
+// Completed   = orders in "CLAIMED" that own a pickup track.
+// No-show     = orders in "UNCLAIMED" (missed window).
 
-// ─── Sample Data ──────────────────────────────────────────────────────────
+const pad = (n) => String(n).padStart(2, '0')
+const todayISO = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+const TODAY_LABEL = new Date().toLocaleDateString('en-US', {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+})
 
-const SCHEDULE_SLOTS = [
-  { time: '8:00 – 8:30 AM',    count: 1, max: 5, status: 'covered' },
-  { time: '8:30 – 9:00 AM',    count: 3, max: 5, status: 'covered' },
-  { time: '9:00 – 9:30 AM',    count: 1, max: 5, status: 'covered' },
-  { time: '9:30 – 10:00 AM',   count: 5, max: 5, status: 'covered' },
-  { time: '10:00 – 10:30 AM',  count: 2, max: 5, status: 'covered' },
-  { time: '10:30 – 11:00 AM',  count: 4, max: 5, status: 'issue'   },
-  { time: '11:00 – 11:30 AM',  count: 0, max: 5, status: 'closed'  },
-  { time: '11:30 AM – 12:00 PM', count: 1, max: 5, status: 'covered' },
-]
+/** '2026-05-22 09:12:00' -> '9:12 AM' */
+function timeOfDay(value) {
+  const date = parseDate(value)
+  if (!date) return '—'
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
 
-const OVERVIEW_SCHEDULE_ROWS = [
-  { time: '8:00 – 8:30 AM',   appts: 1, capacity: 5, staffOk: true,  status: 'Covered' },
-  { time: '8:30 – 9:00 AM',   appts: 3, capacity: 5, staffOk: true,  status: 'Covered' },
-  { time: '9:00 – 9:30 AM',   appts: 1, capacity: 5, staffOk: true,  status: 'Covered' },
-  { time: '9:30 – 10:00 AM',  appts: 5, capacity: 5, staffOk: true,  status: 'Covered' },
-  { time: '10:00 – 10:30 AM', appts: 2, capacity: 5, staffOk: true,  status: 'Covered' },
-  { time: '10:30 – 11:00 AM', appts: 4, capacity: 5, staffOk: false, status: 'Coverage Issue' },
-  { time: '11:00 – 11:30 AM', appts: 0, capacity: 5, staffOk: null,  status: 'Closed' },
-  { time: '11:30 AM – 12:00 PM', appts: 1, capacity: 5, staffOk: true, status: 'Covered' },
-]
+/** Backend slot times are 'YYYY-MM-DD HH:mm'. */
+function clockLabel(hhmm) {
+  const [h, m] = String(hhmm).split(' ')[1].split(':').map(Number)
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const hour12 = h % 12 || 12
+  return `${hour12}:${pad(m)} ${suffix}`
+}
 
-const UNSCHEDULED_ORDERS = [
-  {
-    id: '#ORD-8921', customer: 'Juan Dela Cruz',  phone: '0917-123-4567',
-    items: '1 item',  itemLabel: 'BU Labels 2025 Hoodie',   readySince: '9:12 AM',
-    avatar: 'JD',
-  },
-  {
-    id: '#ORD-8915', customer: 'Marie Santos',    phone: '0918-234-5678',
-    items: '2 items', itemLabel: 'BU Varsity Jacket + BU Lanyard Set', readySince: '10:06 AM',
-    avatar: 'MS',
-  },
-  {
-    id: '#ORD-8897', customer: 'Pedro Reyes',     phone: '0915-341-3799',
-    items: '1 item',  itemLabel: 'BU Polo Shirt',             readySince: '10:30 AM',
-    avatar: 'PR',
-  },
-  {
-    id: '#ORD-8872', customer: 'Ana Cruz',        phone: '0917-97-4542',
-    items: '2 items', itemLabel: 'Tatak BUENO Shirt + Tote Bag', readySince: '11:05 AM',
-    avatar: 'AC',
-  },
-  {
-    id: '#ORD-8865', customer: 'Jose Martinez',   phone: '0922-459-7990',
-    items: '1 item',  itemLabel: 'BU Tote Bag',               readySince: '11:22 AM',
-    avatar: 'JM',
-  },
-]
+/** '08:00' + '08:30' -> '8:00 – 8:30 AM' (meridiem dropped when it matches). */
+function slotRangeLabel(slot) {
+  const start = clockLabel(slot.start)
+  const end = clockLabel(slot.end)
+  const startSuffix = start.slice(-2)
+  const endSuffix = end.slice(-2)
+  return startSuffix === endSuffix
+    ? `${start.slice(0, -3)} – ${end}`
+    : `${start} – ${end}`
+}
 
-const SCHEDULED_GROUPS = [
-  {
-    slot: '9:00 – 9:30 AM',
-    count: 1,
-    appointments: [
-      { apptId: '#AP-2026-0142', orderId: '#ORD-8921', customer: 'Juan Dela Cruz',  avatar: 'JD', items: '1 item', itemLabel: 'BU Labels 2025 Hoodie' },
-    ],
-  },
-  {
-    slot: '10:30 – 11:00 AM',
-    count: 2,
-    appointments: [
-      { apptId: '#AP-2026-0137', orderId: '#ORD-8915', customer: 'Maria Santos',    avatar: 'MS', items: '2 items', itemLabel: 'BU Varsity Jacket (1) · BU Lanyard Set (1)' },
-      { apptId: '#AP-2026-0138', orderId: '#ORD-8897', customer: 'Pedro Reyes',     avatar: 'PR', items: '1 item',  itemLabel: 'BU Polo Shirt' },
-    ],
-  },
-  {
-    slot: '11:00 – 11:30 AM',
-    count: 1,
-    appointments: [
-      { apptId: '#AP-2026-0139', orderId: '#ORD-8872', customer: 'Ana Cruz',        avatar: 'AC', items: '2 items', itemLabel: 'Tatak BUENO Shirt · 2 Items' },
-    ],
-  },
-  {
-    slot: '1:00 – 1:30 PM',
-    count: 2,
-    appointments: [
-      { apptId: '#AP-2026-0140', orderId: '#ORD-8865', customer: 'Jose Martinez',   avatar: 'JM', items: '1 item',  itemLabel: 'BU Tote Bag' },
-      { apptId: '#AP-2026-0141', orderId: '#ORD-8853', customer: 'Rafael Cruz',     avatar: 'RC', items: '1 item',  itemLabel: 'BU Hoodie' },
-    ],
-  },
-]
+function initialsOf(name) {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (parts.length === 0) return '#'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+}
 
-const COMPLETED_PICKUPS = [
-  { datetime: 'May 22, 2026 · 9:10 AM',  customer: 'Juan Dela Cruz', phone: '0917-123-4567', orderId: '#ORD-8921', items: '1 item',  itemLabel: 'BU Labels 2025 Hoodie',               claimedBy: 'Alex R.',  avatar: 'JD' },
-  { datetime: 'May 22, 2026 · 10:42 AM', customer: 'Maria Santos',   phone: '0918-234-5678', orderId: '#ORD-8915', items: '2 items', itemLabel: 'BU Varsity Jacket · BU Lanyard Set',  claimedBy: 'Bea S.',   avatar: 'MS' },
-  { datetime: 'May 22, 2026 · 11:15 AM', customer: 'Pedro Reyes',    phone: '0915-341-3799', orderId: '#ORD-8897', items: '1 item',  itemLabel: 'BU Polo Shirt',                       claimedBy: 'Carlo D.', avatar: 'PR' },
-  { datetime: 'May 22, 2026 · 1:00 PM',  customer: 'Ana Cruz',       phone: '0917-97-4542',  orderId: '#ORD-8872', items: '2 items', itemLabel: 'Tatak BUENO Shirt · Tote Bag',        claimedBy: 'Dan F.',   avatar: 'AC' },
-  { datetime: 'May 22, 2026 · 2:17 PM',  customer: 'Jose Martinez',  phone: '0922-459-7990', orderId: '#ORD-8865', items: '1 item',  itemLabel: 'BU Tote Bag',                         claimedBy: 'Erika L.', avatar: 'JM' },
-]
+function itemsInfo(order) {
+  const items = order?.items || []
+  const label = items.map((i) => i.name).join(' · ')
+  return {
+    count: `${items.length} ${items.length === 1 ? 'item' : 'items'}`,
+    label: label || 'No items',
+  }
+}
 
-const NOSHOW_PICKUPS = [
-  { datetime: 'May 22, 2026 · 3:00 PM',  customer: 'Luis Reyes',     phone: '0918-501-5532', orderId: '#ORD-8820', items: '1 item',  itemLabel: 'BU Hoodie',       avatar: 'LR' },
-  { datetime: 'May 22, 2026 · 3:30 PM',  customer: 'Camille Santos', phone: '0919-510-3419', orderId: '#ORD-8817', items: '2 items', itemLabel: 'BU Shirt · Cap',  avatar: 'CS' },
-  { datetime: 'May 21, 2026 · 4:00 PM',  customer: 'Marco Mendoza',  phone: '0916-882-7744', orderId: '#ORD-8863', items: '1 item',  itemLabel: 'BU Tote Bag',     avatar: 'MM' },
-  { datetime: 'May 21, 2026 · 4:30 PM',  customer: 'Shaira Lopez',   phone: '0917-222-3344', orderId: '#ORD-4769', items: '1 item',  itemLabel: 'BU Polo Shirt',   avatar: 'SL' },
-]
+const isStaffShortage = (slot) => Boolean(slot.reason && slot.reason.includes('employees'))
 
-// ─── Slot Picker Modal ─────────────────────────────────────────────────────
-function SchedulePickupModal({ order, onClose, onConfirm }) {
+// ─── Slot Picker Modal (live /appoint/slots + /appoint/create) ────────────
+function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
   const [selectedSlot, setSelectedSlot] = useState(null)
-  const [selectedDate, setSelectedDate] = useState('May 22, 2026')
-
-  const modalSlots = [
-    { time: '8:00 – 8:30 AM',   count: 1, max: 5, closed: false },
-    { time: '8:30 – 9:00 AM',   count: 3, max: 5, closed: false },
-    { time: '9:00 – 9:30 AM',   count: 1, max: 5, closed: false },
-    { time: '9:30 – 10:00 AM',  count: 5, max: 5, closed: false }, // full
-    { time: '10:00 – 10:30 AM', count: 2, max: 5, closed: false },
-    { time: '10:30 – 11:00 AM', count: 4, max: 5, closed: false, issue: true },
-    { time: '11:00 – 11:30 AM', count: 0, max: 5, closed: true  },
-    { time: '11:30 AM – 12:00 PM', count: 1, max: 5, closed: false },
-    { time: '1:00 – 1:30 PM',   count: 2, max: 5, closed: false },
-    { time: '1:30 – 2:00 PM',   count: 0, max: 5, closed: false },
-    { time: '2:00 – 2:30 PM',   count: 3, max: 5, closed: false },
-  ]
+  const capacity = slots[0]?.capacity || SLOT_RULES.CLAIM.capacity
 
   return (
     <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
@@ -153,39 +115,40 @@ function SchedulePickupModal({ order, onClose, onConfirm }) {
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
             <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          <span className="text-xs font-semibold text-slate-700">{selectedDate}</span>
+          <span className="text-xs font-semibold text-slate-700">{TODAY_LABEL}</span>
           <span className="ml-auto text-[10px] text-slate-400">Showing available slots</span>
         </div>
 
         {/* Slot grid */}
         <div className="px-5 py-4 max-h-72 overflow-y-auto space-y-1.5">
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-            Select a time slot — max 5 appointments per slot
+            Select a time slot — max {capacity} appointments per slot
           </p>
-          {modalSlots.map((slot) => {
-            const isFull   = slot.count >= slot.max
-            const disabled = slot.closed || isFull
-            const isSelected = selectedSlot === slot.time
+          {slots.map((slot) => {
+            const isFull = slot.booked >= slot.capacity
+            const disabled = isFull || !slot.available || busy
+            const isSelected = selectedSlot?.start === slot.start
+            const issue = isStaffShortage(slot)
             return (
               <button
-                key={slot.time}
+                key={`${slot.start}-${slot.type}`}
                 type="button"
                 disabled={disabled}
-                onClick={() => !disabled && setSelectedSlot(slot.time)}
+                onClick={() => !disabled && setSelectedSlot(slot)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-xs font-medium transition-all cursor-pointer
                   ${disabled
                     ? 'bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed'
                     : isSelected
                       ? 'bg-orange-50 border-brand-orange text-brand-orange font-bold'
-                      : slot.issue
+                      : issue
                         ? 'bg-amber-50/60 border-amber-200 text-slate-700 hover:border-amber-400'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                   }`}
               >
-                <span>{slot.time}</span>
+                <span>{slotRangeLabel(slot)}</span>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-semibold ${isFull ? 'text-rose-500' : slot.issue ? 'text-amber-600' : 'text-slate-400'}`}>
-                    {slot.closed ? 'Closed' : isFull ? 'Full' : `${slot.count}/${slot.max}`}
+                  <span className={`text-[11px] font-semibold ${isFull ? 'text-rose-500' : issue ? 'text-amber-600' : 'text-slate-400'}`}>
+                    {isFull ? 'Full' : `${slot.booked}/${slot.capacity}`}
                   </span>
                   {isSelected && (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-brand-orange">
@@ -196,6 +159,9 @@ function SchedulePickupModal({ order, onClose, onConfirm }) {
               </button>
             )
           })}
+          {slots.length === 0 && (
+            <p className="text-xs text-slate-400 py-4 text-center">No bookable slots for today.</p>
+          )}
         </div>
 
         {/* Footer */}
@@ -213,12 +179,12 @@ function SchedulePickupModal({ order, onClose, onConfirm }) {
             </button>
             <button
               type="button"
-              disabled={!selectedSlot}
+              disabled={!selectedSlot || busy}
               onClick={() => selectedSlot && onConfirm(selectedSlot)}
               className={`h-8 px-4 rounded-md text-xs font-bold transition-colors cursor-pointer
-                ${selectedSlot ? 'bg-brand-orange hover:bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                ${selectedSlot && !busy ? 'bg-brand-orange hover:bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
             >
-              Confirm Slot
+              {busy ? 'Scheduling...' : 'Confirm Slot'}
             </button>
           </div>
         </div>
@@ -249,14 +215,16 @@ function SlotStatusBadge({ status }) {
 
 // ─── Avatar helper ─────────────────────────────────────────────────────────
 function Avatar({ initials, size = 'sm' }) {
-  const colors = {
-    JD: 'bg-blue-100 text-blue-700', MS: 'bg-pink-100 text-pink-700',
-    PR: 'bg-indigo-100 text-indigo-700', AC: 'bg-emerald-100 text-emerald-700',
-    JM: 'bg-amber-100 text-amber-700',  RC: 'bg-purple-100 text-purple-700',
-    LR: 'bg-sky-100 text-sky-700',      CS: 'bg-rose-100 text-rose-700',
-    MM: 'bg-teal-100 text-teal-700',    SL: 'bg-violet-100 text-violet-700',
-  }
-  const c = colors[initials] || 'bg-slate-100 text-slate-600'
+  const palette = [
+    'bg-blue-100 text-blue-700', 'bg-pink-100 text-pink-700',
+    'bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700',
+    'bg-amber-100 text-amber-700', 'bg-purple-100 text-purple-700',
+    'bg-sky-100 text-sky-700', 'bg-rose-100 text-rose-700',
+    'bg-teal-100 text-teal-700', 'bg-violet-100 text-violet-700',
+  ]
+  let hash = 0
+  for (const ch of String(initials || '#')) hash = (hash + ch.charCodeAt(0)) % palette.length
+  const c = palette[hash]
   const sz = size === 'sm' ? 'w-7 h-7 text-[10px]' : 'w-8 h-8 text-xs'
   return (
     <div className={`${sz} ${c} rounded-full flex items-center justify-center font-bold shrink-0`}>
@@ -266,7 +234,7 @@ function Avatar({ initials, size = 'sm' }) {
 }
 
 // ─── Right Sidebar Panel (shared by Scheduled & Overview) ─────────────────
-function PickupScheduleSidebar({ onSchedule, onViewUnscheduled }) {
+function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
   return (
     <div className="w-80 shrink-0 space-y-3">
       {/* Schedule Panel */}
@@ -278,29 +246,39 @@ function PickupScheduleSidebar({ onSchedule, onViewUnscheduled }) {
           </svg>
           <div>
             <p className="text-xs font-bold text-slate-900">Pickup Schedule</p>
-            <p className="text-[10px] text-slate-400">Today • May 22, 2026</p>
+            <p className="text-[10px] text-slate-400">Today • {TODAY_LABEL}</p>
           </div>
         </div>
-        <div className="divide-y divide-slate-100">
-          {SCHEDULE_SLOTS.map((slot) => (
-            <div key={slot.time} className="flex items-center justify-between gap-2 px-4 py-2">
-              <span className="text-[11px] font-medium text-slate-700 w-28 shrink-0 whitespace-nowrap">{slot.time}</span>
-              <span className={`text-[11px] font-semibold shrink-0 whitespace-nowrap ${slot.count >= slot.max ? 'text-rose-500' : 'text-slate-500'}`}>
-                {slot.count}/{slot.max}
-              </span>
-              <span className="shrink-0 whitespace-nowrap">
-                <SlotStatusBadge status={slot.status} />
-              </span>
+        <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+          {slots.map((slot) => {
+            const isFull = slot.booked >= slot.capacity
+            const status = !slot.available && isStaffShortage(slot) ? 'issue' : 'covered'
+            return (
+              <div key={slot.start} className="flex items-center justify-between gap-2 px-4 py-2">
+                <span className="text-[11px] font-medium text-slate-700 w-28 shrink-0 whitespace-nowrap">{slotRangeLabel(slot)}</span>
+                <span className={`text-[11px] font-semibold shrink-0 whitespace-nowrap ${isFull ? 'text-rose-500' : 'text-slate-500'}`}>
+                  {slot.booked}/{slot.capacity}
+                </span>
+                <span className="shrink-0 whitespace-nowrap">
+                  <SlotStatusBadge status={status} />
+                </span>
+              </div>
+            )
+          })}
+          {slots.length === 0 && (
+            <div className="flex items-center gap-2 px-4 py-3">
+              <LoadingSpinner size={16} />
+              <p className="text-[11px] text-slate-400">Loading today&apos;s slots…</p>
             </div>
-          ))}
+          )}
         </div>
         <div className="px-4 py-2.5 border-t border-slate-100">
-          <button
-            type="button"
+          <Link
+            to="/admin/schedule"
             className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
           >
             View Full Schedule
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -320,7 +298,8 @@ function PickupScheduleSidebar({ onSchedule, onViewUnscheduled }) {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
               <line x1="12" y1="14" x2="12" y2="18" /><line x1="10" y1="16" x2="14" y2="16" />
             </svg>
             Schedule Pickup
@@ -332,20 +311,21 @@ function PickupScheduleSidebar({ onSchedule, onViewUnscheduled }) {
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0 text-slate-400">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
               <line x1="9" y1="14" x2="15" y2="14" />
             </svg>
             View Unscheduled
           </button>
-          <button
-            type="button"
+          <Link
+            to="/admin/schedule"
             className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0 text-slate-400">
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
             Manage Time Slots
-          </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -354,7 +334,7 @@ function PickupScheduleSidebar({ onSchedule, onViewUnscheduled }) {
 
 // ─── Tab Components ────────────────────────────────────────────────────────
 
-function OverviewTab({ onSchedule, onViewUnscheduled }) {
+function OverviewTab({ kpis, scheduleRows, slots, onSchedule, onViewUnscheduled }) {
   return (
     <div className="flex gap-4 min-h-0">
       {/* Main content */}
@@ -362,11 +342,11 @@ function OverviewTab({ onSchedule, onViewUnscheduled }) {
         {/* KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
           {[
-            { label: 'Ready for Pickup', value: '12', sub: 'orders',          color: 'emerald', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>) },
-            { label: 'Unscheduled',      value: '5',  sub: 'orders',          color: 'amber',   icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/></svg>) },
-            { label: "Today's Scheduled",value: '8',  sub: 'appointments',    color: 'blue',    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>) },
-            { label: "Today's Completed",value: '1',  sub: 'pickups',         color: 'indigo',  icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="20 6 9 17 4 12"/></svg>) },
-            { label: 'No-show',          value: '1',  sub: 'appointment',     color: 'rose',    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>) },
+            { label: 'Ready for Pickup', value: kpis.ready, sub: 'orders',          color: 'emerald', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>) },
+            { label: 'Unscheduled',      value: kpis.unscheduled, sub: 'orders',      color: 'amber',   icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/></svg>) },
+            { label: "Today's Scheduled",value: kpis.scheduledToday, sub: 'appointments', color: 'blue', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>) },
+            { label: "Today's Completed",value: kpis.completedToday, sub: 'pickups',   color: 'indigo',  icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="20 6 9 17 4 12"/></svg>) },
+            { label: 'No-show',          value: kpis.noshow, sub: 'appointment',       color: 'rose',    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>) },
           ].map(({ label, value, sub, color, icon }) => (
             <div key={label} className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
               <div className={`w-8 h-8 rounded-md bg-${color}-50 border border-${color}-100 flex items-center justify-center text-${color}-600 shrink-0`}>
@@ -391,7 +371,7 @@ function OverviewTab({ onSchedule, onViewUnscheduled }) {
               </svg>
               <p className="text-sm font-bold text-slate-900">Today's Pickup Schedule</p>
             </div>
-            <span className="text-xs text-slate-500 font-medium">May 22, 2026</span>
+            <span className="text-xs text-slate-500 font-medium">{TODAY_LABEL}</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left border-collapse">
@@ -404,7 +384,7 @@ function OverviewTab({ onSchedule, onViewUnscheduled }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {OVERVIEW_SCHEDULE_ROWS.map((row) => (
+                {scheduleRows.map((row) => (
                   <tr key={row.time} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-4 py-2.5 font-medium text-slate-700 whitespace-nowrap">{row.time}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
@@ -416,9 +396,14 @@ function OverviewTab({ onSchedule, onViewUnscheduled }) {
                       {row.staffOk === false && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-amber-500"><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/><circle cx="12" cy="12" r="10"/></svg>}
                       {row.staffOk === null  && <span className="text-[10px] text-slate-400">—</span>}
                     </td>
-                    <td className="px-4 py-2.5"><SlotStatusBadge status={row.status === 'Covered' ? 'covered' : row.status === 'Coverage Issue' ? 'issue' : 'closed'} /></td>
+                    <td className="px-4 py-2.5"><SlotStatusBadge status={row.status} /></td>
                   </tr>
                 ))}
+                {scheduleRows.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">No slots available today.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -426,13 +411,12 @@ function OverviewTab({ onSchedule, onViewUnscheduled }) {
       </div>
 
       {/* Right sidebar */}
-      <PickupScheduleSidebar onSchedule={onSchedule} onViewUnscheduled={onViewUnscheduled} />
+      <PickupScheduleSidebar slots={slots} onSchedule={onSchedule} onViewUnscheduled={onViewUnscheduled} />
     </div>
   )
 }
 
-function UnscheduledTab({ onSchedule }) {
-  const [orders] = useState(UNSCHEDULED_ORDERS)
+function UnscheduledTab({ orders, onSchedule, onHandover, onOpenOrder, busyId }) {
   return (
     <div className="space-y-3">
       {/* Info banner */}
@@ -465,49 +449,70 @@ function UnscheduledTab({ onSchedule }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {orders.map((order) => (
-                <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar initials={order.avatar} />
-                      <div>
-                        <p className="font-bold text-slate-900 text-xs">{order.customer}</p>
-                        <p className="text-[10px] text-slate-400">{order.phone}</p>
+              {orders.map((order) => {
+                const items = itemsInfo(order)
+                return (
+                  <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar initials={initialsOf(order.customer)} />
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">{order.customer}</p>
+                          <p className="text-[10px] text-slate-400">{order.custPhone || '—'}</p>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-extrabold text-slate-800">{order.id}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-slate-700">{order.items}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{order.itemLabel}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 text-slate-600 font-medium">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-400">
-                        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                      </svg>
-                      {order.readySince}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onSchedule(order)}
-                        className="h-8 px-3 bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold rounded-md transition-colors cursor-pointer"
-                      >
-                        Schedule Pickup
-                      </button>
-                      <button type="button" className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer">
-                        View Order
-                      </button>
-                      <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer text-sm font-bold">⋯</button>
-                    </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-extrabold text-slate-800">{order.id}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-700">{items.count}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{items.label}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 text-slate-600 font-medium">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-400">
+                          <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        {timeOfDay(order.createdAt)}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onSchedule(order)}
+                          className="h-8 px-3 bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold rounded-md transition-colors cursor-pointer"
+                        >
+                          Schedule Pickup
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          onClick={() => onHandover(order)}
+                          className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                        >
+                          {busyId === order.id ? 'Handing over…' : 'Hand over'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOpenOrder(order)}
+                          className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer"
+                        >
+                          View Order
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+              {orders.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                    No unscheduled pickups — every ready order has a slot.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -516,7 +521,7 @@ function UnscheduledTab({ onSchedule }) {
   )
 }
 
-function ScheduledTab({ onSchedule, onViewUnscheduled }) {
+function ScheduledTab({ groups, slots, onSchedule, onViewUnscheduled, onHandover, onOpenOrder, busyId }) {
   return (
     <div className="flex gap-4 min-h-0">
       {/* Main area */}
@@ -539,25 +544,27 @@ function ScheduledTab({ onSchedule, onViewUnscheduled }) {
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                 <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
               </svg>
-              May 22, 2026
+              {TODAY_LABEL}
             </button>
-            <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:bg-slate-50 cursor-pointer">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="6 9 12 15 18 9"/></svg>
+            <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
           </div>
         </div>
 
-        {/* Time-grouped appointments */}
+        {/* Date-grouped appointments */}
         <div className="space-y-3">
-          {SCHEDULED_GROUPS.map((group) => (
-            <div key={group.slot} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-              {/* Slot header */}
+          {groups.map((group) => (
+            <div key={group.key} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+              {/* Group header */}
               <div className="px-4 py-2.5 bg-slate-50/60 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
                   </svg>
-                  <span className="text-xs font-bold text-slate-800">{group.slot}</span>
+                  <span className="text-xs font-bold text-slate-800">{group.label}</span>
                 </div>
                 <span className="text-[10px] font-semibold text-slate-400">
                   {group.count} {group.count === 1 ? 'appointment' : 'appointments'}
@@ -568,9 +575,12 @@ function ScheduledTab({ onSchedule, onViewUnscheduled }) {
               <div className="divide-y divide-slate-100">
                 {group.appointments.map((appt) => (
                   <div key={appt.apptId} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/40 transition-colors">
-                    <Avatar initials={appt.avatar} size="md" />
+                    <Avatar initials={initialsOf(appt.customer)} size="md" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-900">{appt.customer}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs font-bold text-slate-900">{appt.customer}</p>
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{appt.time}</span>
+                      </div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-[10px] text-slate-400 font-medium">{appt.apptId}</span>
                         <span className="w-1 h-1 rounded-full bg-slate-300" />
@@ -582,26 +592,44 @@ function ScheduledTab({ onSchedule, onViewUnscheduled }) {
                       <p className="text-[10px] text-slate-400 mt-0.5 max-w-[180px] truncate">{appt.itemLabel}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button type="button" className="h-7 px-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 rounded-md cursor-pointer">
+                      {appt.order && (
+                        <button
+                          type="button"
+                          disabled={busyId === appt.order.id}
+                          onClick={() => onHandover(appt.order)}
+                          className="h-7 px-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 rounded-md cursor-pointer disabled:opacity-60"
+                        >
+                          Hand over
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onOpenOrder(appt.order)}
+                        className="h-7 px-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 rounded-md cursor-pointer"
+                      >
                         View Order
                       </button>
-                      <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer text-sm font-bold">⋯</button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           ))}
+          {groups.length === 0 && (
+            <div className="bg-white rounded-lg border border-slate-200 px-4 py-8 text-center text-slate-400 text-xs">
+              No scheduled pickups yet.
+            </div>
+          )}
         </div>
       </div>
 
       {/* Right sidebar */}
-      <PickupScheduleSidebar onSchedule={onSchedule} onViewUnscheduled={onViewUnscheduled} />
+      <PickupScheduleSidebar onSchedule={() => onSchedule(null)} onViewUnscheduled={onViewUnscheduled} slots={slots} />
     </div>
   )
 }
 
-function CompletedTab() {
+function CompletedTab({ orders, total }) {
   return (
     <div className="space-y-3">
       {/* Header row */}
@@ -622,7 +650,7 @@ function CompletedTab() {
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
             <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          May 22, 2026
+          {TODAY_LABEL}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-400"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
       </div>
@@ -640,46 +668,60 @@ function CompletedTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {COMPLETED_PICKUPS.map((row, i) => (
-                <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-4 py-3 text-slate-600 font-medium whitespace-nowrap">{row.datetime}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar initials={row.avatar} />
-                      <div>
-                        <p className="font-bold text-slate-900">{row.customer}</p>
-                        <p className="text-[10px] text-slate-400">{row.phone}</p>
+              {orders.map((order) => {
+                const items = itemsInfo(order)
+                const when = parseDate(order.completedAt) || parseDate(order.createdAt)
+                return (
+                  <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3 text-slate-600 font-medium whitespace-nowrap">
+                      {when
+                        ? `${when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar initials={initialsOf(order.customer)} />
+                        <div>
+                          <p className="font-bold text-slate-900">{order.customer}</p>
+                          <p className="text-[10px] text-slate-400">{order.custPhone || '—'}</p>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-extrabold text-slate-800">{row.orderId}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-slate-700">{row.items}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{row.itemLabel}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] font-semibold">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      {row.claimedBy}
-                    </span>
+                    </td>
+                    <td className="px-4 py-3 font-extrabold text-slate-800">{order.id}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-700">{items.count}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{items.label}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] font-semibold">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        In-store claim
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+              {orders.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                    No completed pickups yet.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
         <div className="px-4 py-2.5 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
-          Showing 5 of 5 completed pickups
+          Showing {orders.length} of {total} completed pickups
         </div>
       </div>
     </div>
   )
 }
 
-function NoshowTab() {
-  const [orders] = useState(NOSHOW_PICKUPS)
+function NoshowTab({ orders, onReschedule, onOpenOrder, busyId }) {
   return (
     <div className="space-y-3">
       {/* Header row */}
@@ -700,7 +742,7 @@ function NoshowTab() {
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
             <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          May 22, 2026
+          {TODAY_LABEL}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-400"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
       </div>
@@ -718,44 +760,61 @@ function NoshowTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {orders.map((row, i) => (
-                <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-4 py-3 text-slate-600 font-medium whitespace-nowrap">{row.datetime}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar initials={row.avatar} />
-                      <div>
-                        <p className="font-bold text-slate-900">{row.customer}</p>
-                        <p className="text-[10px] text-slate-400">{row.phone}</p>
+              {orders.map((order) => {
+                const items = itemsInfo(order)
+                const when = parseDate(order.createdAt)
+                return (
+                  <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3 text-slate-600 font-medium whitespace-nowrap">
+                      {when
+                        ? `${when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar initials={initialsOf(order.customer)} />
+                        <div>
+                          <p className="font-bold text-slate-900">{order.customer}</p>
+                          <p className="text-[10px] text-slate-400">{order.custPhone || '—'}</p>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-extrabold text-slate-800">{row.orderId}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-slate-700">{row.items}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{row.itemLabel}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        className="h-8 px-3 bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold rounded-md transition-colors cursor-pointer"
-                      >
-                        Reschedule
-                      </button>
-                      <button type="button" className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer">
-                        Contact
-                      </button>
-                      <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer text-sm font-bold">⋯</button>
-                    </div>
+                    </td>
+                    <td className="px-4 py-3 font-extrabold text-slate-800">{order.id}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-700">{items.count}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{items.label}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={busyId === order.id}
+                          onClick={() => onReschedule(order)}
+                          className="h-8 px-3 bg-brand-orange hover:bg-orange-600 disabled:opacity-70 text-white text-xs font-bold rounded-md transition-colors cursor-pointer"
+                        >
+                          {busyId === order.id ? 'Rescheduling…' : 'Reschedule'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOpenOrder(order)}
+                          className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer"
+                        >
+                          Contact
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+              {orders.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                    No no-show pickups.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
-        </div>
-        <div className="px-4 py-2.5 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
-          Showing 4 of 4 no-show pickups
         </div>
       </div>
     </div>
@@ -764,28 +823,281 @@ function NoshowTab() {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
 const TABS = ['Overview', 'Unscheduled', 'Scheduled', 'Completed', 'No-show']
+const REFRESH_MS = 30000 // REQ-SD-02: keep the queues fresh
 
 export default function AdminPickup() {
+  const { orders: rawOrders = [], refreshOrders, updateOrderStatus } = useAdmin()
   const [activeTab, setActiveTab] = useState('Overview')
   const [scheduleModal, setScheduleModal] = useState({ open: false, order: null })
+  const [scheduling, setScheduling] = useState(false)
+  const [busyId, setBusyId] = useState(null)
   const [toast, setToast] = useState('')
+
+  // Live auxiliary data: appointments, today's slots, customer directory.
+  const [appointments, setAppointments] = useState([])
+  const [slots, setSlots] = useState([])
+  const [customerDir, setCustomerDir] = useState({})
+
+  // QR scanning (REQ-APC-02) - the server message is echoed inline.
+  const [scanCode, setScanCode] = useState('')
+  const [scanMsg, setScanMsg] = useState(null) // { type: 'ok' | 'error', text }
+  const scanInputRef = useRef(null)
+
+  // ordIds known to own a pickup track (null until the first probe resolves).
+  const [pickupTrackIds, setPickupTrackIds] = useState(null)
+
+  const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
+  const claimSlots = useMemo(() => slots.filter((s) => s.type === 'CLAIM'), [slots])
 
   const showToast = (msg) => {
     setToast(msg)
     setTimeout(() => setToast(''), 3500)
   }
 
+  // Auxiliary data loader. setState only runs inside the promise callbacks,
+  // never synchronously in the effect body (react-hooks/set-state-in-effect).
+  const loadAux = useCallback(() => {
+    Promise.all([
+      fetchAppointments({ scope: 'master' }).catch(() => []),
+      fetchSlots(todayISO()).catch(() => null),
+      fetchAccounts().catch(() => ({ customers: [], employees: [] })),
+    ])
+      .then(([apptPayload, slotPayload, accountsPayload]) => {
+        setAppointments(Array.isArray(apptPayload) ? apptPayload : [])
+        setSlots(normalizeSlots(slotPayload))
+        const normalized = normalizeAccounts(accountsPayload)
+        const dir = {}
+        for (const cust of normalized.customers || []) {
+          dir[cust.cust_id] = {
+            name: cust.cust_nickname || cust.cust_email || `Customer #${cust.cust_id}`,
+            phone: cust.cust_phone || '',
+          }
+        }
+        setCustomerDir(dir)
+      })
+      .catch(() => {
+        // Transient API failure: keep the last schedule on screen.
+      })
+  }, [])
+
+  // Mount + 30s: refresh order queues and the schedule data (REQ-SD-02).
+  useEffect(() => {
+    refreshOrders()
+    loadAux()
+    const timer = setInterval(() => {
+      refreshOrders()
+      loadAux()
+    }, REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [refreshOrders, loadAux])
+
+  // Which CLAIMED orders are pickup orders (delivery claims own no pickup
+  // track -> /tracking/create answers 404 and the row is excluded).
+  const claimedKey = useMemo(
+    () => orders.filter((o) => o.rawStatus === 'CLAIMED').map((o) => o.ordId).join(','),
+    [orders]
+  )
+  useEffect(() => {
+    const ids = claimedKey ? claimedKey.split(',').map(Number) : []
+    // No CLAIMED rows to probe yet: keep the last known set (it only filters
+    // CLAIMED rows, of which there are none right now). Resetting it here would
+    // be a synchronous setState inside the effect.
+    if (ids.length === 0) return undefined
+    let cancelled = false
+    Promise.all(
+      ids.map((id) =>
+        getTrack(id, 'pickup')
+          .then(() => [id, true])
+          .catch((e) => [id, e?.status !== 404])
+      )
+    ).then((pairs) => {
+      if (cancelled) return
+      setPickupTrackIds(new Set(pairs.filter(([, ok]) => ok).map(([id]) => id)))
+    })
+    return () => { cancelled = true }
+  }, [claimedKey])
+
+  // ── Derived queues ──
+  const openClaimAppts = useMemo(
+    () =>
+      appointments.filter(
+        (a) => !a.appoint_closed && String(a.appoint_type || '').toUpperCase() === 'CLAIM'
+      ),
+    [appointments]
+  )
+
+  const scheduledCustIds = useMemo(
+    () => new Set(openClaimAppts.map((a) => a.cust_id)),
+    [openClaimAppts]
+  )
+
+  const unscheduled = useMemo(
+    () =>
+      orders.filter(
+        (o) => o.rawStatus === 'TO CLAIM' && !scheduledCustIds.has(o.custId)
+      ),
+    [orders, scheduledCustIds]
+  )
+
+  const scheduledGroups = useMemo(() => {
+    const byKey = new Map()
+    for (const appt of openClaimAppts) {
+      const date = parseDate(appt.appoint_date)
+      if (!date) continue
+      const key = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+      const order =
+        orders.find((o) => o.custId === appt.cust_id && o.rawStatus === 'TO CLAIM') || null
+      const directory = customerDir[appt.cust_id]
+      const customer = order?.customer || directory?.name || `Customer #${appt.cust_id}`
+      const items = order ? itemsInfo(order) : { count: '—', label: 'No open order' }
+      const group = byKey.get(key) || { key, label: date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }), appointments: [] }
+      group.appointments.push({
+        apptId: appt.appoint_qr || `#AP-${appt.appoint_id}`,
+        time: timeOfDay(appt.appoint_date),
+        customer,
+        orderId: order ? order.id : '—',
+        order,
+        items: items.count,
+        itemLabel: items.label,
+      })
+      byKey.set(key, group)
+    }
+    return Array.from(byKey.values())
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((g) => ({ ...g, count: g.appointments.length }))
+  }, [openClaimAppts, orders, customerDir])
+
+  const claimedPickupOrders = useMemo(
+    () =>
+      orders.filter(
+        (o) => o.rawStatus === 'CLAIMED' && (!pickupTrackIds || pickupTrackIds.has(o.ordId))
+      ),
+    [orders, pickupTrackIds]
+  )
+
+  const noshowOrders = useMemo(
+    () => orders.filter((o) => o.rawStatus === 'UNCLAIMED'),
+    [orders]
+  )
+
+  const kpis = useMemo(() => {
+    const todayKey = todayISO()
+    const isToday = (value) => {
+      const d = parseDate(value)
+      if (!d) return false
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` === todayKey
+    }
+    return {
+      ready: orders.filter((o) => o.rawStatus === 'TO CLAIM').length,
+      unscheduled: unscheduled.length,
+      scheduledToday: openClaimAppts.filter((a) => isToday(a.appoint_date)).length,
+      completedToday: claimedPickupOrders.filter(
+        (o) => isToday(o.completedAt) || isToday(o.createdAt)
+      ).length,
+      noshow: noshowOrders.length,
+    }
+  }, [orders, unscheduled, openClaimAppts, claimedPickupOrders, noshowOrders])
+
+  const scheduleRows = useMemo(
+    () =>
+      claimSlots.map((slot) => ({
+        time: slotRangeLabel(slot),
+        appts: slot.booked,
+        capacity: slot.capacity,
+        staffOk: isStaffShortage(slot) ? false : true,
+        status: !slot.available && isStaffShortage(slot) ? 'issue' : 'covered',
+      })),
+    [claimSlots]
+  )
+
+  // ── Actions ──
   const openScheduleModal = (order = null) => setScheduleModal({ open: true, order })
   const closeScheduleModal = () => setScheduleModal({ open: false, order: null })
+  const handleViewUnscheduled = () => setActiveTab('Unscheduled')
 
-  const handleConfirmSlot = (slot) => {
-    const name = scheduleModal.order?.customer || 'customer'
-    const id   = scheduleModal.order?.id || ''
-    showToast(`Pickup scheduled for ${name}${id ? ` (${id})` : ''} at ${slot}`)
-    closeScheduleModal()
+  const handleOpenOrder = (order) => {
+    showToast(order ? `Opening order ${order.id}` : 'Select an order from the Unscheduled list')
   }
 
-  const handleViewUnscheduled = () => setActiveTab('Unscheduled')
+  /** Book the chosen slot (POST /appoint/create, validated server-side). */
+  const handleConfirmSlot = async (slot) => {
+    const order = scheduleModal.order
+    if (!order) {
+      closeScheduleModal()
+      showToast('Pick an order from the Unscheduled list to schedule its pickup.')
+      return
+    }
+    const custId = order.custId ?? order.raw?.cust_id
+    if (!custId) {
+      showToast('This order has no customer account to schedule for.')
+      return
+    }
+    setScheduling(true)
+    try {
+      await createAppointment({
+        cust_id: custId,
+        appoint_date: slot.start,
+        appoint_type: 'CLAIM',
+        appoint_desc: order.id,
+      })
+      showToast(`Pickup scheduled for ${order.customer} (${order.id}) — ${slotRangeLabel(slot)}`)
+      closeScheduleModal()
+      await loadAux()
+    } catch (e) {
+      showToast(e?.message || 'Could not schedule that slot.')
+    } finally {
+      setScheduling(false)
+    }
+  }
+
+  /**
+   * Handover is QR-only (REQ-APC-02): the backend refuses /tracking/close
+   * until a scan has verified the customer's code, so this routes the staff
+   * member to the scanner instead of closing the track directly.
+   */
+  const handleHandover = (order) => {
+    if (!order) return
+    setScanCode('')
+    setScanMsg({
+      type: 'ok',
+      text: `Scan the QR code shown by ${order.customer} for ${order.id} to hand it over.`,
+    })
+    scanInputRef.current?.focus()
+  }
+
+  /** No-show back into the queue: UNCLAIMED -> TO CLAIM. */
+  const handleReschedule = async (order) => {
+    setBusyId(order.id)
+    try {
+      const result = await updateOrderStatus(order.ordId, 'TO CLAIM')
+      if (result && result.success === false) {
+        showToast(result.error || 'Could not reschedule the order.')
+      } else {
+        showToast(`${order.id} moved back to the pickup queue.`)
+        refreshOrders()
+      }
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  /** REQ-APC-02: staff scan an order/appointment/parcel QR (POST /tracking/scan). */
+  const handleScan = async () => {
+    const code = scanCode.trim()
+    if (!code) {
+      setScanMsg({ type: 'error', text: 'Enter a QR code to scan.' })
+      return
+    }
+    try {
+      const res = await scanQr(code, 'employee')
+      setScanMsg({ type: 'ok', text: res?.message || 'Scan verified.' })
+      setScanCode('')
+      refreshOrders()
+      loadAux()
+    } catch (e) {
+      setScanMsg({ type: 'error', text: e?.message || 'Scan failed.' })
+    }
+  }
 
   const TAB_ICONS = {
     Overview:    (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>),
@@ -795,7 +1107,13 @@ export default function AdminPickup() {
     'No-show':   (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>),
   }
 
-  const TAB_COUNTS = { Overview: null, Unscheduled: 5, Scheduled: 8, Completed: 5, 'No-show': 4 }
+  const TAB_COUNTS = {
+    Overview: null,
+    Unscheduled: unscheduled.length,
+    Scheduled: openClaimAppts.length,
+    Completed: claimedPickupOrders.length,
+    'No-show': noshowOrders.length,
+  }
 
   return (
     <AdminLayout>
@@ -812,6 +1130,8 @@ export default function AdminPickup() {
         {scheduleModal.open && (
           <SchedulePickupModal
             order={scheduleModal.order}
+            slots={claimSlots}
+            busy={scheduling}
             onClose={closeScheduleModal}
             onConfirm={handleConfirmSlot}
           />
@@ -819,27 +1139,66 @@ export default function AdminPickup() {
 
         {/* ── Page Header ── */}
         <div className="pb-4">
-          {/* Breadcrumb — reflects the current section */}
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-2">
-            <Link to="/admin/dashboard" className="hover:text-slate-600 transition-colors">Fulfillment</Link>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-            <span className="text-slate-600 font-semibold">Pickup</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-orange flex items-center justify-center text-white shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            </div>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-tight">Pickup</h1>
-              <p className="text-xs text-slate-500 font-normal">
-                Manage in-store pickups, schedule appointments, and track handovers.
-              </p>
+              {/* Breadcrumb — reflects the current section */}
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-2">
+                <Link to="/admin/dashboard" className="hover:text-slate-600 transition-colors">Fulfillment</Link>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+                <span className="text-slate-600 font-semibold">Pickup</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-brand-orange flex items-center justify-center text-white shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-tight">Pickup</h1>
+                  <p className="text-xs text-slate-500 font-normal">
+                    Manage in-store pickups, schedule appointments, and track handovers.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* QR verification (REQ-APC-02) */}
+            <div className="w-80">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <line x1="14" y1="14" x2="14" y2="14.01" /><line x1="21" y1="14" x2="21" y2="21" /><line x1="14" y1="21" x2="17" y2="21" />
+                  </svg>
+                  <input
+                    type="text"
+                    ref={scanInputRef}
+                    value={scanCode}
+                    onChange={(e) => { setScanCode(e.target.value); setScanMsg(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
+                    placeholder="Scan or enter QR code"
+                    className="w-full h-9 pl-8 pr-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleScan}
+                  className="h-9 px-3.5 rounded-md bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                >
+                  Scan QR
+                </button>
+              </div>
+              {scanMsg && (
+                <p className={`mt-1 text-[11px] font-semibold ${scanMsg.type === 'ok' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {scanMsg.text}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -864,8 +1223,7 @@ export default function AdminPickup() {
                   ${activeTab === tab
                     ? 'bg-orange-100 text-brand-orange'
                     : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
+                  }`}>
                   {TAB_COUNTS[tab]}
                 </span>
               )}
@@ -875,11 +1233,46 @@ export default function AdminPickup() {
 
         {/* ── Tab Content ── */}
         <div className="flex-1 overflow-y-auto pb-6 scrollbar-none">
-          {activeTab === 'Overview'    && <OverviewTab    onSchedule={openScheduleModal} onViewUnscheduled={handleViewUnscheduled} />}
-          {activeTab === 'Unscheduled' && <UnscheduledTab onSchedule={openScheduleModal} />}
-          {activeTab === 'Scheduled'   && <ScheduledTab   onSchedule={openScheduleModal} onViewUnscheduled={handleViewUnscheduled} />}
-          {activeTab === 'Completed'   && <CompletedTab />}
-          {activeTab === 'No-show'     && <NoshowTab />}
+          {activeTab === 'Overview' && (
+            <OverviewTab
+              kpis={kpis}
+              scheduleRows={scheduleRows}
+              slots={claimSlots}
+              onSchedule={() => openScheduleModal(null)}
+              onViewUnscheduled={handleViewUnscheduled}
+            />
+          )}
+          {activeTab === 'Unscheduled' && (
+            <UnscheduledTab
+              orders={unscheduled}
+              onSchedule={openScheduleModal}
+              onHandover={handleHandover}
+              onOpenOrder={handleOpenOrder}
+              busyId={busyId}
+            />
+          )}
+          {activeTab === 'Scheduled' && (
+            <ScheduledTab
+              groups={scheduledGroups}
+              slots={claimSlots}
+              onSchedule={openScheduleModal}
+              onViewUnscheduled={handleViewUnscheduled}
+              onHandover={handleHandover}
+              onOpenOrder={handleOpenOrder}
+              busyId={busyId}
+            />
+          )}
+          {activeTab === 'Completed' && (
+            <CompletedTab orders={claimedPickupOrders} total={claimedPickupOrders.length} />
+          )}
+          {activeTab === 'No-show' && (
+            <NoshowTab
+              orders={noshowOrders}
+              onReschedule={handleReschedule}
+              onOpenOrder={handleOpenOrder}
+              busyId={busyId}
+            />
+          )}
         </div>
       </div>
     </AdminLayout>

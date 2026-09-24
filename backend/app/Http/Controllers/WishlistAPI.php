@@ -3,9 +3,13 @@
     namespace App\Http\Controllers;
 
     use App\Models\Customer;
+    use App\Models\Item;
+    use App\Models\Order;
     use App\Models\Product;
     use App\Models\Wishlist;
     use Illuminate\Http\Request;
+    use Illuminate\Support\Facades\DB;
+    use Illuminate\Support\Str;
 
     class WishlistAPI extends Controller
     {
@@ -25,10 +29,15 @@
             if ($validator) return $validator;
 
             try {
-                $custId = $json->input('cust_id');
+                $custId = $this->customerId($json);
+                if ($custId === null || (int) $json->input('cust_id') !== $custId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer account mismatch.',
+                    ], 403);
+                }
                 $prodId = $json->input('prod_id');
-                $itemQty = $json->input('item_qty', 1);
-                $itemAmount = $json->input('item_amount', null);
+                $itemQty = max(1, (int) $json->input('item_qty', 1));
 
                 $customer = Customer::where('cust_id', $custId)->first();
                 if (!$customer) {
@@ -46,9 +55,7 @@
                 }
 
                 $resolvedProdId = $product->prod_id;
-                if ($itemAmount === null) {
-                    $itemAmount = $product->prod_price * $itemQty;
-                }
+                $itemAmount = round((float) $product->prod_price * (int) $itemQty, 2);
 
                 // Check if already in wishlist; update or insert
                 $existing = Wishlist::where('cust_id', $custId)->where('prod_id', $resolvedProdId)->first();
@@ -104,15 +111,21 @@
             if ($validator) return $validator;
 
             try {
-                $custId = $json->input('cust_id');
+                $custId = $this->customerId($json);
+                if ($custId === null || (int) $json->input('cust_id') !== $custId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer account mismatch.',
+                    ], 403);
+                }
                 $prodId = $json->input('prod_id');
                 $qty = $json->input('item_qty', 1);
 
                 // Only these three columns are read below - skip the heavy
                 // review/detail JSON blobs on this lookup.
                 $product = is_numeric($prodId)
-                    ? Product::where('prod_id', $prodId)->first(['prod_id', 'prod_disabled', 'prod_deleted'])
-                    : Product::where('prod_tag', $prodId)->first(['prod_id', 'prod_disabled', 'prod_deleted']);
+                    ? Product::where('prod_id', $prodId)->first(['prod_id', 'prod_price', 'prod_disabled', 'prod_deleted'])
+                    : Product::where('prod_tag', $prodId)->first(['prod_id', 'prod_price', 'prod_disabled', 'prod_deleted']);
 
                 if (!$product) {
                     return response()->json(['success' => false, 'message' => 'Product not found'], 404);
@@ -123,24 +136,48 @@
                 }
 
                 $resolvedProdId = $product->prod_id;
-
-                Wishlist::where('cust_id', $custId)->where('prod_id', $resolvedProdId)->delete();
-
-                $customer = Customer::where('cust_id', $custId)->first();
-                if ($customer && $customer->cust_wishlist > 0) {
-                    $customer->decrement('cust_wishlist');
-                    $customer->increment('cust_cart');
+                $wishlistItem = Wishlist::where('cust_id', $custId)
+                    ->where('prod_id', $resolvedProdId)
+                    ->first();
+                if (! $wishlistItem) {
+                    return response()->json(['success' => false, 'message' => 'Wishlist item not found.'], 404);
                 }
+
+                $created = DB::transaction(function () use ($custId, $resolvedProdId, $product, $qty, $wishlistItem) {
+                    $order = Order::create([
+                        'cust_id' => $custId,
+                        'ord_created' => now(),
+                        'ord_completed' => null,
+                        'ord_tag' => 'CART-' . strtoupper(Str::random(8)),
+                        'ord_status' => 'TO PROCESS',
+                        'ord_rating' => 0,
+                        'ord_review' => null,
+                    ]);
+                    $item = Item::create([
+                        'ord_id' => $order->ord_id,
+                        'prod_id' => $resolvedProdId,
+                        'item_qty' => $qty,
+                        'item_amount' => round((float) $product->prod_price * $qty, 2),
+                    ]);
+                    $wishlistItem->delete();
+
+                    $customer = Customer::lockForUpdate()->findOrFail($custId);
+                    if ($customer->cust_wishlist > 0) {
+                        $customer->decrement('cust_wishlist');
+                    }
+                    $customer->increment('cust_cart');
+
+                    return [$order, $item];
+                });
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Wishlist item transferred to order/cart successfully',
+                    'message' => 'Wishlist item transferred to cart successfully',
                     'data' => [
-                        'cust_id' => $custId,
-                        'prod_id' => $resolvedProdId,
-                        'qty'     => $qty,
-                    ]
-                ], 200);
+                        'order' => $created[0],
+                        'item' => $created[1],
+                    ],
+                ], 201);
 
             } catch (\Exception $e) {
                 return response()->json([
@@ -161,7 +198,13 @@
         public function displayWishlist(Request $json)
         {
             try {
-                $custId = $json->input('cust_id');
+                $custId = $this->customerId($json);
+                if ($custId === null || (int) $json->input('cust_id') !== $custId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer account mismatch.',
+                    ], 403);
+                }
                 if (!$custId) {
                     return response()->json(['success' => false, 'message' => 'Customer ID is required'], 400);
                 }
@@ -207,7 +250,13 @@
             if ($validator) return $validator;
 
             try {
-                $custId = $json->input('cust_id');
+                $custId = $this->customerId($json);
+                if ($custId === null || (int) $json->input('cust_id') !== $custId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer account mismatch.',
+                    ], 403);
+                }
                 $prodId = $json->input('prod_id');
 
                 // Resolve the id with a single-column lookup instead of
@@ -217,11 +266,15 @@
                     : Product::where('prod_tag', $prodId)->value('prod_id'))
                     ?? $prodId;
 
-                Wishlist::where('cust_id', $custId)->where('prod_id', $resolvedProdId)->delete();
+                $deleted = Wishlist::where('cust_id', $custId)
+                    ->where('prod_id', $resolvedProdId)
+                    ->delete();
 
-                $customer = Customer::where('cust_id', $custId)->first();
-                if ($customer && $customer->cust_wishlist > 0) {
-                    $customer->decrement('cust_wishlist');
+                if ($deleted) {
+                    $customer = Customer::where('cust_id', $custId)->first();
+                    if ($customer && $customer->cust_wishlist > 0) {
+                        $customer->decrement('cust_wishlist');
+                    }
                 }
 
                 return response()->json([
@@ -258,21 +311,33 @@
             if ($validator) return $validator;
 
             try {
-                $custId = $json->input('cust_id');
+                $custId = $this->customerId($json);
+                if ($custId === null || (int) $json->input('cust_id') !== $custId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer account mismatch.',
+                    ], 403);
+                }
                 $prodId = $json->input('prod_id');
 
-                // Resolve the id with a single-column lookup instead of
-                // hydrating the whole product row (incl. the review blobs).
-                $resolvedProdId = (is_numeric($prodId)
-                    ? Product::where('prod_id', $prodId)->value('prod_id')
-                    : Product::where('prod_tag', $prodId)->value('prod_id'))
-                    ?? $prodId;
+                $product = is_numeric($prodId)
+                    ? Product::where('prod_id', $prodId)->first(['prod_id', 'prod_price'])
+                    : Product::where('prod_tag', $prodId)->first(['prod_id', 'prod_price']);
+                if (! $product) {
+                    return response()->json(['success' => false, 'message' => 'Product not found.'], 404);
+                }
+                $resolvedProdId = $product->prod_id;
 
                 $updateData = [];
-                if ($json->has('item_qty')) $updateData['item_qty'] = $json->input('item_qty');
-                if ($json->has('item_amount')) $updateData['item_amount'] = $json->input('item_amount');
+                if ($json->has('item_qty')) {
+                    $quantity = max(1, (int) $json->input('item_qty'));
+                    $updateData = [
+                        'item_qty' => $quantity,
+                        'item_amount' => round((float) $product->prod_price * $quantity, 2),
+                    ];
+                }
 
-                if (!empty($updateData)) {
+                if (! empty($updateData)) {
                     Wishlist::where('cust_id', $custId)->where('prod_id', $resolvedProdId)->update($updateData);
                 }
 

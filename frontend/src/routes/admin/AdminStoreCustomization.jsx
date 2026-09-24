@@ -1,29 +1,68 @@
-import React, { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
-import { INITIAL_ADMIN_DATA } from '../../data/adminMockData.js'
+import { fetchSettings, updateSettings } from '../../services/settings.js'
+
+/** Slides are persisted as a JSON string in settings.store_slides. */
+function parseSlides(raw) {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
 
 export default function AdminStoreCustomization() {
-  const {
-    adminState = {},
-    updateStoreSettings,
-  } = useAdmin()
+  const { currentAdminUser } = useAdmin() || {}
+  const { showToast } = useToast()
 
-  const initialSettings = adminState?.storeSettings || INITIAL_ADMIN_DATA.storeSettings
+  // Real settings (GET /settings/display) — no mock fallback by design
+  const [settings, setSettings] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const [slides, setSlides] = useState(initialSettings?.slides || INITIAL_ADMIN_DATA.storeSettings.slides || [])
-  const [expandedSlideId, setExpandedSlideId] = useState(null)
+  const [slides, setSlides] = useState([])
   const [editingSlideId, setEditingSlideId] = useState(null)
   const [isSavedToast, setIsSavedToast] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showPreviewDrawer, setShowPreviewDrawer] = useState(false)
 
-  const isStoreOpen = initialSettings?.isPhysicalStoreOpen ?? true
-  const lastEdit = 'May 20, 2025 • 10:42 AM'
-  const lastEditBy = 'by Maria Santos'
-  const bannerCount = '1 image uploaded'
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setLoadError('')
+    fetchSettings()
+      .then((s) => {
+        if (cancelled) return
+        const data = s || {}
+        setSettings(data)
+        setSlides(parseSlides(data.store_slides))
+        setHasUnsavedChanges(false)
+        setIsLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setLoadError(err?.message || 'Unable to load store customization.')
+        setIsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
+
+  const isStoreOpen = settings
+    ? settings.store_open ?? !(settings.maintenance_mode ?? false)
+    : true
+  const lastEdit = settings?.banner_last_edit || '—'
+  const lastEditBy = settings?.banner_last_edit_by ? `by ${settings.banner_last_edit_by}` : '—'
+  const bannerCount = `${slides.length} image${slides.length === 1 ? '' : 's'} uploaded`
   const bannerType = '(Hero Banner & Slideshow)'
 
   const handleSlideChange = (slideId, field, value) => {
@@ -66,16 +105,43 @@ export default function AdminStoreCustomization() {
   }
 
   const handleDiscard = () => {
-    setSlides(initialSettings?.slides || [])
+    setSlides(parseSlides(settings?.store_slides))
     setHasUnsavedChanges(false)
     setEditingSlideId(null)
   }
 
-  const handleSaveChanges = () => {
-    updateStoreSettings({ slides, lastBannerEdit: 'Today' })
-    setHasUnsavedChanges(false)
-    setIsSavedToast(true)
-    setTimeout(() => setIsSavedToast(false), 3500)
+  const handleSaveChanges = async () => {
+    if (isSaving) return
+    setIsSaving(true)
+    try {
+      const storeSlides = JSON.stringify(slides)
+      const stamp = new Date().toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+      const editedBy = currentAdminUser?.name || 'Staff'
+      await updateSettings({
+        store_slides: storeSlides,
+        banner_last_edit: stamp,
+        banner_last_edit_by: editedBy,
+      })
+      setSettings((prev) => ({
+        ...(prev || {}),
+        store_slides: storeSlides,
+        banner_last_edit: stamp,
+        banner_last_edit_by: editedBy,
+      }))
+      setHasUnsavedChanges(false)
+      setIsSavedToast(true)
+      setTimeout(() => setIsSavedToast(false), 3500)
+    } catch (err) {
+      showToast(err?.message || 'Failed to save the slideshow.', 'error')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -88,6 +154,25 @@ export default function AdminStoreCustomization() {
             Update your store's appearance and manage what your customers see on the storefront.
           </p>
         </div>
+
+        {/* Load states */}
+        {isLoading && (
+          <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
+            <span className="spinner-circle !w-3.5 !h-3.5" /> Loading store customization…
+          </div>
+        )}
+        {loadError && (
+          <div className="mb-4 flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <p className="text-xs font-semibold text-red-700">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="text-xs font-bold text-red-700 border border-red-300 rounded-md px-2 py-1 hover:bg-red-100 cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Top 3 Info Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -361,10 +446,17 @@ export default function AdminStoreCustomization() {
                 )
               })}
 
-              {slides.length === 0 && (
-                <div className="px-6 py-10 text-center">
-                  <p className="text-sm text-gray-400 font-medium">No slides yet. Add a new slide to get started.</p>
+              {isLoading ? (
+                <div className="px-6 py-10 text-center flex items-center justify-center gap-2">
+                  <span className="spinner-circle !w-3.5 !h-3.5" />
+                  <p className="text-sm text-gray-400 font-medium">Loading slides…</p>
                 </div>
+              ) : (
+                slides.length === 0 && (
+                  <div className="px-6 py-10 text-center">
+                    <p className="text-sm text-gray-400 font-medium">No slides yet. Add a new slide to get started.</p>
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -449,14 +541,20 @@ export default function AdminStoreCustomization() {
               }`}
             />
             <span className="text-xs font-semibold text-gray-600">
-              {hasUnsavedChanges ? 'Unsaved changes' : 'All changes published'}
+              {isLoading
+                ? 'Loading…'
+                : isSaving
+                ? 'Saving…'
+                : hasUnsavedChanges
+                ? 'Unsaved changes'
+                : 'All changes published'}
             </span>
           </div>
 
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              disabled={!hasUnsavedChanges}
+              disabled={!hasUnsavedChanges || isLoading}
               onClick={handleDiscard}
               className="px-4 py-2 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 font-semibold text-xs rounded-lg transition-colors"
             >
@@ -464,10 +562,11 @@ export default function AdminStoreCustomization() {
             </button>
             <button
               type="button"
+              disabled={isLoading || isSaving}
               onClick={handleSaveChanges}
-              className="px-4 py-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-xs rounded-lg transition-colors shadow-sm"
+              className="px-4 py-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-xs rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save Changes
+              {isSaving ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
         </div>

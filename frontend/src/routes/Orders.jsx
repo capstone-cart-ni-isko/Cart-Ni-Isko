@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react'
+/* eslint-disable react-refresh/only-export-components */
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
+import { useAuth } from '../hooks/useAuth.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageTitle from '../components/ui/PageTitle.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
-import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon, AlertTriangleIcon } from '../components/ui/Icons.jsx'
-import { getStoredOrders, isFulfillmentLocked } from '../utils/orderStorage.js'
+import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon } from '../components/ui/Icons.jsx'
+import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import { fetchOrders, requestCancel, requestReturn } from '../services/orders.js'
 
 const tabs = [
   { key: 'all', label: 'All' },
@@ -18,24 +22,144 @@ const tabs = [
   { key: 'history', label: 'Completed' },
 ]
 
+/** Friendly line under the status pill (SRS status vocabulary). */
+export const STATUS_CONTEXT = {
+  'TO PROCESS': 'Your order is being prepared by the store.',
+  'TO CLAIM': 'Ready for pickup — show your claim QR at the counter.',
+  'TO RECEIVE': 'Out for courier delivery to your address.',
+  CLAIMED: 'Picked up and claimed. Thank you!',
+  UNCLAIMED: 'Not claimed within the pickup window. Contact the store.',
+  CANCELLED: 'This order was cancelled.',
+  RETURNED: 'This order was returned.',
+  REFUNDED: 'Your payment has been refunded.',
+  'CANCEL REQUESTED': 'Cancellation requested — waiting for staff approval.',
+  'RETURN REQUESTED': 'Return requested — waiting for staff approval.',
+}
+
+const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
+const HISTORY = ['CLAIMED', 'UNCLAIMED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'COMPLETED']
+
+function formatDate(value) {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function dispatchOf(row) {
+  const raw = String(
+    row.dispatch_type ?? row.ord_dispatch ?? row.deliver_type ?? row.ord_type ?? ''
+  ).toLowerCase()
+  if (raw.includes('deliver')) return 'Courier Delivery'
+  if (raw.includes('pickup') || raw.includes('pick')) return 'Store Pickup'
+  // Fallbacks until the display contract is confirmed.
+  if (row.deliver_qr || row.deliver_addr) return 'Courier Delivery'
+  const status = String(row.ord_status || '').toUpperCase()
+  if (status === 'TO RECEIVE') return 'Courier Delivery'
+  return 'Store Pickup'
+}
+
+function isPreOrderRow(row) {
+  const tag = String(row.ord_tag || '')
+  if (/PRE/i.test(tag)) return true
+  return (row.items || []).some(
+    (i) => i.product?.preOrder || i.product?.pre_order || i.product?.ord_type === 'PRE-ORDER'
+  )
+}
+
+/** Convert a `GET /cart/display` order row into the shape this page renders. */
+export function mapServerOrder(row) {
+  const items = row.items || []
+  const first = items[0] || null
+  const product = first?.product || {}
+  const qty = items.reduce((sum, i) => sum + Number(i.item_qty || 0), 0)
+  const subtotal = items.reduce(
+    (sum, i) => sum + Number(i.item_amount ?? 0) * Number(i.item_qty || 0),
+    0
+  )
+  const status = String(row.ord_status || 'TO PROCESS').toUpperCase()
+  const method = dispatchOf(row)
+
+  return {
+    id: row.ord_id ?? row.id,
+    date: formatDate(row.ord_created ?? row.ord_date ?? row.created_at ?? row.ord_placed),
+    status,
+    statusContext: STATUS_CONTEXT[status] || '',
+    type: isPreOrderRow(row) ? 'pre-order' : 'regular',
+    qty: qty || items.length,
+    name:
+      product.name ||
+      product.prod_name ||
+      (items.length > 1 ? `${items.length} products` : 'Merchandise'),
+    image:
+      first?.color?.image ||
+      product.image ||
+      product.images?.[0] ||
+      (Array.isArray(product.prod_img) ? product.prod_img[0] : product.prod_img) ||
+      null,
+    productId: product.prod_tag ?? product.id ?? product.prod_id ?? null,
+    price: Number(first?.item_amount ?? product.price ?? 0),
+    size: first?.size ?? product.size ?? null,
+    color: first?.color ?? product.color ?? null,
+    preOrder: isPreOrderRow(row),
+    subtotal,
+    deliverQr: row.deliver_qr || null,
+    fulfillment: {
+      method,
+      location:
+        method === 'Courier Delivery'
+          ? row.deliver_addr || row.ord_addr || 'Delivery address on file'
+          : 'Tindahan ni Isko · BU Student Center',
+    },
+    raw: row,
+  }
+}
+
+function tabMatch(order, key) {
+  if (key === 'all') return true
+  if (key === 'pre-order') return order.type === 'pre-order'
+  if (key === 'processing') return order.status === 'TO PROCESS'
+  if (key === 'receive') return RECEIVING.includes(order.status)
+  if (key === 'history') return HISTORY.includes(order.status)
+  return true
+}
+
 function Orders() {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { currentUser } = useAuth()
+  const custId = currentUser?.cust_id ?? currentUser?.id ?? null
+
   const [activeTab, setActiveTab] = useState('all')
-  const [orders, setOrders] = useState(() => getStoredOrders())
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState(null)
+
+  const load = useCallback(async () => {
+    if (!custId) {
+      setOrders([])
+      setLoading(false)
+      return
+    }
+    try {
+      const rows = await fetchOrders(custId)
+      setOrders((rows || []).map(mapServerOrder))
+    } catch (err) {
+      console.warn('Failed to load orders:', err?.message)
+      showToast('Unable to load your orders. Please try again.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [custId, showToast])
 
   useEffect(() => {
-    const handleUpdate = () => {
-      setOrders(getStoredOrders())
-    }
-    window.addEventListener('isko_orders_updated', handleUpdate)
-    return () => window.removeEventListener('isko_orders_updated', handleUpdate)
-  }, [])
+    load()
+  }, [load])
 
-  const filteredOrders =
-    activeTab === 'all'
-      ? orders
-      : orders.filter((o) => o.type === activeTab)
+  const filteredOrders = useMemo(
+    () => orders.filter((o) => tabMatch(o, activeTab)),
+    [orders, activeTab]
+  )
 
   const handleCopyOrderId = (e, orderId) => {
     e.preventDefault()
@@ -43,6 +167,39 @@ function Orders() {
     navigator.clipboard?.writeText(orderId)
     showToast(`Copied Order ID: #${orderId}`)
   }
+
+  /** Customer-requested cancel: pending staff approval (SRS cancellation). */
+  const handleCancel = async (order) => {
+    if (busyId) return
+    setBusyId(order.id)
+    try {
+      await requestCancel(order.id)
+      showToast('Cancellation requested. The store will review it shortly.', 'success')
+      await load()
+    } catch (err) {
+      showToast(err?.message || 'Unable to request cancellation.', 'error')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  /** Customer-requested return/refund after fulfilment. */
+  const handleReturn = async (order) => {
+    if (busyId) return
+    setBusyId(order.id)
+    try {
+      await requestReturn(order.id)
+      showToast('Return requested. The store will review it shortly.', 'success')
+      await load()
+    } catch (err) {
+      showToast(err?.message || 'Unable to request a return.', 'error')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const canCancel = useCallback((o) => o.status === 'TO PROCESS', [])
+  const canReturn = useCallback((o) => ['CLAIMED', 'UNCLAIMED'].includes(o.status), [])
 
   return (
     <AccountLayout>
@@ -55,10 +212,7 @@ function Orders() {
       <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-2xs">
         <div className="max-w-3xl mx-auto flex gap-2 overflow-x-auto px-4 py-3 scrollbar-none select-none">
           {tabs.map((tab) => {
-            const count =
-              tab.key === 'all'
-                ? orders.length
-                : orders.filter((o) => o.type === tab.key).length
+            const count = orders.filter((o) => tabMatch(o, tab.key)).length
 
             return (
               <button
@@ -87,7 +241,12 @@ function Orders() {
 
       {/* Single Vertical Column Layout */}
       <div className="px-4 py-6 pb-32 animate-fade-in max-w-3xl mx-auto space-y-4">
-        {filteredOrders.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-xs flex items-center justify-center gap-3">
+            <LoadingSpinner size={26} />
+            <p className="text-sm text-gray-450 font-semibold">Loading your orders…</p>
+          </div>
+        ) : filteredOrders.length === 0 ? (
           <div className="text-center py-20 flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 p-8 shadow-xs">
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-100 mb-2">
               <PackageIcon className="w-7 h-7 text-gray-400" />
@@ -107,10 +266,8 @@ function Orders() {
         ) : (
           filteredOrders.map((order) => {
             const productImage = order.image || null
-            const isLocked = isFulfillmentLocked(order)
             const isDelivery = order.fulfillment?.method === 'Courier Delivery'
-            const deliveryFee = isDelivery ? (order.deliveryFee || 280) : 0
-            const orderTotal = (order.price * order.qty) + (order.deliveryFeePaid ? deliveryFee : 0)
+            const orderTotal = order.subtotal
 
             return (
               <article
@@ -138,15 +295,20 @@ function Orders() {
                         </svg>
                       </button>
 
-                      {/* Fulfillment lock pill */}
-                      {isLocked ? (
+                      {/* Fulfillment chip */}
+                      {isDelivery ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
                           <LockIcon className="w-2.5 h-2.5 text-slate-600" />
-                          Delivery Locked
+                          Courier Delivery
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                          Flexible
+                          Store Pickup
+                        </span>
+                      )}
+                      {order.preOrder && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
+                          Pre-order
                         </span>
                       )}
                     </div>
@@ -185,19 +347,9 @@ function Orders() {
                     </span>
                   </div>
 
-                  {/* Lalamove / Delivery Fee status tag */}
-                  {isDelivery && (
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                      order.deliveryFeePaid
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      {order.deliveryFeePaid && (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-2.5 h-2.5 shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
-                      )}
-                      {order.deliveryFeePaid
-                        ? (order.lalamoveBookingId ? order.lalamoveBookingId : 'Fee Paid')
-                        : `₱${(order.deliveryFee || 280).toFixed(2)} Fee Pending`}
+                  {RECEIVING.includes(order.status) && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                      {order.status === 'TO CLAIM' ? 'Claim QR ready' : 'Tracking active'}
                     </span>
                   )}
                 </div>
@@ -237,7 +389,7 @@ function Orders() {
                             Color:{' '}
                             <span
                               className="w-2.5 h-2.5 rounded-full border border-gray-300 inline-block shrink-0"
-                              style={{ backgroundColor: order.color.value }}
+                              style={{ backgroundColor: order.color.value || order.color.name }}
                               title={order.color.name}
                             />
                             <strong className="text-gray-900">{order.color.name}</strong>
@@ -265,7 +417,7 @@ function Orders() {
 
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* Secondary Contextual Actions */}
-                    {order.status === 'TO RECEIVE' && !isDelivery && (
+                    {RECEIVING.includes(order.status) && !isDelivery && (
                       <button
                         type="button"
                         onClick={() => navigate(`/orders/${order.id}`)}
@@ -275,28 +427,29 @@ function Orders() {
                       </button>
                     )}
 
-                    {isDelivery && !order.deliveryFeePaid && (
+                    {canCancel(order) && (
                       <button
                         type="button"
-                        onClick={() => navigate(`/orders/${order.id}`)}
-                        className="px-3.5 py-2 rounded-xl border border-orange-200 bg-orange-50 text-brand-orange text-xs font-black hover:bg-orange-100 transition-colors cursor-pointer"
+                        disabled={busyId === order.id}
+                        onClick={() => handleCancel(order)}
+                        className="px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
                       >
-                        Pay ₱{(order.deliveryFee || 280).toFixed(2)} Fee
+                        {busyId === order.id ? <><LoadingSpinner size={14} /> Sending…</> : 'Cancel Order'}
                       </button>
                     )}
 
-                    {order.lalamoveStatus === 'booking_failed' && (
+                    {canReturn(order) && (
                       <button
                         type="button"
-                        onClick={() => navigate(`/orders/${order.id}`)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-black hover:bg-rose-100 transition-colors cursor-pointer"
+                        disabled={busyId === order.id}
+                        onClick={() => handleReturn(order)}
+                        className="px-3.5 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-bold hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-60"
                       >
-                        <AlertTriangleIcon className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                        <span>Retry Booking</span>
+                        {busyId === order.id ? 'Sending…' : 'Request Return'}
                       </button>
                     )}
 
-                    {order.status === 'COMPLETED' && (
+                    {['CLAIMED', 'COMPLETED'].includes(order.status) && order.productId != null && (
                       <Link
                         to={`/product/${order.productId}`}
                         className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
@@ -324,4 +477,4 @@ function Orders() {
   )
 }
 
-export default Orders
+export default React.memo(Orders)

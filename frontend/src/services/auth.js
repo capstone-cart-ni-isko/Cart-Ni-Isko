@@ -1,4 +1,4 @@
-import { apiPost } from './api.js'
+import { apiPost, apiPut } from './api.js'
 
 export async function signUpUser(details) {
   try {
@@ -8,7 +8,17 @@ export async function signUpUser(details) {
       nickname: details.fullName || details.username || '',
       email: details.email || '',
       type: details.role || 'Student',
+      ...(details.username ? { username: details.username } : {}),
+      ...(details.role === 'Student'
+        ? {
+            campus: details.campus || '',
+            college: details.college || '',
+            course: details.course || '',
+            year_level: details.yearLevel || '',
+          }
+        : {}),
     })
+    // data.data carries the account; data.data.token is the bearer token.
     return { user: data.data, error: null }
   } catch (err) {
     return { user: null, error: err.message || 'Signup failed' }
@@ -21,10 +31,38 @@ export async function signInUser(credentials) {
       phone: credentials.phone,
       password: credentials.password,
     })
+    // data.data carries the account; data.data.token is the bearer token.
     return { user: data.data, error: null }
   } catch (err) {
     return { user: null, error: err.message || 'Login failed' }
   }
+}
+
+/** POST /auth/recover_credentials - start password recovery for an account. */
+export async function recoverCredentials(identifier, accountType = 'customer') {
+  try {
+    const data = await apiPost('/auth/recover_credentials', {
+      identifier,
+      account_type: accountType,
+    })
+    return { data, error: null }
+  } catch (err) {
+    return { data: null, error: err.message || 'Unable to start password recovery' }
+  }
+}
+
+/** PUT /auth/update_credentials - set the new password for an account. */
+export async function updateCredentials(payload) {
+  try {
+    const data = await apiPut('/auth/update_credentials', payload)
+    return { data, error: null }
+  } catch (err) {
+    return { data: null, error: err.message || 'Unable to update password' }
+  }
+}
+
+export function logoutSession() {
+  return apiPost('/auth/logout', {})
 }
 
 export async function employeeLogin(email, password) {
@@ -84,6 +122,7 @@ export function mapEmployee(employeeData) {
     avatar: initials,
     avatarBg: 'blue',
     status: employeeData.emp_disabled ? 'Disabled' : 'Active',
+    mustChangePassword: Boolean(employeeData.must_change_password),
     dateAdded: employeeData.emp_created
       ? new Date(employeeData.emp_created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       : 'Now',
@@ -94,11 +133,20 @@ export async function employeeSignUp(details) {
   try {
     const data = await apiPost('/auth/emp_signup', {
       email: details.email,
-      password: details.password,
       surname: details.surname || '',
       givname: details.givname || '',
+      midname: details.midname || '',
+      suffix: details.suffix || '',
+      studnum: details.studnum || details.studentNumber || '',
+      college: details.college || '',
+      program: details.program || details.course || '',
+      year: details.year || details.yearLevel || '',
+      bloc: details.bloc || '',
+      pronoun: details.pronoun || '',
       phone: details.phone || '',
-      type: details.type || 'Staff',
+      callcode: details.callcode || '+63',
+      type: String(details.type || 'Staff').toUpperCase(),
+      instore: details.instore ?? false,
     })
     return { user: data.data, error: null }
   } catch (err) {

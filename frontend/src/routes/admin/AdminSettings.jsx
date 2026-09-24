@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
-import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
+import { fetchSettings, updateSettings } from '../../services/settings.js'
 
 // ── Reusable inline toggle ──────────────────────────────────────────────────
 function Toggle({ checked, onChange, size = 'md' }) {
@@ -125,20 +125,50 @@ function PreviewCard({ title, icon, rows, onNavigate }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function AdminSettings() {
-  const { adminState = {}, updateStoreSettings } = useAdmin()
   const { showToast } = useToast()
-
-  const storeSettings = adminState?.storeSettings || {}
 
   const [activeSection, setActiveSection] = useState('store-operations')
 
+  // Real settings (GET /settings/display)
+  const [settings, setSettings] = useState({})
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [isSaving, setIsSaving] = useState(false)
+
   // Store Operations
-  const [isStoreOpen, setIsStoreOpen]           = useState(storeSettings.isStoreOpen         ?? true)
-  const [acceptOnlineOrders, setAcceptOnlineOrders] = useState(storeSettings.acceptOnlineOrders ?? true)
-  const [allowInStorePickup, setAllowInStorePickup] = useState(storeSettings.allowInStorePickups ?? true)
-  const [allowDelivery, setAllowDelivery]       = useState(storeSettings.allowDelivery        ?? true)
+  const [isStoreOpen, setIsStoreOpen]           = useState(true)
+  const [acceptOnlineOrders, setAcceptOnlineOrders] = useState(true)
+  const [allowInStorePickup, setAllowInStorePickup] = useState(true)
+  const [allowDelivery, setAllowDelivery]       = useState(true)
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setLoadError('')
+    fetchSettings()
+      .then((s) => {
+        if (cancelled) return
+        const data = s || {}
+        setSettings(data)
+        setIsStoreOpen(data.store_open ?? !(data.maintenance_mode ?? false))
+        setAcceptOnlineOrders(data.accept_online_orders ?? true)
+        setAllowInStorePickup(data.allow_in_store_pickup ?? true)
+        setAllowDelivery(data.allow_delivery ?? true)
+        setHasUnsavedChanges(false)
+        setIsLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setLoadError(err?.message || 'Unable to load settings.')
+        setIsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
 
   const mark = () => setHasUnsavedChanges(true)
 
@@ -149,22 +179,41 @@ export default function AdminSettings() {
   }
 
   const handleDiscard = () => {
-    setIsStoreOpen(storeSettings.isStoreOpen    ?? true)
-    setAcceptOnlineOrders(storeSettings.acceptOnlineOrders ?? true)
-    setAllowInStorePickup(storeSettings.allowInStorePickups ?? true)
-    setAllowDelivery(storeSettings.allowDelivery ?? true)
+    setIsStoreOpen(settings.store_open ?? !(settings.maintenance_mode ?? false))
+    setAcceptOnlineOrders(settings.accept_online_orders ?? true)
+    setAllowInStorePickup(settings.allow_in_store_pickup ?? true)
+    setAllowDelivery(settings.allow_delivery ?? true)
     setHasUnsavedChanges(false)
     showToast('Changes discarded.', 'info')
   }
 
-  const handleSave = () => {
-    updateStoreSettings({
-      isStoreOpen, acceptOnlineOrders,
-      allowInStorePickups: allowInStorePickup,
-      allowDelivery,
-    })
-    setHasUnsavedChanges(false)
-    showToast('Settings saved successfully!', 'success')
+  // Persist only this page's keys (maintenance_mode mirrors store_open so the
+  // open/closed state round-trips through GET /settings/display).
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await updateSettings({
+        store_open: isStoreOpen,
+        maintenance_mode: !isStoreOpen,
+        accept_online_orders: acceptOnlineOrders,
+        allow_in_store_pickup: allowInStorePickup,
+        allow_delivery: allowDelivery,
+      })
+      setSettings((prev) => ({
+        ...prev,
+        store_open: isStoreOpen,
+        maintenance_mode: !isStoreOpen,
+        accept_online_orders: acceptOnlineOrders,
+        allow_in_store_pickup: allowInStorePickup,
+        allow_delivery: allowDelivery,
+      }))
+      setHasUnsavedChanges(false)
+      showToast('Settings saved successfully!', 'success')
+    } catch (err) {
+      showToast(err?.message || 'Failed to save settings.', 'error')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -178,6 +227,25 @@ export default function AdminSettings() {
             Manage your store, ordering preferences, notifications, and administrative settings.
           </p>
         </div>
+
+        {/* ── Load states ── */}
+        {isLoading && (
+          <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
+            <span className="spinner-circle !w-3.5 !h-3.5" /> Loading settings…
+          </div>
+        )}
+        {loadError && (
+          <div className="mb-4 flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <p className="text-xs font-semibold text-red-700">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="text-xs font-bold text-red-700 border border-red-300 rounded-md px-2 py-1 hover:bg-red-100 cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* ── Two-Column Layout ── */}
         <div className="flex gap-6 items-start">
@@ -320,7 +388,7 @@ export default function AdminSettings() {
                   </svg>
                 }
                 rows={[
-                  { label: 'Max orders per time slot', value: '25 orders'  },
+                  { label: 'Max orders per time slot', value: `${settings.max_claiming_slots ?? 10} orders` },
                   { label: 'Order confirmation mode',  value: 'Automatic'  },
                   { label: 'Cancellation policy',      value: 'Within 24h' },
                 ]}
@@ -338,7 +406,7 @@ export default function AdminSettings() {
                 rows={[
                   { label: 'New order notifications', value: 'Instant Push' },
                   { label: 'Pickup reminders',        value: '2h Before'    },
-                  { label: 'Low-stock alerts',        value: '≤ 5 units'    },
+                  { label: 'Low-stock alerts',        value: `≤ ${settings.low_stock_threshold ?? 5} units` },
                 ]}
               />
 
@@ -366,16 +434,16 @@ export default function AdminSettings() {
       {/* ── Sticky Bottom Bar ── */}
       <div className="fixed bottom-0 right-0 left-0 md:left-64 bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+          <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-slate-400' : hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
           <span className="text-xs font-semibold text-slate-600">
-            {hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
+            {isLoading ? 'Loading settings…' : hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
           </span>
         </div>
 
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            disabled={!hasUnsavedChanges}
+            disabled={!hasUnsavedChanges || isLoading}
             onClick={handleDiscard}
             className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-xs font-semibold text-slate-700 transition-colors"
           >
@@ -383,10 +451,11 @@ export default function AdminSettings() {
           </button>
           <button
             type="button"
+            disabled={isLoading || isSaving}
             onClick={handleSave}
-            className="px-5 py-2 rounded-lg bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-sm active:scale-95"
+            className="px-5 py-2 rounded-lg bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Save Changes
+            {isSaving ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </div>

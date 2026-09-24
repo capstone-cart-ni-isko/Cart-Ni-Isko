@@ -1,85 +1,278 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
+import { useToast } from '../hooks/useToast.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
-import avatarImg from '../assets/avatar.png'
-import hoodieImg from '../assets/Images/unnamed (11).png'
-import jacketImg from '../assets/Images/unnamed (12).png'
-import lanyardImg from '../assets/Branding/Copy of lanyard.png'
-import shirtImg from '../assets/Branding/Copy of shirt.png'
+import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import Avatar from '../components/ui/Avatar.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
-import { SettingsIcon } from '../components/ui/Icons.jsx'
+import { SettingsIcon, ShirtIcon } from '../components/ui/Icons.jsx'
+import { getImageUrl } from '../utils/imageUtils.js'
+import {
+  fetchAppointments,
+  fetchSlots,
+  createAppointment,
+  SLOT_RULES,
+} from '../services/appointments.js'
+import { fetchOrder } from '../services/orders.js'
+import { fetchNotifications, unreadCount } from '../services/notifications.js'
 
-const MOCK_APPOINTMENTS = [
-  {
-    id: 'AP-2026-0142',
-    orderId: 'ORD-8921',
-    itemCount: 1,
-    status: 'upcoming',
-    date: 'May 22, 2026',
-    dayOfWeek: 'Friday',
-    time: '10:30 AM – 11:00 AM',
-    location: 'Tindahan ni Isko – Main Campus',
-    subLocation: 'Bicol University, Main Campus',
-    items: [
-      {
-        name: 'BU Labels 2025 Hoodie',
-        details: 'Size L · Off White · Qty 1',
-        image: hoodieImg,
-      },
-    ],
-  },
-  {
-    id: 'AP-2026-0137',
-    orderId: 'ORD-8915',
-    itemCount: 2,
-    status: 'upcoming',
-    date: 'May 23, 2026',
-    dayOfWeek: 'Saturday',
-    time: '01:00 PM – 01:30 PM',
-    location: 'Tindahan ni Isko – Main Campus',
-    subLocation: 'Bicol University, Main Campus',
-    items: [
-      {
-        name: 'BU Varsity Jacket (Navy)',
-        details: 'Size XL · Navy/White · Qty 1',
-        image: jacketImg,
-      },
-      {
-        name: 'BU Lanyard Set',
-        details: 'Orange/Blue/Green · Qty 1',
-        image: lanyardImg,
-      },
-    ],
-  },
-  {
-    id: 'AP-2026-0128',
-    orderId: 'ORD-8842',
-    itemCount: 1,
-    status: 'completed',
-    date: 'May 15, 2026',
-    dayOfWeek: 'Friday',
-    time: '09:00 AM – 09:30 AM',
-    location: 'Tindahan ni Isko – Main Campus',
-    subLocation: 'Bicol University, Main Campus',
-    items: [
-      {
-        name: 'BU Polo Shirt',
-        details: 'Size M · Charcoal Grey · Qty 1',
-        image: shirtImg,
-      },
-    ],
-  },
-]
+/* ── Server-backed helpers ── */
 
-function CalendarHeaderIcon({ className = 'w-7 h-7' }) {
+function formatClock(value) {
+  const s = String(value || '')
+  const m = s.match(/^(\d{1,2}):(\d{2})/)
+  if (!m) return s
+  let h = Number(m[1])
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  h = h % 12 || 12
+  return `${h}:${m[2]} ${suffix}`
+}
+
+function parseDateParts(value) {
+  const s = String(value || '')
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) {
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    if (!Number.isNaN(d.getTime())) {
+      return {
+        date: d.toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        }),
+        dayOfWeek: d.toLocaleDateString('en-US', { weekday: 'long' }),
+      }
+    }
+  }
+  return { date: s || 'To be scheduled', dayOfWeek: '' }
+}
+
+function slotTime(slot) {
+  return slot.slot_start ?? slot.start_time ?? slot.start ?? slot.time ?? slot.slot_time ?? ''
+}
+
+function slotOpen(slot) {
+  if (slot.available === false || slot.is_available === false) return false
+  if (slot.open === false || slot.full === true) return false
+  const booked = Number(slot.booked ?? slot.taken ?? slot.reserved ?? slot.used ?? 0)
+  const capacity = Number(slot.capacity ?? slot.limit ?? 0)
+  return !(capacity > 0 && booked >= capacity)
+}
+
+function slotReason(slot) {
+  return slot.reason || slot.disabled_reason || 'Fully booked'
+}
+
+/** Items preview taken from the linked order (when one exists). */
+function itemsOfOrder(ordRow) {
+  if (!ordRow?.items?.length) return []
+  return ordRow.items.map((e) => {
+    const p = e.product || {}
+    return {
+      name: p.name || p.prod_name || 'Item',
+      details: `Qty ${e.item_qty ?? 1}${p.size ? ` · Size ${p.size}` : ''}`,
+      image: e.color?.image || p.image || p.images?.[0] || null,
+    }
+  })
+}
+
+function mapAppointment(row, ordRow) {
+  const rawStatus = String(row.appoint_status ?? row.status ?? '').toUpperCase()
+  let status = 'upcoming'
+  if (rawStatus.includes('CANCEL')) status = 'cancelled'
+  else if (['COMPLETED', 'CLAIMED', 'CLOSED', 'DONE', 'FULFILLED'].some((k) => rawStatus.includes(k)))
+    status = 'completed'
+
+  const start = row.appoint_start ?? row.slot_start ?? row.appoint_time ?? ''
+  const end = row.appoint_end ?? ''
+  const time = start
+    ? `${formatClock(start)}${end ? ` – ${formatClock(end)}` : ''}`
+    : 'To be confirmed'
+  const { date, dayOfWeek } = parseDateParts(row.appoint_date ?? row.appoint_day ?? '')
+  const items = itemsOfOrder(ordRow)
+
+  return {
+    id: row.appoint_id ?? row.id,
+    orderId: row.ord_id ?? row.order_id ?? null,
+    type: String(row.appoint_type || 'CLAIM').toUpperCase(),
+    itemCount: items.length || Number(row.item_count ?? 1),
+    status,
+    date,
+    dayOfWeek,
+    time,
+    location: 'Tindahan ni Isko – Main Campus',
+    subLocation: 'Bicol University, Main Campus',
+    items,
+  }
+}
+
+/** Booking form: date → slots → POST /appoint/create (REQ-SC-02). */
+function BookAppointmentCard({ custId, onBooked }) {
+  const { showToast } = useToast()
+  const [date, setDate] = useState('')
+  const [type, setType] = useState('CLAIM')
+  const [slots, setSlots] = useState([])
+  const [slot, setSlot] = useState('')
+  const [slotsError, setSlotsError] = useState('')
+  const [booking, setBooking] = useState(false)
+
+  useEffect(() => {
+    if (!date) {
+      setSlots([])
+      return undefined
+    }
+    let cancelled = false
+    ;(async () => {
+      setSlot('')
+      setSlotsError('')
+      try {
+        const rows = await fetchSlots(date)
+        if (!cancelled) setSlots(Array.isArray(rows) ? rows : [])
+      } catch (err) {
+        if (!cancelled) {
+          setSlots([])
+          setSlotsError(err?.message || 'Unable to load time slots right now.')
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [date])
+
+  const handleBook = async () => {
+    if (booking) return
+    if (!custId) return
+    if (!date || !slot) {
+      showToast('Please pick a date and a time slot first.', 'error')
+      return
+    }
+    setBooking(true)
+    try {
+      await createAppointment({
+        cust_id: custId,
+        appoint_type: type,
+        appoint_date: date,
+        appoint_desc: `${type === 'CLAIM' ? 'Order claim' : 'Store visit'} appointment on ${date} at ${slot}`,
+        // Start time is sent under several keys until the API contract is fixed.
+        slot_start: slot,
+        appoint_start: slot,
+        appoint_time: slot,
+      })
+      showToast('Appointment booked! See it in your list below.', 'success')
+      setSlot('')
+      onBooked?.()
+    } catch (err) {
+      showToast(err?.message || 'Unable to book that slot. Try another one.', 'error')
+    } finally {
+      setBooking(false)
+    }
+  }
+
+  const rules = SLOT_RULES[type] || SLOT_RULES.CLAIM
+
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="4" width="18" height="18" rx="2.5" ry="2.5" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
+    <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+      <div>
+        <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
+          Book an Appointment
+        </h2>
+        <p className="text-xs text-slate-500 leading-relaxed mt-0.5">
+          Reserve a slot to claim your order or visit the store. Slots are{' '}
+          {rules.minutes} minutes long (up to {rules.capacity}{' '}
+          {rules.capacity === 1 ? 'person' : 'people'} per slot).
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {Object.entries(SLOT_RULES).map(([key]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setType(key)}
+              className={`h-8 px-3 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                type === key
+                  ? 'bg-brand-orange text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              {key === 'CLAIM' ? 'Claim Order' : 'Store Visit'}
+            </button>
+          ))}
+        </div>
+
+        <label className="flex items-center gap-2 text-xs text-slate-500 ml-auto">
+          <span>Date</span>
+          <input
+            type="date"
+            value={date}
+            min={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setDate(e.target.value)}
+            className="px-2 py-1.5 rounded-md border border-slate-200 text-xs text-gray-700 focus:border-brand-orange"
+          />
+        </label>
+      </div>
+
+      {slotsError && <p className="text-xs text-red-500 bg-red-50 rounded-md p-2">{slotsError}</p>}
+      {!date && (
+        <p className="text-xs text-slate-500 bg-slate-50 rounded-md p-2.5">
+          Pick a date to see the available time slots.
+        </p>
+      )}
+      {date && !slotsError && slots.length === 0 && (
+        <p className="text-xs text-slate-500 bg-slate-50 rounded-md p-2.5">
+          No slots are open for this date yet. Try another date.
+        </p>
+      )}
+
+      {slots.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+          {slots.map((s, idx) => {
+            const time = slotTime(s)
+            const open = slotOpen(s)
+            const active = open && slot === time
+            return (
+              <button
+                key={time || `slot-${idx}`}
+                type="button"
+                disabled={!open}
+                title={open ? time : slotReason(s)}
+                onClick={() => open && setSlot(time)}
+                className={`py-2 rounded-md text-xs font-semibold border transition-colors ${
+                  active
+                    ? 'bg-brand-orange text-white border-brand-orange'
+                    : open
+                    ? 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange cursor-pointer'
+                    : 'bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed line-through'
+                }`}
+              >
+                {time || `Slot ${idx + 1}`}
+                {!open && (
+                  <span className="block text-[10px] font-normal no-underline">
+                    {slotReason(s)}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <button
+        type="button"
+        disabled={booking || !slot}
+        onClick={handleBook}
+        className="w-full h-9 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {booking
+          ? 'Booking…'
+          : slot
+          ? `Book ${type === 'CLAIM' ? 'claim' : 'visit'} slot • ${date} ${slot}`
+          : 'Select a time slot to book'}
+      </button>
+    </div>
   )
 }
 
@@ -144,8 +337,11 @@ function CheckmarkCircleIcon({ className = 'w-8 h-8' }) {
 
 function Appointments() {
   const { currentUser } = useAuth()
-  const navigate = useNavigate()
+  const { showToast } = useToast()
   const [activeFilter, setActiveFilter] = useState('all')
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [unread, setUnread] = useState(0)
 
   const baseUser = currentUser || {}
   const rawEmail = baseUser.email || ''
@@ -154,8 +350,64 @@ function Appointments() {
   const email = isRawPhoneActuallyEmail ? rawPhone : (rawEmail || '')
   const studentId = baseUser.studentId || ''
   const fullName = baseUser.fullName || 'User'
+  const custId = baseUser.cust_id ?? baseUser.id ?? null
 
-  const filteredAppointments = MOCK_APPOINTMENTS.filter((appt) => {
+  /** Load own appointments from GET /appoint/display with their order items. */
+  const loadAppointments = useCallback(async () => {
+    if (!custId) {
+      setAppointments([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    try {
+      const rows = await fetchAppointments({ cust_id: custId })
+      const list = Array.isArray(rows) ? rows : []
+      const orderIds = [
+        ...new Set(list.map((r) => r.ord_id ?? r.order_id).filter(Boolean)),
+      ].slice(0, 12)
+      const orderRows = await Promise.all(
+        orderIds.map((oid) => fetchOrder(oid).catch(() => null))
+      )
+      const cache = {}
+      orderIds.forEach((oid, i) => {
+        if (orderRows[i]) cache[String(oid)] = orderRows[i]
+      })
+      setAppointments(
+        list.map((row) =>
+          mapAppointment(row, cache[String(row.ord_id ?? row.order_id)] ?? null)
+        )
+      )
+    } catch (err) {
+      console.warn('Failed to load appointments:', err?.message)
+      showToast('Unable to load your appointments. Please try again.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [custId, showToast])
+
+  useEffect(() => {
+    loadAppointments()
+  }, [loadAppointments])
+
+  // Real unread count for the header bell (replaces the hardcoded "3").
+  useEffect(() => {
+    if (!custId) {
+      setUnread(0)
+      return undefined
+    }
+    let alive = true
+    fetchNotifications('customer', custId)
+      .then((rows) => {
+        if (alive) setUnread(unreadCount(rows))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [custId])
+
+  const filteredAppointments = appointments.filter((appt) => {
     if (activeFilter === 'all') return true
     return appt.status === activeFilter
   })
@@ -182,9 +434,11 @@ function Appointments() {
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
-              <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white">
-                3
-              </span>
+              {unread > 0 && (
+                <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white">
+                  {unread}
+                </span>
+              )}
             </Link>
           </div>
         </div>
@@ -201,7 +455,7 @@ function Appointments() {
             {/* Avatar + Info */}
             <div className="flex items-center gap-3.5 relative z-10 min-w-0">
               <div className="w-16 h-16 rounded-full border-2 border-white overflow-hidden bg-blue-100 shadow-md shrink-0">
-                <img src={avatarImg} alt={fullName} className="w-full h-full object-cover" />
+                <Avatar name={fullName} size={64} className="w-full h-full" />
               </div>
               <div className="min-w-0 text-white">
                 <h1 className="text-lg font-black tracking-tight leading-tight truncate">{fullName}</h1>
@@ -259,9 +513,16 @@ function Appointments() {
             </div>
           </div>
 
+          <BookAppointmentCard custId={custId} onBooked={loadAppointments} />
+
           {/* Appointments Cards (Matching 2-Column inner card layout of Image 1) */}
           <div className="space-y-4">
-            {filteredAppointments.length === 0 ? (
+            {loading ? (
+              <div className="bg-white rounded-3xl p-8 text-center border border-gray-100 shadow-xs flex items-center justify-center gap-3">
+                <LoadingSpinner size={24} />
+                <p className="text-sm font-bold text-gray-500">Loading your appointments…</p>
+              </div>
+            ) : filteredAppointments.length === 0 ? (
               <div className="bg-white rounded-3xl p-8 text-center border border-gray-100 shadow-xs">
                 <p className="text-sm font-bold text-gray-500">No appointments found in this category.</p>
               </div>
@@ -327,11 +588,15 @@ function Appointments() {
                           {appt.items.map((item, idx) => (
                             <div key={idx} className="flex items-center gap-2.5">
                               <div className="w-9 h-9 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center p-1 shrink-0">
-                                <img
-                                  src={item.image}
-                                  alt={item.name}
-                                  className="w-full h-full object-contain"
-                                />
+                                {item.image ? (
+                                  <img
+                                    src={getImageUrl(item.image)}
+                                    alt={item.name}
+                                    className="w-full h-full object-contain"
+                                  />
+                                ) : (
+                                  <ShirtIcon className="w-5 h-5 text-brand-orange opacity-40" />
+                                )}
                               </div>
                               <div className="min-w-0">
                                 <p className="text-xs font-bold text-slate-900 leading-tight truncate">
@@ -357,7 +622,7 @@ function Appointments() {
                               </span>
                             </div>
                             <Link
-                              to={`/orders/${appt.orderId}`}
+                              to={appt.orderId ? `/orders/${appt.orderId}` : '/orders'}
                               className="inline-flex items-center justify-center gap-1 w-full h-8 px-3 rounded-md bg-white border border-brand-orange text-brand-orange text-xs font-bold hover:bg-orange-50 transition-colors"
                             >
                               <span>View Order Details</span>
@@ -376,7 +641,7 @@ function Appointments() {
                               </p>
                             </div>
                             <Link
-                              to={`/orders/${appt.orderId}`}
+                              to={appt.orderId ? `/orders/${appt.orderId}` : '/orders'}
                               className="inline-flex items-center justify-center gap-1 w-full h-8 px-3 rounded-md bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
                             >
                               <span>View Order Details</span>
@@ -512,7 +777,7 @@ function Appointments() {
           {/* User Info */}
           <div className="flex items-center gap-3.5 relative z-10">
             <div className="w-12 h-12 rounded-md overflow-hidden shrink-0 border border-white/20">
-              <img src={avatarImg} alt={fullName} className="w-full h-full object-cover" />
+              <Avatar name={fullName} size={48} className="w-full h-full" />
             </div>
             <div className="text-white">
               <h1 className="text-base font-extrabold tracking-tight leading-tight">{fullName}</h1>
@@ -577,9 +842,16 @@ function Appointments() {
                 </div>
               </div>
 
+              <BookAppointmentCard custId={custId} onBooked={loadAppointments} />
+
               {/* Appointments List */}
               <div className="space-y-4">
-                {filteredAppointments.length === 0 ? (
+                {loading ? (
+                  <div className="bg-white rounded-lg p-8 text-center border border-slate-200 flex items-center justify-center gap-3">
+                    <LoadingSpinner size={24} />
+                    <p className="text-sm font-bold text-slate-500">Loading your appointments…</p>
+                  </div>
+                ) : filteredAppointments.length === 0 ? (
                   <div className="bg-white rounded-lg p-8 text-center border border-slate-200">
                     <p className="text-sm font-bold text-slate-500">No appointments in this category.</p>
                   </div>
@@ -622,11 +894,15 @@ function Appointments() {
                             {appt.items.map((item, idx) => (
                               <div key={idx} className="flex items-center gap-2.5">
                                 <div className="w-11 h-11 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center p-1 shrink-0">
-                                  <img
-                                    src={item.image}
-                                    alt={item.name}
-                                    className="w-full h-full object-contain"
-                                  />
+                                  {item.image ? (
+                                    <img
+                                      src={getImageUrl(item.image)}
+                                      alt={item.name}
+                                      className="w-full h-full object-contain"
+                                    />
+                                  ) : (
+                                    <ShirtIcon className="w-6 h-6 text-brand-orange opacity-40" />
+                                  )}
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-xs font-bold text-slate-900 leading-snug truncate">
@@ -680,7 +956,7 @@ function Appointments() {
                                   </span>
                                 </div>
                                 <Link
-                                  to={`/orders/${appt.orderId}`}
+                                  to={appt.orderId ? `/orders/${appt.orderId}` : '/orders'}
                                   className="inline-flex items-center justify-center gap-1 w-full h-8 px-3 rounded-md bg-white border border-brand-orange text-brand-orange text-xs font-bold hover:bg-orange-50 transition-colors"
                                 >
                                   <span>View Order Details</span>

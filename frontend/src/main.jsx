@@ -20,17 +20,6 @@ if (import.meta.env.PROD) {
   }
 }
 
-// Capture the PWA install prompt globally so it is never missed
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault()
-  window.__pwaDeferredPrompt = e
-  window.dispatchEvent(new CustomEvent('pwa-prompt-available'))
-})
-
-window.addEventListener('appinstalled', () => {
-  window.__pwaDeferredPrompt = null
-})
-
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>

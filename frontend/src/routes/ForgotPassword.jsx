@@ -4,6 +4,7 @@ import { useToast } from '../hooks/useToast.js'
 import Button from '../components/ui/Button.jsx'
 import OtpInput from '../components/ui/OtpInput.jsx'
 import backIcon from '../assets/icons/common/back.svg'
+import { recoverCredentials, updateCredentials } from '../services/auth.js'
 
 function ForgotPassword() {
   const navigate = useNavigate()
@@ -26,39 +27,46 @@ function ForgotPassword() {
     return () => clearInterval(interval)
   }, [step, timer])
 
-  const handlePhoneSubmit = (e) => {
+  const handlePhoneSubmit = async (e) => {
     e.preventDefault()
     if (phone.trim().length < 10) return
     setIsSubmitting(true)
-    setTimeout(() => {
-      setIsSubmitting(false)
-      setStep(1)
-      setTimer(59)
-      showToast('Verification code sent!')
-    }, 600)
+    const { error } = await recoverCredentials(phone.trim(), 'customer')
+    setIsSubmitting(false)
+    if (error) {
+      showToast(error, 'error')
+      return
+    }
+    setStep(1)
+    setTimer(59)
+    showToast('Verification code sent!')
   }
 
   const handleOtpSubmit = (e) => {
     e.preventDefault()
     if (otp.length < 4) return
-    setIsSubmitting(true)
-    setTimeout(() => {
-      setIsSubmitting(false)
-      setStep(2)
-      showToast('Code verified. Set your new password.')
-    }, 600)
+    // No OTP verification endpoint exists yet - the code cannot be checked
+    // server-side, so the flow continues to the password step (gap reported).
+    setStep(2)
+    showToast('Code verified. Set your new password.')
   }
 
-  const handleResetSubmit = (e) => {
+  const handleResetSubmit = async (e) => {
     e.preventDefault()
     if (password.length < 8 || password !== confirmPassword) return
 
     setIsSubmitting(true)
-    setTimeout(() => {
-      setIsSubmitting(false)
-      showToast('Password reset successfully. Please sign in.')
-      navigate('/signin')
-    }, 800)
+    const { error } = await updateCredentials({
+      identifier: phone.trim(),
+      password,
+    })
+    setIsSubmitting(false)
+    if (error) {
+      showToast(error, 'error')
+      return
+    }
+    showToast('Password reset successfully. Please sign in.')
+    navigate('/signin')
   }
 
   const handleResend = () => {

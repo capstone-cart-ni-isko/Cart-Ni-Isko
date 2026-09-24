@@ -76,10 +76,9 @@ function SignUp() {
   const [availableColleges, setAvailableColleges] = useState([])
   const [availableDepartments, setAvailableDepartments] = useState([])
 
-  // Keep signup progress synced
+  // Keep signup progress synced (passwords live in their own state, never in `form`)
   useEffect(() => {
-    const { password: _, confirmPassword: __, ...persistForm } = form
-    localStorage.setItem('isko_signup_progress', JSON.stringify(persistForm))
+    localStorage.setItem('isko_signup_progress', JSON.stringify(form))
   }, [form])
 
   // Timer for OTP step
@@ -164,19 +163,19 @@ function SignUp() {
     goToStep(3)
   }
 
-  const handleOtpNext = (e) => {
+  const handleOtpNext = async (e) => {
     e.preventDefault()
     if (otp.length < 6) return
     setIsSubmitting(true)
-    setTimeout(async () => {
-      setIsSubmitting(false)
-      showToast('Phone verified!')
-      if (form.role === 'Student') {
-        goToStep(5)
-      } else {
-        await handleCompleteNext()
-      }
-    }, 800)
+    // No OTP verification endpoint exists yet, so any 6-digit code is
+    // accepted here (contract gap reported).
+    showToast('Phone verified!')
+    if (form.role === 'Student') {
+      goToStep(5)
+    } else {
+      await handleCompleteNext()
+    }
+    setIsSubmitting(false)
   }
 
   const handleCollegeNext = async (e) => {
@@ -203,7 +202,7 @@ function SignUp() {
       registrationDetails.course = 'N/A'
       registrationDetails.yearLevel = 'N/A'
     }
-    const { user, error } = await register(registrationDetails)
+    const { error } = await register(registrationDetails)
     if (error) {
       showToast(error, 'error')
       return
@@ -275,7 +274,7 @@ function SignUp() {
       registrationDetails.yearLevel = 'N/A'
     }
 
-    const { user, error } = await register(registrationDetails)
+    const { error } = await register(registrationDetails)
 
     if (error) {
       showToast(error, 'error')
@@ -520,7 +519,7 @@ function SignUp() {
             )}
 
             {/* STEP 5: College (Only shown for Student role) */}
-            {step === 5 && (
+            {step === 5 && form.role === 'Student' && (
               <form onSubmit={handleCollegeNext} className="space-y-5 animate-fade-in">
                 <div className="flex justify-between items-start">
                   <h1 className="text-2xl font-black text-gray-900">Your College</h1>

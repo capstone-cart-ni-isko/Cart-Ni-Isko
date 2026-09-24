@@ -1,14 +1,15 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { useAdmin } from '../../hooks/useAdmin.js'
+import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
-import { INITIAL_ADMIN_DATA } from '../../data/adminMockData.js'
+import { fetchAdminProducts } from '../../services/adminProducts.js'
+import { fetchProductReviews, moderateReview, deleteReview } from '../../services/reviews.js'
 
 const REPLY_TEMPLATES = [
   { label: 'Thank you', text: 'Thank you for your feedback! We are glad you enjoyed your purchase.' },
   { label: 'Apology', text: "We're sorry to hear this. Please contact our support team so we can make it right." },
-  { label: 'Suggestion noted', text: 'Thanks for the suggestion! We have shared it with our product team.' },
+  { label: 'Suggestion noted', text: "Thanks for the suggestion! We have shared it with our product team." },
 ]
 
 const STATUS_OPTIONS = [
@@ -75,40 +76,36 @@ function getStatusMeta(review) {
   return { dot: 'bg-slate-400', label: 'Rejected' }
 }
 
-// Builds an exact timestamp from the relative "timeAgo" text (mock data has no raw date)
-function buildTimestamp(review, now) {
-  if (review.postedAt) return review.postedAt
-  const text = (review.timeAgo || '').toLowerCase()
-  let offset = 0
-  const m = text.match(/(\d+)\s*(minute|hour|day)/)
-  if (m) {
-    const n = parseInt(m[1], 10)
-    offset = m[2] === 'minute' ? n * 60000 : m[2] === 'hour' ? n * 3600000 : n * 86400000
-  } else if (text.includes('yesterday')) {
-    offset = 86400000
-  }
-  const d = new Date(now - offset)
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+/**
+ * The reviews service strips the backend's [PENDING]/[APPROVED]/CENSORED
+ * markers from ord_review, so status is derived from what survives:
+ * empty body → pending, censored marker → rejected, otherwise approved.
+ */
+function deriveStatus(comment) {
+  if (!comment) return 'pending'
+  if (comment === '[REVIEW CENSORED]') return 'rejected'
+  return 'approved'
 }
 
-function getOrderId(review) {
-  if (review.orderId) return review.orderId
-  const n = parseInt(String(review.id).replace(/\D/g, ''), 10) || 0
-  return `ORD-${9100 + n}`
+function buildTimestamp(review) {
+  return review.postedAt || review.date || 'Recently'
 }
+
+const errMsg = (err, fallback) => err?.message || fallback
 
 export default function AdminReviews() {
-  const {
-    adminState = {},
-    approveReview,
-    rejectReview,
-    assignReviewToSupport,
-    replyToReview,
-  } = useAdmin()
+  const { showToast } = useToast()
 
-  const [now] = useState(() => Date.now())
+  // Real data: every product's reviews, loaded once per reload (Product Reviews)
+  const [reviews, setReviews] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [isModerating, setIsModerating] = useState(false)
 
-  const [statusFilter, setStatusFilter] = useState('pending')
+  // Show the whole queue by default — pending rows may not be visible yet
+  // through the service (see contract notes), so 'pending' would look empty.
+  const [statusFilter, setStatusFilter] = useState('all')
   const [ratingFilter, setRatingFilter] = useState('all')
   const [mediaFilter, setMediaFilter] = useState('all')
   const [sortBy, setSortBy] = useState('newest')
@@ -124,7 +121,75 @@ export default function AdminReviews() {
   const [escalateReview, setEscalateReview] = useState(null)
   const [escalateNote, setEscalateNote] = useState('')
 
-  const reviews = adminState?.reviews || INITIAL_ADMIN_DATA.reviews || []
+  const mapItem = useCallback((item, product) => {
+    const ordId = Number(String(item.id || '').split('-')[1]) || 0
+    const comment = item.comment || ''
+    return {
+      id: item.id,
+      ordId,
+      productName: product?.name || 'Unnamed Product',
+      rating: Number(item.rating) || 0,
+      comment,
+      title: '',
+      status: deriveStatus(comment),
+      timeAgo: item.date || 'Recently',
+      postedAt: item.date || '',
+      orderId: ordId ? `ORD-${ordId}` : '',
+      reviewer: item.author || 'Verified Student',
+      reviewerInitials: 'VS',
+      verifiedPurchase: item.verified !== false,
+      photos: [],
+      deliveryStatus: null,
+      reply: '',
+      flagged: false,
+    }
+  }, [])
+
+  const loadReviews = useCallback(async () => {
+    setIsLoading(true)
+    setLoadError('')
+    try {
+      const products = await fetchAdminProducts()
+      const perProduct = await Promise.all(
+        products.map(async (product) => {
+          const prodId = String(product.id || '').replace('prod-', '')
+          const res = await fetchProductReviews(prodId)
+          if (!res?.success) {
+            return { items: [], error: res?.error || 'Unable to load reviews.' }
+          }
+          return { items: (res.items || []).map((item) => mapItem(item, product)), error: null }
+        })
+      )
+      // One order row can appear under several products it contains — dedupe by order.
+      const seen = new Set()
+      const merged = []
+      let firstError = null
+      perProduct.forEach(({ items, error }) => {
+        if (error && !firstError) firstError = error
+        items.forEach((r) => {
+          const key = r.ordId || r.id
+          if (seen.has(key)) return
+          seen.add(key)
+          merged.push(r)
+        })
+      })
+      setReviews(merged)
+      // Partial failures still show data, with the reason surfaced inline.
+      setLoadError(firstError && merged.length === 0 ? firstError : '')
+      if (firstError && merged.length > 0) {
+        showToast(`Some reviews could not be loaded: ${firstError}`, 'info')
+      }
+    } catch (err) {
+      setReviews([])
+      setLoadError(errMsg(err, 'Unable to load reviews.'))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [mapItem, showToast])
+
+  useEffect(() => {
+    loadReviews()
+  }, [loadReviews, reloadKey])
 
   const filteredReviews = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -173,36 +238,113 @@ export default function AdminReviews() {
     setReplyText('')
   }
 
-  const handleApprove = (review) => {
-    approveReview(review.id)
-    setDetailOpen(false)
-    setReplyText('')
+  // POST /reviews/moderate — approve=true publishes, false censors (REQ-APC-1)
+  const applyModeration = async (review, approve) => {
+    await moderateReview({ ord_id: review.ordId, approve })
+    setReviews((list) =>
+      list.map((r) =>
+        r.id === review.id ? { ...r, status: approve ? 'approved' : 'rejected' } : r
+      )
+    )
   }
 
-  const handleReject = (review) => {
-    rejectReview(review.id)
-    setDetailOpen(false)
-    setReplyText('')
+  const handleApprove = async (review) => {
+    if (isModerating) return
+    setIsModerating(true)
+    try {
+      await applyModeration(review, true)
+      setDetailOpen(false)
+      setReplyText('')
+      showToast('Review approved and published.', 'success')
+    } catch (err) {
+      showToast(errMsg(err, 'Failed to approve the review.'), 'error')
+    } finally {
+      setIsModerating(false)
+    }
   }
 
-  const handleBulk = (action) => {
-    checkedIds.forEach((id) => (action === 'approve' ? approveReview(id) : rejectReview(id)))
+  const handleReject = async (review) => {
+    if (isModerating) return
+    setIsModerating(true)
+    try {
+      await applyModeration(review, false)
+      setDetailOpen(false)
+      setReplyText('')
+      showToast('Review rejected and censored.', 'success')
+    } catch (err) {
+      showToast(errMsg(err, 'Failed to reject the review.'), 'error')
+    } finally {
+      setIsModerating(false)
+    }
+  }
+
+  const handleDelete = async (review) => {
+    if (isModerating) return
+    if (!window.confirm(`Delete the review for ${review.productName}? This cannot be undone.`)) return
+    setIsModerating(true)
+    try {
+      await deleteReview({ ord_id: review.ordId })
+      setReviews((list) => list.filter((r) => r.id !== review.id))
+      setDetailOpen(false)
+      showToast('Review deleted.', 'success')
+    } catch (err) {
+      showToast(errMsg(err, 'Failed to delete the review.'), 'error')
+    } finally {
+      setIsModerating(false)
+    }
+  }
+
+  const handleBulk = async (action) => {
+    const targets = reviews.filter((r) => checkedIds.includes(r.id))
     setCheckedIds([])
     setBulkOpen(false)
+    if (targets.length === 0) return
+    setIsModerating(true)
+    let failed = 0
+    for (const review of targets) {
+      try {
+        await applyModeration(review, action === 'approve')
+      } catch {
+        failed += 1
+      }
+    }
+    setIsModerating(false)
+    if (failed > 0) {
+      showToast(`${failed} of ${targets.length} reviews failed to update.`, 'error')
+    } else {
+      showToast(
+        `${targets.length} review${targets.length === 1 ? '' : 's'} ${
+          action === 'approve' ? 'approved' : 'rejected'
+        }.`,
+        'success'
+      )
+    }
   }
 
+  // No reply endpoint exists — replies are kept for this session only.
   const handleSendReply = (review) => {
     if (!replyText.trim()) return
-    replyToReview(review.id, replyText.trim())
+    setReviews((list) =>
+      list.map((r) => (r.id === review.id ? { ...r, reply: replyText.trim() } : r))
+    )
     setReplyText('')
+    showToast('Reply saved for this session (the API has no reply endpoint yet).', 'info')
   }
 
+  // No escalation endpoint exists — the escalation is session-local only.
   const handleEscalate = (e) => {
     e.preventDefault()
     if (!escalateReview) return
-    assignReviewToSupport(escalateReview.id, escalateNote.trim())
+    const targetId = escalateReview.id
+    const note = escalateNote.trim()
+    setReviews((list) =>
+      list.map((r) =>
+        r.id === targetId ? { ...r, status: 'assigned_support', supportNote: note } : r
+      )
+    )
     setEscalateReview(null)
     setEscalateNote('')
+    showToast('Escalated to support for this session (no API endpoint yet).', 'info')
   }
 
   return (
@@ -234,7 +376,7 @@ export default function AdminReviews() {
                 <div className="absolute right-0 mt-1 w-48 bg-white border border-slate-200 rounded-md z-40 py-1 text-xs">
                   <button
                     type="button"
-                    disabled={checkedIds.length === 0}
+                    disabled={checkedIds.length === 0 || isModerating}
                     onClick={() => handleBulk('approve')}
                     className="w-full text-left px-3 py-2 font-medium text-slate-700 hover:bg-slate-50 disabled:text-slate-300 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
                   >
@@ -242,7 +384,7 @@ export default function AdminReviews() {
                   </button>
                   <button
                     type="button"
-                    disabled={checkedIds.length === 0}
+                    disabled={checkedIds.length === 0 || isModerating}
                     onClick={() => handleBulk('reject')}
                     className="w-full text-left px-3 py-2 font-medium text-slate-700 hover:bg-slate-50 disabled:text-slate-300 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
                   >
@@ -264,6 +406,20 @@ export default function AdminReviews() {
             )}
           </div>
         </div>
+
+        {/* Load error banner */}
+        {loadError && (
+          <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+            <p className="text-xs font-semibold text-red-700">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="text-xs font-bold text-red-700 border border-red-300 rounded-md px-2 py-1 hover:bg-red-100 cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Unified search + filter bar */}
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2">
@@ -329,9 +485,15 @@ export default function AdminReviews() {
             </label>
 
             <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-              {filteredReviews.length === 0 ? (
+              {isLoading ? (
+                <p className="px-4 py-10 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+                  <span className="spinner-circle !w-3.5 !h-3.5" /> Loading reviews…
+                </p>
+              ) : filteredReviews.length === 0 ? (
                 <p className="px-4 py-10 text-center text-xs text-slate-400 font-medium">
-                  No reviews match your filters.
+                  {reviews.length === 0
+                    ? 'No reviews yet. Reviews appear here once customers submit them.'
+                    : 'No reviews match your filters.'}
                 </p>
               ) : (
                 filteredReviews.map((r) => {
@@ -382,7 +544,7 @@ export default function AdminReviews() {
           >
             {!selected ? (
               <div className="flex-1 flex items-center justify-center px-4 py-16 text-xs text-slate-400 font-medium">
-                Select a review to inspect it.
+                {isLoading ? 'Loading reviews…' : 'Select a review to inspect it.'}
               </div>
             ) : (
               <>
@@ -407,34 +569,42 @@ export default function AdminReviews() {
                     </Link>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <Stars rating={selected.rating} className="w-3.5 h-3.5" />
-                      <span className="text-[11px] text-slate-400">{buildTimestamp(selected, now)}</span>
+                      <span className="text-[11px] text-slate-400">{buildTimestamp(selected)}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
-                      disabled={selected.status === 'approved'}
+                      disabled={selected.status === 'approved' || isModerating}
                       onClick={() => handleApprove(selected)}
                       className={`h-8 px-3.5 rounded-md text-xs font-bold transition-colors ${
-                        selected.status === 'approved'
+                        selected.status === 'approved' || isModerating
                           ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                           : 'bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer'
                       }`}
                     >
-                      Approve
+                      {isModerating ? 'Saving…' : 'Approve'}
                     </button>
                     <button
                       type="button"
-                      disabled={selected.status === 'rejected'}
+                      disabled={selected.status === 'rejected' || isModerating}
                       onClick={() => handleReject(selected)}
                       className={`h-8 px-3.5 rounded-md border text-xs font-semibold transition-colors ${
-                        selected.status === 'rejected'
+                        selected.status === 'rejected' || isModerating
                           ? 'border-slate-100 text-slate-300 cursor-not-allowed'
                           : 'border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer'
                       }`}
                     >
                       Reject
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isModerating}
+                      onClick={() => handleDelete(selected)}
+                      className="h-8 px-3.5 rounded-md border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -465,7 +635,7 @@ export default function AdminReviews() {
 
                   {/* Review content */}
                   <div className="space-y-1.5">
-                    <h2 className="text-base font-bold text-slate-900">{selected.title}</h2>
+                    {selected.title && <h2 className="text-base font-bold text-slate-900">{selected.title}</h2>}
                     <p className="text-sm text-slate-600 leading-relaxed">{selected.comment}</p>
                   </div>
 
@@ -510,12 +680,12 @@ export default function AdminReviews() {
                     </div>
                     <div>
                       <p className="text-[11px] font-medium text-slate-400">Order</p>
-                      <p className="text-xs font-semibold text-slate-800 mt-0.5">{getOrderId(selected)}</p>
+                      <p className="text-xs font-semibold text-slate-800 mt-0.5">{selected.orderId || '—'}</p>
                     </div>
                     <div>
                       <p className="text-[11px] font-medium text-slate-400">Delivery status</p>
                       <p className="text-xs font-semibold text-slate-800 mt-0.5">
-                        {selected.deliveryStatus || 'Delivered'}
+                        {selected.deliveryStatus || '—'}
                       </p>
                     </div>
                   </div>

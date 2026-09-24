@@ -3,10 +3,10 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useCart } from '../hooks/useCart.js'
 import { useWishlist } from '../hooks/useWishlist.js'
+import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ViewAllLink from '../components/ui/ViewAllLink.jsx'
-import QuantityStepper from '../components/ui/QuantityStepper.jsx'
 import PriceTag from '../components/ui/PriceTag.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
@@ -81,7 +81,8 @@ function ProductDetail() {
   if (loading) {
     return (
       <AppShell showNav={true}>
-        <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center gap-3">
+          <LoadingSpinner size={32} />
           <p className="text-sm font-semibold text-gray-500">Loading product…</p>
         </div>
       </AppShell>
@@ -153,9 +154,6 @@ function ProductDetail() {
   const availableStock = calculateStock(selectedColor, selectedSize)
   const isOutOfStock = !product.preOrder && availableStock === 0
   const isLowStock = !product.preOrder && availableStock > 0 && availableStock <= 3
-  const maxAllowedQty = product.preOrder
-    ? (product.preOrderInfo?.maxPreOrderQty || 10)
-    : Math.max(1, availableStock)
 
   // Color selection handler
   const handleSelectColor = (color) => {

@@ -5,7 +5,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 
 export default function AdminInventory() {
-  const { addProduct, updateProduct, deleteProduct, adjustStock, products: backendProducts } = useAdmin()
+  const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, products: backendProducts } = useAdmin()
 
   // Product data state - synced directly from backend (refetched on every change)
   const productsList = backendProducts
@@ -33,6 +33,8 @@ export default function AdminInventory() {
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
   const [newProdName, setNewProdName] = useState('')
+  const [newProdDesc, setNewProdDesc] = useState('')
+  const [newProdPhoto, setNewProdPhoto] = useState('')
   const [newProdCategory, setNewProdCategory] = useState('Shirts')
   const [newProdPrice, setNewProdPrice] = useState('450')
   const [newProdStock, setNewProdStock] = useState('20')
@@ -42,6 +44,7 @@ export default function AdminInventory() {
   const [showEditProductModal, setShowEditProductModal] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [editName, setEditName] = useState('')
+  const [editDesc, setEditDesc] = useState('')
   const [editCategory, setEditCategory] = useState('Shirts')
   const [editPrice, setEditPrice] = useState('')
   const [editStock, setEditStock] = useState('')
@@ -101,42 +104,48 @@ export default function AdminInventory() {
     setActiveTags([])
   }
 
-  // Add Product Form submit (calls backend)
-  const handleCreateProduct = (e) => {
+  // Add Product Form submit (calls backend; keeps input on failure per REQ-IM-01)
+  const handleCreateProduct = async (e) => {
     e.preventDefault()
     if (!newProdName) return
-    addProduct({
+    const result = await addProduct({
       name: newProdName,
-      sku: `SKU-${Math.floor(100 + Math.random() * 900)}`,
+      desc: newProdDesc,
+      photo: newProdPhoto,
       category: newProdCategory,
       price: parseFloat(newProdPrice) || 300,
       stock: parseInt(newProdStock, 10) || 10,
-      desc: '',
     })
+    if (!result.success) return
     setShowAddProductModal(false)
     setNewProdName('')
+    setNewProdDesc('')
+    setNewProdPhoto('')
   }
 
   // Open Edit Product modal pre-filled with current values
   const openEditModal = (prod) => {
     setEditTarget(prod)
     setEditName(prod.name)
+    setEditDesc(prod.description || '')
     setEditCategory(prod.categoryName || 'Shirts')
     setEditPrice(String(prod.price ?? ''))
     setEditStock(String(prod.totalStock ?? ''))
     setShowEditProductModal(true)
   }
 
-  // Edit Product Form submit (calls backend)
-  const handleUpdateProduct = (e) => {
+  // Edit Product Form submit (calls backend; keeps input on failure per REQ-IM-01)
+  const handleUpdateProduct = async (e) => {
     e.preventDefault()
     if (!editTarget) return
-    updateProduct(editTarget.id, {
+    const result = await updateProduct(editTarget.id, {
       prod_name: editName,
+      prod_desc: editDesc,
       prod_categ: editCategory,
       prod_price: parseFloat(editPrice) || 0,
       prod_qty: parseInt(editStock, 10) || 0,
     })
+    if (!result.success) return
     setShowEditProductModal(false)
     setEditTarget(null)
   }
@@ -512,8 +521,16 @@ export default function AdminInventory() {
 
                         {/* Status */}
                         <td className="p-4">
-                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+                              prod.disabled ? 'text-amber-600' : 'text-emerald-600'
+                            }`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                prod.disabled ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`}
+                            />
                             <span>{prod.status}</span>
                           </span>
                         </td>
@@ -549,6 +566,14 @@ export default function AdminInventory() {
                                 </svg>
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => (prod.disabled ? sellProduct(prod.id) : unlistProduct(prod.id))}
+                              title={prod.disabled ? 'Sell (relist in catalog)' : 'Unlist from customer catalog'}
+                              className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
+                            >
+                              {prod.disabled ? 'Sell' : 'Unlist'}
+                            </button>
                             <button
                               type="button"
                               onClick={() => openEditModal(prod)}
@@ -824,6 +849,28 @@ export default function AdminInventory() {
                 />
               </div>
               <div>
+                <label className="font-semibold text-slate-700 block mb-1">Description</label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Material, fit, care instructions..."
+                  value={newProdDesc}
+                  onChange={(e) => setNewProdDesc(e.target.value)}
+                  className="w-full px-2.5 py-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange resize-none"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Product Photo URL</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="https://.../product-image.png"
+                  value={newProdPhoto}
+                  onChange={(e) => setNewProdPhoto(e.target.value)}
+                  className="w-full h-8 px-2.5 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                />
+              </div>
+              <div>
                 <label className="font-semibold text-slate-700 block mb-1">Category</label>
                 <select
                   value={newProdCategory}
@@ -955,6 +1002,15 @@ export default function AdminInventory() {
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   className="w-full h-8 px-2.5 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-2.5 py-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange resize-none"
                 />
               </div>
               <div>

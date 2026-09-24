@@ -8,8 +8,9 @@
     {
         // Define the table name, primary key, and timestamps
         protected $table = 'items';
+        protected $primaryKey = 'item_id';
         public $timestamps = false;
-        public $incrementing = false;
+        public $incrementing = true;
 
         // Define the fillable attributes for mass assignment
         protected $fillable = [

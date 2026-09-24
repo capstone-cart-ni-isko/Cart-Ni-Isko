@@ -6,6 +6,8 @@
     use App\Models\Employee;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\Hash;
+    use Illuminate\Support\Str;
+    use Illuminate\Support\Facades\Schema;
 
     class AuthAPI extends Controller
     {
@@ -23,6 +25,7 @@
                 brgy - string (req)
                 city - string (req)
                 province - string (req)
+                country - string (opt)
                 callcode - string (req)
                 phone - string (req)
                 email - string (req)
@@ -50,7 +53,7 @@
             try {
                 // Create new Customer
                 $type = $json->input('type') ?? 'Student';
-                $customer = Customer::create([
+                $attributes = [
                     'cust_created' => now(),
                     'cust_password' => Hash::make($password),
                     'cust_nickname' => $json->input('nickname') ?? 'User',
@@ -61,20 +64,53 @@
                     'cust_province' => $json->input('province') ?? '',
                     'cust_callcode' => $json->input('callcode') ?? '+63',
                     'cust_phone' => $phone,
-                    'cust_email' => $json->input('email') ?? '',
+                    'cust_email' => $json->input('email') ?: null,
                     'cust_type' => $type,
                     'cust_college' => ($type === 'Student') ? ($json->input('college') ?? '') : '',
                     'cust_wishlist' => 0,
                     'cust_cart' => 0,
                     'cust_orders' => 0,
                     'cust_appoints' => 0,
-                ]);
+                ];
+
+                // Stamp the first credential set (REQ-APC-01 baseline);
+                // guarded so connections without the migration still work
+                if (Schema::hasColumn('customer', 'cust_cred_changed')) {
+                    $attributes['cust_cred_changed'] = now();
+                }
+
+                // Optional default country (guarded until the column exists)
+                if (Schema::hasColumn('customer', 'cust_country')) {
+                    $attributes['cust_country'] = $json->input('country') ?? '';
+                }
+
+                // Signup details the edit-profile form round-trips; guarded so
+                // connections without the migration still sign up cleanly.
+                if (Schema::hasColumn('customer', 'cust_username')) {
+                    $attributes['cust_username'] = $json->input('username') ?? '';
+                }
+                if ($type === 'Student') {
+                    if (Schema::hasColumn('customer', 'cust_campus')) {
+                        $attributes['cust_campus'] = $json->input('campus') ?? '';
+                    }
+                    if (Schema::hasColumn('customer', 'cust_course')) {
+                        $attributes['cust_course'] = $json->input('course') ?? '';
+                    }
+                    if (Schema::hasColumn('customer', 'cust_year')) {
+                        $attributes['cust_year'] = $json->input('year_level') ?? '';
+                    }
+                }
+
+                $customer = Customer::create($attributes);
+
+                // Issue an API token for the new account
+                $token = $customer->createToken('auth_token')->plainTextToken;
 
                 // JSON SUCCESS
                 return response()->json([
                     'success' => true,
                     'message' => 'Signup successful',
-                    'data' => $customer
+                    'data' => array_merge($customer->toArray(), ['token' => $token])
                 ], 201);
 
             } catch (\Exception $e) {
@@ -115,11 +151,20 @@
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
 
+                // Banned or deleted accounts lose access immediately (REQ-UM-02)
+                if ($customer->cust_disabled || $customer->cust_deleted) {
+                    // JSON ERROR
+                    return response()->json(['success' => false, 'message' => 'Account disabled'], 403);
+                }
+
+                // Issue an API token for the session
+                $token = $customer->createToken('auth_token')->plainTextToken;
+
                 // JSON SUCCESS
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
-                    'data' => $customer
+                    'data' => array_merge($customer->toArray(), ['token' => $token])
                 ], 200);
 
             } catch (\Exception $e) {
@@ -161,49 +206,53 @@
             $validator = (new InputValidatorAPI())->employeeSignup($json);
             if ($validator) return $validator;
 
-            // Get user email and password
-            $email      = $json->input('email');
-            $password   = $json->input('password');
+            $email = $json->input('email');
+            $temporaryPassword = Str::password(16);
+            $type = strtoupper($json->input('type', 'STAFF'));
 
-            // Check if email already exists
             if (Employee::where('emp_email', $email)->exists()) {
-                // JSON ERROR
                 return response()->json([
-                        'success' => false,
-                        'message' => 'Email already exists'
-                    ], 409);
+                    'success' => false,
+                    'message' => 'Email already exists',
+                ], 409);
             }
 
-            // Insert to database using Models
             try {
-                // Create new employee
-                $employee = Employee::create([
+                $attributes = [
                     'emp_created' => now(),
-                    'emp_password' => Hash::make($password),
-                    'emp_surname' => $json->input('surname') ?? '',
-                    'emp_givname' => $json->input('givname') ?? '',
-                    'emp_midname' => $json->input('midname') ?? '',
-                    'emp_suffix' => $json->input('suffix') ?? '',
-                    'emp_studnum' => $json->input('studnum') ?? '',
-                    'emp_pronoun' => $json->input('pronoun') ?? 'they/them',
-                    'emp_birthday' => $json->input('birthday') ?? '2000-01-01',
-                    'emp_brgy' => $json->input('brgy') ?? '',
-                    'emp_city' => $json->input('city') ?? '',
-                    'emp_province' => $json->input('province') ?? '',
-                    'emp_callcode' => $json->input('callcode') ?? '+63',
-                    'emp_phone' => $json->input('phone') ?? '',
+                    'emp_password' => Hash::make($temporaryPassword),
+                    'emp_surname' => $json->input('surname'),
+                    'emp_givname' => $json->input('givname'),
+                    'emp_midname' => $json->input('midname', ''),
+                    'emp_suffix' => $json->input('suffix', ''),
+                    'emp_studnum' => $json->input('studnum'),
+                    'emp_college' => $json->input('college'),
+                    'emp_program' => $json->input('program'),
+                    'emp_year' => $json->input('year'),
+                    'emp_bloc' => $json->input('bloc'),
+                    'emp_pronoun' => $json->input('pronoun', 'they/them'),
+                    'emp_birthday' => $json->input('birthday', '2000-01-01'),
+                    'emp_brgy' => $json->input('brgy', ''),
+                    'emp_city' => $json->input('city', ''),
+                    'emp_province' => $json->input('province', ''),
+                    'emp_country' => $json->input('country', 'PH'),
+                    'emp_callcode' => $json->input('callcode', '+63'),
+                    'emp_phone' => $json->input('phone'),
                     'emp_email' => $email,
-                    'emp_type' => $json->input('type') ?? 'Student',
-                    'emp_instore' => $json->input('instore') ?? 0,
-                ]);
+                    'emp_type' => $type,
+                    'emp_instore' => (bool) $json->input('instore', false),
+                    'emp_cred_changed' => null,
+                ];
 
-                // JSON SUCCESS
+                $employee = Employee::create($attributes);
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Signup successful',
-                    'data' => $employee
+                    'message' => 'Employee registered. Share the temporary password securely.',
+                    'data' => array_merge($employee->toArray(), [
+                        'temporary_password' => $temporaryPassword,
+                    ]),
                 ], 201);
-
             } catch (\Exception $e) {
                 // JSON ERROR
                 return response()->json([
@@ -242,11 +291,30 @@
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
 
+                if (! $employee->emp_cred_changed && $employee->emp_created?->addHours(24)->isPast()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The temporary password has expired. Contact a super admin.',
+                    ], 403);
+                }
+
+                // Banned or deleted accounts lose access immediately (REQ-UM-02)
+                if ($employee->emp_disabled || $employee->emp_deleted) {
+                    // JSON ERROR
+                    return response()->json(['success' => false, 'message' => 'Account disabled'], 403);
+                }
+
+                // Issue an API token for the session
+                $token = $employee->createToken('auth_token')->plainTextToken;
+
                 // JSON SUCCESS
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
-                    'data' => $employee
+                    'data' => array_merge($employee->toArray(), [
+                        'token' => $token,
+                        'must_change_password' => ! $employee->emp_cred_changed,
+                    ])
                 ], 200);
 
             } catch (\Exception $e) {
@@ -259,162 +327,132 @@
             }
         }
 
+        public function logout(Request $json)
+        {
+            $json->user()->currentAccessToken()?->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logout successful',
+            ]);
+        }
+
         public function backupCredentials(Request $json)
         {
-            /*
-                BACKUP CREDENTIALS
-                ----------
-                JSON REQUEST
-
-                user_id - integer (req)
-                account_type - string (req: customer | employee)
-                backupcallcode - string (opt)
-                backupphone - string (opt)
-                backupemail - string (opt)
-            */
-
             $validator = (new InputValidatorAPI())->backupCredentials($json);
-            if ($validator) return $validator;
-
-            try {
-                $userId = $json->input('user_id');
-                $accountType = strtolower($json->input('account_type'));
-
-                if ($accountType === 'customer') {
-                    $user = Customer::where('cust_id', $userId)->first();
-                    if (!$user) return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
-
-                    $user->update([
-                        'cust_backupcallcode' => $json->input('backupcallcode') ?? $user->cust_backupcallcode,
-                        'cust_backupphone'    => $json->input('backupphone') ?? $user->cust_backupphone,
-                        'cust_backupemail'    => $json->input('backupemail') ?? $user->cust_backupemail,
-                    ]);
-                } else {
-                    $user = Employee::where('emp_id', $userId)->first();
-                    if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
-
-                    $user->update([
-                        'emp_backupcallcode' => $json->input('backupcallcode') ?? $user->emp_backupcallcode,
-                        'emp_backupphone'    => $json->input('backupphone') ?? $user->emp_backupphone,
-                        'emp_backupemail'    => $json->input('backupemail') ?? $user->emp_backupemail,
-                    ]);
-                }
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Backup credentials updated successfully',
-                    'data' => $user
-                ], 200);
-
-            } catch (\Exception $e) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to update backup credentials',
-                    'error' => $e->getMessage()
-                ], 500);
+            if ($validator) {
+                return $validator;
             }
+
+            $user = $json->user();
+            $fields = array_filter([
+                'backupcallcode' => $json->input('backupcallcode'),
+                'backupphone' => $json->input('backupphone'),
+                'backupemail' => $json->input('backupemail'),
+            ], static fn ($value) => $value !== null && $value !== '');
+
+            if ($user instanceof Customer) {
+                $user->update([
+                    'cust_backupcallcode' => $fields['backupcallcode'] ?? $user->cust_backupcallcode,
+                    'cust_backupphone' => $fields['backupphone'] ?? $user->cust_backupphone,
+                    'cust_backupemail' => $fields['backupemail'] ?? $user->cust_backupemail,
+                ]);
+            } elseif ($user instanceof Employee) {
+                $user->update([
+                    'emp_backupcallcode' => $fields['backupcallcode'] ?? $user->emp_backupcallcode,
+                    'emp_backupphone' => $fields['backupphone'] ?? $user->emp_backupphone,
+                    'emp_backupemail' => $fields['backupemail'] ?? $user->emp_backupemail,
+                ]);
+            } else {
+                return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Backup credentials updated successfully',
+                'data' => $user,
+            ]);
         }
 
         public function recoverCredentials(Request $json)
         {
-            /*
-                RECOVERING CREDENTIALS
-                ----------
-                JSON REQUEST
-
-                identifier - string (req: phone or email)
-                account_type - string (req: customer | employee)
-            */
-
             $validator = (new InputValidatorAPI())->recoverCredentials($json);
-            if ($validator) return $validator;
-
-            try {
-                $identifier = $json->input('identifier');
-                $accountType = strtolower($json->input('account_type'));
-
-                if ($accountType === 'customer') {
-                    $user = Customer::where('cust_phone', $identifier)
-                        ->orWhere('cust_email', $identifier)
-                        ->orWhere('cust_backupemail', $identifier)
-                        ->first();
-                } else {
-                    $user = Employee::where('emp_email', $identifier)
-                        ->orWhere('emp_phone', $identifier)
-                        ->orWhere('emp_backupemail', $identifier)
-                        ->first();
-                }
-
-                if (!$user) {
-                    return response()->json(['success' => false, 'message' => 'Account not found'], 404);
-                }
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Credential recovery instructions issued successfully'
-                ], 200);
-
-            } catch (\Exception $e) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to initiate credential recovery',
-                    'error' => $e->getMessage()
-                ], 500);
+            if ($validator) {
+                return $validator;
             }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'If the account exists, recovery instructions will be sent to its registered contact.',
+            ]);
         }
 
         public function updateCredentials(Request $json)
         {
-            /*
-                UPDATING CREDENTIALS
-                ----------
-                JSON REQUEST
-
-                user_id - integer (req)
-                account_type - string (req: customer | employee)
-                new_password - string (req)
-                phone - string (opt)
-                email - string (opt)
-            */
-
             $validator = (new InputValidatorAPI())->updateCredentials($json);
-            if ($validator) return $validator;
+            if ($validator) {
+                return $validator;
+            }
 
-            try {
-                $userId = $json->input('user_id');
-                $accountType = strtolower($json->input('account_type'));
-                $newPassword = $json->input('new_password');
+            $user = $json->user();
+            $passwordField = $user instanceof Customer ? 'cust_password' : 'emp_password';
+            $changedField = $user instanceof Customer ? 'cust_cred_changed' : 'emp_cred_changed';
 
-                if ($accountType === 'customer') {
-                    $user = Customer::where('cust_id', $userId)->first();
-                    if (!$user) return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
-
-                    $updateData = ['cust_password' => Hash::make($newPassword)];
-                    if ($json->has('phone')) $updateData['cust_phone'] = $json->input('phone');
-                    if ($json->has('email')) $updateData['cust_email'] = $json->input('email');
-                    $user->update($updateData);
-
-                } else {
-                    $user = Employee::where('emp_id', $userId)->first();
-                    if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
-
-                    $updateData = ['emp_password' => Hash::make($newPassword)];
-                    if ($json->has('phone')) $updateData['emp_phone'] = $json->input('phone');
-                    if ($json->has('email')) $updateData['emp_email'] = $json->input('email');
-                    $user->update($updateData);
-                }
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Credentials updated successfully'
-                ], 200);
-
-            } catch (\Exception $e) {
+            if (! Hash::check($json->input('current_password'), $user->{$passwordField})) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to update credentials',
-                    'error' => $e->getMessage()
-                ], 500);
+                    'message' => 'Current password is incorrect.',
+                ], 422);
             }
+
+            $initialEmployeeGrace = $user instanceof Employee
+                && ! $user->emp_cred_changed
+                && $user->emp_created?->addHours(24)->isFuture();
+
+            $blocked = $this->credentialChangeBlocked($user->{$changedField});
+            if ($blocked && ! $initialEmployeeGrace) {
+                return $blocked;
+            }
+
+            $update = [$passwordField => Hash::make($json->input('new_password'))];
+            if ($user instanceof Customer) {
+                if ($json->has('phone')) {
+                    $update['cust_phone'] = $json->input('phone');
+                }
+                if ($json->has('email')) {
+                    $update['cust_email'] = $json->input('email');
+                }
+            } else {
+                if ($json->has('phone')) {
+                    $update['emp_phone'] = $json->input('phone');
+                }
+                if ($json->has('email')) {
+                    $update['emp_email'] = $json->input('email');
+                }
+            }
+            $update[$changedField] = now();
+            $user->update($update);
+            $user->tokens()->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Credentials updated successfully. Please sign in again.',
+            ]);
+        }
+
+        // REQ-APC-01 helper: returns a 409 response when the account's most
+        // recent credential change happened within the last thirty days.
+        // A null stamp means the credentials were never changed, so the
+        // change is allowed.
+        protected function credentialChangeBlocked($stamp)
+        {
+            if ($stamp && $stamp->copy()->addDays(30)->isFuture()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sensitive credentials cannot be changed within thirty days of the most recent change'
+                ], 409);
+            }
+
+            return null;
         }
     }

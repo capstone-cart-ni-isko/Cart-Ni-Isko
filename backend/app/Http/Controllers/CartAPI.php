@@ -23,7 +23,7 @@
             item_amount - numeric (opt)
             items - array of objects (opt, if adding multiple products)
                 [ {"prod_id": 1, "item_qty": 2, "item_amount": 100.00} ]
-            ord_tag - string (opt)
+            ord_tag - string (opt, default: 'CART-<8 random>')
             ord_status - string (opt, default: 'TO PROCESS')
         */
         public function addOrder(Request $json)
@@ -32,10 +32,15 @@
             if ($validator) return $validator;
 
             try {
-                $custId = $json->input('cust_id');
+                $custId = $this->customerId($json);
+                if ($custId === null || (int) $json->input('cust_id') !== $custId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer account mismatch.',
+                    ], 403);
+                }
 
-                // Verify customer exists
-                $customer = Customer::where('cust_id', $custId)->first();
+                $customer = Customer::find($custId);
                 if (!$customer) {
                     return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
                 }
@@ -85,10 +90,8 @@
                         ], 400);
                     }
 
-                    $qty = isset($item['item_qty']) && $item['item_qty'] > 0 ? (int)$item['item_qty'] : 1;
-                    $amount = isset($item['item_amount']) && $item['item_amount'] !== null
-                        ? (float)$item['item_amount']
-                        : ((float)$product->prod_price * $qty);
+                    $qty = max(1, (int) ($item['item_qty'] ?? 1));
+                    $amount = round((float) $product->prod_price * $qty, 2);
 
                     $validatedItems[] = [
                         'prod_id'     => $product->prod_id,
@@ -98,9 +101,8 @@
                     ];
                 }
 
-                // Generate order tag
-                $ordTag = $json->input('ord_tag') ?? ('ORD-' . strtoupper(Str::random(8)));
-                $ordStatus = $json->input('ord_status', 'TO PROCESS');
+                $ordTag = 'CART-' . strtoupper(Str::random(8));
+                $ordStatus = 'TO PROCESS';
 
                 // Create Order record
                 $order = Order::create([
@@ -127,7 +129,6 @@
 
                 // Update customer cart & orders counters
                 $customer->increment('cust_cart');
-                $customer->increment('cust_orders');
 
                 return response()->json([
                     'success' => true,
@@ -155,15 +156,21 @@
             cust_id - integer (opt)
             ord_status - string (opt)
             ord_id - integer (opt)
+            tag_prefix - string (opt: only orders whose ord_tag starts with it)
+            exclude_prefix - string (opt: only orders whose ord_tag does NOT start with it)
         */
         public function displayOrders(Request $json)
         {
             try {
-                $query = Order::with(['items.product', 'customer']);
-
-                if ($json->has('cust_id')) {
-                    $query->where('cust_id', $json->input('cust_id'));
+                $custId = $this->customerId($json);
+                if ($custId === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer authentication is required.',
+                    ], 403);
                 }
+
+                $query = Order::with(['items.product'])->where('cust_id', $custId);
 
                 if ($json->has('ord_status')) {
                     $query->where('ord_status', $json->input('ord_status'));
@@ -173,7 +180,22 @@
                     $query->where('ord_id', $json->input('ord_id'));
                 }
 
+                if ($json->filled('tag_prefix')) {
+                    $query->where('ord_tag', 'like', $json->input('tag_prefix') . '%');
+                }
+
+                if ($json->filled('exclude_prefix')) {
+                    $query->where('ord_tag', 'not like', $json->input('exclude_prefix') . '%');
+                }
+
                 $orders = $query->orderBy('ord_created', 'desc')->get();
+
+                // Every listed order belongs to the authenticated customer,
+                // so reuse that row instead of fetching it a second time
+                $customer = $json->user('sanctum');
+                if ($customer instanceof Customer) {
+                    $orders->each(fn ($order) => $order->setRelation('customer', $customer));
+                }
 
                 return response()->json([
                     'success' => true,
@@ -201,12 +223,16 @@
         public function searchOrders(Request $json)
         {
             try {
-                $q = $json->input('q', '');
-                $query = Order::with(['items.product', 'customer']);
-
-                if ($json->has('cust_id')) {
-                    $query->where('cust_id', $json->input('cust_id'));
+                $custId = $this->customerId($json);
+                if ($custId === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer authentication is required.',
+                    ], 403);
                 }
+
+                $q = $json->input('q', '');
+                $query = Order::with(['items.product', 'customer'])->where('cust_id', $custId);
 
                 if (!empty($q)) {
                     $query->where(function($builder) use ($q) {
@@ -249,6 +275,14 @@
         public function sortOrders(Request $json)
         {
             try {
+                $custId = $this->customerId($json);
+                if ($custId === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer authentication is required.',
+                    ], 403);
+                }
+
                 $sortBy = $json->input('sort_by', 'date');
                 $orderDir = strtolower($json->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
 
@@ -262,12 +296,7 @@
 
                 $column = $columnMap[$sortBy] ?? 'ord_created';
 
-                $query = Order::with(['items.product', 'customer']);
-
-                if ($json->has('cust_id')) {
-                    $query->where('cust_id', $json->input('cust_id'));
-                }
-
+                $query = Order::with(['items.product', 'customer'])->where('cust_id', $custId);
                 $orders = $query->orderBy($column, $orderDir)->get();
 
                 return response()->json([
@@ -301,11 +330,20 @@
                 $ordId = $json->input('ord_id');
                 $order = Order::where('ord_id', $ordId)->first();
 
-                if (!$order) {
+                if (! $order) {
                     return response()->json(['success' => false, 'message' => 'Order not found'], 404);
                 }
 
-                $custId = $order->cust_id;
+                $custId = $this->customerId($json);
+                if ($custId === null || (int) $order->cust_id !== $custId) {
+                    return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                }
+                if (! str_starts_with(strtoupper((string) $order->ord_tag), 'CART-')) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only cart orders can be removed.',
+                    ], 409);
+                }
 
                 // Delete associated items first
                 Item::where('ord_id', $ordId)->delete();
@@ -318,9 +356,6 @@
                 if ($customer) {
                     if ($customer->cust_cart > 0) {
                         $customer->decrement('cust_cart');
-                    }
-                    if ($customer->cust_orders > 0) {
-                        $customer->decrement('cust_orders');
                     }
                 }
 
