@@ -16,6 +16,7 @@ use App\Http\Controllers\ProductsAPI;
 use App\Http\Controllers\ReviewsAPI;
 use App\Http\Controllers\SettingsAPI;
 use App\Http\Controllers\WishlistAPI;
+use App\Http\Controllers\UploadAPI;
 
 // Public Auth API Routes (no token required, login/signup issue the Sanctum token)
 Route::post('/auth/cust_signup', [AuthAPI::class, 'customerSignup']);
@@ -96,6 +97,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/appoint/sort', [AppointAPI::class, 'sortAppointments']);
     Route::get('/appoint/slots', [AppointAPI::class, 'displaySlots']);
     Route::put('/appoint/update', [AppointAPI::class, 'updateAppointmentDetails']);
+
+    // Uploads API Routes (real file uploads for product / profile photos)
+    Route::post('/uploads', [UploadAPI::class, 'uploadImage']);
 
     // Products API Routes (staff management actions)
     Route::post('/products/add', [ProductsAPI::class, 'addProduct'])->middleware('role:admin');

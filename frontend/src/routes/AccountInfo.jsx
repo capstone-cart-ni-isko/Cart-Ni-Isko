@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -6,6 +6,7 @@ import collegesData from '../data/colleges.json'
 import Avatar from '../components/ui/Avatar.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 import { updateAccount } from '../services/accounts.js'
+import { uploadImage } from '../services/upload.js'
 
 const selectStyle = {
   backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
@@ -48,10 +49,44 @@ function AccountInfo() {
     campus: currentUser?.campus || 'N/A',
     college: currentUser?.college || 'N/A',
     course: currentUser?.course || 'N/A',
+    pronoun: currentUser?.pronoun || '',
+    birthday: currentUser?.birthday || '',
+    brgy: currentUser?.brgy || '',
+    city: currentUser?.city || '',
+    province: currentUser?.province || '',
+    country: currentUser?.country || '',
+    callcode: currentUser?.callcode || '+63',
+    backupcallcode: currentUser?.backupcallcode || '',
+    backupphone: currentUser?.backupphone || '',
+    backupemail: currentUser?.backupemail || '',
   })
   const [saveState, setSaveState] = useState('')
   const [availableColleges, setAvailableColleges] = useState([])
   const [availableDepartments, setAvailableDepartments] = useState([])
+  const [photo, setPhoto] = useState(currentUser?.avatarImage || '')
+  const fileInputRef = useRef(null)
+
+  // Handle profile photo selection → real file upload to backend storage
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(file.type)) {
+      setSaveState('Please upload a PNG, JPEG, GIF, or WebP image.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setSaveState('Image size exceeds the 10MB limit.')
+      return
+    }
+    setSaveState('Uploading photo…')
+    try {
+      const url = await uploadImage(file, 'avatar')
+      setPhoto(url)
+      setSaveState('Photo uploaded — click Save Changes to apply.')
+    } catch (err) {
+      setSaveState(err.message || 'Unable to upload photo.')
+    }
+  }
 
   useEffect(() => {
     if (form.campus) {
@@ -105,6 +140,17 @@ function AccountInfo() {
         cust_campus: form.campus,
         cust_course: form.course,
         cust_year: form.yearLevel,
+        cust_pronoun: form.pronoun,
+        cust_birthday: form.birthday,
+        cust_brgy: form.brgy,
+        cust_city: form.city,
+        cust_province: form.province,
+        cust_country: form.country,
+        cust_callcode: form.callcode,
+        cust_backupcallcode: form.backupcallcode,
+        cust_backupphone: form.backupphone,
+        cust_backupemail: form.backupemail,
+        cust_photo: photo,
       })
       // The response is the raw cust_* row; rebuild the mapped fields the UI
       // reads so Profile/Settings reflect the save immediately.
@@ -121,6 +167,17 @@ function AccountInfo() {
         campus: form.campus,
         college: form.college,
         course: form.course,
+        pronoun: form.pronoun,
+        birthday: form.birthday,
+        brgy: form.brgy,
+        city: form.city,
+        province: form.province,
+        country: form.country,
+        callcode: form.callcode,
+        backupcallcode: form.backupcallcode,
+        backupphone: form.backupphone,
+        backupemail: form.backupemail,
+        avatarImage: photo,
       }))
       setSaveState('Changes saved!')
     } catch (error) {
@@ -148,14 +205,16 @@ function AccountInfo() {
           <div className="flex flex-col items-center justify-center">
             <div className="relative">
               <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-md">
-                <Avatar name={fullName} size={96} className="w-full h-full" userId={currentUser?.cust_id} />
+                <Avatar name={fullName} size={96} className="w-full h-full" userId={currentUser?.cust_id} src={photo} />
               </div>
               <button
                 type="button"
+                onClick={() => fileInputRef.current?.click()}
                 className="absolute bottom-0 right-0 bg-brand-orange hover:bg-brand-orange-dark text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-md active:scale-95 transition-all"
               >
                 EDIT
               </button>
+              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/gif" className="hidden" onChange={handlePhotoChange} />
             </div>
           </div>
 
@@ -216,6 +275,53 @@ function AccountInfo() {
             </div>
           </div>
 
+          {/* Additional Information Section */}
+          <div className="space-y-5">
+            <h2 className="text-base font-black text-gray-900">Additional Information</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClasses}>Pronoun</label>
+                <input name="pronoun" value={form.pronoun} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Birthday</label>
+                <input name="birthday" type="date" value={form.birthday} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Barangay</label>
+                <input name="brgy" value={form.brgy} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>City</label>
+                <input name="city" value={form.city} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Province</label>
+                <input name="province" value={form.province} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Country</label>
+                <input name="country" value={form.country} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Phone Code</label>
+                <input name="callcode" value={form.callcode} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Backup Call Code</label>
+                <input name="backupcallcode" value={form.backupcallcode} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Backup Phone</label>
+                <input name="backupphone" value={form.backupphone} onChange={handleChange} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Backup Email</label>
+                <input name="backupemail" type="email" value={form.backupemail} onChange={handleChange} className={inputClasses} />
+              </div>
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={saveState === 'Saving…'}
@@ -248,7 +354,7 @@ function AccountInfo() {
           {/* Profile Photo Section */}
           <div className="px-7 py-6 border-b border-gray-100 flex items-center gap-5">
             <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-md shrink-0">
-              <Avatar name={fullName} size={64} className="w-full h-full" userId={currentUser?.cust_id} />
+              <Avatar name={fullName} size={64} className="w-full h-full" userId={currentUser?.cust_id} src={photo} />
             </div>
             <div className="min-w-0">
               <h3 className="text-lg font-bold text-gray-900">{fullName}</h3>
@@ -256,6 +362,7 @@ function AccountInfo() {
             </div>
             <button
               type="button"
+              onClick={() => fileInputRef.current?.click()}
               className="ml-auto flex items-center gap-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm px-5 py-2.5 rounded-xl shadow-sm active:scale-95 transition-all shrink-0"
             >
               <PencilIcon className="w-3.5 h-3.5" />
@@ -290,6 +397,53 @@ function AccountInfo() {
                 <div>
                   <label className={labelClasses}>Phone <span className="text-red-500">*</span></label>
                   <input name="phone" type="tel" value={form.phone} onChange={handleChange} className={inputClasses} />
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Information Section */}
+            <div className="px-7 py-6 border-b border-gray-100 space-y-5">
+              <h2 className="text-base font-black text-gray-900">Additional Information</h2>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                  <label className={labelClasses}>Pronoun</label>
+                  <input name="pronoun" value={form.pronoun} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>Birthday</label>
+                  <input name="birthday" type="date" value={form.birthday} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>Barangay</label>
+                  <input name="brgy" value={form.brgy} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>City</label>
+                  <input name="city" value={form.city} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>Province</label>
+                  <input name="province" value={form.province} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>Country</label>
+                  <input name="country" value={form.country} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>Phone Code</label>
+                  <input name="callcode" value={form.callcode} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>Backup Call Code</label>
+                  <input name="backupcallcode" value={form.backupcallcode} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>Backup Phone</label>
+                  <input name="backupphone" value={form.backupphone} onChange={handleChange} className={inputClasses} />
+                </div>
+                <div>
+                  <label className={labelClasses}>Backup Email</label>
+                  <input name="backupemail" type="email" value={form.backupemail} onChange={handleChange} className={inputClasses} />
                 </div>
               </div>
             </div>

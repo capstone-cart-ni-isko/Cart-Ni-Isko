@@ -39,6 +39,7 @@
             'cust_cart',
             'cust_orders',
             'cust_appoints',
+            'cust_photo',
         ];
 
         // Define the hidden attributes that should not be visible in JSON responses

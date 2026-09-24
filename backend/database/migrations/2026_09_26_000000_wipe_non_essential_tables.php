@@ -22,6 +22,10 @@ return new class extends Migration
     {
         if (! Schema::hasTable('customer')) return;
 
+        // This migration is for PostgreSQL only; SQLite-based tests
+        // (phpunit.xml uses :memory:) do not have pg_tables.
+        if (DB::connection()->getDriverName() !== 'pgsql') return;
+
         $keep = ['customer', 'employee', 'migrations', 'personal_access_tokens',
                  'password_reset_tokens', 'cache', 'cache_locks', 'sessions',
                  'jobs', 'failed_jobs', 'users'];

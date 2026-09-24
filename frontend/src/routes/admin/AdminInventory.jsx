@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
+import { uploadImage } from '../../services/upload.js'
 
 export default function AdminInventory() {
   const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, products: backendProducts } = useAdmin()
@@ -48,7 +49,58 @@ export default function AdminInventory() {
   const [editCategory, setEditCategory] = useState('Shirts')
   const [editPrice, setEditPrice] = useState('')
   const [editStock, setEditStock] = useState('')
+  const [editPhoto, setEditPhoto] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
+
+  // File inputs for real photo uploads (add + edit modals)
+  const addPhotoRef = useRef(null)
+  const editPhotoRef = useRef(null)
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
+
+  // Product photo upload → backend storage, then keep the returned URL
+  const handleAddPhotoChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(file.type)) {
+      window.alert('Please choose a PNG, JPEG, GIF, or WebP image.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      window.alert('Image size exceeds the 10MB limit.')
+      return
+    }
+    setIsUploadingPhoto(true)
+    try {
+      const url = await uploadImage(file, 'product')
+      setNewProdPhoto(url)
+    } catch (err) {
+      window.alert(err.message || 'Unable to upload the image.')
+    } finally {
+      setIsUploadingPhoto(false)
+    }
+  }
+
+  const handleEditPhotoChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(file.type)) {
+      window.alert('Please choose a PNG, JPEG, GIF, or WebP image.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      window.alert('Image size exceeds the 10MB limit.')
+      return
+    }
+    setIsUploadingPhoto(true)
+    try {
+      const url = await uploadImage(file, 'product')
+      setEditPhoto(url)
+    } catch (err) {
+      window.alert(err.message || 'Unable to upload the image.')
+    } finally {
+      setIsUploadingPhoto(false)
+    }
+  }
 
   // Toggle expand row
   const toggleRow = (id) => {
@@ -131,6 +183,11 @@ export default function AdminInventory() {
     setEditCategory(prod.categoryName || 'Shirts')
     setEditPrice(String(prod.price ?? ''))
     setEditStock(String(prod.totalStock ?? ''))
+    setEditPhoto(
+      prod.image && (prod.image.startsWith('http') || prod.image.startsWith('/storage/'))
+        ? prod.image
+        : ''
+    )
     setShowEditProductModal(true)
   }
 
@@ -144,6 +201,7 @@ export default function AdminInventory() {
       prod_categ: editCategory,
       prod_price: parseFloat(editPrice) || 0,
       prod_qty: parseInt(editStock, 10) || 0,
+      ...(editPhoto ? { prod_images: [editPhoto] } : {}),
     })
     if (!result.success) return
     setShowEditProductModal(false)
@@ -860,15 +918,28 @@ export default function AdminInventory() {
                 />
               </div>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Product Photo URL</label>
+                <label className="font-semibold text-slate-700 block mb-1">Product Photo</label>
+                <button
+                  type="button"
+                  onClick={() => addPhotoRef.current?.click()}
+                  className="w-full h-10 flex items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 text-xs font-semibold text-slate-600 hover:border-brand-orange hover:text-brand-orange bg-slate-50 cursor-pointer"
+                >
+                  {isUploadingPhoto ? 'Uploading…' : newProdPhoto ? 'Replace Photo' : 'Upload Photo'}
+                </button>
                 <input
-                  type="text"
-                  required
-                  placeholder="https://.../product-image.png"
-                  value={newProdPhoto}
-                  onChange={(e) => setNewProdPhoto(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                  ref={addPhotoRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  className="hidden"
+                  onChange={handleAddPhotoChange}
                 />
+                {newProdPhoto && (
+                  <img
+                    src={getImageUrl(newProdPhoto)}
+                    alt="Product preview"
+                    className="mt-2 h-20 w-20 rounded-md border border-slate-200 object-contain"
+                  />
+                )}
               </div>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Category</label>
@@ -1012,6 +1083,30 @@ export default function AdminInventory() {
                   onChange={(e) => setEditDesc(e.target.value)}
                   className="w-full px-2.5 py-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange resize-none"
                 />
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Product Photo</label>
+                <button
+                  type="button"
+                  onClick={() => editPhotoRef.current?.click()}
+                  className="w-full h-10 flex items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 text-xs font-semibold text-slate-600 hover:border-brand-orange hover:text-brand-orange bg-slate-50 cursor-pointer"
+                >
+                  {isUploadingPhoto ? 'Uploading…' : editPhoto ? 'Replace Photo' : 'Upload Photo'}
+                </button>
+                <input
+                  ref={editPhotoRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  className="hidden"
+                  onChange={handleEditPhotoChange}
+                />
+                {editPhoto && (
+                  <img
+                    src={getImageUrl(editPhoto)}
+                    alt="Product preview"
+                    className="mt-2 h-20 w-20 rounded-md border border-slate-200 object-contain"
+                  />
+                )}
               </div>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Category</label>

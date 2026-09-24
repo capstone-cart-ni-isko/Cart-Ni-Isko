@@ -508,6 +508,7 @@
                         'cust_brgy', 'cust_city', 'cust_province', 'cust_country',
                         'cust_callcode', 'cust_phone', 'cust_email', 'cust_college',
                         'cust_username', 'cust_campus', 'cust_course', 'cust_year',
+                        'cust_photo',
                     ]), array_flip($columns)));
                 } else {
                     if ((int) $actor->getKey() !== $userId && ! $this->isSuperAdmin($actor)) {
@@ -519,7 +520,7 @@
                         'emp_studnum', 'emp_college', 'emp_program', 'emp_year', 'emp_bloc',
                         'emp_pronoun', 'emp_birthday', 'emp_brgy', 'emp_city',
                         'emp_province', 'emp_country', 'emp_callcode', 'emp_phone',
-                        'emp_email', 'emp_instore',
+                        'emp_email', 'emp_instore', 'emp_photo',
                     ]));
                 }
 

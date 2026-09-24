@@ -1,7 +1,7 @@
 /**
  * Default avatar.
  *
- * Odd cust_id  → aqua-blue gradient background with a white head silhouette.
+ * Odd cust_id  → aqua-blue background with a white head silhouette.
  * Even cust_id → dark-grey background with a fiery red-orange head silhouette.
  * No userId   → brand-blue/orange fallback.
  */
@@ -18,8 +18,7 @@ export default function Avatar({ name = '', src, size = 40, className = '', user
   }
 
   const isOdd = userId != null ? Number(userId) % 2 !== 0 : null
-  const blueGrad = 'url(#aqua-grad)'
-  const background = isOdd === true ? blueGrad : isOdd === false ? '#2D2D2D' : '#2563EB'
+  const background = isOdd === true ? '#00B4D8' : isOdd === false ? '#2D2D2D' : '#2563EB'
   const headColor = isOdd === true ? '#FFFFFF' : '#F97316'
 
   return (
@@ -31,12 +30,6 @@ export default function Avatar({ name = '', src, size = 40, className = '', user
       style={{ width: size, height: size }}
       xmlns="http://www.w3.org/2000/svg"
     >
-      <defs>
-        <linearGradient id="aqua-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#00B4D8" />
-          <stop offset="100%" stopColor="#48CAE4" />
-        </linearGradient>
-      </defs>
       <circle cx="20" cy="20" r="20" fill={background} />
       <g fill={headColor}>
         <circle cx="20" cy="14" r="7" />

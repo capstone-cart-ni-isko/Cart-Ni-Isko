@@ -43,6 +43,7 @@
             'emp_backupemail',
             'emp_type',
             'emp_instore',
+            'emp_photo',
         ];
 
         // Define the hidden attributes that should not be visible in JSON responses

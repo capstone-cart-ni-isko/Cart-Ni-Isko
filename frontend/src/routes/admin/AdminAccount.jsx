@@ -5,6 +5,7 @@ import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import Avatar from '../../components/ui/Avatar.jsx'
 import { fetchAccounts, updateAccount } from '../../services/accounts.js'
 import { updateCredentials } from '../../services/auth.js'
+import { uploadImage } from '../../services/upload.js'
 
 export default function AdminAccount() {
   const { showToast } = useToast()
@@ -79,13 +80,13 @@ export default function AdminAccount() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Handle avatar file selection
-  const handleFileChange = (e) => {
+  // Handle avatar file selection → real file upload to backend storage
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif'].includes(file.type)) {
-      showToast('Please upload a valid PNG, JPEG, or GIF image.', 'error')
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(file.type)) {
+      showToast('Please upload a valid PNG, JPEG, GIF, or WebP image.', 'error')
       return
     }
 
@@ -94,15 +95,14 @@ export default function AdminAccount() {
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result
-      if (dataUrl) {
-        setAvatarPreview(dataUrl)
-        showToast('Image preview loaded. Click Save to apply.', 'info')
-      }
+    try {
+      showToast('Uploading image…', 'info')
+      const url = await uploadImage(file, 'avatar')
+      setAvatarPreview(url)
+      showToast('Image uploaded. Click Save to apply.', 'success')
+    } catch (err) {
+      showToast(err?.message || 'Unable to upload the image.', 'error')
     }
-    reader.readAsDataURL(file)
   }
 
   // Remove avatar
@@ -142,6 +142,7 @@ export default function AdminAccount() {
         emp_givname: cleanFirst,
         emp_surname: cleanLast,
         emp_email: cleanEmail,
+        emp_photo: avatarPreview || null,
       })
 
       const fullName = `${cleanFirst} ${cleanLast}`
@@ -162,6 +163,7 @@ export default function AdminAccount() {
         emp_givname: cleanFirst,
         emp_surname: cleanLast,
         emp_email: cleanEmail,
+        emp_photo: avatarPreview || null,
       }))
       setIsEmailEditable(false)
       showToast('Account profile updated successfully!', 'success')
@@ -293,7 +295,7 @@ export default function AdminAccount() {
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
-                    accept="image/png,image/jpeg,image/gif"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
                     className="hidden"
                   />
                   <button

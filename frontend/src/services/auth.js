@@ -121,6 +121,7 @@ export function mapEmployee(employeeData) {
     modules,
     avatar: initials,
     avatarBg: 'blue',
+    avatarImage: employeeData.emp_photo || '',
     status: employeeData.emp_disabled ? 'Disabled' : 'Active',
     mustChangePassword: Boolean(employeeData.must_change_password),
     dateAdded: employeeData.emp_created

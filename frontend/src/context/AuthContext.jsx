@@ -86,6 +86,8 @@ export function AuthProvider({ children }) {
       college: extras.college || account?.cust_college || 'N/A',
       course: extras.course || account?.cust_course || 'N/A',
       studentId: extras.studentId || 'N/A',
+      // Real uploaded profile photo (URL served by the backend)
+      avatarImage: account?.cust_photo || extras.avatarImage || '',
     }
   }
 
