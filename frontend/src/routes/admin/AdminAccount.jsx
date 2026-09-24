@@ -282,6 +282,7 @@ export default function AdminAccount() {
                   name={currentAdminUser?.name || 'MS'}
                   size={avatarPreview ? 88 : 88}
                   className="w-full h-full"
+                  userId={currentAdminUser?.id}
                 />
               </div>
 

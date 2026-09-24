@@ -152,6 +152,7 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
               name={currentAdminUser?.name || 'Admin'}
               size={28}
               className="border border-slate-200"
+              userId={currentAdminUser?.id}
             />
             <div className="hidden sm:flex flex-col text-left leading-tight">
               <span className="text-xs font-semibold text-slate-900 truncate max-w-[120px]">

@@ -148,7 +148,7 @@ function AccountInfo() {
           <div className="flex flex-col items-center justify-center">
             <div className="relative">
               <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-md">
-                <Avatar name={fullName} size={96} className="w-full h-full" />
+                <Avatar name={fullName} size={96} className="w-full h-full" userId={currentUser?.cust_id} />
               </div>
               <button
                 type="button"
@@ -248,7 +248,7 @@ function AccountInfo() {
           {/* Profile Photo Section */}
           <div className="px-7 py-6 border-b border-gray-100 flex items-center gap-5">
             <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-md shrink-0">
-              <Avatar name={fullName} size={64} className="w-full h-full" />
+              <Avatar name={fullName} size={64} className="w-full h-full" userId={currentUser?.cust_id} />
             </div>
             <div className="min-w-0">
               <h3 className="text-lg font-bold text-gray-900">{fullName}</h3>

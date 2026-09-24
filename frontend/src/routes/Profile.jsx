@@ -120,7 +120,7 @@ function Profile() {
   const handleLogout = () => {
     logout()
     showToast('Signed out successfully')
-    navigate('/signin')
+    navigate('/')
   }
 
   // Fetch appointments from the backend
@@ -180,7 +180,7 @@ function Profile() {
             <div className="flex items-start justify-between gap-3 relative z-10">
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm">
-                  <Avatar name={fullName} size={64} className="w-full h-full scale-125" />
+                  <Avatar name={fullName} size={64} className="w-full h-full scale-125" userId={currentUser?.cust_id} />
                 </div>
                 <div className="min-w-0 text-white">
                   <h1 className="text-lg font-black tracking-tight leading-tight truncate">{fullName}</h1>
@@ -449,7 +449,7 @@ function Profile() {
           {/* Left: Avatar + Info */}
           <div className="flex items-center gap-4 relative z-10">
             <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm border-2 border-white/40">
-              <Avatar name={fullName} size={64} className="w-full h-full scale-125" />
+              <Avatar name={fullName} size={64} className="w-full h-full scale-125" userId={currentUser?.cust_id} />
             </div>
             <div className="text-white">
               <h1 className="text-xl md:text-2xl font-black tracking-tight leading-tight">{fullName}</h1>

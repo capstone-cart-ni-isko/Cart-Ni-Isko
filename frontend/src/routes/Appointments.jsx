@@ -455,7 +455,7 @@ function Appointments() {
             {/* Avatar + Info */}
             <div className="flex items-center gap-3.5 relative z-10 min-w-0">
               <div className="w-16 h-16 rounded-full border-2 border-white overflow-hidden bg-blue-100 shadow-md shrink-0">
-                <Avatar name={fullName} size={64} className="w-full h-full" />
+                <Avatar name={fullName} size={64} className="w-full h-full" userId={currentUser?.cust_id} />
               </div>
               <div className="min-w-0 text-white">
                 <h1 className="text-lg font-black tracking-tight leading-tight truncate">{fullName}</h1>
@@ -777,7 +777,7 @@ function Appointments() {
           {/* User Info */}
           <div className="flex items-center gap-3.5 relative z-10">
             <div className="w-12 h-12 rounded-md overflow-hidden shrink-0 border border-white/20">
-              <Avatar name={fullName} size={48} className="w-full h-full" />
+              <Avatar name={fullName} size={48} className="w-full h-full" userId={currentUser?.cust_id} />
             </div>
             <div className="text-white">
               <h1 className="text-base font-extrabold tracking-tight leading-tight">{fullName}</h1>

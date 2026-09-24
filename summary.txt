@@ -1,0 +1,11 @@
+=== ALL CHANGES COMPLETE ===
+
+1. Fixed API Base URL: https://cartniisko-api.supabase.co/rest/v1
+2. Fixed AdminDelivery.jsx syntax errors (lines 263, 648)
+3. LoadingSpinner: BU-red #EF4444 replacing all 'loading..' text
+4. Avatar: Brand-red gradient (from-brand-red-600 to-brand-red-500)
+5. Product placeholders: Themed icons per category
+6. useCatalog hook: 5-minute TTL caching added
+7. 12+ locations: 'loading..' replaced with LoadingSpinner
+8. Admin UI: font-sizes improved (text-xs to text-sm)
+9. All changes: Strict SRS schema document compliance

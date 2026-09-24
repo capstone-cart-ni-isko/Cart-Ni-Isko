@@ -100,7 +100,7 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
           <div className="gradient-orange-header px-6 pt-12 pb-8 text-white relative">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-full border-2 border-white bg-blue-100 overflow-hidden">
-                <Avatar name={user?.fullName} size={56} className="w-full h-full" />
+                <Avatar name={user?.fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} />
               </div>
               <div>
                 <p className="font-bold text-lg">{user ? user.fullName : 'Guest Isko'}</p>
