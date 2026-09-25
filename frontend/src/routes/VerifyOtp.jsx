@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import OtpInput from '../components/ui/OtpInput.jsx'
 import Button from '../components/ui/Button.jsx'
-import backIcon from '../assets/icons/common/back.svg'
+import BackButton from '../components/ui/BackButton.jsx'
 
 function VerifyOtp() {
   const navigate = useNavigate()
@@ -59,13 +59,7 @@ function VerifyOtp() {
         <div>
           {/* Header row with back button */}
           <div className="flex items-center mb-6">
-            <button
-              type="button"
-              onClick={() => navigate('/signin')}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <img src={backIcon} alt="Back" className="w-5 h-5" />
-            </button>
+            <BackButton to="/signin" label="Back to Login" />
           </div>
 
           <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Verify Device</h1>

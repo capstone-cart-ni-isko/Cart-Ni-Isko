@@ -333,10 +333,30 @@
 
                 $appointments = $query->orderBy('appoint_date', 'asc')->get();
 
+                // SRS: APPOINTMENT has no order column - the link to the order a
+                // claim is for lives in PICKUP (appoint_id -> ord_id), written by
+                // POST /checkout/payment. Surfacing it here lets the ribbon's
+                // Appointments list open the matching order without any schema
+                // change. One extra query for the whole page, never per row.
+                $orders = $this->ordersFor($appointments->pluck('appoint_id')->all());
+
+                $rows = $appointments->map(function (Appointment $appointment) use ($orders) {
+                    $link = $orders[(int) $appointment->appoint_id] ?? null;
+                    if ($link === null) {
+                        return $appointment;
+                    }
+
+                    return array_merge($appointment->toArray(), [
+                        'ord_id'     => $link['ord_id'],
+                        'ord_tag'    => $link['ord_tag'],
+                        'ord_status' => $link['ord_status'],
+                    ]);
+                });
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Appointments retrieved successfully',
-                    'data' => $appointments
+                    'data' => $rows
                 ], 200);
 
             } catch (\Exception $e) {
@@ -530,6 +550,36 @@
         // ==========================================
         // SLOT AVAILABILITY RULES (REQ-AB-01 / REQ-AB-02 / REQ-AB-03 / REQ-SC-03)
         // ==========================================
+
+        /*
+            Resolves the order behind each appointment, keyed by appoint_id.
+            Reads the SRS PICKUP -> ORDERS pair in a single indexed query; an
+            appointment that was never claimed through checkout (a plain store
+            visit) simply has no entry.
+        */
+        protected function ordersFor(array $appointIds): array
+        {
+            $appointIds = array_values(array_filter(array_map('intval', $appointIds)));
+            if ($appointIds === []) {
+                return [];
+            }
+
+            $rows = DB::table('pickup')
+                ->join('orders', 'orders.ord_id', '=', 'pickup.ord_id')
+                ->whereIn('pickup.appoint_id', $appointIds)
+                ->get(['pickup.appoint_id', 'orders.ord_id', 'orders.ord_tag', 'orders.ord_status']);
+
+            $links = [];
+            foreach ($rows as $row) {
+                $links[(int) $row->appoint_id] = [
+                    'ord_id'     => $row->ord_id,
+                    'ord_tag'    => $row->ord_tag,
+                    'ord_status' => $row->ord_status,
+                ];
+            }
+
+            return $links;
+        }
 
         /*
             Computes capacity, staffing and the resulting availability for a

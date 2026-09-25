@@ -3,11 +3,11 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import collegesData from '../data/colleges.json'
-import backIcon from '../assets/icons/common/back.svg'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import OtpInput from '../components/ui/OtpInput.jsx'
 import Button from '../components/ui/Button.jsx'
 import AppShell from '../components/layout/AppShell.jsx'
+import BackButton from '../components/ui/BackButton.jsx'
 
 const selectStyle = {
   backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
@@ -297,13 +297,7 @@ function SignUp() {
         <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-100 shadow-xl p-8 flex flex-col justify-between min-h-[580px] z-10 animate-fade-in relative">
           <div>
             <div className="flex items-center justify-between mb-8">
-              <button
-                type="button"
-                onClick={handleBack}
-                className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <img src={backIcon} alt="Back" className="w-5 h-5" />
-              </button>
+              <BackButton onClick={handleBack} label="Back" className="w-10 justify-center" />
               <div className="flex gap-1.5 w-32 justify-end">
                 {steps.map((_, i) => (
                   <div

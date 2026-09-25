@@ -2,9 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import AppShell from '../components/layout/AppShell.jsx'
+import BackButton from '../components/ui/BackButton.jsx'
 import Button from '../components/ui/Button.jsx'
-import backIcon from '../assets/icons/common/back.svg'
-
 const steps = ['education', 'bio', 'success']
 
 const yearLevels = ['1st Year Student', '2nd Year Student', '3rd Year Student', '4th Year Student', '5th Year Student']
@@ -64,13 +63,7 @@ function ProfileSetup() {
         <div>
           {/* Header row with back button */}
           <div className="flex items-center justify-between mb-6">
-            <button
-              type="button"
-              onClick={prevStep}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-gray hover:bg-gray-200 transition-colors"
-            >
-              <img src={backIcon} alt="Back" className="w-5 h-5" />
-            </button>
+            <BackButton onClick={prevStep} label="Back" className="w-10 justify-center" />
             <div className="flex gap-2 w-32">
               {steps.map((_, i) => (
                 <div

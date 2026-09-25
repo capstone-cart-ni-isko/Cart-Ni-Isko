@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { useCart } from '../hooks/useCart.js'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
@@ -7,17 +8,17 @@ import AppShell from '../components/layout/AppShell.jsx'
 import BottomNav from '../components/layout/BottomNav.jsx'
 import Button from '../components/ui/Button.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import { ApiErrorText } from '../components/ui/ApiErrorBoundary.jsx'
+import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
+import BackButton from '../components/ui/BackButton.jsx'
+import { CloseIcon } from '../components/ui/Icons.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import { CheckIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { getDispatch, payOrder } from '../services/checkout.js'
 import { addToCart as addCartOrder, removeFromCart as removeCartOrder } from '../services/cart.js'
 import { removeProductFromOrder } from '../services/orders.js'
-import {
-  fetchSlots,
-  createAppointment,
-  closeAppointment,
-} from '../services/appointments.js'
+import { APPOINT_TYPE } from '../services/appointments.js'
 
 /* Delivery tiers previewed through POST /checkout/dispatch (SRS shipping fees). */
 const DELIVERY_TIERS = [
@@ -40,30 +41,53 @@ function pickOrdId(res) {
   return res?.ord_id ?? null
 }
 
-function slotTime(slot) {
-  return (
-    slot.slot_start ?? slot.start_time ?? slot.start ?? slot.time ?? slot.slot_time ?? ''
-  )
-}
-
-function slotOpen(slot) {
-  if (slot.available === false || slot.is_available === false) return false
-  if (slot.open === false || slot.full === true) return false
-  const booked = Number(slot.booked ?? slot.taken ?? slot.reserved ?? slot.used ?? 0)
-  const capacity = Number(slot.capacity ?? slot.limit ?? 0)
-  return !(capacity > 0 && booked >= capacity)
-}
-
-function slotReason(slot) {
-  return slot.reason || slot.disabled_reason || 'Fully booked'
-}
-
 function addressText(addr) {
   if (!addr) return ''
   if (typeof addr === 'string') return addr
   return [addr.addressLine, addr.barangay, addr.city, addr.province, addr.postalCode]
     .filter(Boolean)
     .join(', ')
+}
+
+/**
+ * The pickup gate. Selecting "In-Store Pickup" mounts and opens the very same
+ * <AppointmentForm/> used by the Appointments page; on success it closes and
+ * hands the booked claim slot straight back to the checkout screen.
+ */
+function PickupSlotModal({ custId, onBooked, onClose }) {
+  return createPortal(
+    <div className="fixed inset-0 z-[125000] flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <button
+        type="button"
+        aria-label="Close slot booking"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/50 cursor-pointer"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full sm:max-w-md bg-slate-50 rounded-lg animate-slide-up max-h-[92vh] overflow-y-auto p-3"
+      >
+        <AppointmentForm
+          type={APPOINT_TYPE.CLAIM}
+          custId={custId}
+          required
+          title="Book Your In-Store Pickup Slot"
+          onSuccess={onBooked}
+          onCancel={onClose}
+        />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close slot booking"
+          className="absolute top-5 right-5 w-8 h-8 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center cursor-pointer"
+        >
+          <CloseIcon />
+        </button>
+      </div>
+    </div>,
+    document.body
+  )
 }
 
 function CheckoutPlaceholder() {
@@ -83,11 +107,11 @@ function CheckoutPlaceholder() {
   const [dispatchType, setDispatchType] = useState('pickup')
   const [countdown, setCountdown] = useState(5)
 
-  // Pickup scheduling (REQ-OC-01: pickup claim slot is part of checkout)
-  const [pickupDate, setPickupDate] = useState('')
-  const [slots, setSlots] = useState([])
-  const [slot, setSlot] = useState('')
-  const [slotsError, setSlotsError] = useState('')
+  // In-Store Pickup: the claim slot is booked through the shared
+  // <AppointmentForm/>; this only holds the resulting record and whether that
+  // form is currently open. Delivery never touches either value.
+  const [appointment, setAppointment] = useState(null)
+  const [slotFormOpen, setSlotFormOpen] = useState(false)
 
   // Delivery (address + priority tier)
   const [addressIdx, setAddressIdx] = useState(0)
@@ -169,30 +193,11 @@ function CheckoutPlaceholder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directOrdId, dispatchType, tier, addressIdx, useCustomAddress, customAddress])
 
-  /* Bookable pickup slots for the chosen date. */
-  useEffect(() => {
-    if (dispatchType !== 'pickup' || !pickupDate) {
-      setSlots([])
-      return undefined
-    }
-    let cancelled = false
-    ;(async () => {
-      setSlotsError('')
-      setSlot('')
-      try {
-        const rows = await fetchSlots(pickupDate)
-        if (!cancelled) setSlots(Array.isArray(rows) ? rows : [])
-      } catch (err) {
-        if (!cancelled) {
-          setSlots([])
-          setSlotsError(err?.message || 'Unable to load time slots right now.')
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [dispatchType, pickupDate])
+  /* Picking "In-Store Pickup" mounts and opens the shared <AppointmentForm/>. */
+  const chooseModality = (type) => {
+    setDispatchType(type)
+    if (type === 'pickup') setSlotFormOpen(true)
+  }
 
   // Never leave the checkout empty-handed.
   useEffect(() => {
@@ -230,8 +235,10 @@ function CheckoutPlaceholder() {
       setError('Some items are currently out of stock and cannot be checked out. Please remove them from your selection.')
       return
     }
-    if (dispatchType === 'pickup' && (!pickupDate || !slot)) {
-      setError('Please choose a pickup date and time slot to continue.')
+    // In-Store Pickup is only complete once <AppointmentForm/> has booked the
+    // claim slot. Delivery never checks this.
+    if (dispatchType === 'pickup' && !appointment?.appoint_id) {
+      setError('Please book your in-store pickup slot to continue.')
       return
     }
     if (dispatchType === 'delivery' && !deliveryAddress) {
@@ -240,8 +247,7 @@ function CheckoutPlaceholder() {
     }
 
     setBusy(true)
-    let tempOrdId = null
-    let appointId = null
+    let createdOrdId = null
 
     try {
       // 1. Resolve the order being paid: existing cart row, or a temp order.
@@ -266,24 +272,13 @@ function CheckoutPlaceholder() {
         if (!ordId) {
           throw new Error('Unable to prepare your order. Please try again.')
         }
-        tempOrdId = ordId
+        createdOrdId = ordId
       }
 
-      // 2. Reserve the pickup slot before quoting or charging. Pickup checkout
-      //    requires a previously booked order-claiming appointment, and the
-      //    slot grid expects the date and start time as one datetime.
-      if (dispatchType === 'pickup') {
-        const res = await createAppointment({
-          cust_id: custId,
-          appoint_date: `${pickupDate} ${slot}`,
-          appoint_type: 'CLAIM',
-          appoint_desc: `Pickup of order ${ordId}`,
-        })
-        appointId = res?.data?.appoint_id ?? res?.data?.id ?? null
-        if (!appointId) {
-          throw new Error('Unable to reserve your pickup slot. Please try again.')
-        }
-      }
+      // 2. The claim slot already exists (booked by <AppointmentForm/>); the
+      //    backend maps it onto this order through the SRS PICKUP row
+      //    (ord_id, appoint_id, pay_id) when the payment is integrated.
+      const appointId = appointment?.appoint_id ?? null
 
       // 3. Ask the backend for the authoritative amount due (REQ-OC-01).
       let due = totalDue
@@ -301,7 +296,7 @@ function CheckoutPlaceholder() {
       const payRef = payRes?.data?.payment?.pay_ref ?? ''
 
       // 5. Success: clean up the source rows and resync the cart.
-      if (tempOrdId) await removeSourceLines()
+      if (createdOrdId) await removeSourceLines()
       clearSelectedItems()
       refreshCart()
       setPaidRef(payRef)
@@ -309,12 +304,10 @@ function CheckoutPlaceholder() {
       setStep('confirmed')
       setCountdown(5)
     } catch (err) {
-      // REQ-OC-02: failed payment must roll back every temp artifact.
-      if (appointId) {
-        closeAppointment(appointId, 'Checkout payment failed').catch(() => {})
-      }
-      if (tempOrdId) {
-        removeCartOrder(tempOrdId).catch(() => {})
+      // REQ-OC-02: failed payment must roll back every temp artifact. The claim
+      // slot is kept so the customer can simply retry with the same booking.
+      if (createdOrdId) {
+        removeCartOrder(createdOrdId).catch(() => {})
       }
       setError(err?.message || 'Payment failed. Please try again.')
     } finally {
@@ -392,6 +385,9 @@ function CheckoutPlaceholder() {
     <AppShell showNav={false}>
       <div className="min-h-dvh flex flex-col items-center justify-center p-4 pb-28 md:p-8 animate-fade-in bg-slate-50/60">
         <div className="w-full max-w-xl bg-white rounded-xl p-6 md:p-8 border border-slate-100 space-y-6">
+          {/* Back to the previous view of this step-by-step process */}
+          <BackButton to="/cart" label="Back to Bag" />
+
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div className="flex items-center gap-3">
@@ -430,7 +426,7 @@ function CheckoutPlaceholder() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setDispatchType('pickup')}
+                  onClick={() => chooseModality('pickup')}
                   className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
                     dispatchType === 'pickup'
                       ? 'bg-brand-orange text-white border-brand-orange'
@@ -441,7 +437,7 @@ function CheckoutPlaceholder() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDispatchType('delivery')}
+                  onClick={() => chooseModality('delivery')}
                   className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
                     dispatchType === 'delivery'
                       ? 'bg-brand-orange text-white border-brand-orange'
@@ -459,77 +455,34 @@ function CheckoutPlaceholder() {
             </div>
           </div>
 
-          {/* Pickup scheduling: date + slot grid */}
+          {/* In-Store Pickup only: the claim slot comes from the shared
+              <AppointmentForm/>, which opens as soon as Pickup is selected. */}
           {dispatchType === 'pickup' && (
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <p className="font-bold text-gray-900">Pickup Schedule</p>
-                <label className="flex items-center gap-2 text-xs text-gray-500">
-                  <span>Date</span>
-                  <input
-                    type="date"
-                    value={pickupDate}
-                    min={new Date().toISOString().slice(0, 10)}
-                    onChange={(e) => setPickupDate(e.target.value)}
-                    className="px-2 py-1.5 rounded-md border border-slate-200 text-xs text-gray-700 focus:border-brand-orange focus:ring-brand-orange/30"
-                  />
-                </label>
-              </div>
-
-              {!pickupDate && (
-                <p className="text-xs text-gray-500 bg-slate-50 rounded-lg p-3">
-                  Pick a date to see available claim slots (30 minutes each).
-                </p>
-              )}
-
-              {slotsError && (
-                <p className="text-xs text-red-500 bg-red-50 rounded-lg p-3">{slotsError}</p>
-              )}
-
-              {pickupDate && !slotsError && slots.length === 0 && (
-                <p className="text-xs text-gray-500 bg-slate-50 rounded-lg p-3">
-                  No slots are open for this date yet. Try another date.
-                </p>
-              )}
-
-              {slots.length > 0 && (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {slots.map((s, idx) => {
-                    const time = slotTime(s)
-                    const open = slotOpen(s)
-                    const active = open && slot === time
-                    const key = time || `slot-${idx}`
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        disabled={!open}
-                        title={open ? time : slotReason(s)}
-                        onClick={() => open && setSlot(time)}
-                        className={`py-2 rounded-md text-xs font-semibold border transition-colors ${
-                          active
-                            ? 'bg-brand-orange text-white border-brand-orange'
-                            : open
-                            ? 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange cursor-pointer'
-                            : 'bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed line-through'
-                        }`}
-                      >
-                        {time || `Slot ${idx + 1}`}
-                        {!open && (
-                          <span className="block text-[10px] font-normal no-underline">
-                            {slotReason(s)}
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
+            <div className="space-y-3">
+              {appointment ? (
+                <div className="p-3.5 rounded-lg border border-orange-200 bg-orange-50/70 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900">Pickup slot booked</p>
+                    <p className="text-xs text-slate-600 truncate">
+                      {String(appointment.appoint_date).replace('T', ' ')} · 30-minute claim slot
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSlotFormOpen(true)}
+                    className="shrink-0 h-8 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Change slot
+                  </button>
                 </div>
-              )}
-
-              {slot && (
-                <p className="text-xs font-semibold text-brand-orange bg-orange-50 rounded-lg p-2.5">
-                  Claim slot reserved for review: {pickupDate} at {slot}
-                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSlotFormOpen(true)}
+                  className="w-full h-11 rounded-lg border-2 border-dashed border-brand-orange text-brand-orange text-sm font-bold hover:bg-orange-50 transition-colors cursor-pointer"
+                >
+                  Book your in-store pickup slot
+                </button>
               )}
             </div>
           )}
@@ -685,11 +638,7 @@ function CheckoutPlaceholder() {
             </div>
           </div>
 
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">
-              {error}
-            </div>
-          )}
+          {error && <ApiErrorText error={{ message: error }} />}
 
           {/* Confirmation Decision Buttons */}
           <div className="space-y-2 pt-2">
@@ -716,6 +665,18 @@ function CheckoutPlaceholder() {
           </div>
         </div>
       </div>
+
+      {/* Booking the slot returns the customer straight back to this page. */}
+      {slotFormOpen && (
+        <PickupSlotModal
+          custId={custId}
+          onClose={() => setSlotFormOpen(false)}
+          onBooked={(saved) => {
+            setAppointment(saved)
+            setSlotFormOpen(false)
+          }}
+        />
+      )}
 
       <BottomNav />
     </AppShell>

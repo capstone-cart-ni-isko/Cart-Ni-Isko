@@ -1,38 +1,9 @@
-/* ── Brand Tokens ── */
+/* ── Legacy helper classes ──
+   NOTE: index.css is the stylesheet main.jsx actually loads and it owns the
+   design tokens (brand colours, radius scale, shadows). This sheet only keeps
+   the plain-CSS helpers below (.card, .btn-*, .form-input) and deliberately
+   does not redefine anything index.css already sets. */
 @import "tailwindcss";
-
-@theme {
-  --color-brand-orange: #F97316;
-  --color-brand-orange-dark: #EA580C;
-  --color-brand-blue: #2563EB;
-  --color-brand-blue-light: #38BDF8;
-  --color-brand-cyan: #4FD1C5;
-  --color-surface-gray: #F5F5F5;
-  --color-text-muted: #757575;
-  --color-gray-150: #E5E7EB;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-
-  /* High-Density Border-Radius Tokens (6px-8px max for cards/containers, 6px for buttons/inputs) */
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
-  --radius-2xl: 8px;
-  --radius-3xl: 8px;
-
-  /* Theme Shadows Zeroed Out */
-  --shadow-none: none;
-  --shadow-2xs: none;
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow-md: none;
-  --shadow-lg: none;
-  --shadow-xl: none;
-  --shadow-2xl: none;
-  --shadow-inner: none;
-  --shadow: none;
-}
 
 *, *::before, *::after {
   -webkit-tap-highlight-color: transparent;
@@ -234,7 +205,7 @@ h1, h2, h3, h4, h5, h6 {
 .card {
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-lg); /* uniform 12px, see index.css */
   padding: 1rem;
 }
 
@@ -244,7 +215,7 @@ h1, h2, h3, h4, h5, h6 {
   color: #ffffff;
   font-weight: 600;
   padding: 0.625rem 1.25rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
   transition: background 0.2s;
@@ -259,7 +230,7 @@ h1, h2, h3, h4, h5, h6 {
   color: #111827;
   font-weight: 600;
   padding: 0.625rem 1.25rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid #d1d5db;
   cursor: pointer;
   transition: background 0.2s;
@@ -274,7 +245,7 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
   padding: 0.625rem 0.75rem;
   border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 15px;
   line-height: 1.5;
   color: #111827;

@@ -14,13 +14,17 @@
 
   /* Corner scale: every card/element sits a notch rounder than before, while
      the homepage banner (rounded-[1.5rem]) stays the roundest box on screen. */
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
+  /* One uniform corner for every card, modal and button: rounded-md through
+     rounded-3xl all resolve to 12px. The homepage carousel banner is the only
+     heavily rounded box on screen at 24px. */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 12px;
   --radius-xl: 12px;
-  --radius-2xl: 14px;
-  --radius-3xl: 16px;
+  --radius-2xl: 12px;
+  --radius-3xl: 12px;
+  --radius-carousel: 24px;
 
   --shadow-none: none;
   --shadow-2xs: none;
@@ -142,7 +146,6 @@ input[type="checkbox"].check-plain:checked::after {
   from { transform: translateX(-100%); }
   to { transform: translateX(0); }
 }
-
 .animate-slide-right { animation: slideRight 0.25s ease-out both; }
 
 /* ── Animation Utilities ── */
@@ -184,7 +187,7 @@ input[type="checkbox"].check-plain:checked::after {
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 @keyframes shimmer {

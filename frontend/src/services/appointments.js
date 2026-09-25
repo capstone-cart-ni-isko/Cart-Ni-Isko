@@ -6,6 +6,12 @@ export const SLOT_RULES = {
   VISIT: { minutes: 10, capacity: 1 },
 }
 
+/**
+ * Appointment kinds. The customer never picks one: the Appointments page books
+ * a VISIT, Checkout's "In-Store Pickup" books a CLAIM.
+ */
+export const APPOINT_TYPE = { VISIT: 'VISIT', CLAIM: 'CLAIM' }
+
 /** GET /appoint/display - own appointments, or all for staff (REQ-SC-01). */
 export async function fetchAppointments(params = {}) {
   const data = await apiGet('/appoint/display', params)

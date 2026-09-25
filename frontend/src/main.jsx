@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
+import { prefetch } from './services/api.js'
 import './index.css'
 import App from './App.jsx'
 
@@ -9,6 +10,10 @@ import App from './App.jsx'
 if (localStorage.getItem('isko_theme') === 'dark') {
   document.documentElement.classList.add('dark')
 }
+
+// Warm the API socket and cache public catalog data immediately on boot.
+// Runs silently so it never raises the global progress bar.
+prefetch('/products/filter', { status: 'active' }).catch(() => null)
 
 if (import.meta.env.PROD) {
   // Production PWA: register the service worker.

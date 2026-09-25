@@ -5,12 +5,57 @@
     use App\Models\Customer;
     use App\Models\Employee;
     use Illuminate\Http\Request;
+    use Illuminate\Support\Facades\DB;
     use Illuminate\Support\Facades\Hash;
     use Illuminate\Support\Str;
     use Illuminate\Support\Facades\Schema;
 
     class AuthAPI extends Controller
     {
+        /**
+         * Set to false the first time the database reports the login RPC is
+         * missing, so an un-migrated connection stops paying for a failed call
+         * and uses the two-step read instead.
+         */
+        private static ?bool $loginRpcReady = null;
+
+        /**
+         * Resolves the account for a phone + password pair.
+         *
+         * Primary path: one `api_auth_cust_login` round trip that fetches the
+         * row and verifies the bcrypt digest inside PostgreSQL, which is what
+         * keeps login inside the 1-second frontend budget on a high-latency
+         * Supabase link. Fallback path: the original read + `Hash::check` pair,
+         * used unchanged on other drivers (SQLite) and whenever the RPC is
+         * unavailable on a database that has not run the migration yet.
+         */
+        private function findCustomerByCredentials(string $phone, string $password): ?Customer
+        {
+            if (self::$loginRpcReady !== false && DB::getDriverName() === 'pgsql') {
+                try {
+                    $row = DB::selectOne(
+                        'select * from api_auth_cust_login(?, ?)',
+                        [$phone, $password]
+                    );
+                    self::$loginRpcReady = true;
+
+                    return $row ? (new Customer)->newFromBuilder((array) $row) : null;
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // 42883 = undefined_function: the RPC is simply not there.
+                    if ((string) $e->getCode() !== '42883') {
+                        throw $e;
+                    }
+                    self::$loginRpcReady = false;
+                }
+            }
+
+            $customer = Customer::where('cust_phone', $phone)->first();
+
+            return $customer && Hash::check($password, $customer->cust_password)
+                ? $customer
+                : null;
+        }
+
         public function customerSignup(Request $json)
         {
             /*
@@ -141,19 +186,20 @@
             // Get user phone and password
             $phone = $json->input('phone');
             $password = $json->input('password');
-            
-            // Find customer and verify password
-            try {
-                $customer = Customer::where('cust_phone', $phone)->first();
 
-                if (!$customer || !Hash::check($password, $customer->cust_password)) {
-                    // JSON ERROR
+            // Single round trip: the database returns the account only when the
+            // bcrypt digest matches, and hashes there instead of in this worker
+            // (see api_auth_cust_login). A wrong phone and a wrong password are
+            // reported identically, as before.
+            try {
+                $customer = $this->findCustomerByCredentials((string) $phone, (string) $password);
+
+                if (! $customer) {
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
 
                 // Banned or deleted accounts lose access immediately (REQ-UM-02)
                 if ($customer->cust_disabled || $customer->cust_deleted) {
-                    // JSON ERROR
                     return response()->json(['success' => false, 'message' => 'Account disabled'], 403);
                 }
 
@@ -282,7 +328,11 @@
             $email = $json->input('email');
             $password = $json->input('password');
 
-            // Find employee and verify password
+            // One narrow indexed read: emp_email carries a unique index, so
+            // this is a single round trip. Connection handling around it is
+            // tuned for the 1-second budget (see config/database.php); the
+            // expiry check, credential comparison and token minting are
+            // unchanged.
             try {
                 $employee = Employee::where('emp_email', $email)->first();
 

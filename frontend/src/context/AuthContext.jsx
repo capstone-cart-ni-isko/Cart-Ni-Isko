@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getApiToken, setApiToken } from '../services/api.js'
 import { clearSession, loadSession, saveSession } from '../services/session.js'
 import { logoutSession, signInUser, signUpUser } from '../services/auth.js'
@@ -33,6 +34,8 @@ const DEFAULT_ADDRESSES = []
  * overridden here; a 401 from the API still ends the session immediately.
  */
 export function AuthProvider({ children }) {
+  const navigate = useNavigate()
+
   // Lazy restore so the token is back in place before the first API call.
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = loadSession('customer')
@@ -153,12 +156,19 @@ export function AuthProvider({ children }) {
     })
   }
 
+  /**
+   * Ends the session and always lands on the login form (REQ-ALR-01). The
+   * redirect lives here so every logout entry point - the menu drawer, the
+   * account pages, the profile menu, the password change - behaves the same.
+   * `replace` keeps Back from re-entering an authenticated page.
+   */
   const logout = async () => {
     const revocation = logoutSession().catch(() => null)
     clearSession('customer')
     setApiToken(null)
     setCurrentUser(null)
     await revocation
+    navigate('/signin', { replace: true })
   }
 
   const addAddress = (address) => {

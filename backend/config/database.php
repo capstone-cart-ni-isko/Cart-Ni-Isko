@@ -95,14 +95,26 @@ return [
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
-            'search_path' => 'public',
-            'sslmode' => env('DB_SSLMODE', 'prefer'), // Supabase requires 'require'
-            // Reuse the TCP+TLS session across requests (each handshake to
-            // Supabase costs ~1.2 s); stale handles are auto-retried by
-            // Laravel's lost-connection detector.
-            'options' => array_filter([
-                \PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false) ?: null,
-            ]),
+            // No explicit `search_path` here on purpose. Laravel would issue a
+            // `set search_path` statement every time it builds the PDO handle,
+            // which is a whole extra round trip on every request against the
+            // Tokyo pooler. The Supabase role already defaults to
+            // "$user", public, extensions, so unqualified names resolve to the
+            // exact same `public` schema as before.
+            'sslmode' => env('DB_SSLMODE', 'require'), // Supabase requires 'require'
+            // Supabase sits behind a TLS endpoint, so a fresh TCP+TLS handshake
+            // costs ~0.8 s on the Tokyo link. A persistent handle keeps that out
+            // of every request after the first one.
+            // Client-side prepared statements are mandatory here, not an
+            // optimisation: PgBouncer's transaction-mode pooler (port 5432)
+            // hands each transaction to a different backend, so a server-side
+            // PREPARE would either fail or cost extra round trips - and a bare
+            // query already costs 3 of them on a 130 ms link instead of 1.
+            'options' => [
+                \PDO::ATTR_PERSISTENT => (bool) env('DB_PERSISTENT', true),
+                \PDO::ATTR_EMULATE_PREPARES => true,
+                \PDO::ATTR_STRINGIFY_FETCHES => false,
+            ],
         ],
 
         'sqlsrv' => [

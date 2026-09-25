@@ -255,9 +255,9 @@ function Home() {
           </form>
         </div>
 
-        {/* 1. Hero banner carousel - rounder corners (rounded-2xl), shorter height */}
+        {/* 1. Hero banner carousel - taller, heavy border-radius (24px) */}
         <div className="px-4 py-2">
-          <div className="h-[100px] w-full bg-slate-900 rounded-[1.5rem] overflow-hidden relative border border-slate-200">
+          <div className="h-[150px] w-full bg-slate-900 rounded-[var(--radius-carousel)] overflow-hidden relative border border-slate-200">
             {/* Background elements */}
             <div className="absolute inset-0 opacity-[0.1] select-none pointer-events-none z-10 flex items-center justify-center overflow-hidden">
               <span className="text-8xl font-black text-white tracking-wider rotate-12">BU</span>
@@ -441,9 +441,9 @@ function Home() {
 
       {/* ────────────────── DESKTOP HOME PAGE LAYOUT ────────────────── */}
       <div className="hidden md:block pb-16">
-        {/* 1. Wide Hero Banner with Refined CTA - rounder corners, shorter height */}
+        {/* 1. Wide Hero Banner - taller, heavy border-radius (24px) */}
         <div className="mb-12">
-          <div className="h-[180px] w-full bg-slate-900 rounded-[1.5rem] overflow-hidden relative border border-slate-200 text-white">
+          <div className="h-[240px] w-full bg-slate-900 rounded-[var(--radius-carousel)] overflow-hidden relative border border-slate-200 text-white">
             {/* Background elements */}
             <div className="absolute inset-0 opacity-[0.06] select-none pointer-events-none z-0 flex items-center justify-center overflow-hidden">
               <span className="text-[15rem] font-black text-white tracking-widest rotate-12">BU</span>

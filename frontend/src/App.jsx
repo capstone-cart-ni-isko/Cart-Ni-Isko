@@ -3,6 +3,8 @@ import { ToastProvider } from './context/ToastContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { useAuth } from './hooks/useAuth.js'
 import LoginPromptModal from './components/ui/LoginPromptModal.jsx'
+import GlobalApiLoader from './components/ui/GlobalApiLoader.jsx'
+import { ApiErrorBoundary } from './components/ui/ApiErrorBoundary.jsx'
 import { CartProvider } from './context/CartContext.jsx'
 import { WishlistProvider } from './context/WishlistContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
@@ -75,7 +77,9 @@ function App() {
           <CartProvider>
             <WishlistProvider>
               <ScrollToTop />
-              <Routes>
+              <GlobalApiLoader />
+              <ApiErrorBoundary>
+                <Routes>
                 {/* ── Customer Routes ── */}
                 <Route path="/" element={<Home />} />
                 <Route path="/home" element={<Home />} />
@@ -134,7 +138,8 @@ function App() {
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+                </Routes>
+              </ApiErrorBoundary>
             </WishlistProvider>
           </CartProvider>
         </AdminProvider>
