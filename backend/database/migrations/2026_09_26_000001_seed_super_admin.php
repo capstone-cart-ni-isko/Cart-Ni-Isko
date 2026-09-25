@@ -36,6 +36,17 @@ return new class extends Migration
                 'emp_country'    => 'PH',
                 'emp_callcode'   => '+63',
                 'emp_instore'    => false,
+                // Explicitly null — avoids SQLite strict NOT NULL after Doctrine DBAL ->change()
+                'emp_studnum'    => null,
+                'emp_midname'    => null,
+                'emp_suffix'     => null,
+                'emp_backupcallcode' => null,
+                'emp_backupphone'    => null,
+                'emp_backupemail'    => null,
+                'emp_college'    => null,
+                'emp_program'    => null,
+                'emp_year'       => null,
+                'emp_bloc'       => null,
             ]);
         }
     }
