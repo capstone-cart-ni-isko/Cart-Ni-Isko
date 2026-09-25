@@ -1,4 +1,6 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth.js'
+import React from 'react'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
 import ordersIcon from '../../assets/icons/navigation-bar/orders.svg'
 import wishlistIcon from '../../assets/icons/navigation-bar/wishlist.svg'
@@ -14,6 +16,17 @@ const navItems = [
 ]
 
 function BottomNav() {
+  const navigate = useNavigate()
+  const { currentUser } = useAuth()
+
+  // Guests tapping a protected tab go to sign-in (pushed, so back works).
+  const handleGuest = (e, to) => {
+    if (!currentUser && to !== '/home') {
+      e.preventDefault()
+      navigate('/signin')
+    }
+  }
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-[110000] safe-bottom md:bottom-4 lg:hidden">
       <div className="mx-auto max-w-lg md:max-w-xl px-4">
@@ -23,6 +36,7 @@ function BottomNav() {
               key={to}
               to={to}
               end={end}
+              onClick={(e) => handleGuest(e, to)}
               className={({ isActive }) =>
                 `flex flex-col items-center gap-0.5 px-1 py-1 rounded-md transition-colors flex-1 min-w-0 max-w-[4.5rem] relative ${
                   isActive ? 'text-brand-orange font-bold bg-orange-50/50' : 'text-text-muted'
@@ -52,5 +66,5 @@ function BottomNav() {
   )
 }
 
-export default BottomNav
+export default React.memo(BottomNav)
 

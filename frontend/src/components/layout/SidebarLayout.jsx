@@ -1,5 +1,6 @@
 import DesktopHeader from './DesktopHeader.jsx'
 import DesktopFooter from './DesktopFooter.jsx'
+import React from 'react'
 
 /**
  * Responsive layout container:
@@ -30,4 +31,4 @@ function SidebarLayout({ bottomNav, children, className = '' }) {
   )
 }
 
-export default SidebarLayout
+export default React.memo(SidebarLayout)

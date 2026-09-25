@@ -155,6 +155,83 @@
         }
 
         /*
+            Displaying notifications for an account (inbox)
+            ----------
+            JSON REQUEST / Query Params
+
+            recipient_type - string (req: customer | employee)
+            recipient_id - integer (req for employees, resolved from the
+                            token for customers)
+        */
+        public function displayNotifications(Request $json)
+        {
+            $recipientType = strtolower((string) $json->input('recipient_type', ''));
+            if (!in_array($recipientType, ['customer', 'employee'], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Recipient type must be either customer or employee'
+                ], 400);
+            }
+
+            $user = $json->user();
+            $recipientId = $json->input('recipient_id');
+
+            try {
+                if ($user instanceof Customer) {
+                    if ($recipientType !== 'customer') {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Customers may only read their own notifications'
+                        ], 403);
+                    }
+                    $recipientId = $user->getKey();
+                } elseif ($user instanceof Employee) {
+                    if ($recipientType !== 'employee') {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Employees may only read their own notifications'
+                        ], 403);
+                    }
+                    $recipientId = $user->getKey();
+                } else {
+                    return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
+                }
+
+                if ($recipientType === 'customer') {
+                    // The sanctum token already resolved this customer row,
+                    // so a second existence check would only add a round trip
+                    $notifications = CustNotif::where('cust_id', $recipientId)
+                        ->orderBy('custnotif_created', 'desc')
+                        ->get();
+                } else {
+                    if (!$recipientId) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Recipient ID is required'
+                        ], 400);
+                    }
+
+                    $notifications = EmpNotif::where('emp_id', $recipientId)
+                        ->orderBy('empnotif_created', 'desc')
+                        ->get();
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Notifications retrieved successfully',
+                    'data'    => $notifications
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to display notifications',
+                    'error'   => $e->getMessage()
+                ], 500);
+            }
+        }
+
+        /*
             Updating notification status (mark as read)
             ----------
             JSON REQUEST
@@ -173,7 +250,7 @@
 
                 if ($recipientType === 'customer') {
                     $notif = CustNotif::where('custnotif_id', $notifId)->first();
-                    if (!$notif) {
+                    if (! $notif || (int) $notif->cust_id !== $this->customerId($json)) {
                         return response()->json(['success' => false, 'message' => 'Customer notification not found'], 404);
                     }
                     if ($notif->custnotif_read) {
@@ -185,7 +262,8 @@
                     $notif->update(['custnotif_read' => now()]);
                 } else {
                     $notif = EmpNotif::where('empnotif_id', $notifId)->first();
-                    if (!$notif) {
+                    $employee = $json->user('sanctum');
+                    if (! $notif || ! $employee instanceof Employee || (int) $notif->emp_id !== (int) $employee->getKey()) {
                         return response()->json(['success' => false, 'message' => 'Employee notification not found'], 404);
                     }
                     if ($notif->empnotif_read) {

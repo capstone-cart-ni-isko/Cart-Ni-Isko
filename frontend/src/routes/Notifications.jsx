@@ -1,7 +1,16 @@
-import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
+import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
+import { fetchNotifications, markRead } from '../services/notifications.js'
+
+/** REQ-OT-01: "to claim"/"to receive" notifications are handled by QR scanning, not regular notifications. */
+function isExemptNotification(message) {
+  const msg = String(message || '').toLowerCase()
+  return msg.includes('to claim') || msg.includes('to receive')
+}
 
 // SVG Icons tailored for notification types
 function NotifTypeIcon({ icon, className = 'w-5 h-5' }) {
@@ -108,19 +117,116 @@ function CaughtUpIllustration({ className = 'w-44 h-44' }) {
   )
 }
 
-const INITIAL_NOTIFICATIONS = []
+/** Inbox presentation per inferred category. */
+const CATEGORY_STYLES = {
+  orders: {
+    icon: 'box',
+    iconBg: 'bg-orange-50 text-brand-orange',
+    tag: 'Orders',
+    tagColor: 'bg-orange-50 text-brand-orange',
+    title: 'Order Update',
+  },
+  production: {
+    icon: 'megaphone',
+    iconBg: 'bg-blue-50 text-blue-600',
+    tag: 'Production',
+    tagColor: 'bg-blue-50 text-blue-600',
+    title: 'Production Update',
+  },
+  system: {
+    icon: 'bell',
+    iconBg: 'bg-slate-50 text-slate-600',
+    tag: 'System',
+    tagColor: 'bg-slate-100 text-slate-600',
+    title: 'Announcement',
+  },
+  promotions: {
+    icon: 'bag',
+    iconBg: 'bg-emerald-50 text-emerald-600',
+    tag: 'Promotions',
+    tagColor: 'bg-emerald-50 text-emerald-600',
+    title: 'Promo',
+  },
+}
+
+function timeAgo(date) {
+  if (Number.isNaN(date.getTime())) return 'Recently'
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return 'Just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return date.toLocaleDateString()
+}
+
+/** Map a custnotif_* / empnotif_* row into the inbox card shape this page renders. */
+function mapNotification(row, index) {
+  const message = row.custnotif_msg ?? row.empnotif_msg ?? row.message ?? ''
+  const text = String(message).toLowerCase()
+  let category = 'system'
+  if (/order|pickup|claim|deliver|refund|payment/.test(text)) category = 'orders'
+  else if (/production|pre-?order|stock|restock/.test(text)) category = 'production'
+  else if (/promo|sale|discount|voucher|deal/.test(text)) category = 'promotions'
+
+  const style = CATEGORY_STYLES[category] || CATEGORY_STYLES.system
+  const created = row.custnotif_created ?? row.empnotif_created ?? row.created_at
+
+  return {
+    id: row.custnotif_id ?? row.empnotif_id ?? row.id ?? `notif-${index}`,
+    category,
+    icon: style.icon,
+    iconBg: style.iconBg,
+    tag: style.tag,
+    tagColor: style.tagColor,
+    title: style.title,
+    message,
+    time: created ? timeAgo(new Date(created)) : 'Just now',
+    unread: !(row.custnotif_read || row.empnotif_read),
+    targetUrl: row.notif_link || null,
+    isExempt: isExemptNotification(message),
+  }
+}
 
 export default function Notifications() {
   const navigate = useNavigate()
-  const [items, setItems] = useState(INITIAL_NOTIFICATIONS)
-  const [activeTab, setActiveTab] = useState('All') // 'All' | 'Orders' | 'Production' | 'System' | 'Promotions'
+  const { currentUser } = useAuth()
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('All')
 
-  const markAllRead = () => {
-    setItems((prev) => prev.map((n) => ({ ...n, unread: false })))
-  }
+  const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
-  const markRead = (id, targetUrl) => {
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)))
+  /** REQ-AN-01: the customer's real inbox from GET /notif/display. */
+  const load = useCallback(async () => {
+    if (!custId) {
+      setItems([])
+      setLoading(false)
+      return
+    }
+    try {
+      const rows = await fetchNotifications('customer', custId)
+      setItems((rows || []).map(mapNotification))
+    } catch (err) {
+      console.warn('Failed to load notifications:', err?.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [custId])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  /** REQ-AN-01: a notification is only marked read when clicked. */
+  const markReadAndGo = async (id, targetUrl) => {
+    const target = items.find((n) => n.id === id)
+    if (target?.unread) {
+      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)))
+      markRead(id, 'customer').catch(() => {})
+    }
     if (targetUrl) {
       navigate(targetUrl)
     }
@@ -163,9 +269,8 @@ export default function Notifications() {
           </div>
         </div>
 
-        {/* Filter Pills and Mark as read toolbar */}
+        {/* Filter Pills */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 mb-7 pb-2 border-b border-slate-200">
-          {/* Filter Pills */}
           <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none">
             {[
               { label: 'All', count: countAll },
@@ -198,20 +303,6 @@ export default function Notifications() {
               )
             })}
           </div>
-
-          {/* Mark all as read button */}
-          {unreadTotal > 0 && (
-            <button
-              type="button"
-              onClick={markAllRead}
-              className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-600 hover:text-brand-orange self-end sm:self-auto transition-colors cursor-pointer shrink-0"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-brand-orange">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <span>Mark all as read</span>
-            </button>
-          )}
         </div>
 
         {/* Main Grid: Left Notification List + Right Caught-Up Card (Desktop) */}
@@ -240,15 +331,12 @@ export default function Notifications() {
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-bold text-slate-900">Need help?</h4>
                   <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                    Check the Help Center for more information about your orders and fulfillment process.
+                    Contact support for more information about your orders and fulfillment process.
                   </p>
-                  <Link
-                    to="/help"
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-orange hover:underline mt-2"
-                  >
-                    <span>Visit Help Center</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-orange mt-2">
+                    <span>Contact Support</span>
                     <span>→</span>
-                  </Link>
+                  </span>
                 </div>
               </div>
             </div>
@@ -263,14 +351,22 @@ export default function Notifications() {
                       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                     </svg>
                   </div>
-                  <p className="text-sm font-bold text-slate-700">No notifications found in this category.</p>
-                  <p className="text-xs text-slate-400 mt-1">Updates regarding your orders, appointments, and campus store will appear here.</p>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <LoadingSpinner size={24} className="mx-auto" />
+                    </div>
+                  ) : (
+                    <span>No notifications found in this category.</span>
+                  )}
+                  {!loading && (
+                    <p className="text-xs text-slate-400 mt-1">Updates regarding your orders, appointments, and campus store will appear here.</p>
+                  )}
                 </div>
               ) : (
                 filteredItems.map((item) => (
                   <article
                     key={item.id}
-                    onClick={() => markRead(item.id, item.targetUrl)}
+                    onClick={() => markReadAndGo(item.id, item.targetUrl)}
                     className={`relative bg-white rounded-xl border transition-colors p-4 sm:p-5 flex items-start gap-4 cursor-pointer group shadow-2xs ${
                       item.unread ? 'border-orange-200 bg-orange-50/15' : 'border-slate-200'
                     }`}
@@ -289,7 +385,12 @@ export default function Notifications() {
                           <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
                             {item.title}
                           </h3>
-                          {item.unread && (
+                          {item.isExempt && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">
+                                QR Verification
+                              </span>
+                            )}
+                            {item.unread && (
                             <span className="w-2.5 h-2.5 rounded-full bg-brand-orange shrink-0 animate-pulse" />
                           )}
                         </div>
@@ -346,15 +447,12 @@ export default function Notifications() {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900">Need order assistance?</h4>
-                  <p className="text-xs text-slate-400">Visit our student help desk</p>
+                  <p className="text-xs text-slate-400">Contact our student help desk</p>
                 </div>
               </div>
-              <Link
-                to="/help"
-                className="text-xs sm:text-sm font-bold text-brand-orange hover:underline px-2 py-1 shrink-0"
-              >
-                Help Center →
-              </Link>
+              <span className="text-xs sm:text-sm font-bold text-brand-orange px-2 py-1 shrink-0">
+                Contact Support
+              </span>
             </div>
           </div>
         </div>

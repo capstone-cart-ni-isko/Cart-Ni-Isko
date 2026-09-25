@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
+import React from 'react'
 import BottomNav from './BottomNav.jsx'
 import SideNav from './SideNav.jsx'
 import SidebarLayout from './SidebarLayout.jsx'
 import DesktopHeader from './DesktopHeader.jsx'
-import PwaInstallPrompt from '../ui/PwaInstallPrompt.jsx'
 
 function AppShell({ children, showNav = true, showBottomNav = true, className = '' }) {
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
@@ -42,7 +42,6 @@ function AppShell({ children, showNav = true, showBottomNav = true, className = 
             {children}
           </div>
         </div>
-        <PwaInstallPrompt />
       </div>
     )
   }
@@ -60,10 +59,9 @@ function AppShell({ children, showNav = true, showBottomNav = true, className = 
         </div>
       )}
       {children}
-      <PwaInstallPrompt />
     </SidebarLayout>
   )
 }
 
-export default AppShell
+export default React.memo(AppShell)
 

@@ -2,9 +2,14 @@
 
     namespace App\Http\Controllers;
 
+    use App\Models\CustLog;
     use App\Models\Customer;
+    use App\Models\EmpLog;
     use App\Models\Employee;
     use Illuminate\Http\Request;
+    use Illuminate\Support\Facades\DB;
+    use Illuminate\Support\Facades\Log;
+    use Illuminate\Support\Facades\Schema;
 
     class AccountsAPI extends Controller
     {
@@ -22,22 +27,37 @@
             $validator = (new InputValidatorAPI())->changeAccountType($json);
             if ($validator) return $validator;
 
+            // REQ-UM-01: only super admin employees may change account types
+            $denied = $this->requireSuperAdmin($json);
+            if ($denied) return $denied;
+
             try {
                 $userId = $json->input('user_id');
                 $accountType = strtolower($json->input('account_type'));
                 $newType = strtoupper($json->input('new_type'));
 
                 if ($accountType === 'customer') {
-                    $user = Customer::where('cust_id', $userId)->first();
-                    if (!$user) return response()->json(['success' => false, 'message' => 'Customer account not found'], 404);
-
-                    $user->update(['cust_type' => $newType]);
-                } else {
-                    $user = Employee::where('emp_id', $userId)->first();
-                    if (!$user) return response()->json(['success' => false, 'message' => 'Employee account not found'], 404);
-
-                    $user->update(['emp_type' => $newType]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Customer and employee accounts cannot be converted.',
+                    ], 422);
                 }
+                if (! in_array($newType, ['STAFF', 'ADMIN', 'SUPER ADMIN'], true)) {
+                    return response()->json(['success' => false, 'message' => 'Invalid employee role.'], 422);
+                }
+
+                $user = Employee::find($userId);
+                if (! $user) {
+                    return response()->json(['success' => false, 'message' => 'Employee account not found'], 404);
+                }
+                $previousType = $user->emp_type;
+                $user->update(['emp_type' => $newType]);
+                EmpLog::create([
+                    'emp_id' => $userId,
+                    'emplog_created' => now(),
+                    'emplog_action' => 'ROLE_CHANGE',
+                    'emplog_desc' => 'Role changed from ' . $previousType . ' to ' . $newType . ' by super admin #' . $json->user()->getKey() . '.',
+                ]);
 
                 return response()->json([
                     'success' => true,
@@ -68,28 +88,61 @@
             $validator = (new InputValidatorAPI())->deleteAccount($json);
             if ($validator) return $validator;
 
+            // REQ-UM-01: only super admin employees may delete accounts
+            $denied = $this->requireSuperAdmin($json);
+            if ($denied) return $denied;
+
             try {
                 $userId = $json->input('user_id');
                 $accountType = strtolower($json->input('account_type'));
-                $hardDelete = $json->input('hard_delete', false);
+                $hardDelete = (bool) $json->input('hard_delete', false);
+                $adminId = $json->user()->getKey();
+                if ($accountType === 'employee' && (int) $userId === (int) $adminId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You cannot delete your own account.',
+                    ], 409);
+                }
 
                 if ($accountType === 'customer') {
                     $user = Customer::where('cust_id', $userId)->first();
                     if (!$user) return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
 
                     if ($hardDelete) {
+                        Log::warning('Customer account permanently deleted', [
+                            'customer_id' => $userId,
+                            'actor_id' => $adminId,
+                        ]);
+                        $user->tokens()->delete();
                         $user->delete();
                     } else {
                         $user->update(['cust_deleted' => now()]);
+                        CustLog::create([
+                            'cust_id' => $userId,
+                            'custlog_created' => now(),
+                            'custlog_action' => 'DELETE',
+                            'custlog_desc' => 'Account soft-deleted by super admin #' . $adminId . '.',
+                        ]);
                     }
                 } else {
                     $user = Employee::where('emp_id', $userId)->first();
                     if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
 
                     if ($hardDelete) {
+                        Log::warning('Employee account permanently deleted', [
+                            'employee_id' => $userId,
+                            'actor_id' => $adminId,
+                        ]);
+                        $user->tokens()->delete();
                         $user->delete();
                     } else {
                         $user->update(['emp_deleted' => now()]);
+                        EmpLog::create([
+                            'emp_id' => $userId,
+                            'emplog_created' => now(),
+                            'emplog_action' => 'DELETE',
+                            'emplog_desc' => 'Account soft-deleted by super admin #' . $adminId . '.',
+                        ]);
                     }
                 }
 
@@ -114,27 +167,64 @@
 
             user_id - integer (req)
             account_type - string (req: customer | employee)
+            reason - string (req)
         */
         public function disableAccount(Request $json)
         {
             $validator = (new InputValidatorAPI())->disableAccount($json);
             if ($validator) return $validator;
 
+            // REQ-UM-01: only super admin employees may ban accounts
+            $denied = $this->requireSuperAdmin($json);
+            if ($denied) return $denied;
+
             try {
                 $userId = $json->input('user_id');
                 $accountType = strtolower($json->input('account_type'));
+                $reason = trim((string) $json->input('reason'));
+                $adminId = $json->user()->getKey();
 
                 if ($accountType === 'customer') {
                     $user = Customer::where('cust_id', $userId)->first();
                     if (!$user) return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
 
                     $user->update(['cust_disabled' => now()]);
+
+                    // REQ-UM-04: log the ban with super admin, timestamp and reason
+                    CustLog::create([
+                        'cust_id'         => $userId,
+                        'custlog_created' => now(),
+                        'custlog_action'  => 'DISABLE',
+                        'custlog_desc'    => 'Account disabled by super admin #' . $adminId .
+                            ' at ' . now() . '. Reason: ' . $reason,
+                    ]);
+
+                    // Notify the banned account of the action
+                    $this->notifyCustomer($userId, 'Your account has been disabled. Reason: ' . $reason);
                 } else {
                     $user = Employee::where('emp_id', $userId)->first();
                     if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
 
                     $user->update(['emp_disabled' => now()]);
+
+                    // REQ-UM-04: log the ban with super admin, timestamp and reason
+                    EmpLog::create([
+                        'emp_id'         => $userId,
+                        'emplog_created' => now(),
+                        'emplog_action'  => 'DISABLE',
+                        'emplog_desc'    => 'Account disabled by super admin #' . $adminId .
+                            ' at ' . now() . '. Reason: ' . $reason,
+                    ]);
+
+                    // Notify the banned account of the action
+                    $this->notifyEmployee($userId, 'Your account has been disabled. Reason: ' . $reason);
                 }
+
+                // REQ-UM-02: terminate every active session of the banned account
+                DB::table('personal_access_tokens')
+                    ->where('tokenable_type', $user->getMorphClass())
+                    ->where('tokenable_id', $user->getKey())
+                    ->delete();
 
                 return response()->json([
                     'success' => true,
@@ -160,6 +250,10 @@
         */
         public function displayAccounts(Request $json)
         {
+            // REQ-UM-01: the account list is employee-only (staff/admin may view)
+            $denied = $this->requireEmployee($json);
+            if ($denied) return $denied;
+
             try {
                 $accountType = strtolower($json->input('account_type', 'all'));
 
@@ -198,15 +292,22 @@
 
             user_id - integer (req)
             account_type - string (req: customer | employee)
+            reason - string (opt)
         */
         public function recoverAccount(Request $json)
         {
             $validator = (new InputValidatorAPI())->recoverAccount($json);
             if ($validator) return $validator;
 
+            // REQ-UM-01: only super admin employees may recover accounts
+            $denied = $this->requireSuperAdmin($json);
+            if ($denied) return $denied;
+
             try {
                 $userId = $json->input('user_id');
                 $accountType = strtolower($json->input('account_type'));
+                $reason = trim((string) $json->input('reason', ''));
+                $adminId = $json->user()->getKey();
 
                 if ($accountType === 'customer') {
                     $user = Customer::where('cust_id', $userId)->first();
@@ -216,6 +317,18 @@
                         'cust_disabled' => null,
                         'cust_deleted'  => null,
                     ]);
+
+                    // REQ-UM-04: log the recovery with the responsible super admin
+                    CustLog::create([
+                        'cust_id'         => $userId,
+                        'custlog_created' => now(),
+                        'custlog_action'  => 'RECOVER',
+                        'custlog_desc'    => 'Account recovered by super admin #' . $adminId .
+                            ' at ' . now() . ($reason !== '' ? '. Reason: ' . $reason : '.'),
+                    ]);
+
+                    // Notify the restored account
+                    $this->notifyCustomer($userId, 'Your account has been recovered and is active again.');
                 } else {
                     $user = Employee::where('emp_id', $userId)->first();
                     if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
@@ -224,6 +337,18 @@
                         'emp_disabled' => null,
                         'emp_deleted'  => null,
                     ]);
+
+                    // REQ-UM-04: log the recovery with the responsible super admin
+                    EmpLog::create([
+                        'emp_id'         => $userId,
+                        'emplog_created' => now(),
+                        'emplog_action'  => 'RECOVER',
+                        'emplog_desc'    => 'Account recovered by super admin #' . $adminId .
+                            ' at ' . now() . ($reason !== '' ? '. Reason: ' . $reason : '.'),
+                    ]);
+
+                    // Notify the restored account
+                    $this->notifyEmployee($userId, 'Your account has been recovered and is active again.');
                 }
 
                 return response()->json([
@@ -251,6 +376,10 @@
         */
         public function searchAccounts(Request $json)
         {
+            // REQ-UM-01: the account list is employee-only (staff/admin may view)
+            $denied = $this->requireEmployee($json);
+            if ($denied) return $denied;
+
             try {
                 $query = $json->input('q', '');
                 $accountType = strtolower($json->input('account_type', 'all'));
@@ -306,6 +435,10 @@
         */
         public function sortAccounts(Request $json)
         {
+            // REQ-UM-01: the account list is employee-only (staff/admin may view)
+            $denied = $this->requireEmployee($json);
+            if ($denied) return $denied;
+
             try {
                 $sortBy = $json->input('sort_by', 'created');
                 $order = strtolower($json->input('order', 'asc')) === 'desc' ? 'desc' : 'asc';
@@ -357,27 +490,37 @@
             if ($validator) return $validator;
 
             try {
-                $userId = $json->input('user_id');
+                $userId = (int) $json->input('user_id');
                 $accountType = strtolower($json->input('account_type'));
+                $actor = $json->user('sanctum');
 
                 if ($accountType === 'customer') {
-                    $user = Customer::where('cust_id', $userId)->first();
-                    if (!$user) return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
-
-                    $user->update($json->only([
+                    $customerId = $this->customerId($json);
+                    if ($customerId === null || $customerId !== $userId) {
+                        return response()->json(['success' => false, 'message' => 'Customer account mismatch.'], 403);
+                    }
+                    $user = Customer::findOrFail($userId);
+                    // Only accept columns that actually exist so a save never
+                    // 500s on a connection that has not run the migration yet.
+                    $columns = Schema::getColumnListing('customer');
+                    $user->update(array_intersect_key($json->only([
                         'cust_nickname', 'cust_pronoun', 'cust_birthday',
                         'cust_brgy', 'cust_city', 'cust_province', 'cust_country',
-                        'cust_callcode', 'cust_phone', 'cust_email', 'cust_college'
-                    ]));
+                        'cust_callcode', 'cust_phone', 'cust_email', 'cust_college',
+                        'cust_username', 'cust_campus', 'cust_course', 'cust_year',
+                        'cust_photo',
+                    ]), array_flip($columns)));
                 } else {
-                    $user = Employee::where('emp_id', $userId)->first();
-                    if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
-
+                    if ((int) $actor->getKey() !== $userId && ! $this->isSuperAdmin($actor)) {
+                        return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
+                    }
+                    $user = Employee::findOrFail($userId);
                     $user->update($json->only([
                         'emp_surname', 'emp_givname', 'emp_midname', 'emp_suffix',
-                        'emp_studnum', 'emp_pronoun', 'emp_birthday',
-                        'emp_brgy', 'emp_city', 'emp_province', 'emp_country',
-                        'emp_callcode', 'emp_phone', 'emp_email', 'emp_instore'
+                        'emp_studnum', 'emp_college', 'emp_program', 'emp_year', 'emp_bloc',
+                        'emp_pronoun', 'emp_birthday', 'emp_brgy', 'emp_city',
+                        'emp_province', 'emp_country', 'emp_callcode', 'emp_phone',
+                        'emp_email', 'emp_instore', 'emp_photo',
                     ]));
                 }
 

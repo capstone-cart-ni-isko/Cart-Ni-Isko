@@ -1,763 +1,472 @@
-import React, { useState, useMemo } from 'react'
-import { useAdmin } from '../../hooks/useAdmin.js'
-import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import { useEffect, useMemo, useState } from "react";
+import { Search, Truck, PackageCheck, AlertCircle, Clock, RefreshCw } from "lucide-react";
+import { useToast } from "../../context/ToastContext";
+import { useAdmin } from "../../context/AdminContext";
+import StatusPill from "../../components/admin/StatusPill";
+import { mapOrderRows } from "../../services/dashboard";
 
-const INITIAL_FULFILLMENT_ORDERS = [
-  {
-    id: '#ORD-8921',
-    customer: 'Maria Santos',
-    date: 'Oct 24, 2:30 PM',
-    batchId: 'BAT-0012',
-    batchCount: 5,
-    category: 'Regular',
-    fulfillmentType: 'Store Pickup',
-    studentId: '2022-10492',
-    pickupMode: 'Self Pickup',
-    status: 'Ready for Pickup',
-    timeInStage: '2h 14m',
-    sinceTime: 'Since 12:16 PM',
-    exceeds24h: false,
-    actionType: 'handover',
-    actionLabel: 'Hand Over Item',
-  },
-  {
-    id: '#ORD-8923',
-    customer: 'Elena Reyes',
-    date: 'Oct 24, 1:45 PM',
-    batchId: 'BAT-0012',
-    batchCount: 5,
-    category: 'Regular',
-    fulfillmentType: 'Store Pickup',
-    studentId: '2020-55321',
-    proxyName: 'Ana P.',
-    pickupMode: 'Proxy: Ana P.',
-    status: 'Ready for Pickup',
-    timeInStage: '28m',
-    sinceTime: 'Since 2:17 PM',
-    exceeds24h: false,
-    actionType: 'handover',
-    actionLabel: 'Hand Over Item',
-  },
-  {
-    id: '#ORD-8925',
-    customer: 'Corazon Aquino',
-    date: 'Oct 24, 11:20 AM',
-    batchId: 'BAT-0014',
-    batchCount: 5,
-    category: 'Pre-order',
-    fulfillmentType: 'Store Pickup',
-    studentId: '2021-00293',
-    pickupMode: 'Self Pickup',
-    status: 'In Production',
-    timeInStage: '3h 05m',
-    sinceTime: 'Since 11:20 AM',
-    exceeds24h: false,
-    actionType: 'production',
-    actionLabel: 'View Production',
-  },
-  {
-    id: '#ORD-8928',
-    customer: 'Diana Lopez',
-    date: 'Oct 24, 10:10 AM',
-    batchId: 'BAT-0015',
-    batchCount: 6,
-    category: 'Pre-order',
-    fulfillmentType: 'Store Pickup',
-    studentId: '2022-88910',
-    proxyName: 'John L.',
-    pickupMode: 'Proxy: John L.',
-    status: 'Awaiting Production',
-    timeInStage: '5h 45m',
-    sinceTime: 'Since 10:10 AM',
-    exceeds24h: false,
-    actionType: 'production',
-    actionLabel: 'View Production',
-  },
-  {
-    id: '#ORD-8929',
-    customer: 'Kevin Tan',
-    date: 'Oct 24, 9:05 AM',
-    batchId: 'BAT-0016',
-    batchCount: 4,
-    category: 'Regular',
-    fulfillmentType: 'Store Pickup',
-    studentId: '2023-11455',
-    pickupMode: 'Self Pickup',
-    status: 'Unclaimed > 24h',
-    timeInStage: '25h 20m',
-    sinceTime: 'Since Oct 23, 8:30 PM',
-    exceeds24h: true,
-    actionType: 'notify',
-    actionLabel: 'Notify Customer',
-  },
-]
+/**
+ * Fulfillment board backed by the live order list (REQ-SD-02: 30s refresh).
+ * Pickup tab = TO PROCESS + TO CLAIM, Courier tab = TO RECEIVE,
+ * History = CLAIMED / CANCELLED / RETURNED.
+ */
+const FULFILLMENT_STAGES = [
+  { key: "pickup", label: "Pickup", icon: PackageCheck, color: "bg-emerald-50 text-emerald-700", stage: "Pickup" },
+  { key: "courier", label: "Courier", icon: Truck, color: "bg-blue-50 text-blue-700", stage: "Courier" },
+  { key: "history", label: "Completed", icon: PackageCheck, color: "bg-slate-50 text-slate-700", stage: "Completed" },
+];
+
+const KPI = [
+  { key: "total", label: "Total Orders", icon: PackageCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
+  { key: "inprod", label: "In Production", icon: Clock, color: "text-amber-600", bg: "bg-amber-50" },
+  { key: "ready", label: "Ready for Pickup", icon: PackageCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
+  { key: "issues", label: "Issues", icon: AlertCircle, color: "text-rose-600", bg: "bg-rose-50" },
+];
+
+const CATEGORY_OPTIONS = ["All Categories", "Regular", "Pre-order"];
+
+const timeSince = (date) => {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+};
+
+/**
+ * Derived row fields: category chip + the 24h SLA flag (measured against
+ * ord_created). Module-level so the impure clock call stays out of render.
+ */
+function enrichOrder(order) {
+  const created = order.createdAt ? new Date(order.createdAt).getTime() : null;
+  return {
+    ...order,
+    category: order.preorder ? "Pre-order" : "Regular",
+    exceeds24h: created !== null && Date.now() - created > 24 * 60 * 60 * 1000,
+  };
+}
 
 export default function AdminFulfillment() {
-  const { updateLogisticsStage } = useAdmin()
+  const { orders, refreshOrders, updateOrderStatus } = useAdmin();
+  const { showToast } = useToast();
+  const [activeStage, setActiveStage] = useState("pickup");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [busyId, setBusyId] = useState(null);
+  const itemsPerPage = 10;
 
-  // Tab State: 'pickup' | 'courier' | 'history'
-  const [activeTab, setActiveTab] = useState('pickup')
+  // REQ-SD-02: poll the order list on mount and every 30 seconds.
+  useEffect(() => {
+    refreshOrders();
+    const interval = setInterval(() => refreshOrders().catch(() => {}), 30000);
+    return () => clearInterval(interval);
+  }, [refreshOrders]);
 
-  // Orders list state
-  const [orders, setOrders] = useState(INITIAL_FULFILLMENT_ORDERS)
-  const [selectedIds, setSelectedIds] = useState(['#ORD-8921', '#ORD-8923']) // 2/3 selected (Photo 4)
-  const [showBatchDropdown, setShowBatchDropdown] = useState(false)
+  const allOrders = mapOrderRows(orders);
 
-  // Filters State
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('All')
-  const [batchFilter, setBatchFilter] = useState('All')
-  const [categoryFilter, setCategoryFilter] = useState('All')
-  const [dateRangeFilter, setDateRangeFilter] = useState('All')
-  const [exceptionFilter, setExceptionFilter] = useState('All')
+  const enrichedOrders = useMemo(() => allOrders.map(enrichOrder), [allOrders]);
 
-  // Active tags (matching Photo 4)
-  const [activeTags, setActiveTags] = useState([
-    'Status: Awaiting Production, In Production, Preparing...',
-    'Exception: Unclaimed > 24h',
-    'Order Category: All',
-  ])
-
-  // Modals & feedback
-  const [toastMessage, setToastMessage] = useState('')
-
-  const showToast = (msg) => {
-    setToastMessage(msg)
-    setTimeout(() => setToastMessage(''), 3500)
-  }
-
-  // Toggle order checkbox selection
-  const toggleSelectOrder = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    )
-  }
-
-  const toggleSelectAll = () => {
-    if (selectedIds.length === orders.length) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(orders.map((o) => o.id))
-    }
-  }
-
-  // Batch actions
-  const handleBatchStatusUpdate = (newStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (selectedIds.includes(o.id) ? { ...o, status: newStatus } : o))
-    )
-    showToast(`Updated ${selectedIds.length} orders to "${newStatus}"`)
-    setShowBatchDropdown(false)
-  }
-
-  // Single order action
-  const handleOrderAction = (order) => {
-    if (order.actionType === 'handover') {
-      setOrders((prev) =>
-        prev.map((o) => (o.id === order.id ? { ...o, status: 'Claimed', actionLabel: 'Claimed' } : o))
-      )
-      showToast(`Order ${order.id} handed over to ${order.customer}!`)
-    } else if (order.actionType === 'notify') {
-      showToast(`Notification and SMS reminder sent to ${order.customer} for ${order.id}.`)
-    } else {
-      showToast(`Viewing production queue for ${order.id}`)
-    }
-  }
-
-  // Remove single active tag
-  const removeTag = (tag) => {
-    setActiveTags((prev) => prev.filter((t) => t !== tag))
-  }
-  const clearAllTags = () => {
-    setActiveTags([])
-  }
-
-  // Filtered orders
   const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      const matchSearch =
-        !searchQuery ||
-        o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.batchId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.studentId.includes(searchQuery)
-      return matchSearch
-    })
-  }, [orders, searchQuery])
+    const stageKeys = {
+      pickup: ["TO PROCESS", "TO CLAIM"],
+      courier: ["TO RECEIVE"],
+      history: ["CLAIMED", "CANCELLED", "RETURNED"],
+    }[activeStage];
+
+    return enrichedOrders.filter((order) => {
+      if (!stageKeys.includes(order.rawStatus)) return false;
+
+      if (selectedCategory !== "All Categories" && order.category !== selectedCategory) return false;
+
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch =
+          order.id.toLowerCase().includes(query) ||
+          order.studentId.toLowerCase().includes(query) ||
+          order.customer.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+
+      return true;
+    });
+  }, [enrichedOrders, activeStage, selectedCategory, searchQuery]);
+
+  const stageCounts = useMemo(
+    () => ({
+      pickup: allOrders.filter((o) => ["TO PROCESS", "TO CLAIM"].includes(o.rawStatus)).length,
+      courier: allOrders.filter((o) => o.rawStatus === "TO RECEIVE").length,
+      history: allOrders.filter((o) => ["CLAIMED", "CANCELLED", "RETURNED"].includes(o.rawStatus)).length,
+    }),
+    [allOrders],
+  );
+
+  const stats = useMemo(() => {
+    const production = allOrders.filter((o) => o.rawStatus === "TO PROCESS").length;
+    const ready = allOrders.filter((o) => o.rawStatus === "TO CLAIM").length;
+    const issues = allOrders.filter((o) => ["CANCELLED", "RETURNED"].includes(o.rawStatus)).length;
+    return { total: allOrders.length, inprod: production, ready, issues };
+  }, [allOrders]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / itemsPerPage));
+  const paginatedOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const rangeStart = filteredOrders.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const rangeEnd = Math.min(currentPage * itemsPerPage, filteredOrders.length);
+
+  const handleSelectOrder = (orderId) => {
+    setSelectedOrders((prev) =>
+      prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId],
+    );
+  };
+
+  const handleSelectAll = () => {
+    const pageIds = paginatedOrders.map((o) => o.id);
+    const allSelected = pageIds.every((id) => selectedOrders.includes(id));
+    setSelectedOrders((prev) => (allSelected ? prev.filter((id) => !pageIds.includes(id)) : [...new Set([...prev, ...pageIds])]));
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await refreshOrders();
+      showToast("Fulfillment list refreshed", "success");
+    } catch {
+      showToast("Could not refresh fulfillment list", "error");
+    }
+  };
+
+  /** Bulk move — SRS status vocabulary only. */
+  const handleBulkAction = async (action) => {
+    if (selectedOrders.length === 0) return;
+    const targets = {
+      ready: { statuses: ["TO PROCESS", "TO CLAIM"], next: "TO CLAIM", label: "Mark ready" },
+      claimed: { statuses: ["TO CLAIM"], next: "CLAIMED", label: "Mark claimed" },
+      cancel: { statuses: ["TO PROCESS", "TO CLAIM", "TO RECEIVE"], next: "CANCELLED", label: "Cancel orders" },
+    }[action];
+    if (!targets) return;
+
+    const applicable = allOrders.filter(
+      (o) => selectedOrders.includes(o.id) && targets.statuses.includes(o.rawStatus),
+    );
+    if (applicable.length === 0) {
+      showToast(`No selected orders are eligible to ${targets.label.toLowerCase()}`, "error");
+      return;
+    }
+
+    let ok = 0;
+    for (const order of applicable) {
+      const result = await updateOrderStatus(order.ordId, targets.next);
+      if (result.success) ok += 1;
+    }
+    setSelectedOrders([]);
+    showToast(
+      ok === applicable.length
+        ? `${targets.label}: ${ok} order${ok === 1 ? "" : "s"} updated`
+        : `${targets.label}: ${ok}/${applicable.length} updated`,
+      ok === applicable.length ? "success" : "error",
+    );
+  };
+
+  const handleSingleAction = async (order, next) => {
+    setBusyId(order.id);
+    try {
+      const result = await updateOrderStatus(order.ordId, next);
+      if (result.success) {
+        showToast(`${order.id} updated to ${next}`, "success");
+      } else {
+        showToast(result.error || "Could not update order", "error");
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /** Handover for pickup is QR-verified (REQ-APC-02); this screen only
+   *  mirrors the bulk status action through the order-status endpoint. */
+  const handleSingleClaim = async (order) => {
+    setBusyId(order.id);
+    try {
+      const result = await updateOrderStatus(order.ordId, "CLAIMED");
+      if (result.success) {
+        showToast(`${order.id} updated to CLAIMED`, "success");
+        await refreshOrders();
+      } else {
+        showToast(result.error || "Could not claim order", "error");
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const renderBatchActions = () => (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-medium text-slate-500 mr-1">{selectedOrders.length} selected</span>
+      <button
+        onClick={() => handleBulkAction("ready")}
+        disabled={selectedOrders.length === 0}
+        className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Mark ready
+      </button>
+      <button
+        onClick={() => handleBulkAction("claimed")}
+        disabled={selectedOrders.length === 0}
+        className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Mark claimed
+      </button>
+      <button
+        onClick={() => handleBulkAction("cancel")}
+        disabled={selectedOrders.length === 0}
+        className="px-4 py-2 rounded-lg text-sm font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+
+  const renderActions = (order) => {
+    if (activeStage === "pickup") {
+      return (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleSingleAction(order, "TO CLAIM")}
+            disabled={order.rawStatus !== "TO PROCESS" || busyId === order.id}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Mark ready
+          </button>
+          <button
+            onClick={() => handleSingleClaim(order)}
+            disabled={order.rawStatus !== "TO CLAIM" || busyId === order.id}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Mark claimed
+          </button>
+        </div>
+      );
+    }
+    if (activeStage === "courier") {
+      return (
+        <button
+          onClick={() => handleSingleAction(order, "CLAIMED")}
+          disabled={busyId === order.id}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Mark delivered
+        </button>
+      );
+    }
+    return <span className="text-xs text-slate-400">No actions</span>;
+  };
 
   return (
-    <AdminLayout>
-      <div className="space-y-4 animate-fade-in pb-10">
-        {/* Toast alert */}
-        {toastMessage && (
-          <div className="fixed top-16 right-6 z-50 bg-white text-slate-800 px-3.5 py-2 rounded-md border border-slate-200 flex items-center gap-2 text-xs font-semibold animate-slide-up">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span>{toastMessage}</span>
-          </div>
-        )}
-
-        {/* Compacted Page Header */}
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-            Fulfillment &amp; Logistics
-          </h1>
-          <p className="text-xs text-slate-500 font-normal mt-0.5">
-            Process online orders through production, pickup, and delivery.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">Fulfillment Center</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage pickup and courier batch processing</p>
         </div>
-
-        {/* 4 Metric KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Active Fulfillment */}
-          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <rect x="2" y="3" width="20" height="14" rx="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
-                ACTIVE FULFILLMENT
-              </p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">42</h3>
-              <p className="text-[10px] text-slate-400 font-normal">Orders in progress</p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search orders..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 w-64"
+            />
           </div>
-
-          {/* Awaiting Production */}
-          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4H2v16z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
-                AWAITING PRODUCTION
-              </p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">4</h3>
-              <p className="text-[10px] text-slate-400 font-normal">Need production</p>
-            </div>
-          </div>
-
-          {/* Ready For Pickup */}
-          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <path d="M16 10a4 4 0 0 1-8 0" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
-                READY FOR PICKUP
-              </p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">12</h3>
-              <p className="text-[10px] text-slate-400 font-normal">Waiting for customers</p>
-            </div>
-          </div>
-
-          {/* Ready For Dispatch */}
-          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <rect x="1" y="3" width="15" height="13" />
-                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-                <circle cx="5.5" cy="18.5" r="2.5" />
-                <circle cx="18.5" cy="18.5" r="2.5" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
-                READY FOR DISPATCH
-              </p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">5</h3>
-              <p className="text-[10px] text-slate-400 font-normal">For courier delivery</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Tabs - Emojis purged */}
-        <div className="flex items-center gap-6 border-b border-slate-200">
-          <button
-            type="button"
-            onClick={() => setActiveTab('pickup')}
-            className={`pb-2.5 text-xs font-semibold transition-colors flex items-center gap-1.5 relative cursor-pointer ${
-              activeTab === 'pickup'
-                ? 'text-brand-orange border-b-2 border-brand-orange font-bold'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
+          <select
+            value={selectedCategory}
+            onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-            <span>Store Pickup (38)</span>
-          </button>
+            {CATEGORY_OPTIONS.map((category) => (
+              <option key={category}>{category}</option>
+            ))}
+          </select>
           <button
-            type="button"
-            onClick={() => setActiveTab('courier')}
-            className={`pb-2.5 text-xs font-semibold transition-colors flex items-center gap-1.5 relative cursor-pointer ${
-              activeTab === 'courier'
-                ? 'text-brand-orange border-b-2 border-brand-orange font-bold'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
+            onClick={handleRefresh}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <rect x="1" y="3" width="15" height="13" />
-              <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
-              <circle cx="5.5" cy="18.5" r="2.5" />
-              <circle cx="18.5" cy="18.5" r="2.5" />
-            </svg>
-            <span>Courier Delivery (12)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('history')}
-            className={`pb-2.5 text-xs font-semibold transition-colors flex items-center gap-1.5 relative cursor-pointer ${
-              activeTab === 'history'
-                ? 'text-brand-orange border-b-2 border-brand-orange font-bold'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            <span>Completed / History</span>
+            <RefreshCw className="w-4 h-4" />
+            Refresh
           </button>
         </div>
+      </div>
 
-        {/* Filters Toolbar */}
-        <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2.5">
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2.5">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="search"
-                placeholder="Search order, customer, or batch..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-8 pl-8 pr-3 rounded-md bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-slate-300"
-              />
-            </div>
-
-            {/* Dropdown Filters */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
-              >
-                <option value="All">Status ▾</option>
-                <option value="Ready for Pickup">Ready for Pickup</option>
-                <option value="In Production">In Production</option>
-                <option value="Awaiting Production">Awaiting Production</option>
-                <option value="Unclaimed">Unclaimed &gt; 24h</option>
-              </select>
-
-              <select
-                value={batchFilter}
-                onChange={(e) => setBatchFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
-              >
-                <option value="All">Batch ▾</option>
-                <option value="BAT-0012">BAT-0012</option>
-                <option value="BAT-0014">BAT-0014</option>
-                <option value="BAT-0015">BAT-0015</option>
-                <option value="BAT-0016">BAT-0016</option>
-              </select>
-
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
-              >
-                <option value="All">Order Category ▾</option>
-                <option value="Regular">Regular</option>
-                <option value="Pre-order">Pre-order</option>
-              </select>
-
-              <select
-                value={dateRangeFilter}
-                onChange={(e) => setDateRangeFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
-              >
-                <option value="All">Date Range ▾</option>
-                <option value="Today">Today</option>
-                <option value="Last 7 Days">Last 7 Days</option>
-                <option value="This Month">This Month</option>
-              </select>
-
-              <select
-                value={exceptionFilter}
-                onChange={(e) => setExceptionFilter(e.target.value)}
-                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
-              >
-                <option value="All">Exception ▾</option>
-                <option value="Unclaimed">Unclaimed &gt; 24h</option>
-                <option value="Delayed">Delayed</option>
-              </select>
-
-              <button
-                type="button"
-                onClick={clearAllTags}
-                className="text-xs font-semibold text-slate-500 hover:text-brand-orange px-1.5 py-1 cursor-pointer"
-              >
-                Clear all
-              </button>
-
-              <button
-                type="button"
-                className="h-8 px-3 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 shrink-0 cursor-pointer"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                </svg>
-                <span>Filters</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Active Filter Tags */}
-          {activeTags.length > 0 && (
-            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 flex-wrap">
-              {activeTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200"
-                >
-                  <span>{tag}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeTag(tag)}
-                    className="text-slate-400 hover:text-slate-700 cursor-pointer text-sm font-bold"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Selected Orders Banner & Batch Actions Dropdown */}
-        {selectedIds.length > 0 && (
-          <div className="bg-orange-50/70 border border-orange-200/80 rounded-md p-2.5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-orange-950">
-                {selectedIds.length} orders selected
-              </span>
-
-              {/* Batch Actions Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowBatchDropdown(!showBatchDropdown)}
-                  className="h-8 px-3 bg-white border border-slate-200 hover:border-slate-300 rounded-md text-xs font-semibold text-slate-800 flex items-center gap-1.5 cursor-pointer focus:outline-none"
-                >
-                  <span>Batch Actions</span>
-                  <span className="text-slate-400 text-xs">▾</span>
-                </button>
-
-                {showBatchDropdown && (
-                  <div className="absolute left-0 mt-1 w-56 bg-white rounded-md border border-slate-200 py-1 z-40 animate-fade-in">
-                    <button
-                      type="button"
-                      onClick={() => handleBatchStatusUpdate('In Production')}
-                      className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500 shrink-0">
-                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-                        <line x1="3" y1="6" x2="21" y2="6"/>
-                        <path d="M16 10a4 4 0 0 1-8 0"/>
-                      </svg>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-900 leading-tight">Mark In Production</p>
-                        <p className="text-[10px] text-slate-400">Move to in production</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleBatchStatusUpdate('Preparing')}
-                      className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500 shrink-0">
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                        <line x1="12" y1="22.08" x2="12" y2="12"/>
-                      </svg>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-900 leading-tight">Mark Preparing</p>
-                        <p className="text-[10px] text-slate-400">Move to preparing</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleBatchStatusUpdate('Ready for Pickup')}
-                      className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500 shrink-0">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-900 leading-tight">Mark Ready for Pickup</p>
-                        <p className="text-[10px] text-slate-400">Notify customers</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleBatchStatusUpdate('Claimed')}
-                      className="w-full px-3 py-1.5 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600 shrink-0">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                        <polyline points="22 4 12 14.01 9 11.01"/>
-                      </svg>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-900 leading-tight">Mark Claimed</p>
-                        <p className="text-[10px] text-slate-400">by customer</p>
-                      </div>
-                    </button>
-                  </div>
-                )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {KPI.map((stat) => {
+          const Icon = stat.icon;
+          const delta = stat.key === "issues" ? "-0.3%" : stat.key === "total" ? "+100%" : "+30%";
+          const positive = stat.key !== "issues";
+          return (
+            <div key={stat.key} className="bg-white rounded-xl border border-slate-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className={`w-10 h-10 rounded-lg ${stat.bg} flex items-center justify-center`}>
+                  <Icon className={`w-5 h-5 ${stat.color}`} />
+                </div>
+                <span className={`text-xs font-medium ${positive ? "text-emerald-600" : "text-rose-600"}`}>{delta}</span>
               </div>
+              <p className="text-2xl font-bold text-slate-900">{stats[stat.key]}</p>
+              <p className="text-sm text-slate-500 mt-1">{stat.label}</p>
             </div>
+          );
+        })}
+      </div>
 
-            <div className="flex items-center gap-1.5 text-xs text-orange-900/80 font-medium">
-              <span>ⓘ</span>
-              <span>Actions are shown based on the status of selected orders.</span>
-            </div>
+      <div className="flex items-center gap-2 border-b border-slate-200">
+        {FULFILLMENT_STAGES.map((stage) => {
+          const Icon = stage.icon;
+          const isActive = activeStage === stage.key;
+          const count = stageCounts[stage.key];
+          return (
+            <button
+              key={stage.key}
+              onClick={() => { setActiveStage(stage.key); setSelectedOrders([]); setCurrentPage(1); }}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                isActive
+                  ? "border-emerald-600 text-emerald-700"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {stage.label}
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-900">
+              {FULFILLMENT_STAGES.find((s) => s.key === activeStage)?.label} Queue
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5">{filteredOrders.length} orders</p>
           </div>
-        )}
+          {renderBatchActions()}
+        </div>
 
-        {/* Table Container */}
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700 border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="py-2.5 px-3 w-10">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className="text-left px-5 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={paginatedOrders.length > 0 && paginatedOrders.every((o) => selectedOrders.includes(o.id))}
+                    onChange={handleSelectAll}
+                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                </th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Order ID</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Customer</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Type</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Stage</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Time in Stage</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedOrders.map((order) => (
+                <tr key={order.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                  <td className="px-5 py-3">
                     <input
                       type="checkbox"
-                      className="rounded text-brand-orange focus:ring-0"
-                      checked={selectedIds.length === orders.length && orders.length > 0}
-                      onChange={toggleSelectAll}
+                      checked={selectedOrders.includes(order.id)}
+                      onChange={() => handleSelectOrder(order.id)}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
-                  </th>
-                  <th className="p-4">ORDER ID</th>
-                  <th className="p-4">BATCH ID</th>
-                  <th className="p-4">CATEGORY</th>
-                  <th className="p-4">FULFILLMENT DETAILS</th>
-                  <th className="p-4">STATUS</th>
-                  <th className="p-4">TIME IN STAGE</th>
-                  <th className="p-4 text-right">ACTION</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredOrders.map((order) => {
-                  const isSelected = selectedIds.includes(order.id)
-                  return (
-                    <tr
-                      key={order.id}
-                      className={`hover:bg-gray-50/70 transition-colors ${
-                        isSelected ? 'bg-orange-50/20' : ''
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className="font-medium text-slate-900 text-sm">{order.id}</span>
+                    <span className="block text-xs text-slate-500">Batch: {order.batch}</span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="text-sm text-slate-900">{order.customer}</div>
+                    <div className="text-xs text-slate-500">{order.studentId}</div>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                        order.type === "Pre-order" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"
                       }`}
                     >
-                      {/* Checkbox */}
-                      <td className="p-4">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelectOrder(order.id)}
-                          className="rounded text-brand-orange focus:ring-0"
-                        />
-                      </td>
-
-                      {/* Order ID & Customer */}
-                      <td className="p-4">
-                        <p className="font-extrabold text-gray-900 text-xs hover:text-brand-orange cursor-pointer">
-                          {order.id}
-                        </p>
-                        <p className="text-gray-800 font-semibold text-[11px] mt-0.5">
-                          {order.customer}
-                        </p>
-                        <p className="text-[10px] text-gray-400 font-medium">{order.date}</p>
-                      </td>
-
-                      {/* Batch ID - Rectangular */}
-                      <td className="p-4">
-                        <span className="inline-block px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-semibold text-[11px] border border-blue-100/70">
-                          {order.batchId}
+                      {order.type}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-sm text-slate-600">{order.fulfillment}</td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-sm font-medium ${
+                          order.exceeds24h ? "text-rose-600" : "text-slate-700"
+                        }`}
+                      >
+                        {timeSince(order.createdAt)}
+                      </span>
+                      {order.exceeds24h && (
+                        <span className="text-xs text-rose-500 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Exceeds 24h
                         </span>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{order.batchCount} orders</p>
-                      </td>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-5 py-3">
+                    <StatusPill status={order.status} />
+                  </td>
+                  <td className="px-5 py-3 text-right">{renderActions(order)}</td>
+                </tr>
+              ))}
+              {paginatedOrders.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-5 py-10 text-center text-sm text-slate-500">
+                    No orders in this queue
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-                      {/* Category Badge - Rectangular */}
-                      <td className="p-4">
-                        <span
-                          className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold ${
-                            order.category === 'Pre-order'
-                              ? 'bg-orange-50 text-brand-orange border border-orange-200/60'
-                              : 'bg-blue-50 text-blue-700 border border-blue-200/60'
-                          }`}
-                        >
-                          {order.category}
-                        </span>
-                      </td>
-
-                      {/* Fulfillment Details */}
-                      <td className="p-4">
-                        <div className="flex items-center gap-1.5 font-bold text-gray-900 text-xs">
-                          <span className="w-2 h-2 rounded-full bg-purple-600" />
-                          <span>{order.fulfillmentType}</span>
-                        </div>
-                        <p className="text-[11px] text-gray-500 font-medium mt-0.5">
-                          Student ID: {order.studentId}
-                        </p>
-                        <p className="text-[10px] text-gray-400 font-medium">
-                          {order.pickupMode}
-                        </p>
-                      </td>
-
-                      {/* Status Badge - Rectangular */}
-                      <td className="p-4">
-                        <span
-                          className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold ${
-                            order.status === 'Ready for Pickup'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                              : order.status === 'In Production'
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
-                              : order.status === 'Awaiting Production'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                              : 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                          }`}
-                        >
-                          {order.status}
-                        </span>
-                        {order.status === 'Unclaimed > 24h' && (
-                          <p className="text-[10px] text-rose-500 font-medium mt-0.5">
-                            {order.sinceTime}
-                          </p>
-                        )}
-                      </td>
-
-                      {/* Time In Stage */}
-                      <td className="p-4">
-                        <div className="flex items-center gap-1 font-bold text-xs">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                            <circle cx="12" cy="12" r="10" />
-                            <polyline points="12 6 12 12 16 14" />
-                          </svg>
-                          <span
-                            className={order.exceeds24h ? 'text-rose-600 font-black' : 'text-gray-800'}
-                          >
-                            {order.timeInStage}
-                          </span>
-                        </div>
-                        <p
-                          className={`text-[10px] font-medium mt-0.5 ${
-                            order.exceeds24h ? 'text-rose-600 font-bold' : 'text-gray-400'
-                          }`}
-                        >
-                          {order.exceeds24h ? 'Exceeds 24h' : order.sinceTime}
-                        </p>
-                      </td>
-
-                      {/* Action Buttons - Rectangular */}
-                      <td className="p-4 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleOrderAction(order)}
-                            className={`px-3 py-1.5 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
-                              order.actionType === 'handover'
-                                ? 'bg-brand-orange hover:bg-brand-orange-dark text-white'
-                                : 'bg-white border border-slate-200 hover:bg-slate-50 text-slate-800'
-                            }`}
-                          >
-                            {order.actionLabel}
-                          </button>
-                          <button
-                            type="button"
-                            className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer"
-                          >
-                            ···
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Footer */}
-          <div className="p-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <span className="text-slate-500 font-medium">Showing 1–5 of 38 orders</span>
-            <div className="flex items-center gap-3">
-              <select className="h-7 px-2 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none focus:ring-0">
-                <option>10 per page</option>
-                <option>25 per page</option>
-                <option>50 per page</option>
-              </select>
-
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="w-7 h-7 rounded-md border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100"
-                >
-                  ‹
-                </button>
-                <button
-                  type="button"
-                  className="w-7 h-7 rounded-md bg-brand-orange text-white font-bold flex items-center justify-center"
-                >
-                  1
-                </button>
-                <button
-                  type="button"
-                  className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
-                >
-                  2
-                </button>
-                <button
-                  type="button"
-                  className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
-                >
-                  3
-                </button>
-                <button
-                  type="button"
-                  className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
-                >
-                  4
-                </button>
-                <button
-                  type="button"
-                  className="w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
+        <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-3">
+          <span className="text-sm text-slate-500">
+            Showing {rangeStart}–{rangeEnd} of {filteredOrders.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-slate-600">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
-    </AdminLayout>
-  )
+    </div>
+  );
 }

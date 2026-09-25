@@ -11,7 +11,6 @@ import Button from '../components/ui/Button.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
 import { CartIcon, ShirtIcon, AlertTriangleIcon, TruckIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
-import { addCustomerOrder } from '../utils/orderStorage.js'
 
 function Cart() {
   const navigate = useNavigate()
@@ -26,24 +25,18 @@ function Cart() {
     updateQuantity,
     removeFromCart,
     restoreItem,
-    clearSelectedItems,
-    clearCart,
     subtotal,
   } = useCart()
+  const { canCheckoutItem } = useCart()
   const { showToast } = useToast()
 
   const [showLogin, setShowLogin] = useState(false)
-  const [showConfirmOrderModal, setShowConfirmOrderModal] = useState(false)
-  const [fulfillmentType, setFulfillmentType] = useState('Store Pickup')
 
   // Mixed order classification (Requirement 8 & 9)
   const regularSelected = selectedItems.filter((i) => !i.product.preOrder)
   const preorderSelected = selectedItems.filter((i) => i.product.preOrder)
   const hasMixedSelection = regularSelected.length > 0 && preorderSelected.length > 0
   const isNoneSelected = selectedItems.length === 0
-
-  const shippingFee = fulfillmentType === 'Courier Delivery' ? 50 : 0
-  const grandTotal = subtotal + shippingFee
 
   const allSelected =
     cartItems.length > 0 && selectedItemIds.length === cartItems.length
@@ -81,75 +74,18 @@ function Cart() {
       )
       return
     }
-    setShowConfirmOrderModal(true)
-  }
-
-  const [orderSuccessId, setOrderSuccessId] = useState(null)
-  const [confirmedSummary, setConfirmedSummary] = useState(null)
-  const [selectedAddressIdx, setSelectedAddressIdx] = useState(0)
-
-  const savedAddresses = [
-    { id: 1, label: 'Home', line: '123 Mayon St., Legazpi City, Albay', default: true },
-    { id: 2, label: 'Dorm', line: '45 BU Campus Drive, Legazpi City, Albay', default: false },
-  ]
-
-  const handleConfirmOrder = () => {
-    setShowConfirmOrderModal(false)
-    // Snapshot for the confirmation screen (the bag is cleared right after)
-    setConfirmedSummary({
-      items: selectedItems.map((item) => ({
-        key: item.cartItemId,
-        name: item.product?.name,
-        qty: Number(item.qty || 1),
-        price: Number(item.product?.price || 0),
-        variant: [item.size !== 'One Size' ? item.size : null, item.color?.name].filter(Boolean).join(' • '),
-        image: item.color?.image || item.product?.images?.[0] || '',
-      })),
-      subtotal,
-      shippingFee,
-      total: grandTotal,
-    })
-    const firstItem = selectedItems[0]
-    const deliveryAddress = fulfillmentType === 'Courier Delivery'
-      ? savedAddresses[selectedAddressIdx]?.line || (currentUser?.address || 'Door-to-door delivery · Legazpi City, Albay')
-      : null
-    const newOrder = addCustomerOrder({
-      productId: firstItem?.product?.id || 'prod-1',
-      name: firstItem?.product?.name || 'BU Merchandise',
-      price: firstItem?.product?.price || 500,
-      qty: firstItem?.quantity || 1,
-      size: firstItem?.size || 'Standard',
-      color: firstItem?.color || { name: 'Default', value: '#1E3A8A' },
-      image: firstItem?.product?.images?.[0] || null,
-      type: firstItem?.product?.preOrder ? 'pre-order' : 'processing',
-      status: firstItem?.product?.preOrder ? 'IN PRODUCTION' : 'PROCESSING',
-      statusContext: fulfillmentType === 'Courier Delivery'
-        ? 'Order placed. Review Lalamove quote and pay delivery fee to lock delivery.'
-        : 'Order confirmed and scheduled for store pickup.',
-      fulfillment: {
-        method: fulfillmentType,
-        location: fulfillmentType === 'Courier Delivery'
-          ? (deliveryAddress || 'Door-to-door delivery · Legazpi City, Albay')
-          : 'Tindahan ni Isko · BU Student Center Ground Floor',
-        note: fulfillmentType === 'Courier Delivery'
-          ? 'Lalamove quote generated. Delivery fee pending payment.'
-          : 'Bring your student ID or order QR pass when claiming.',
-      },
-      recipient: currentUser?.name || 'Alyssa B.',
-      phone: currentUser?.phone || '09123456789',
-      campus: currentUser?.campus || 'Main Campus',
-      college: currentUser?.college || 'College of Science',
-      course: currentUser?.course || 'BS Computer Science',
-    })
-    if (clearSelectedItems) {
-      clearSelectedItems()
-    } else {
-      clearCart()
+    // Real checkout (overview, modality, payment) lives on /checkout.
+    // REQ-CW-02: Verify all selected items are available
+    const unavailableItems = selectedItems.filter((i) => !canCheckoutItem(i))
+    if (unavailableItems.length > 0) {
+      showToast(
+        'Some items are out of stock and cannot be checked out. Please remove them.',
+        'error'
+      )
+      return
     }
-    showToast('Order placed successfully!', 'success')
-    setOrderSuccessId(newOrder?.id || 'ORD-NEW')
+    navigate('/checkout')
   }
-
 
   // Helper to determine max stock per variant (Requirement 12)
   const getItemMaxStock = (item) => {
@@ -160,104 +96,6 @@ function Cart() {
       }
     }
     return item.product.preOrder ? 10 : 15
-  }
-
-  if (orderSuccessId) {
-    return (
-      <AppShell>
-        <div className="min-h-[60vh] flex items-center justify-center px-4 py-8 pb-28 lg:pb-8 animate-fade-in">
-          <div className="bg-white rounded-xl p-6 sm:p-8 max-w-lg w-full border border-slate-100 text-center space-y-5">
-            {/* Success checkmark */}
-            <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-emerald-500">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </div>
-
-            <div className="space-y-1.5">
-              <h2 className="text-xl font-bold text-gray-900">Order placed</h2>
-              <p className="text-sm text-gray-500">Your order has been placed and is now being processed.</p>
-              <p className="text-sm font-mono text-gray-500 bg-slate-50 rounded-md px-3 py-1.5 inline-block">
-                Order #{orderSuccessId}
-              </p>
-            </div>
-
-            {/* Order recap */}
-            {confirmedSummary && (
-              <div className="text-left rounded-lg bg-slate-50 p-4 space-y-3">
-                <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto scrollbar-none">
-                  {confirmedSummary.items.map((it) => (
-                    <div key={it.key} className="py-2.5 first:pt-0 flex items-center justify-between gap-3 text-sm">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {it.image ? (
-                          <img
-                            src={getImageUrl(it.image)}
-                            alt={it.name}
-                            className="w-10 h-10 rounded-md object-contain bg-white p-1 shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-md bg-white flex items-center justify-center shrink-0">
-                            <ShirtIcon className="w-5 h-5 text-slate-300" />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="font-semibold text-gray-900 truncate">{it.name}</p>
-                          <p className="text-xs text-gray-500 truncate">
-                            {it.qty} × {formatPrice(it.price)}
-                            {it.variant ? ` · ${it.variant}` : ''}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="font-bold text-gray-900 shrink-0">{formatPrice(it.price * it.qty)}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="pt-3 border-t border-slate-200 space-y-1 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Subtotal</span>
-                    <span>{formatPrice(confirmedSummary.subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Fulfillment fee</span>
-                    <span>{confirmedSummary.shippingFee > 0 ? formatPrice(confirmedSummary.shippingFee) : 'Free (Pickup)'}</span>
-                  </div>
-                  <div className="flex justify-between items-baseline pt-1.5 font-bold text-gray-900">
-                    <span>Total</span>
-                    <span className="text-lg text-brand-orange">{formatPrice(confirmedSummary.total)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="p-3.5 bg-orange-50/70 rounded-lg text-sm text-left space-y-0.5">
-              <p className="font-bold text-gray-800">Fulfillment</p>
-              <p className="text-gray-600">{fulfillmentType}</p>
-              {fulfillmentType === 'Store Pickup' && (
-                <p className="text-gray-500">Tindahan ni Isko · BU Student Center Ground Floor</p>
-              )}
-              {fulfillmentType === 'Courier Delivery' && (
-                <p className="text-gray-500">You will be notified once the Lalamove quote is ready.</p>
-              )}
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2.5">
-              <Link
-                to="/orders"
-                className="flex-1 py-3 rounded-lg bg-brand-orange text-white font-bold text-sm hover:bg-brand-orange-dark transition-colors flex items-center justify-center"
-              >
-                View My Orders
-              </Link>
-              <Link
-                to="/shop"
-                className="flex-1 py-3 rounded-lg bg-slate-100 text-gray-700 font-semibold text-sm hover:bg-slate-200 transition-colors flex items-center justify-center"
-              >
-                Continue Shopping
-              </Link>
-            </div>
-          </div>
-        </div>
-      </AppShell>
-    )
   }
 
   return (
@@ -684,171 +522,6 @@ function Cart() {
         message="Sign in to proceed with checkout and reserve your BU merchandise."
       />
 
-      {/* ── CUSTOMER ORDER CONFIRMATION MODAL ── */}
-      {showConfirmOrderModal && (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 pb-28 md:pb-4 isolate">
-          <div className="absolute inset-0 z-0 bg-black/50" onClick={() => setShowConfirmOrderModal(false)} />
-          <div className="relative z-10 bg-white rounded-lg p-5 md:p-6 max-w-xl w-full max-h-[80vh] overflow-y-auto space-y-4 animate-scale-in">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Review &amp; Confirm Order</h3>
-                <p className="text-sm text-gray-500">Please verify your items and fulfillment details</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConfirmOrderModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Customer info & Fulfillment selector */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-              <div className="p-3.5 bg-slate-50 rounded-lg space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Recipient</p>
-                <p className="font-bold text-gray-900 truncate">{currentUser?.fullName || 'Juan Dela Cruz'}</p>
-                <p className="text-gray-500 truncate">{currentUser?.email || 'jdcruz@student.u.edu.ph'}</p>
-                <p className="text-gray-500 font-mono text-xs">ID: {currentUser?.studentId || '2020-1234-5678'}</p>
-              </div>
-
-              <div className="p-3.5 bg-slate-50 rounded-lg space-y-1.5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Fulfillment Method</p>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setFulfillmentType('Store Pickup')}
-                    className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
-                      fulfillmentType === 'Store Pickup'
-                        ? 'bg-brand-orange text-white border-brand-orange'
-                        : 'bg-white text-gray-600 border-slate-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    Store Pickup
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFulfillmentType('Courier Delivery')}
-                    className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
-                      fulfillmentType === 'Courier Delivery'
-                        ? 'bg-brand-orange text-white border-brand-orange'
-                        : 'bg-white text-gray-600 border-slate-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    Delivery
-                  </button>
-                </div>
-                <p className="text-xs text-gray-500 truncate">
-                  {fulfillmentType === 'Store Pickup' ? 'BU Main Campus Center' : 'Courier delivery (+\u20b150)'}
-                </p>
-              </div>
-            </div>
-
-            {/* Delivery Address Selector — shown only when Courier Delivery is selected */}
-            {fulfillmentType === 'Courier Delivery' && (
-              <div className="space-y-2 text-sm">
-                <p className="font-bold text-gray-900">Delivery Address</p>
-                <div className="space-y-1.5">
-                  {savedAddresses.map((addr, idx) => (
-                    <button
-                      key={addr.id}
-                      type="button"
-                      onClick={() => setSelectedAddressIdx(idx)}
-                      className={`w-full text-left p-3 rounded-lg border transition-colors cursor-pointer ${
-                        selectedAddressIdx === idx
-                          ? 'border-brand-orange bg-orange-50/60'
-                          : 'border-slate-100 bg-white hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                          selectedAddressIdx === idx ? 'border-brand-orange' : 'border-gray-300'
-                        }`}>
-                          {selectedAddressIdx === idx && (
-                            <div className="w-1.5 h-1.5 rounded-full bg-brand-orange" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="font-bold text-gray-800">{addr.label}</span>
-                          {addr.default && <span className="ml-1.5 text-xs font-semibold text-brand-orange bg-orange-50 px-1.5 py-0.5 rounded uppercase">Default</span>}
-                          <p className="text-gray-500 text-xs truncate mt-0.5">{addr.line}</p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Selected Items List */}
-            <div className="space-y-1.5">
-              <p className="text-sm font-bold text-gray-900">Items to Order ({selectedItems.length})</p>
-              <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 rounded-lg px-3 py-1 bg-slate-50 scrollbar-none">
-                {selectedItems.map((item, idx) => {
-                  const product = item.product || item
-                  const itemPrice = Number(product.price || item.price || 0)
-                  const itemQty = Number(item.qty || 1)
-                  const variantText = [item.size, item.color?.name].filter(Boolean).join(' • ')
-                  return (
-                    <div key={idx} className="py-2.5 flex items-center justify-between gap-3 text-sm">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <img
-                          src={getImageUrl(item.color?.image || product.images?.[0] || product.image)}
-                          alt={product.name}
-                          className="w-10 h-10 rounded-md object-contain bg-white p-1 shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <p className="font-bold text-gray-900 truncate">{product.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {itemQty}x {variantText ? `• ${variantText}` : ''} • ₱{itemPrice.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="font-black text-gray-900 shrink-0">₱{(itemPrice * itemQty).toFixed(2)}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Totals Breakdown */}
-            <div className="p-4 bg-orange-50/60 rounded-lg space-y-1.5 text-sm">
-              <div className="flex justify-between text-gray-600 font-medium">
-                <span>Items Subtotal</span>
-                <span>₱{subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-gray-600 font-medium">
-                <span>Fulfillment Fee</span>
-                <span>{shippingFee > 0 ? `₱${shippingFee.toFixed(2)}` : 'FREE (Pickup)'}</span>
-              </div>
-              <div className="flex justify-between items-baseline text-sm font-bold text-gray-900 pt-2 border-t border-orange-200/60">
-                <span>Grand Total</span>
-                <span className="text-lg font-bold text-brand-orange">₱{grandTotal.toFixed(2)}</span>
-              </div>
-            </div>
-
-            {/* Confirmation Decision Buttons */}
-            <div className="flex items-center gap-2.5 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowConfirmOrderModal(false)}
-                className="flex-1 py-3 text-sm font-semibold text-gray-600 hover:text-gray-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-              >
-                Back to Bag
-              </button>
-              <Button
-                onClick={handleConfirmOrder}
-                className="flex-1 py-3 rounded-lg font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98 transition-all cursor-pointer"
-              >
-                Confirm &amp; Place Order
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </AppShell>
   )
 }

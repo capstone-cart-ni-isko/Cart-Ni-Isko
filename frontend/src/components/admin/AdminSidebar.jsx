@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { mapOrderRows } from '../../services/dashboard.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 const ICON = 'w-4 h-4'
@@ -29,6 +30,8 @@ const navSections = [
       {
         to: '/admin/pos',
         label: 'Register',
+        // POST /pos/* is admin-only in the API, so staff never open it.
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <rect x="6" y="2" width="12" height="4" rx="1" />
@@ -169,6 +172,8 @@ const navSections = [
       {
         to: '/admin/settings',
         label: 'Settings',
+        // PUT /settings/update is admin-only in the API.
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <circle cx="12" cy="12" r="3" />
@@ -196,7 +201,19 @@ export default function AdminSidebar({
   onToggleCollapse: controlledToggleCollapse,
 }) {
   const navigate = useNavigate()
-  const { adminState = {} } = useAdmin()
+  const { orders: rawOrders = [], products = [], currentAdminUser } = useAdmin()
+  // Live rows for the ⌘K search palette (server-backed, refreshed by context).
+  const liveOrders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
+  // Nav mirrors the backend `role:` middleware (staff/admin/super admin).
+  const visibleSections = useMemo(() => {
+    const roleKey = currentAdminUser?.roleKey
+    return navSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => !item.roles || item.roles.includes(roleKey)),
+      }))
+      .filter((section) => section.items.length > 0)
+  }, [currentAdminUser?.roleKey])
   const [internalCollapsed, setInternalCollapsed] = useState(false)
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false)
@@ -211,47 +228,9 @@ export default function AdminSidebar({
 
   const smallIcon = 'w-4 h-4'
 
-  const defaultRecentSearches = [
-    {
-      id: 'ord-9402', type: 'order', title: '#ORD-9402', subtitle: 'Juan Dela Cruz',
-      link: '/admin/orders?search=ORD-9402',
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={smallIcon}>
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <path d="M16 10a4 4 0 0 1-8 0" />
-        </svg>
-      ),
-      iconBg: 'bg-blue-50 text-blue-600',
-    },
-    {
-      id: 'prod-coffee', type: 'product', title: 'Organic Roast Coffee', subtitle: 'In Stock (45)',
-      link: '/admin/inventory?search=Organic Roast Coffee',
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={smallIcon}>
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-          <line x1="12" y1="22.08" x2="12" y2="12" />
-        </svg>
-      ),
-      iconBg: 'bg-slate-100 text-slate-600',
-    },
-    {
-      id: 'user-maria', type: 'customer', title: 'Maria Santos', subtitle: '14 Total Orders',
-      link: '/admin/orders?search=Maria Santos',
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={smallIcon}>
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-      ),
-      iconBg: 'bg-slate-100 text-slate-600',
-    },
-  ]
-
   const displayedItems = searchQuery.trim()
     ? [
-        ...(adminState.orders || [])
+        ...liveOrders
           .filter((o) =>
             o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
             o.customer.toLowerCase().includes(searchQuery.toLowerCase())
@@ -269,11 +248,11 @@ export default function AdminSidebar({
             ),
             iconBg: 'bg-blue-50 text-blue-600',
           })),
-        ...(adminState.products || [])
+        ...products
           .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
           .slice(0, 3)
           .map((p) => ({
-            id: p.id, type: 'product', title: p.name, subtitle: `In Stock (${p.stock})`,
+            id: p.id, type: 'product', title: p.name, subtitle: `In Stock (${p.totalStock ?? 0})`,
             link: `/admin/inventory?search=${encodeURIComponent(p.name)}`,
             icon: (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={smallIcon}>
@@ -284,13 +263,8 @@ export default function AdminSidebar({
             ),
             iconBg: 'bg-slate-100 text-slate-600',
           })),
-        ...defaultRecentSearches.filter(
-          (item) =>
-            item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.subtitle.toLowerCase().includes(searchQuery.toLowerCase())
-        ),
       ]
-    : defaultRecentSearches
+    : []
 
   const handleSelectItem = (item) => {
     navigate(item.link)
@@ -323,8 +297,10 @@ export default function AdminSidebar({
 
   useEffect(() => {
     if (isSearchModalOpen) {
-      setTimeout(() => searchInputRef.current?.focus(), 50)
-      setSelectedIndex(0)
+      setTimeout(() => {
+        searchInputRef.current?.focus()
+        setSelectedIndex(0)
+      }, 50)
     }
   }, [isSearchModalOpen])
 
@@ -471,14 +447,16 @@ export default function AdminSidebar({
 
               <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
                 <span className="text-[10px] font-medium text-slate-400 uppercase">
-                  {searchQuery.trim() ? 'Search results' : 'Recent searches'}
+                  {searchQuery.trim() ? 'Search results' : 'Start typing to search'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-medium">Quick jump</span>
               </div>
 
               <div className="px-2.5 pb-2.5 space-y-0.5 max-h-64 overflow-y-auto">
                 {displayedItems.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-5 text-center">No matching results found.</p>
+                  <p className="text-xs text-slate-400 py-5 text-center">
+                    {searchQuery.trim() ? 'No matching results found.' : 'Search orders and products by name or ID.'}
+                  </p>
                 ) : (
                   displayedItems.map((item, index) => (
                     <div
@@ -520,7 +498,7 @@ export default function AdminSidebar({
 
         {/* Navigation */}
         <nav className="p-2.5 space-y-3 overflow-y-auto flex-1 scrollbar-none">
-          {navSections.map((section, secIdx) => (
+          {visibleSections.map((section, secIdx) => (
             <div key={section.title} className="space-y-0.5">
               {!isCollapsed ? (
                 <div className="px-2.5 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 select-none">

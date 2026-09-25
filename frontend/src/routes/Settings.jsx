@@ -12,17 +12,12 @@ import {
   MapPinIcon,
   BellIcon,
   PackageIcon,
-  HelpIcon,
-  LockIcon,
   LogOutIcon,
-  DownloadCloudIcon
 } from '../components/ui/Icons.jsx'
-import { triggerPwaInstall } from '../components/ui/PwaInstallPrompt.jsx'
 
 const settingsAccountItems = [
   { to: '/account', label: 'Edit Profile', icon: <UserIcon className="w-5 h-5 text-gray-450" />, description: 'Update name, email and photo' },
   { to: '/settings/change-password', label: 'Change Password', icon: <KeyIcon className="w-5 h-5 text-gray-450" />, description: 'Update your login password' },
-  { to: '/security', label: 'Security', icon: <LockIcon className="w-5 h-5 text-gray-450" />, description: 'Two-factor authentication' },
 ]
 
 const settingsBillingItems = [
@@ -32,12 +27,9 @@ const settingsBillingItems = [
 const settingsPrefsItems = [
   { to: '/settings/notifications', label: 'Notification Preferences', icon: <BellIcon className="w-5 h-5 text-gray-450" />, description: 'Control alerts and updates' },
   { to: '/orders', label: 'Order History', icon: <PackageIcon className="w-5 h-5 text-gray-450" />, description: 'View past and active orders' },
-  { onClick: triggerPwaInstall, label: 'Install App (PWA)', icon: <DownloadCloudIcon className="w-5 h-5 text-gray-450" />, description: 'Add to Home Screen for fast access' },
 ]
 
-const settingsSupportItems = [
-  { to: '/help', label: 'Help & Support', icon: <HelpIcon className="w-5 h-5 text-gray-450" />, description: 'FAQs and contact support' },
-]
+const settingsSupportItems = []
 
 function SettingsSection({ title, items }) {
   return (

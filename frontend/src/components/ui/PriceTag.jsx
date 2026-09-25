@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 export function formatPrice(amount) {
   return new Intl.NumberFormat('en-PH', {
     style: 'currency',

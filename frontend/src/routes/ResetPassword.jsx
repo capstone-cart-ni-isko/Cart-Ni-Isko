@@ -1,12 +1,17 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { useToast } from '../hooks/useToast.js'
 import AuthLayout from '../components/layout/AuthLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Input from '../components/ui/Input.jsx'
 import Button from '../components/ui/Button.jsx'
+import { updateCredentials } from '../services/auth.js'
 
 function ResetPassword() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { showToast } = useToast()
+  const identifier = location.state?.identifier || ''
   const [form, setForm] = useState({ password: '', confirm: '' })
   const [errors, setErrors] = useState({})
   const [showPassword, setShowPassword] = useState(false)
@@ -29,9 +34,26 @@ function ResetPassword() {
     setErrors(validationErrors)
     if (Object.keys(validationErrors).length > 0) return
 
+    if (!identifier) {
+      showToast(
+        'Reset session missing. Start again from the Forgot Password page.',
+        'error'
+      )
+      navigate('/forgot-password')
+      return
+    }
+
     setIsSubmitting(true)
-    await new Promise((r) => setTimeout(r, 600))
+    const { error } = await updateCredentials({
+      identifier,
+      password: form.password,
+    })
     setIsSubmitting(false)
+    if (error) {
+      showToast(error, 'error')
+      return
+    }
+    showToast('Password updated. Please sign in with your new password.')
     navigate('/signin')
   }
 

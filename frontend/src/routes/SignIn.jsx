@@ -13,18 +13,23 @@ function SignIn() {
   const [form, setForm] = useState({
     phone: '',
     password: '',
-    rememberMe: false,
   })
 
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
+  // Back to whichever page sent the guest here; '/' when this is the entry page.
+  const handleBack = () => {
+    if (window.history.length > 1) navigate(-1)
+    else navigate('/')
+  }
+
   function handleChange(e) {
-    const { name, value, type, checked } = e.target
+    const { name, value } = e.target
     setForm((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: value,
     }))
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: '' }))
@@ -40,8 +45,7 @@ function SignIn() {
     if (!formValid) return
 
     setIsSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 800))
-    const { user, error } = await login(form.phone, form.password)
+    const { error } = await login(form.phone, form.password)
     setIsSubmitting(false)
 
     if (error) {
@@ -69,7 +73,7 @@ function SignIn() {
             <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Sign In</h1>
             <button
               type="button"
-              onClick={() => navigate('/')}
+              onClick={handleBack}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
             >
               <img src={closeIcon} alt="Close" className="w-5 h-5 opacity-70" />
@@ -129,16 +133,7 @@ function SignIn() {
             </div>
 
             <div className="flex items-center justify-between pt-1">
-              <label className="flex items-center gap-2 text-sm text-gray-500 font-semibold select-none cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="rememberMe"
-                  checked={form.rememberMe}
-                  onChange={handleChange}
-                  className="h-4 w-4 accent-brand-orange rounded cursor-pointer"
-                />
-                Remember me
-              </label>
+              <span className="text-sm text-gray-400 font-medium"></span>
               <Link
                 to="/forgot-password"
                 className="text-sm text-gray-400 hover:text-brand-orange font-bold transition-colors"
@@ -174,11 +169,21 @@ function SignIn() {
       {/* DESKTOP LOGIN LAYOUT (Image 3 Wireframe) */}
       <div className="hidden md:flex flex-col justify-between min-h-[460px] p-10 animate-fade-in bg-white">
         <div>
-          <div className="mb-8">
-            <h1 className="text-3xl font-black text-gray-900 leading-tight">Log In</h1>
-            <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
-              Access your tasks, notes, and projects anytime, anywhere.
-            </p>
+          <div className="mb-8 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-black text-gray-900 leading-tight">Log In</h1>
+              <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
+                Access your tasks, notes, and projects anytime, anywhere.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleBack}
+              aria-label="Go back"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors shrink-0"
+            >
+              <img src={closeIcon} alt="" className="w-5 h-5 opacity-70" />
+            </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">

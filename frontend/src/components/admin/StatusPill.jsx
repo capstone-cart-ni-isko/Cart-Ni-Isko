@@ -1,5 +1,3 @@
-import React from 'react'
-
 /**
  * Semantic status pill used across all Admin tables and cards
  * Matches the status pill pattern (bg-100/text-700 pairs):
@@ -24,9 +22,14 @@ export default function StatusPill({ status, variant, className = '' }) {
     else if (variant === 'purple') style = 'bg-purple-50 text-purple-700 border-purple-200'
     else if (variant === 'cyan') style = 'bg-cyan-50 text-cyan-700 border-cyan-200'
   } else {
+    // SRS order-status vocabulary first:
+    //   Unclaimed must win over the generic "claimed" match, "requested" rows
+    //   (cancel/return requests) are pending staff action, and refunded
+    //   orders count as completed.
     if (
       norm.includes('completed') ||
-      norm.includes('claimed') ||
+      (norm.includes('claimed') && !norm.includes('unclaimed')) ||
+      norm.includes('refunded') ||
       norm.includes('ready') ||
       norm.includes('published') ||
       norm.includes('approved') ||
@@ -38,12 +41,16 @@ export default function StatusPill({ status, variant, className = '' }) {
       norm.includes('in production') ||
       norm.includes('preparing') ||
       norm.includes('in transit') ||
+      norm.includes('to claim') ||
+      norm.includes('to receive') ||
       norm.includes('desk duty') ||
       norm.includes('online regular') ||
       norm.includes('campus pickup')
     ) {
       style = 'bg-blue-50 text-blue-700 border-blue-200'
     } else if (
+      norm.includes('to process') ||
+      norm.includes('requested') ||
       norm.includes('pending') ||
       norm.includes('awaiting') ||
       norm.includes('packing') ||
@@ -54,6 +61,8 @@ export default function StatusPill({ status, variant, className = '' }) {
     ) {
       style = 'bg-amber-50 text-amber-700 border-amber-200'
     } else if (
+      norm.includes('unclaimed') ||
+      norm.includes('returned') ||
       norm.includes('failed') ||
       norm.includes('delayed') ||
       norm.includes('cancelled') ||

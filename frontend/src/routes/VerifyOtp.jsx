@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import OtpInput from '../components/ui/OtpInput.jsx'
 import Button from '../components/ui/Button.jsx'
@@ -9,12 +8,10 @@ import backIcon from '../assets/icons/common/back.svg'
 function VerifyOtp() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { currentUser } = useAuth()
   const { showToast } = useToast()
 
   const state = location.state || {}
   const phone = state.phone || '+63 9** *** **99'
-  const fromSignIn = state.fromSignIn || false
 
   const [otp, setOtp] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -33,23 +30,14 @@ function VerifyOtp() {
     if (otp.length < 6) return
 
     setIsSubmitting(true)
-    await new Promise((r) => setTimeout(r, 800))
+    // Contract gap: the backend exposes no OTP verification endpoint, so any
+    // 6-digit code is accepted. This flag is a device hint only - the actual
+    // session is the shared `isko_session` slot.
+    localStorage.setItem('isko_device_verified', 'true')
     setIsSubmitting(false)
 
-    // Simulate OTP validation
-    if (otp === '123456' || otp.length === 6) {
-      showToast('OTP verified successfully!')
-      localStorage.setItem('isko_device_verified', 'true')
-      
-      if (fromSignIn) {
-        navigate('/home')
-      } else {
-        // Fallback or backup
-        navigate('/home')
-      }
-    } else {
-      showToast('Invalid verification code. Try again.', 'error')
-    }
+    showToast('OTP verified successfully!')
+    navigate('/home')
   }
 
   function handleResend() {

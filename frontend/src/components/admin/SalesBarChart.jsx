@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 
 const CHART_HEIGHT = 160
 const TICK_STEPS = 4

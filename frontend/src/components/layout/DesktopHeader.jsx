@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import React from 'react'
 import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useCart } from '../../hooks/useCart.js'
+import { useAuth } from '../../hooks/useAuth.js'
+import { fetchNotifications, unreadCount } from '../../services/notifications.js'
+import LoginPromptModal from '../ui/LoginPromptModal.jsx'
 import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import searchIcon from '../../assets/icons/common/search.svg'
 import notificationIcon from '../../assets/icons/common/notification.svg'
@@ -14,10 +18,48 @@ function DesktopHeader() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const { cartItems } = useCart()
+  const { currentUser } = useAuth()
   const [searchVal, setSearchVal] = useState('')
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0)
+  const [showLogin, setShowLogin] = useState(false)
+
+  // The header renders on every page, so it must gate the protected links
+  // itself: a guest gets the prompt instead of a redirect away from the page.
+  const guardGuest = (e) => {
+    if (!currentUser) {
+      e.preventDefault()
+      setShowLogin(true)
+    }
+  }
+
+  // Re-evaluating on every route change keeps a stale prompt from lingering.
+  useEffect(() => {
+    setShowLogin(false)
+  }, [location.pathname])
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0)
-  const unreadNotifCount = 2 // Current unread notifications count
+
+  const custId = currentUser?.cust_id ?? currentUser?.id ?? null
+
+  const refreshUnread = useCallback(async () => {
+    if (!custId) {
+      setUnreadNotifCount(0)
+      return
+    }
+    try {
+      const rows = await fetchNotifications('customer', custId)
+      setUnreadNotifCount(unreadCount(rows))
+    } catch {
+      // Keep the last known count when the API is unreachable.
+    }
+  }, [custId])
+
+  useEffect(() => {
+    refreshUnread()
+    if (!custId) return undefined
+    const timer = setInterval(refreshUnread, 60000)
+    return () => clearInterval(timer)
+  }, [custId, refreshUnread])
 
   const isHomePage = location.pathname === '/home' || location.pathname === '/'
   const isWishlistPage = location.pathname.startsWith('/wishlist')
@@ -27,8 +69,7 @@ function DesktopHeader() {
     location.pathname.startsWith('/profile') ||
     location.pathname.startsWith('/orders') ||
     location.pathname.startsWith('/account') ||
-    location.pathname.startsWith('/settings') ||
-    location.pathname.startsWith('/security')
+    location.pathname.startsWith('/settings')
 
   const q = searchParams.get('search') || ''
   const [prevQ, setPrevQ] = useState(q)
@@ -94,6 +135,7 @@ function DesktopHeader() {
           <div className="relative group flex items-center justify-center">
             <Link
               to="/wishlist"
+              onClick={guardGuest}
               className={`p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center ${
                 isWishlistPage ? 'bg-slate-100' : ''
               }`}
@@ -116,6 +158,7 @@ function DesktopHeader() {
           <div className="relative group flex items-center justify-center">
             <Link
               to="/cart"
+              onClick={guardGuest}
               className={`p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center ${
                 isCartPage ? 'bg-slate-100' : ''
               }`}
@@ -143,6 +186,7 @@ function DesktopHeader() {
           <div className="relative group flex items-center justify-center">
             <Link
               to="/notifications"
+              onClick={guardGuest}
               className={`p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center ${
                 isNotificationsPage ? 'bg-slate-100' : ''
               }`}
@@ -170,6 +214,7 @@ function DesktopHeader() {
           <div className="relative group flex items-center justify-center">
             <Link
               to="/profile"
+              onClick={guardGuest}
               className={`p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center ${
                 isProfilePage ? 'bg-slate-100' : ''
               }`}
@@ -189,8 +234,14 @@ function DesktopHeader() {
           </div>
         </div>
       </div>
+
+      <LoginPromptModal
+        isOpen={showLogin}
+        onClose={() => setShowLogin(false)}
+        message="Sign in to view your wishlist, bag, notifications, and account."
+      />
     </header>
   )
 }
 
-export default DesktopHeader
+export default React.memo(DesktopHeader)

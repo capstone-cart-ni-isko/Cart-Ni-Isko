@@ -1,19 +1,24 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useRef, useEffect } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
-import defaultAvatar from '../../assets/avatar.png'
+import Avatar from '../../components/ui/Avatar.jsx'
+import { fetchAccounts, updateAccount } from '../../services/accounts.js'
+import { updateCredentials } from '../../services/auth.js'
+import { uploadImage } from '../../services/upload.js'
 
 export default function AdminAccount() {
-  const navigate = useNavigate()
   const { showToast } = useToast()
   const {
     currentAdminUser,
+    logoutAdmin,
     updateCurrentAdminProfile,
-    switchAdminUser,
-    adminState,
   } = useAdmin()
+
+  // The signed-in employee's own record (authoritative emp_id / field values)
+  const [record, setRecord] = useState(null)
+  const [isLoadingRecord, setIsLoadingRecord] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Form state
   const [firstName, setFirstName] = useState(
@@ -23,10 +28,10 @@ export default function AdminAccount() {
     currentAdminUser?.lastName || (currentAdminUser?.name ? currentAdminUser.name.split(' ').slice(1).join(' ') : 'Santos')
   )
   const [email, setEmail] = useState(
-    currentAdminUser?.email || 'm.santos@tindahan.nisko.edu.ph'
+    currentAdminUser?.email || ''
   )
   const [avatarPreview, setAvatarPreview] = useState(
-    currentAdminUser?.avatarImage || defaultAvatar
+    currentAdminUser?.avatarImage || ''
   )
   const [isEmailEditable, setIsEmailEditable] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
@@ -36,32 +41,52 @@ export default function AdminAccount() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordError, setPasswordError] = useState('')
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
   const fileInputRef = useRef(null)
 
-  // Keep state synchronized if user changes
+  // Load the backend row for the signed-in employee (REQ-APC-02)
   useEffect(() => {
-    if (currentAdminUser) {
-      setFirstName(
-        currentAdminUser.firstName ||
-          (currentAdminUser.name ? currentAdminUser.name.split(' ')[0] : '')
-      )
-      setLastName(
-        currentAdminUser.lastName ||
-          (currentAdminUser.name ? currentAdminUser.name.split(' ').slice(1).join(' ') : '')
-      )
-      setEmail(currentAdminUser.email || '')
-      setAvatarPreview(currentAdminUser.avatarImage || defaultAvatar)
+    let cancelled = false
+    setIsLoadingRecord(true)
+    fetchAccounts({ account_type: 'employee' })
+      .then((payload) => {
+        if (cancelled) return
+        const rows = Array.isArray(payload)
+          ? payload.filter((r) => r.emp_id != null)
+          : Array.isArray(payload?.employees)
+          ? payload.employees
+          : []
+        const id = currentAdminUser?.id
+        const found =
+          rows.find((r) => String(r.emp_id) === String(id)) ||
+          rows.find((r) => r.emp_email && r.emp_email === currentAdminUser?.email) ||
+          null
+        setRecord(found)
+        if (found) {
+          setFirstName(found.emp_givname || '')
+          setLastName(found.emp_surname || '')
+          setEmail(found.emp_email || '')
+        }
+        setIsLoadingRecord(false)
+      })
+      .catch(() => {
+        // Fall back to the context values already in the form.
+        if (!cancelled) setIsLoadingRecord(false)
+      })
+    return () => {
+      cancelled = true
     }
-  }, [currentAdminUser])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // Handle avatar file selection
-  const handleFileChange = (e) => {
+  // Handle avatar file selection → real file upload to backend storage
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif'].includes(file.type)) {
-      showToast('Please upload a valid PNG, JPEG, or GIF image.', 'error')
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(file.type)) {
+      showToast('Please upload a valid PNG, JPEG, GIF, or WebP image.', 'error')
       return
     }
 
@@ -70,15 +95,14 @@ export default function AdminAccount() {
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result
-      if (dataUrl) {
-        setAvatarPreview(dataUrl)
-        showToast('Image preview loaded. Click Save to apply.', 'info')
-      }
+    try {
+      showToast('Uploading image…', 'info')
+      const url = await uploadImage(file, 'avatar')
+      setAvatarPreview(url)
+      showToast('Image uploaded. Click Save to apply.', 'success')
+    } catch (err) {
+      showToast(err?.message || 'Unable to upload the image.', 'error')
     }
-    reader.readAsDataURL(file)
   }
 
   // Remove avatar
@@ -90,8 +114,8 @@ export default function AdminAccount() {
     showToast('Profile picture removed. Click Save to confirm.', 'info')
   }
 
-  // Save profile changes
-  const handleSave = () => {
+  // Save profile changes → PUT /accounts/update (REQ-APC-02)
+  const handleSave = async () => {
     const cleanFirst = firstName.trim()
     const cleanLast = lastName.trim()
     const cleanEmail = email.trim()
@@ -106,42 +130,69 @@ export default function AdminAccount() {
       return
     }
 
-    const fullName = `${cleanFirst} ${cleanLast}`
-    const initials = `${cleanFirst[0] || ''}${cleanLast[0] || ''}`.toUpperCase()
+    const empId = record?.emp_id ?? currentAdminUser?.id
+    if (empId == null) {
+      showToast('Unable to resolve your account record. Please reload.', 'error')
+      return
+    }
 
-    updateCurrentAdminProfile({
-      firstName: cleanFirst,
-      lastName: cleanLast,
-      name: fullName,
-      email: cleanEmail,
-      avatar: initials,
-      avatarImage: avatarPreview,
-    })
+    setIsSaving(true)
+    try {
+      await updateAccount('employee', empId, {
+        emp_givname: cleanFirst,
+        emp_surname: cleanLast,
+        emp_email: cleanEmail,
+        emp_photo: avatarPreview || null,
+      })
 
-    setIsEmailEditable(false)
-    showToast('Account profile updated successfully!', 'success')
+      const fullName = `${cleanFirst} ${cleanLast}`
+      const initials = `${cleanFirst[0] || ''}${cleanLast[0] || ''}`.toUpperCase()
+
+      updateCurrentAdminProfile({
+        firstName: cleanFirst,
+        lastName: cleanLast,
+        name: fullName,
+        email: cleanEmail,
+        avatar: initials,
+        avatarImage: avatarPreview,
+      })
+
+      setRecord((prev) => ({
+        ...(prev || {}),
+        emp_id: empId,
+        emp_givname: cleanFirst,
+        emp_surname: cleanLast,
+        emp_email: cleanEmail,
+        emp_photo: avatarPreview || null,
+      }))
+      setIsEmailEditable(false)
+      showToast('Account profile updated successfully!', 'success')
+    } catch (err) {
+      // Inputs stay as typed so the admin can correct and retry (REQ-APC-02).
+      showToast(err?.message || 'Failed to update the account profile.', 'error')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   // Cancel changes
   const handleCancel = () => {
-    if (currentAdminUser) {
-      setFirstName(
-        currentAdminUser.firstName ||
-          (currentAdminUser.name ? currentAdminUser.name.split(' ')[0] : 'Maria')
-      )
-      setLastName(
-        currentAdminUser.lastName ||
-          (currentAdminUser.name ? currentAdminUser.name.split(' ').slice(1).join(' ') : 'Santos')
-      )
-      setEmail(currentAdminUser.email || 'm.santos@tindahan.nisko.edu.ph')
-      setAvatarPreview(currentAdminUser.avatarImage || defaultAvatar)
-      setIsEmailEditable(false)
+    if (record) {
+      setFirstName(record.emp_givname || '')
+      setLastName(record.emp_surname || '')
+      setEmail(record.emp_email || '')
+    } else if (currentAdminUser) {
+      setFirstName(currentAdminUser.firstName || (currentAdminUser.name ? currentAdminUser.name.split(' ')[0] : ''))
+      setLastName(currentAdminUser.lastName || (currentAdminUser.name ? currentAdminUser.name.split(' ').slice(1).join(' ') : ''))
+      setEmail(currentAdminUser.email || '')
+      setAvatarPreview(currentAdminUser.avatarImage || '')
     }
+    setIsEmailEditable(false)
     showToast('Changes reverted.', 'info')
   }
 
-  // Password change submission
-  const handleChangePassword = (e) => {
+  // Password change submission → PUT /auth/update_credentials (REQ-APC-01)
+  const handleChangePassword = async (e) => {
     e.preventDefault()
     setPasswordError('')
 
@@ -149,8 +200,8 @@ export default function AdminAccount() {
       setPasswordError('Please enter your current password.')
       return
     }
-    if (newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters.')
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.')
       return
     }
     if (newPassword !== confirmPassword) {
@@ -158,12 +209,27 @@ export default function AdminAccount() {
       return
     }
 
-    // Success simulation
+    setIsUpdatingPassword(true)
+    const { error } = await updateCredentials({
+      current_password: currentPassword,
+      new_password: newPassword,
+    })
+    setIsUpdatingPassword(false)
+
+    if (error) {
+      // Surface the backend message verbatim — includes the SRS 30-day
+      // lockout response (REQ-APC-01). Keep the fields so the admin can retry.
+      setPasswordError(error)
+      return
+    }
+
+    // Success: close and clear only then (REQ-APC-02)
     setShowPasswordModal(false)
     setCurrentPassword('')
     setNewPassword('')
     setConfirmPassword('')
-    showToast('Password updated successfully!', 'success')
+    showToast('Password updated. Please sign in again.', 'success')
+    logoutAdmin()
   }
 
   const isSuperAdmin = currentAdminUser?.roleKey === 'SUPER_ADMIN'
@@ -195,20 +261,9 @@ export default function AdminAccount() {
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => switchAdminUser('usr-2')}
-                className="px-3 py-1.5 rounded-lg bg-brand-orange text-white font-bold text-[11px] hover:bg-orange-600 transition-colors cursor-pointer"
-              >
-                Switch to Maria Santos (Admin)
-              </button>
-              <button
-                type="button"
-                onClick={() => switchAdminUser('usr-3')}
-                className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold text-[11px] hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                Switch to Juan Cruz (Staff)
-              </button>
+              <span className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold text-[11px]">
+                Root account · profile edits apply to your employee record
+              </span>
             </div>
           </div>
         )}
@@ -224,17 +279,13 @@ export default function AdminAccount() {
             <div className="flex items-center gap-5 sm:gap-6">
               {/* Avatar Preview */}
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-slate-100 bg-slate-100 flex items-center justify-center shrink-0">
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
-                    alt={currentAdminUser?.name || 'Staff Avatar'}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-brand-orange text-white text-xl sm:text-2xl font-black flex items-center justify-center">
-                    {currentAdminUser?.avatar || 'MS'}
-                  </div>
-                )}
+                <Avatar
+                  src={avatarPreview}
+                  name={currentAdminUser?.name || 'MS'}
+                  size={avatarPreview ? 88 : 88}
+                  className="w-full h-full"
+                  userId={currentAdminUser?.id}
+                />
               </div>
 
               {/* Action Buttons & Note */}
@@ -244,7 +295,7 @@ export default function AdminAccount() {
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
-                    accept="image/png,image/jpeg,image/gif"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
                     className="hidden"
                   />
                   <button
@@ -382,9 +433,10 @@ export default function AdminAccount() {
             <button
               type="button"
               onClick={handleSave}
-              className="px-6 py-2 rounded-lg bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs active:scale-98"
+              disabled={isSaving || isLoadingRecord}
+              className="px-6 py-2 rounded-lg bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold transition-colors cursor-pointer shadow-xs active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save
+              {isSaving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>
@@ -441,9 +493,12 @@ export default function AdminAccount() {
                   required
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   className="w-full h-9 px-3 rounded-lg border border-slate-200 focus:outline-none focus:border-brand-orange"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Sensitive credentials cannot be changed within 30 days of the most recent change (REQ-APC-01).
+                </p>
               </div>
 
               <div>
@@ -470,9 +525,10 @@ export default function AdminAccount() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-brand-orange text-white hover:bg-orange-600 font-bold"
+                  disabled={isUpdatingPassword}
+                  className="px-4 py-2 rounded-lg bg-brand-orange text-white hover:bg-orange-600 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Update Password
+                  {isUpdatingPassword ? 'Updating…' : 'Update Password'}
                 </button>
               </div>
             </form>

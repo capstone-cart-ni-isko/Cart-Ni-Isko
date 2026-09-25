@@ -11,7 +11,6 @@
   --color-gray-150: #E5E7EB;
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 
-  /* High-Density Border-Radius Tokens (6px-8px max for cards/containers, 6px for buttons/inputs) */
   --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -20,7 +19,6 @@
   --radius-2xl: 8px;
   --radius-3xl: 8px;
 
-  /* Theme Shadows Zeroed Out */
   --shadow-none: none;
   --shadow-2xs: none;
   --shadow-xs: none;
@@ -47,10 +45,20 @@
 }
 
 html {
-  font-size: 100%;
+  font-size: 16px;
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+body {
+  margin: 0;
+  background: #F8F9FA;
+  color: #111827;
+  line-height: 1.6;
+}
+
+/* ── Page Title ── */
 .page-title {
   font-size: 1.375rem;
   font-weight: 700;
@@ -64,133 +72,16 @@ html {
   }
 }
 
-body {
-  margin: 0;
-  background: #F8F9FA;
-  color: #111827;
-}
+/* ── Scrollbar ── */
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ── Global Flat Neutral Border & High-Density Scope ── */
-.admin-portal *,
-.app-container * {
-  box-shadow: none !important;
-}
-
-#root {
-  min-height: 100dvh;
-}
-
+/* ── Safe Bottom ── */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-.gradient-orange-header {
-  background: linear-gradient(135deg, #F97316 0%, #FB923C 50%, #FDBA74 100%);
-}
-
-.gradient-about-me {
-  background: linear-gradient(to right, #2563EB, #38BDF8);
-}
-
-.gradient-splash {
-  background: linear-gradient(160deg, #F97316 0%, #FB923C 40%, #2563EB 100%);
-}
-
-.watermark-text {
-  position: absolute;
-  font-size: clamp(4rem, 18vw, 8rem);
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.08);
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-  letter-spacing: 0.05em;
-}
-
-
-
-/* ── Animations ── */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes scaleIn {
-  from { transform: scale(0); }
-  to { transform: scale(1); }
-}
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.35s ease-out both;
-}
-.animate-scale-in {
-  animation: scaleIn 0.25s ease-out both;
-}
-.animate-slide-up {
-  animation: slideUp 0.3s ease-out both;
-}
-
-/* Hide scrollbar for horizontal scrollable areas */
-.scrollbar-none::-webkit-scrollbar { display: none; }
-.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* ── Sleek, constrained desktop container width ── */
-.customer-desktop-scale .app-container.max-w-7xl {
-  max-width: 76rem;
-}
-
-.customer-desktop-scale .app-container .max-w-3xl {
-  max-width: 48rem;
-}
-
-/* ── Soft outlines: no thick or dark borders on customer pages ── */
-.customer-desktop-scale .border-2:not(.rounded-full),
-.customer-desktop-scale .border-4:not(.rounded-full) {
-  border-width: 1px;
-}
-
-.customer-desktop-scale .border-slate-200,
-.customer-desktop-scale .border-gray-200 {
-  border-color: #eceef1;
-}
-
-.customer-desktop-scale .border-slate-100,
-.customer-desktop-scale .border-gray-100 {
-  border-color: #f1f3f5;
-}
-
-/* ── One consistent, compact page title (inside the main layouts only) ── */
-.customer-desktop-scale main h1.text-gray-900:not(.text-base):not(.leading-tight) {
-  font-size: 1.375rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: 1.25;
-}
-
-.customer-desktop-scale main h1.text-gray-900:not(.text-base):not(.leading-tight) + p {
-  font-size: 0.9rem;
-  line-height: 1.35;
-  margin-top: 0.125rem;
-}
-
-@media (min-width: 768px) {
-  .customer-desktop-scale main h1.text-gray-900:not(.text-base):not(.leading-tight) {
-    font-size: 1.625rem;
-  }
-}
-
-.customer-desktop-scale main :is(.mb-6, .mb-8):has(> h1.text-gray-900:not(.text-base):not(.leading-tight), > div > h1.text-gray-900:not(.text-base):not(.leading-tight)) {
-  margin-bottom: 1.25rem;
-}
-
-/* No icon tiles beside page titles */
-.customer-desktop-scale main div:has(+ div > h1.text-gray-900:not(.text-base):not(.leading-tight)) {
-  display: none;
-}
-
+/* ── Checkbox ── */
 input[type="checkbox"].check-plain {
   appearance: none;
   -webkit-appearance: none;
@@ -217,4 +108,82 @@ input[type="checkbox"].check-plain:checked::after {
   border: solid #111827;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg) translateY(-1px);
+}
+
+/* ── Animation Utilities ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in { animation: fadeIn 0.35s ease-out both; }
+.animate-scale-in { animation: scaleIn 0.25s ease-out both; }
+.animate-slide-up { animation: slideUp 0.3s ease-out both; }
+.animate-spin { animation: spin 1s linear infinite; }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Loading Spinner ── */
+.spinner-circle {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(249, 115, 22, 0.15);
+  border-top-color: #F97316;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ── Skeleton Loader ── */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Improved Readability ── */
+body {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.text-readable {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: #1e293b;
+}
+
+/* ── Card hover lift ── */
+.card-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Reduced clutter: tighter spacing for lists ── */
+.list-item {
+  padding: 0.625rem 0;
+}
+
+/* ── Button press feedback ── */
+.btn-press:active {
+  transform: scale(0.97);
 }

@@ -20,7 +20,7 @@ class BackendIntegrationTest extends TestCase
         $uniqueEmail = 'emp_' . rand(1000, 9999) . '@bicol-u.edu.ph';
         $password = 'Password123!';
 
-        // 1. CUSTOMER SIGNUP
+        // 1. CUSTOMER SIGNUP (public route, issues a Sanctum bearer token)
         $signupResponse = $this->postJson('/api/auth/cust_signup', [
             'phone' => $uniquePhone,
             'password' => $password,
@@ -32,16 +32,19 @@ class BackendIntegrationTest extends TestCase
             'province' => 'Albay',
             'callcode' => '+63',
             'email' => 'isko_' . rand(1000, 9999) . '@example.com',
-            'type' => 'Student'
+            'type' => 'Student',
+            'college' => 'College of Engineering and Technology'
         ]);
 
         $signupResponse->assertStatus(201)
                        ->assertJson(['success' => true]);
+        $this->assertNotEmpty($signupResponse->json('data.token'));
+        $this->assertStringContainsString('|', $signupResponse->json('data.token'));
 
         $customerData = $signupResponse->json('data');
         $custId = $customerData['cust_id'];
 
-        // 2. CUSTOMER LOGIN
+        // 2. CUSTOMER LOGIN (returns its own bearer token)
         $loginResponse = $this->postJson('/api/auth/cust_login', [
             'phone' => $uniquePhone,
             'password' => $password
@@ -49,26 +52,61 @@ class BackendIntegrationTest extends TestCase
 
         $loginResponse->assertStatus(200)
                       ->assertJson(['success' => true]);
+        $this->assertNotEmpty($loginResponse->json('data.token'));
 
-        // 3. EMPLOYEE SIGNUP & LOGIN
+        $custToken = $loginResponse->json('data.token');
+        $authHeader = ['Authorization' => 'Bearer ' . $custToken];
+
+        // 3. EMPLOYEE SIGNUP (super-admin only, issues a temporary password) & LOGIN
+        $superAdmin = Employee::create([
+            'emp_created' => now(),
+            'emp_password' => 'unused-password-hash',
+            'emp_surname' => 'Super',
+            'emp_givname' => 'Admin',
+            'emp_pronoun' => 'they/them',
+            'emp_birthday' => '2000-01-01',
+            'emp_brgy' => 'Sagpon',
+            'emp_city' => 'Legazpi',
+            'emp_province' => 'Albay',
+            'emp_phone' => '0917' . rand(1000000, 9999999),
+            'emp_email' => 'superadmin_' . rand(1000, 9999) . '@bicol-u.edu.ph',
+            'emp_type' => 'SUPER ADMIN',
+        ]);
+        $adminHeader = [
+            'Authorization' => 'Bearer ' . $superAdmin->createToken('test')->plainTextToken,
+        ];
+
         $empSignup = $this->postJson('/api/auth/emp_signup', [
             'email' => $uniqueEmail,
             'phone' => '0998' . rand(1000000, 9999999),
-            'password' => $password,
             'surname' => 'Dela Cruz',
             'givname' => 'Juan',
             'studnum' => '2023-12345',
-            'type' => 'Staff'
-        ]);
+            'college' => 'College of Engineering and Technology',
+            'program' => 'BS Information Technology',
+            'year' => 3,
+            'bloc' => 'A',
+            'type' => 'STAFF',
+        ], $adminHeader);
         $empSignup->assertStatus(201);
+        $temporaryPassword = $empSignup->json('data.temporary_password');
+        $this->assertNotEmpty($temporaryPassword);
 
         $empLogin = $this->postJson('/api/auth/emp_login', [
             'email' => $uniqueEmail,
-            'password' => $password
+            'password' => $temporaryPassword
         ]);
         $empLogin->assertStatus(200);
+        $this->assertNotEmpty($empLogin->json('data.token'));
 
-        // 4. PRODUCT CATALOG - ADD PRODUCT
+        // 4. PROTECTED ROUTES REJECT REQUESTS WITHOUT A TOKEN
+        // (forgetGuards: the sanctum guard caches the super admin resolved
+        // during emp_signup, which would otherwise authorise this request)
+        $this->app['auth']->forgetGuards();
+        $this->postJson('/api/products/add', [])->assertStatus(401);
+        $this->json('GET', '/api/wishlist/display', ['cust_id' => $custId])->assertStatus(401);
+
+        // 5. PRODUCT CATALOG - ADD PRODUCT (super-admin bearer token)
         $productTag = 'ITEM_' . rand(10000, 99999);
         $productName = 'BU Lanyard ' . rand(100, 999);
         $productPrice = 150.00;
@@ -80,7 +118,7 @@ class BackendIntegrationTest extends TestCase
             'prod_price' => $productPrice,
             'prod_qty' => 50,
             'prod_desc' => 'Official BU Student Lanyard'
-        ]);
+        ], $adminHeader);
 
         $addProductResponse->assertStatus(201)
                            ->assertJson(['success' => true]);
@@ -88,21 +126,30 @@ class BackendIntegrationTest extends TestCase
         $productData = $addProductResponse->json('data');
         $prodId = $productData['prod_id'];
 
-        // PRODUCT SEARCH & FILTER
-        $searchResponse = $this->getJson('/api/products/search?q=' . urlencode($productName));
+        // PRODUCT SEARCH, FILTER, SORT & VIEW ARE PUBLIC (guest catalog browsing)
+        $searchResponse = $this->json('GET', '/api/products/search', ['q' => $productName]);
         $searchResponse->assertStatus(200)
                        ->assertJson(['success' => true]);
 
-        $filterResponse = $this->getJson('/api/products/filter?category=ACCESSORIES');
+        $filterResponse = $this->json('GET', '/api/products/filter', ['category' => 'ACCESSORIES']);
         $filterResponse->assertStatus(200)
                        ->assertJson(['success' => true]);
 
+        $this->json('GET', '/api/products/sort', ['sort_by' => 'name'])
+             ->assertStatus(200)
+             ->assertJson(['success' => true]);
+
+        $this->json('GET', '/api/products/view', ['prod_tag' => $productTag])
+             ->assertStatus(200)
+             ->assertJson(['success' => true]);
+
         // 5. WISHLIST DATA FLOW - ADD TO WISHLIST
+        $this->app['auth']->forgetGuards();
         $addWishlistResponse = $this->postJson('/api/wishlist/add', [
             'cust_id' => $custId,
             'prod_id' => $prodId,
             'item_qty' => 2
-        ]);
+        ], $authHeader);
 
         $addWishlistResponse->assertStatus(201)
                             ->assertJson(['success' => true]);
@@ -116,7 +163,7 @@ class BackendIntegrationTest extends TestCase
         $this->assertEquals(1, $customerInDb->cust_wishlist);
 
         // DISPLAY WISHLIST
-        $displayWishlist = $this->json('GET', '/api/wishlist/display', ['cust_id' => $custId]);
+        $displayWishlist = $this->json('GET', '/api/wishlist/display', ['cust_id' => $custId], $authHeader);
         $displayWishlist->assertStatus(200)
                         ->assertJson(['success' => true]);
 
@@ -126,7 +173,7 @@ class BackendIntegrationTest extends TestCase
             'prod_id' => $prodId,
             'item_qty' => 5,
             'item_amount' => 750.00
-        ]);
+        ], $authHeader);
         $updateWishlist->assertStatus(200);
 
         // TRANSFER WISHLIST TO ORDER
@@ -134,8 +181,9 @@ class BackendIntegrationTest extends TestCase
             'cust_id' => $custId,
             'prod_id' => $prodId,
             'item_qty' => 5
-        ]);
-        $transferResponse->assertStatus(200);
+        ], $authHeader);
+        // creates a cart order + item, so the API answers 201 Created
+        $transferResponse->assertStatus(201);
 
         $customerAfterTransfer = Customer::find($custId);
         $this->assertEquals(0, $customerAfterTransfer->cust_wishlist);
@@ -145,7 +193,7 @@ class BackendIntegrationTest extends TestCase
         $removeResponse = $this->json('DELETE', '/api/wishlist/remove', [
             'cust_id' => $custId,
             'prod_id' => $prodId
-        ]);
+        ], $authHeader);
         $removeResponse->assertStatus(200);
 
         // CLEANUP CREATED TEST DATA

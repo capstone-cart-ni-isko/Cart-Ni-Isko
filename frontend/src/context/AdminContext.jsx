@@ -1,144 +1,94 @@
-import { createContext, useState, useEffect, useCallback } from 'react'
-import { INITIAL_ADMIN_DATA } from '../data/adminMockData.js'
-import { adminLogin } from '../services/adminAuth.js'
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { adminLogin, adminLogout } from '../services/adminAuth.js'
+import { getApiToken, setApiToken } from '../services/api.js'
+import { clearSession, loadSession, saveSession } from '../services/session.js'
 import { useToast } from '../hooks/useToast.js'
-import { fetchAdminProducts, createAdminProduct, updateAdminProduct as updateAdminProductAPI, removeAdminProduct as removeAdminProductAPI } from '../services/adminProducts.js'
+import { fetchOrders, updateOrder } from '../services/orders.js'
+import { addPosItem, removePosItem, checkoutPos } from '../services/pos.js'
+import { fetchAdminProducts, createAdminProduct, updateAdminProduct as updateAdminProductAPI, removeAdminProduct as removeAdminProductAPI, unlistAdminProduct as unlistAdminProductAPI, sellAdminProduct as sellAdminProductAPI } from '../services/adminProducts.js'
+import { buildAlerts } from '../services/dashboard.js'
 
 export const AdminContext = createContext(null)
 
 const STORAGE_KEY = 'isko_admin_state_v4'
-const AUTH_STORAGE_KEY = 'isko_admin_auth_v4'
 
-export const DEFAULT_ADMIN_USERS = [
-  {
-    id: 'usr-1',
-    name: 'Super Admin',
-    firstName: 'Super',
-    lastName: 'Admin',
-    email: 'superadmin@bicol-u.edu.ph',
-    phone: '+63 912 345 6789',
-    role: 'Super Admin',
-    roleKey: 'SUPER_ADMIN',
-    avatar: 'SA',
-    avatarBg: 'orange',
-    status: 'Active',
-    permissions: 'Full System Access',
-    modules: ['products', 'orders', 'analytics', 'content', 'settings'],
-    dateAdded: 'Aug 01, 2026',
-    isOriginal: true,
-  },
-  {
-    id: 'usr-2',
-    name: 'Maria Santos',
-    firstName: 'Maria',
-    lastName: 'Santos',
-    email: 'm.santos@tindahan.nisko.edu.ph',
-    phone: '+63 917 555 1234',
-    role: 'Store Administrator',
-    roleKey: 'ADMIN',
-    avatar: 'MS',
-    avatarImage: '/src/assets/avatar.png',
-    avatarBg: 'blue',
-    status: 'Active',
-    permissions: 'Products, Orders, Inventory, Schedule',
-    modules: ['products', 'orders', 'analytics'],
-    dateAdded: 'Aug 10, 2026',
-    isOriginal: false,
-  },
-  {
-    id: 'usr-3',
-    name: 'Juan Cruz',
-    firstName: 'Juan',
-    lastName: 'Cruz',
-    email: 'juan.cruz@tindahan.nisko.edu.ph',
-    phone: '+63 918 555 4321',
-    role: 'Staff Member',
-    roleKey: 'STAFF',
-    avatar: 'JC',
-    avatarBg: 'purple',
-    status: 'Active',
-    permissions: 'Fulfillment, Orders, POS',
-    modules: ['orders'],
-    dateAdded: 'Aug 12, 2026',
-    isOriginal: false,
-  },
-  {
-    id: 'usr-4',
-    name: 'Elena Reyes',
-    firstName: 'Elena',
-    lastName: 'Reyes',
-    email: 'elena.reyes@tindahan.nisko.edu.ph',
-    phone: '+63 919 555 9876',
-    role: 'Staff Member',
-    roleKey: 'STAFF',
-    avatar: 'ER',
-    avatarBg: 'teal',
-    status: 'Active',
-    permissions: 'POS Register, Claims',
-    modules: ['orders', 'content'],
-    dateAdded: 'Aug 15, 2026',
-    isOriginal: false,
-  },
-]
+/** 'prod-12' / 12 / '#CART-12' -> 12 (backend ids are always numeric). */
+function toNumericId(value) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  const numeric = parseInt(digits, 10)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function isSuperAdmin(user) {
+  return user?.roleKey === 'SUPER_ADMIN' || user?.role === 'Super Admin'
+}
+
+/** Same as toNumericId but understands the mapped catalog ids ('prod-12'). */
+const toNumericProductId = (productId) => toNumericId(String(productId).replace('prod-', ''))
 
 export function AdminProvider({ children }) {
   const { showToast } = useToast()
 
-  // Admin Authentication State (null until a staff member logs in)
+  // ── ADMIN SESSION ──
+  // Restored from the shared `isko_session` slot so the staff member who
+  // signed in last stays signed in across reloads (same slot as customers).
   const [currentAdminUser, setCurrentAdminUser] = useState(() => {
-    try {
-      const savedAuth = localStorage.getItem(AUTH_STORAGE_KEY)
-      if (savedAuth) {
-        return JSON.parse(savedAuth)
-      }
-    } catch (e) {
-      console.warn('Failed to parse admin auth:', e)
-    }
-    return null
+    const saved = loadSession('staff')
+    if (saved) setApiToken(saved.token)
+    return saved?.user ?? null
   })
 
-  // Admin Data State (products are fetched from backend; other data from localStorage)
+  useEffect(() => {
+    if (currentAdminUser) saveSession('staff', getApiToken(), currentAdminUser)
+    else clearSession('staff')
+  }, [currentAdminUser])
+
+  // Token rejected server-side: end the staff session too.
+  useEffect(() => {
+    const handleExpired = () => setCurrentAdminUser(null)
+    window.addEventListener('auth-expired', handleExpired)
+    return () => window.removeEventListener('auth-expired', handleExpired)
+  }, [])
+
+  // ── ADMIN STATE (UI preferences only) ──
+  // Orders, KPIs, reviews, settings and the account list are server-owned;
+  // only the dismissed-alert ids are a local, per-browser preference.
   const [adminState, setAdminState] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
         return {
-          ...INITIAL_ADMIN_DATA,
-          ...parsed,
-          dashboardKPIs: { ...INITIAL_ADMIN_DATA.dashboardKPIs, ...(parsed.dashboardKPIs || {}) },
-          fulfillmentKPIs: { ...INITIAL_ADMIN_DATA.fulfillmentKPIs, ...(parsed.fulfillmentKPIs || {}) },
-          ordersKPIs: { ...INITIAL_ADMIN_DATA.ordersKPIs, ...(parsed.ordersKPIs || {}) },
-          analyticsKPIs: { ...INITIAL_ADMIN_DATA.analyticsKPIs, ...(parsed.analyticsKPIs || {}) },
-          storeSettings: { ...INITIAL_ADMIN_DATA.storeSettings, ...(parsed.storeSettings || {}) },
-          orders: Array.isArray(parsed.orders) && parsed.orders.length > 0 ? parsed.orders : INITIAL_ADMIN_DATA.orders,
-          logisticsOrders: Array.isArray(parsed.logisticsOrders) && parsed.logisticsOrders.length > 0 ? parsed.logisticsOrders : INITIAL_ADMIN_DATA.logisticsOrders,
-          reviews: Array.isArray(parsed.reviews) && parsed.reviews.length > 0 ? parsed.reviews : INITIAL_ADMIN_DATA.reviews,
-          officers: Array.isArray(parsed.officers) && parsed.officers.length > 0 ? parsed.officers : INITIAL_ADMIN_DATA.officers,
-          dutyRequests: Array.isArray(parsed.dutyRequests) ? parsed.dutyRequests : INITIAL_ADMIN_DATA.dutyRequests,
-          alerts: Array.isArray(parsed.alerts) ? parsed.alerts : INITIAL_ADMIN_DATA.alerts,
-          adminUsers: Array.isArray(parsed.adminUsers) && parsed.adminUsers.length > 0 ? parsed.adminUsers : DEFAULT_ADMIN_USERS,
+          dismissedAlertIds: Array.isArray(parsed.dismissedAlertIds) ? parsed.dismissedAlertIds : [],
         }
       }
     } catch (e) {
       console.warn('Failed to parse admin state from localStorage:', e)
     }
-    return {
-      ...INITIAL_ADMIN_DATA,
-      adminUsers: DEFAULT_ADMIN_USERS,
-    }
+    return { dismissedAlertIds: [] }
   })
 
   // Products state - fetched from backend
   const [products, setProducts] = useState([])
   const [productsRefreshKey, setProductsRefreshKey] = useState(0)
 
-  // POS in-memory cart state
-  const [posCart, setPosCart] = useState([])
+  // Live orders (raw backend rows, CART- rows filtered out) - fetched from backend
+  const [orders, setOrders] = useState([])
+  const [ordersRefreshKey, setOrdersRefreshKey] = useState(0)
 
-  // Fetch products from backend whenever admin is logged in or refresh key changes
+  // POS in-memory cart state (mirrored into refs so queued syncs read fresh data)
+  const [posCart, setPosCart] = useState([])
+  const posCartRef = useRef([])
+  const posOrderIdRef = useRef(null) // backend ord_id of the open walk-in order
+  const posServerQtyRef = useRef({}) // prodId -> qty we believe the server has
+  const posQueueRef = useRef(Promise.resolve())
+
+  // Fetch products from backend whenever admin is logged in or refresh key changes.
+  // (logoutAdmin() already clears the lists, so no synchronous setState here.)
   useEffect(() => {
-    if (!currentAdminUser) return
+    if (!currentAdminUser) return undefined
     let cancelled = false
     fetchAdminProducts()
       .then((rows) => { if (!cancelled) setProducts(rows) })
@@ -150,245 +100,116 @@ export function AdminProvider({ children }) {
     setProductsRefreshKey((k) => k + 1)
   }, [])
 
-  // Sync admin state to localStorage (products not included - they come from backend)
+  // Fetch orders from backend (mount + every refreshOrders() call - the pages
+  // re-run this on a 30s interval per REQ-SD-02). logoutAdmin() clears the list,
+  // so there is no synchronous setState in this effect body.
+  useEffect(() => {
+    if (!currentAdminUser) return undefined
+    let cancelled = false
+    fetchOrders()
+      .then((rows) => {
+        if (cancelled) return
+        const list = (rows || []).filter(
+          (row) => !String(row?.ord_tag || '').toUpperCase().startsWith('CART-')
+        )
+        setOrders(list)
+      })
+      .catch(() => {
+        // Transient failure: keep the last known rows on screen.
+      })
+    return () => { cancelled = true }
+  }, [currentAdminUser, ordersRefreshKey])
+
+  const refreshOrders = useCallback(() => {
+    setOrdersRefreshKey((k) => k + 1)
+  }, [])
+
+  // Derived alert feed (out-of-stock + pending cancel/return requests).
+  const dismissedAlertIds = useMemo(
+    () => adminState.dismissedAlertIds || [],
+    [adminState.dismissedAlertIds]
+  )
+  const alerts = useMemo(
+    () => buildAlerts(products, orders, dismissedAlertIds),
+    [products, orders, dismissedAlertIds]
+  )
+
+  // Sync admin state to localStorage - live server data is never written back,
+  // so nothing can be seeded from it on the next load.
   useEffect(() => {
     try {
-      const stateToSave = { ...adminState }
-      delete stateToSave.products
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave))
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ dismissedAlertIds: adminState.dismissedAlertIds || [] })
+      )
     } catch (e) {
       console.warn('Failed to save admin state:', e)
     }
   }, [adminState])
 
-  // Sync auth state to localStorage
-  useEffect(() => {
-    try {
-      if (currentAdminUser) {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentAdminUser))
-      } else {
-        localStorage.removeItem(AUTH_STORAGE_KEY)
-      }
-    } catch (e) {
-      console.warn('Failed to save admin auth:', e)
-    }
-  }, [currentAdminUser])
-
   // ── ADMIN AUTHENTICATION ACTIONS ──
   const loginAdmin = useCallback(async (emailOrUsername, password) => {
     const result = await adminLogin(emailOrUsername.trim(), password)
     if (result.success && result.user) {
+      // REQ-SD-01: Only staff, admin, and super admin can access the dashboard
+      const allowedRoles = ['STAFF', 'Staff', 'ADMIN', 'Admin', 'SUPER_ADMIN', 'Super Admin']
+      if (!allowedRoles.includes(result.user.role) && !allowedRoles.includes(result.user.roleKey)) {
+        return { success: false, error: 'Your account does not have access to the admin panel.' }
+      }
       setCurrentAdminUser(result.user)
     }
     return result
   }, [])
 
   const logoutAdmin = useCallback(() => {
+    adminLogout().catch(() => null)
+    clearSession('staff')
     setCurrentAdminUser(null)
+    setApiToken(null)
     setProducts([])
+    setOrders([])
+    posCartRef.current = []
+    posOrderIdRef.current = null
+    posServerQtyRef.current = {}
+    setPosCart([])
   }, [])
-
-  const switchAdminUser = useCallback((userId) => {
-    const users = adminState.adminUsers || DEFAULT_ADMIN_USERS
-    const target = users.find((u) => u.id === userId)
-    if (target) {
-      setCurrentAdminUser(target)
-    }
-  }, [adminState.adminUsers])
 
   const updateCurrentAdminProfile = useCallback((updatedFields) => {
-    setCurrentAdminUser((prev) => {
-      if (!prev) return prev
-      const updated = { ...prev, ...updatedFields }
-      return updated
-    })
+    // Employee records are server-owned (PUT /accounts/update); this only
+    // refreshes the in-memory session copy.
+    setCurrentAdminUser((prev) => (prev ? { ...prev, ...updatedFields } : prev))
+  }, [])
 
-    setAdminState((prev) => {
-      const currentId = currentAdminUser?.id
-      if (!currentId) return prev
-      return {
-        ...prev,
-        adminUsers: (prev.adminUsers || DEFAULT_ADMIN_USERS).map((u) =>
-          u.id === currentId ? { ...u, ...updatedFields } : u
-        ),
+  // ── ORDER ACTIONS (backend-driven: PUT /orders/update) ──
+  const updateOrderStatus = useCallback(
+    async (orderId, newStatus) => {
+      const ordId = toNumericId(orderId)
+      if (ordId === null) {
+        return { success: false, error: 'Invalid order id.' }
       }
-    })
-  }, [currentAdminUser?.id])
-
-  // ── SUPER ADMIN USER MANAGEMENT ACTIONS ──
-  const addAdminUser = useCallback((userData) => {
-    const initials = (userData.name || 'Staff')
-      .split(' ')
-      .filter(Boolean)
-      .map((n) => n[0])
-      .join('')
-      .substring(0, 2)
-      .toUpperCase() || 'ST'
-
-    const colorPalette = ['orange', 'blue', 'purple', 'teal']
-    const randomColor = colorPalette[Math.floor(Math.random() * colorPalette.length)]
-
-    const defaultPerm =
-      userData.role === 'Super Admin'
-        ? 'Full System Access'
-        : userData.role === 'Admin'
-        ? 'Products, Orders, Inventory, Schedule'
-        : 'POS Register, Claims'
-
-    const newUser = {
-      id: `usr-${Date.now()}`,
-      status: userData.status || 'Active',
-      avatar: initials,
-      avatarBg: userData.avatarBg || randomColor,
-      dateAdded: 'Today',
-      isOriginal: false,
-      role: userData.role || 'Staff',
-      roleKey: userData.role === 'Super Admin' ? 'SUPER_ADMIN' : userData.role === 'Admin' ? 'ADMIN' : 'STAFF',
-      permissions: userData.permissions || defaultPerm,
-      modules: userData.modules || ['orders'],
-      phone: userData.phone || '+63 912 345 6789',
-      ...userData,
-    }
-
-    setAdminState((prev) => ({
-      ...prev,
-      adminUsers: [...(prev.adminUsers || DEFAULT_ADMIN_USERS), newUser],
-    }))
-    return newUser
-  }, [])
-
-  const updateAdminUser = useCallback((userId, updatedData) => {
-    setAdminState((prev) => ({
-      ...prev,
-      adminUsers: (prev.adminUsers || DEFAULT_ADMIN_USERS).map((u) => {
-        if (u.id !== userId) return u
-        const updated = { ...u, ...updatedData }
-        if (updatedData.name && !updatedData.avatar) {
-          updated.avatar =
-            updatedData.name
-              .split(' ')
-              .filter(Boolean)
-              .map((n) => n[0])
-              .join('')
-              .substring(0, 2)
-              .toUpperCase() || u.avatar
-        }
-        if (updatedData.role) {
-          updated.roleKey =
-            updatedData.role === 'Super Admin' ? 'SUPER_ADMIN' : updatedData.role === 'Admin' ? 'ADMIN' : 'STAFF'
-        }
-        return updated
-      }),
-    }))
-  }, [])
-
-  const deleteAdminUser = useCallback((userId) => {
-    setAdminState((prev) => ({
-      ...prev,
-      adminUsers: (prev.adminUsers || DEFAULT_ADMIN_USERS).filter(
-        (u) => u.id !== userId && !u.isOriginal
-      ),
-    }))
-  }, [])
-
-  // ── ORDER ACTIONS ──
-  const updateOrderStatus = useCallback((orderId, newStatus) => {
-    setAdminState((prev) => ({
-      ...prev,
-      orders: (prev.orders || []).map((order) =>
-        order.id === orderId ? { ...order, status: newStatus } : order
-      ),
-    }))
-  }, [])
-
-  const addOrder = useCallback((orderData) => {
-    const newOrder = {
-      id: `#ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-      batch: `BAT-00${Math.floor(18 + Math.random() * 10)}`,
-      date: 'Just now',
-      timeAgo: 'Just now',
-      ...orderData,
-    }
-    setAdminState((prev) => ({
-      ...prev,
-      orders: [newOrder, ...(prev.orders || [])],
-      dashboardKPIs: {
-        ...prev.dashboardKPIs,
-        totalOrders: (prev.dashboardKPIs?.totalOrders || 0) + 1,
-        grossSales: (prev.dashboardKPIs?.grossSales || 0) + (newOrder.total || 0),
-      },
-    }))
-    return newOrder
-  }, [])
-
-  // ── LOGISTICS & FULFILLMENT ACTIONS ──
-  const updateLogisticsStage = useCallback((orderId, newStage, extra = {}) => {
-    setAdminState((prev) => ({
-      ...prev,
-      logisticsOrders: (prev.logisticsOrders || []).map((item) =>
-        item.id === orderId
-          ? {
-              ...item,
-              stage: newStage,
-              ...extra,
-              action:
-                newStage === 'Ready'
-                  ? 'Hand Over Item'
-                  : newStage === 'Packing'
-                  ? 'Dispatch / Track'
-                  : newStage === 'Delayed'
-                  ? 'Notify'
-                  : newStage === 'Completed'
-                  ? 'Fulfilled'
-                  : 'Start Packing',
-              isCompleted: newStage === 'Completed',
-            }
-          : item
-      ),
-    }))
-  }, [])
-
-  const batchCompleteLogistics = useCallback((orderIds) => {
-    setAdminState((prev) => ({
-      ...prev,
-      logisticsOrders: (prev.logisticsOrders || []).map((item) =>
-        orderIds.includes(item.id)
-          ? { ...item, stage: 'Completed', action: 'Fulfilled', isCompleted: true }
-          : item
-      ),
-    }))
-  }, [])
+      try {
+        await updateOrder(ordId, { ord_status: String(newStatus || '').trim().toUpperCase() })
+        refreshOrders()
+        return { success: true }
+      } catch (e) {
+        return { success: false, error: e?.message || 'Failed to update the order status.' }
+      }
+    },
+    [refreshOrders]
+  )
 
   // ── PRODUCT & INVENTORY ACTIONS (backend-driven) ──
-  const toNumericProductId = (productId) => {
-    const numericId = parseInt(String(productId).replace('prod-', ''), 10)
-    return Number.isFinite(numericId) ? numericId : null
-  }
-
-  const toggleProductPublished = useCallback(async (productId) => {
-    const numericId = toNumericProductId(productId)
-    if (numericId === null) return
-    const current = products.find((p) => p.id === productId)
-    const nextStatus = current && current.status !== 'Draft' ? 'Draft' : 'Published'
-    try {
-      await updateAdminProductAPI(numericId, { prod_status: nextStatus })
-      refreshProducts()
-    } catch (e) {
-      console.error('Failed to toggle product status:', e)
-      showToast('Failed to update product status.', 'error')
-      refreshProducts()
-    }
-  }, [products, refreshProducts, showToast])
 
   const addProduct = useCallback(async (productData) => {
     try {
       await createAdminProduct({
         name: productData.name,
-        sku: productData.sku || `SKU-${Date.now()}`,
+        sku: productData.sku || `SKU-${Date.now().toString(36).toUpperCase()}`,
         category: productData.category || 'Shirts',
         price: Number(productData.price) || 300,
         stock: Number(productData.stock) || 10,
         desc: productData.desc || '',
+        photo: productData.photo || '',
       })
       showToast('Product added to catalog successfully!', 'success')
       refreshProducts()
@@ -432,6 +253,38 @@ export function AdminProvider({ children }) {
     }
   }, [refreshProducts, showToast])
 
+  const unlistProduct = useCallback(async (productId) => {
+    const numericId = toNumericProductId(productId)
+    if (numericId === null) return { success: false, error: 'Invalid product ID.' }
+    try {
+      await unlistAdminProductAPI(numericId)
+      showToast('Product unlisted from the customer catalog.', 'success')
+      refreshProducts()
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to unlist product:', e)
+      showToast(e.message || 'Failed to unlist product.', 'error')
+      refreshProducts()
+      return { success: false, error: e.message || 'Failed to unlist product.' }
+    }
+  }, [refreshProducts, showToast])
+
+  const sellProduct = useCallback(async (productId) => {
+    const numericId = toNumericProductId(productId)
+    if (numericId === null) return { success: false, error: 'Invalid product ID.' }
+    try {
+      await sellAdminProductAPI(numericId)
+      showToast('Product listed back for sale.', 'success')
+      refreshProducts()
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to list product for sale:', e)
+      showToast(e.message || 'Failed to list product for sale.', 'error')
+      refreshProducts()
+      return { success: false, error: e.message || 'Failed to list product for sale.' }
+    }
+  }, [refreshProducts, showToast])
+
   const adjustStock = useCallback(async (productId, newStock) => {
     const numericId = toNumericProductId(productId)
     if (numericId === null) return
@@ -445,235 +298,245 @@ export function AdminProvider({ children }) {
     }
   }, [refreshProducts, showToast])
 
-  // ── REVIEWS MODERATION ACTIONS ──
-  const approveReview = useCallback((reviewId) => {
-    setAdminState((prev) => ({
-      ...prev,
-      reviews: (prev.reviews || []).map((r) =>
-        r.id === reviewId ? { ...r, status: 'approved', flagged: false } : r
-      ),
-    }))
-  }, [])
-
-  const rejectReview = useCallback((reviewId) => {
-    setAdminState((prev) => ({
-      ...prev,
-      reviews: (prev.reviews || []).map((r) =>
-        r.id === reviewId ? { ...r, status: 'rejected' } : r
-      ),
-    }))
-  }, [])
-
-  const assignReviewToSupport = useCallback((reviewId, note = '') => {
-    setAdminState((prev) => ({
-      ...prev,
-      reviews: (prev.reviews || []).map((r) =>
-        r.id === reviewId
-          ? { ...r, status: 'assigned_support', supportNote: note || 'Assigned to Customer Support Tier 2' }
-          : r
-      ),
-    }))
-  }, [])
-
-  const replyToReview = useCallback((reviewId, replyText) => {
-    setAdminState((prev) => ({
-      ...prev,
-      reviews: (prev.reviews || []).map((r) =>
-        r.id === reviewId ? { ...r, reply: replyText, status: 'approved' } : r
-      ),
-    }))
-  }, [])
-
-  // ── SCHEDULE & SHIFT ACTIONS ──
-  const assignDutyShift = useCallback((officerId, shift) => {
-    setAdminState((prev) => ({
-      ...prev,
-      officers: (prev.officers || []).map((off) =>
-        off.id === officerId
-          ? {
-              ...off,
-              shifts: [...(off.shifts || []).filter((s) => s.type !== 'open_slot'), shift],
-              available: false,
-              availability: `${shift.time} (${shift.title})`,
-            }
-          : off
-      ),
-    }))
-  }, [])
-
-  const approveDutyRequest = useCallback((requestId) => {
-    setAdminState((prev) => {
-      const req = (prev.dutyRequests || []).find((r) => r.id === requestId)
-      return {
-        ...prev,
-        dutyRequests: (prev.dutyRequests || []).filter((r) => r.id !== requestId),
-        officers: (prev.officers || []).map((off) =>
-          req && off.name === req.officerName
-            ? {
-                ...off,
-                availability: req.requestedShift,
-                shifts: [...(off.shifts || []), { time: '1:00 PM - 3:00 PM', type: 'desk_duty', title: 'Desk Duty' }],
-              }
-            : off
-        ),
-      }
-    })
-  }, [])
-
-  const rejectDutyRequest = useCallback((requestId) => {
-    setAdminState((prev) => ({
-      ...prev,
-      dutyRequests: (prev.dutyRequests || []).filter((r) => r.id !== requestId),
-    }))
-  }, [])
-
-  // ── STORE CUSTOMIZATION & SETTINGS ACTIONS ──
-  const updateStoreSettings = useCallback((newSettings) => {
-    setAdminState((prev) => ({
-      ...prev,
-      storeSettings: {
-        ...(prev.storeSettings || INITIAL_ADMIN_DATA.storeSettings),
-        ...newSettings,
-      },
-    }))
-  }, [])
-
   // ── ALERTS ACTIONS ──
+  // Alerts are derived from live data, so "resolving" one records the dismissal
+  // (persisted) instead of mutating a list that would reappear on refresh.
   const resolveAlert = useCallback((alertId) => {
-    setAdminState((prev) => ({
-      ...prev,
-      alerts: (prev.alerts || []).filter((a) => a.id !== alertId),
-    }))
-  }, [])
-
-  // ── POS REGISTER CART ACTIONS ──
-  const posAddToCart = useCallback((product, variantName = 'Standard') => {
-    setPosCart((prev) => {
-      const existingIdx = prev.findIndex(
-        (item) => item.id === product.id && item.variant === variantName
-      )
-      if (existingIdx > -1) {
-        const next = [...prev]
-        next[existingIdx].qty += 1
-        return next
-      }
-      return [
-        ...prev,
-        {
-          id: product.id,
-          name: product.name,
-          variant: variantName,
-          price: product.price,
-          qty: 1,
-          image: product.image,
-        },
-      ]
+    setAdminState((prev) => {
+      const current = prev.dismissedAlertIds || []
+      if (current.includes(alertId)) return prev
+      return { ...prev, dismissedAlertIds: [...current, alertId] }
     })
   }, [])
 
-  const posUpdateQty = useCallback((index, newQty) => {
-    setPosCart((prev) => {
-      if (newQty <= 0) {
-        return prev.filter((_, i) => i !== index)
+  // ── POS REGISTER CART ACTIONS (optimistic + queued server sync) ──
+  // Every cart change updates local state immediately and then runs through a
+  // single-flight queue so /pos/add, /pos/remove and /pos/checkout can never
+  // interleave (the backend aggregates same-product rows, so each change is
+  // applied as an exact remove + re-set).
+  const applyPosCart = useCallback((next) => {
+    posCartRef.current = next
+    setPosCart(next)
+  }, [])
+
+  const enqueuePosTask = useCallback((task) => {
+    const run = posQueueRef.current.then(() => task())
+    // Keep the chain alive even when a task rejects; callers get the rejection.
+    posQueueRef.current = run.then(() => undefined, () => undefined)
+    return run
+  }, [])
+
+  /** Reconcile the server copy of the walk-in order with the local cart. */
+  const syncPosCart = useCallback(() => {
+    return enqueuePosTask(async () => {
+      const local = posCartRef.current
+      const server = posServerQtyRef.current
+      let ordId = posOrderIdRef.current
+
+      // 1. Lines dropped from the cart are removed server-side.
+      for (const prodId of Object.keys(server)) {
+        if (!local.some((line) => String(line.prodId) === prodId)) {
+          if (ordId) {
+            await removePosItem({ ord_id: ordId, prod_id: Number(prodId) })
+          }
+          delete server[prodId]
+        }
       }
-      const next = [...prev]
-      next[index] = { ...next[index], qty: newQty }
-      return next
+
+      // 2. First add creates the anonymous POS order.
+      if (!ordId && local.length > 0) {
+        const first = local[0]
+        const res = await addPosItem({
+          prod_id: first.prodId,
+          item_qty: first.qty,
+          item_amount: first.price * first.qty,
+        })
+        ordId = res?.data?.order?.ord_id ?? res?.order?.ord_id ?? res?.data?.ord_id ?? null
+        if (!ordId) throw new Error('The POS order id was missing from the server response.')
+        posOrderIdRef.current = ordId
+        server[String(first.prodId)] = first.qty
+      }
+
+      // 3. Every remaining line is set to the exact quantity in the cart.
+      if (ordId) {
+        for (const line of local) {
+          const key = String(line.prodId)
+          const wanted = Number(line.qty) || 0
+          if (server[key] === wanted) continue
+          if (server[key] !== undefined) {
+            await removePosItem({ ord_id: ordId, prod_id: line.prodId })
+            delete server[key]
+          }
+          if (wanted > 0) {
+            await addPosItem({
+              ord_id: ordId,
+              prod_id: line.prodId,
+              item_qty: wanted,
+              item_amount: line.price * wanted,
+            })
+            server[key] = wanted
+          }
+        }
+      }
+
+      return { success: true, ordId }
     })
-  }, [])
+  }, [enqueuePosTask])
 
-  const posRemoveItem = useCallback((index) => {
-    setPosCart((prev) => prev.filter((_, i) => i !== index))
-  }, [])
-
-  const posClearCart = useCallback(() => {
-    setPosCart([])
-  }, [])
-
-  const posCheckout = useCallback(
-    ({ paymentMethod = 'Cash', customerName = 'Walk-in Customer', studentId = 'N/A', amountTendered = 0 }) => {
-      const subtotal = posCart.reduce((sum, item) => sum + item.price * item.qty, 0)
-      const newOrder = {
-        id: `#ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-        batch: 'BAT-POS',
-        customer: customerName || 'Walk-in Customer',
-        date: 'Just now',
-        type: 'Onsite Regular',
-        fulfillment: 'Instant POS',
-        status: 'Completed',
-        total: subtotal,
-        timeAgo: 'Just now',
-        paymentMethod,
-        studentId,
-        amountTendered,
-        change: amountTendered >= subtotal ? amountTendered - subtotal : 0,
-        items: posCart.map((i) => ({ name: i.name, qty: i.qty, price: i.price, size: i.variant })),
-      }
-
-      setAdminState((prev) => ({
-        ...prev,
-        orders: [newOrder, ...(prev.orders || [])],
-        logisticsOrders: [
-          {
-            id: newOrder.id,
-            customer: newOrder.customer,
-            method: 'Instant POS',
-            methodType: 'pos',
-            details: 'Instant POS\nWalk-in',
-            stage: 'Completed',
-            action: 'Fulfilled',
-            actionKey: 'fulfilled',
-            isCompleted: true,
-          },
-          ...(prev.logisticsOrders || []),
-        ],
-        dashboardKPIs: {
-          ...(prev.dashboardKPIs || INITIAL_ADMIN_DATA.dashboardKPIs),
-          totalOrders: ((prev.dashboardKPIs || {}).totalOrders || 0) + 1,
-          grossSales: ((prev.dashboardKPIs || {}).grossSales || 0) + subtotal,
-        },
-      }))
-
-      setPosCart([])
-      return newOrder
+  const reportPosFailure = useCallback(
+    (err) => {
+      const message = err?.message || 'Failed to sync the cart with the server.'
+      showToast(message, 'error')
+      return { success: false, error: message }
     },
-    [posCart]
+    [showToast]
   )
 
-  const isSuperAdmin = currentAdminUser?.roleKey === 'SUPER_ADMIN' || currentAdminUser?.role === 'Super Admin'
+  const posAddToCart = useCallback(
+    (product, variantName = 'Standard', qty = 1) => {
+      const prodId = toNumericProductId(product?.id ?? product?.prodId)
+      if (prodId === null) {
+        return Promise.resolve({ success: false, error: 'Invalid product.' })
+      }
+
+      const current = posCartRef.current
+      const index = current.findIndex(
+        (line) => line.prodId === prodId && line.variant === variantName
+      )
+      let next
+      if (index > -1) {
+        next = current.map((line, i) =>
+          i === index ? { ...line, qty: line.qty + qty } : line
+        )
+      } else {
+        next = [
+          ...current,
+          {
+            id: product?.id || `prod-${prodId}`,
+            prodId,
+            name: product?.name || 'Item',
+            variant: variantName,
+            price: Number(product?.price) || 0,
+            qty,
+            image: product?.image || '',
+          },
+        ]
+      }
+      applyPosCart(next)
+      return syncPosCart().catch(reportPosFailure)
+    },
+    [applyPosCart, syncPosCart, reportPosFailure]
+  )
+
+  const posUpdateQty = useCallback(
+    (index, newQty) => {
+      const current = posCartRef.current
+      const next =
+        newQty <= 0
+          ? current.filter((_, i) => i !== index)
+          : current.map((line, i) => (i === index ? { ...line, qty: newQty } : line))
+      applyPosCart(next)
+      return syncPosCart().catch(reportPosFailure)
+    },
+    [applyPosCart, syncPosCart, reportPosFailure]
+  )
+
+  const posRemoveItem = useCallback(
+    (index) => {
+      const next = posCartRef.current.filter((_, i) => i !== index)
+      applyPosCart(next)
+      return syncPosCart().catch(reportPosFailure)
+    },
+    [applyPosCart, syncPosCart, reportPosFailure]
+  )
+
+  const posClearCart = useCallback(() => {
+    applyPosCart([])
+    return syncPosCart().catch(reportPosFailure)
+  }, [applyPosCart, syncPosCart, reportPosFailure])
+
+  /**
+   * Pay the walk-in order at the register (POST /pos/checkout).
+   * Returns { success, order } with the receipt on success, or
+   * { success: false, error } so the register can keep the modal open.
+   */
+  const posCheckout = useCallback(
+    async ({ paymentMethod = 'Cash', customerName = 'Walk-in Customer', studentId = 'N/A', amountTendered = 0 } = {}) => {
+      const snapshot = posCartRef.current
+      const subtotal = snapshot.reduce((sum, line) => sum + line.price * line.qty, 0)
+      const ordId = posOrderIdRef.current
+
+      if (!ordId || snapshot.length === 0) {
+        return { success: false, error: 'The POS cart is empty.' }
+      }
+
+      const tendered = Number(amountTendered) > 0 ? Number(amountTendered) : subtotal
+
+      try {
+        // Drain any pending cart edits first so the server total is final.
+        await syncPosCart()
+        const res = await enqueuePosTask(() => checkoutPos({ ord_id: ordId, pay_given: tendered }))
+
+        const payment = res?.data?.payment || {}
+        const order = res?.data?.order || {}
+        const receipt = {
+          id: `#${order.ord_tag || `POS-${ordId}`}`,
+          ordId,
+          pickupId: res?.data?.pickup_id ?? null,
+          customer: customerName || 'Walk-in Customer',
+          paymentMethod,
+          studentId,
+          fulfillment: 'Instant POS',
+          total: Number(payment.pay_due) || subtotal,
+          amountTendered: Number(payment.pay_given) || tendered,
+          change: Number(payment.pay_change) || 0,
+          items: snapshot.map((line) => ({
+            name: line.name,
+            qty: line.qty,
+            price: line.price,
+            size: line.variant,
+          })),
+        }
+
+        // New sale starts from an empty basket and a fresh order id.
+        posCartRef.current = []
+        posOrderIdRef.current = null
+        posServerQtyRef.current = {}
+        setPosCart([])
+
+        refreshOrders()
+        refreshProducts()
+        return { success: true, order: receipt }
+      } catch (e) {
+        const message = e?.message || 'Failed to checkout the POS order.'
+        return { success: false, error: message }
+      }
+    },
+    [syncPosCart, enqueuePosTask, refreshOrders, refreshProducts]
+  )
 
   return (
     <AdminContext.Provider
       value={{
         adminState,
+        orders,
+        refreshOrders,
+        alerts,
+        dismissedAlertIds,
         posCart,
         products,
         currentAdminUser,
-        isSuperAdmin,
+        isSuperAdmin: isSuperAdmin(currentAdminUser),
         loginAdmin,
         logoutAdmin,
-        switchAdminUser,
         updateCurrentAdminProfile,
-        addAdminUser,
-        updateAdminUser,
-        deleteAdminUser,
         updateOrderStatus,
-        addOrder,
-        updateLogisticsStage,
-        batchCompleteLogistics,
-        toggleProductPublished,
         addProduct,
         updateProduct,
         deleteProduct,
+        unlistProduct,
+        sellProduct,
         adjustStock,
-        approveReview,
-        rejectReview,
-        assignReviewToSupport,
-        replyToReview,
-        assignDutyShift,
-        approveDutyRequest,
-        rejectDutyRequest,
-        updateStoreSettings,
         resolveAlert,
         posAddToCart,
         posUpdateQty,

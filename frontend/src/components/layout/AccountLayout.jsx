@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
+import React from 'react'
 import BottomNav from './BottomNav.jsx'
 import DesktopHeader from './DesktopHeader.jsx'
 import DesktopFooter from './DesktopFooter.jsx'
 import DesktopAccountSidebar from './DesktopAccountSidebar.jsx'
-import PwaInstallPrompt from '../ui/PwaInstallPrompt.jsx'
 
 /**
  * Shared shell for every account page (Profile, Orders, Order Details, Settings, ...).
@@ -49,9 +49,8 @@ function AccountLayout({ children, className = '' }) {
 
       <DesktopFooter />
       <BottomNav />
-      <PwaInstallPrompt />
     </div>
   )
 }
 
-export default AccountLayout
+export default React.memo(AccountLayout)

@@ -3,11 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
+import Avatar from '../components/ui/Avatar.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import searchIcon from '../assets/icons/common/search.svg'
 import notificationIcon from '../assets/icons/common/notification.svg'
-import avatarImg from '../assets/avatar.png'
 import carouselImg1 from '../assets/Images/unnamed (1).png'
 import carouselImg2 from '../assets/Images/unnamed (2).png'
 import carouselImg3 from '../assets/Images/unnamed (3).png'
@@ -100,7 +100,7 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
           <div className="gradient-orange-header px-6 pt-12 pb-8 text-white relative">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-full border-2 border-white bg-blue-100 overflow-hidden">
-                <img src={avatarImg} alt="User Avatar" className="w-full h-full object-cover" />
+                <Avatar name={user?.fullName} size={56} className="w-full h-full" userId={user?.cust_id} />
               </div>
               <div>
                 <p className="font-bold text-lg">{user ? user.fullName : 'Guest Isko'}</p>

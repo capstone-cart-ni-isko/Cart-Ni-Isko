@@ -1,6 +1,18 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import {
+  fetchAccounts,
+  searchAccounts,
+  banAccount,
+  recoverAccount,
+  deleteAccount,
+  changeAccountType,
+  updateAccount,
+} from '../../services/accounts.js'
+import { employeeSignUp } from '../../services/auth.js'
+import { logAction } from '../../services/access.js'
 
 // Available modules for granular permissions
 const SYSTEM_MODULES = [
@@ -11,18 +23,93 @@ const SYSTEM_MODULES = [
   { id: 'settings', label: 'Settings', desc: 'Manage system settings' },
 ]
 
-export default function AdminUsers() {
-  const {
-    adminState,
-    addAdminUser,
-    updateAdminUser,
-    deleteAdminUser,
-  } = useAdmin()
+// ── API → UI mapping helpers ────────────────────────────────────────────────
+// The backend returns { customers, employees } (or a flat array from older
+// builds); normalize both shapes into one row list.
+function normalizeAccountList(payload) {
+  const customers = Array.isArray(payload?.customers) ? payload.customers : null
+  const employees = Array.isArray(payload?.employees) ? payload.employees : null
+  if (customers || employees) {
+    return [
+      ...(employees || []).map((row) => ({ ...row, _group: 'employee' })),
+      ...(customers || []).map((row) => ({ ...row, _group: 'customer' })),
+    ]
+  }
+  if (Array.isArray(payload)) {
+    return payload.map((row) => ({
+      ...row,
+      _group: row.emp_id != null ? 'employee' : 'customer',
+    }))
+  }
+  return []
+}
 
-  const users = adminState.adminUsers || []
+// Employees carry emp_type; resolve it into the role vocabulary this page renders.
+function roleFromAccountType(group, rawType) {
+  if (group === 'customer') return 'Customer'
+  const t = String(rawType || '')
+  if (/super\s*admin|root/i.test(t)) return 'Super Admin'
+  if (/admin|manager|officer/i.test(t)) return 'Admin'
+  return 'Staff'
+}
+
+function permissionsForRole(role) {
+  if (role === 'Super Admin') return 'Full System Access'
+  if (role === 'Admin') return 'Products, Orders, Inventory, Schedule'
+  if (role === 'Customer') return 'Customer Account'
+  return 'Fulfillment, Orders, POS'
+}
+
+function mapAccountRow(row, idx) {
+  const isEmp = row._group === 'employee'
+  const id = isEmp ? row.emp_id : row.cust_id
+  const name = isEmp
+    ? `${row.emp_givname || ''} ${row.emp_surname || ''}`.trim() || row.emp_email || 'Unnamed account'
+    : row.cust_nickname || row.cust_email || row.cust_phone || 'Unnamed account'
+  const role = roleFromAccountType(row._group, row.emp_type || row.cust_type)
+  const disabled = isEmp ? row.emp_disabled : row.cust_disabled
+  const deleted = isEmp ? row.emp_deleted : row.cust_deleted
+  return {
+    id: `${isEmp ? 'emp' : 'cust'}-${id ?? idx}`,
+    userId: id,
+    accountType: isEmp ? 'employee' : 'customer',
+    name,
+    email: (isEmp ? row.emp_email : row.cust_email) || '',
+    phone: (isEmp ? row.emp_phone : row.cust_phone) || '',
+    role,
+    permissions: permissionsForRole(role),
+    modules: ['products', 'orders', 'analytics', 'content', 'settings'],
+    photo: null,
+    avatarBg: isEmp ? 'blue' : 'teal',
+    status: deleted ? 'Deleted' : disabled ? 'Inactive' : 'Active',
+  }
+}
+
+// Case-insensitive match across every field this page's search box claims.
+function matchesQuery(user, q) {
+  if (!q) return true
+  const hay = `${user.name} ${user.email} ${user.phone} ${user.role} ${user.permissions}`.toLowerCase()
+  return hay.includes(String(q).toLowerCase())
+}
+
+function errorMessage(err, fallback) {
+  return err?.message || fallback || 'Request failed'
+}
+
+export default function AdminUsers() {
+  const { currentAdminUser, isSuperAdmin } = useAdmin()
+  const { showToast } = useToast()
+
+  // Server-backed account list (User Management screen)
+  const [users, setUsers] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [pageError, setPageError] = useState('')
+  const [notice, setNotice] = useState(null) // { type: 'success' | 'error', text }
+  const [reloadKey, setReloadKey] = useState(0)
 
   // Table filters & search state
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedRole, setSelectedRole] = useState('All Roles')
   const [selectedStatus, setSelectedStatus] = useState('All Statuses')
   const [selectedUserIds, setSelectedUserIds] = useState([])
@@ -32,11 +119,26 @@ export default function AdminUsers() {
   // Modal State
   const [showModal, setShowModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Ban / delete flows (REQ-UM-02 / REQ-UM-03)
+  const [banTarget, setBanTarget] = useState(null)
+  const [banReason, setBanReason] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteStep, setDeleteStep] = useState(1)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
   // Modal Form State
   const [formName, setFormName] = useState('')
   const [formEmail, setFormEmail] = useState('')
   const [formPhone, setFormPhone] = useState('')
+  // Employee record fields the backend validator requires (emp_signup).
+  const [formStudnum, setFormStudnum] = useState('')
+  const [formCollege, setFormCollege] = useState('')
+  const [formProgram, setFormProgram] = useState('')
+  const [formYear, setFormYear] = useState('')
+  const [formBloc, setFormBloc] = useState('')
+  const [tempPassword, setTempPassword] = useState('')
   const [formStatus, setFormStatus] = useState('Active')
   const [formRole, setFormRole] = useState('Super Admin')
   const [formModules, setFormModules] = useState(['products', 'orders', 'analytics', 'content', 'settings'])
@@ -54,16 +156,76 @@ export default function AdminUsers() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // ── Server load (User Management: GET /accounts/display | /accounts/search) ──
+  const loadAccounts = useCallback(async (q) => {
+    setIsLoading(true)
+    setPageError('')
+    try {
+      let payload = q ? await searchAccounts(q) : await fetchAccounts()
+      let rows = normalizeAccountList(payload)
+      // The server `q` search only covers name/email/phone — if it matches
+      // nothing (e.g. searching a role like "Super Admin"), refetch the full
+      // list and refine locally instead of showing a false empty state.
+      if (q && rows.length === 0) {
+        rows = normalizeAccountList(await fetchAccounts())
+      }
+      rows = rows.map(mapAccountRow)
+      rows.sort((a, b) => {
+        const ga = a.accountType === 'employee' ? 0 : 1
+        const gb = b.accountType === 'employee' ? 0 : 1
+        return ga - gb || a.name.localeCompare(b.name)
+      })
+      setUsers(rows)
+    } catch (err) {
+      setPageError(errorMessage(err, 'Unable to load accounts from the server.'))
+      setUsers([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const reloadAccounts = useCallback(() => setReloadKey((k) => k + 1), [])
+
+  // Debounce the search box before it hits the API
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 350)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    loadAccounts(debouncedQuery)
+  }, [debouncedQuery, reloadKey, loadAccounts])
+
+  // REQ-UM-04: every management action is written to the access log.
+  const recordLog = useCallback(
+    (action, desc, target) => {
+      logAction({
+        user_id: target?.userId ?? currentAdminUser?.id ?? 0,
+        user_type: target?.accountType || 'employee',
+        action,
+        desc: `${desc} (by ${currentAdminUser?.name || 'Staff'}${
+          isSuperAdmin ? ', Super Admin' : ''
+        })`,
+      }).catch(() => {
+        // Logging must never block the management action itself.
+      })
+    },
+    [currentAdminUser?.id, currentAdminUser?.name, isSuperAdmin]
+  )
+
+  const notify = useCallback(
+    (text, type = 'success') => {
+      setNotice({ type, text })
+      showToast(text, type)
+    },
+    [showToast]
+  )
+
   // Filtered users list
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       const q = searchQuery.toLowerCase().trim()
-      const matchSearch =
-        !q ||
-        (u.name && u.name.toLowerCase().includes(q)) ||
-        (u.email && u.email.toLowerCase().includes(q)) ||
-        (u.role && u.role.toLowerCase().includes(q)) ||
-        (u.permissions && u.permissions.toLowerCase().includes(q))
+      const matchSearch = matchesQuery(u, q)
 
       const matchRole =
         selectedRole === 'All Roles' ||
@@ -94,10 +256,20 @@ export default function AdminUsers() {
 
   // Open Modal for Add
   const handleOpenAdd = () => {
+    if (!isSuperAdmin) {
+      notify('Only the Super Admin may register staff accounts (REQ-UM-01).', 'error')
+      return
+    }
     setEditingUser(null)
     setFormName('')
     setFormEmail('')
     setFormPhone('')
+    setFormStudnum('')
+    setFormCollege('')
+    setFormProgram('')
+    setFormYear('')
+    setFormBloc('')
+    setTempPassword('')
     setFormStatus('Active')
     setFormRole('Staff')
     setFormModules(['orders'])
@@ -110,9 +282,15 @@ export default function AdminUsers() {
     setEditingUser(user)
     setFormName(user.name || '')
     setFormEmail(user.email || '')
-    setFormPhone(user.phone || '+63 912 345 6789')
+    setFormPhone(user.phone || '')
+    setFormStudnum('')
+    setFormCollege('')
+    setFormProgram('')
+    setFormYear('')
+    setFormBloc('')
+    setTempPassword('')
     setFormStatus(user.status || 'Active')
-    setFormRole(user.role || 'Super Admin')
+    setFormRole(user.role || 'Staff')
     setFormModules(
       user.modules || (
         user.role === 'Super Admin'
@@ -129,6 +307,10 @@ export default function AdminUsers() {
 
   // Auto-sync modules when role changes in modal
   const handleRoleChange = (newRole) => {
+    if (editingUser && editingUser.accountType === 'customer') {
+      notify('Staff roles only apply to employee accounts.', 'info')
+      return
+    }
     setFormRole(newRole)
     if (newRole === 'Super Admin') {
       setFormModules(['products', 'orders', 'analytics', 'content', 'settings'])
@@ -160,50 +342,203 @@ export default function AdminUsers() {
     }
   }
 
-  // Save Modal Form
-  const handleFormSubmit = (e) => {
-    e.preventDefault()
-    if (!formName.trim() || !formEmail.trim()) return
-
-    // Derive permissions scope text
-    let scopeText = 'Limited Access'
-    if (formRole === 'Super Admin') {
-      scopeText = 'Full System Access'
-    } else if (formRole === 'Admin') {
-      scopeText = 'Products, Orders, Inventory, Schedule'
-    } else if (formRole === 'Staff') {
-      if (formModules.includes('products')) {
-        scopeText = 'Products, Fulfillment, POS'
-      } else {
-        scopeText = 'Fulfillment, Orders, POS'
-      }
-    }
-
-    const payload = {
-      name: formName.trim(),
-      email: formEmail.trim(),
-      phone: formPhone.trim() || '+63 912 345 6789',
-      role: formRole,
-      status: formStatus,
-      permissions: scopeText,
-      modules: formModules,
-      photo: formAvatarPhoto,
-    }
-
-    if (editingUser) {
-      updateAdminUser(editingUser.id, payload)
-    } else {
-      addAdminUser(payload)
-    }
-
-    setShowModal(false)
+  // Split "Juan Dela Cruz" into surname / given name for the employee API.
+  const splitFullName = (full) => {
+    const parts = String(full || '').trim().split(/\s+/).filter(Boolean)
+    if (parts.length <= 1) return { givname: parts[0] || '', surname: parts[0] || '' }
+    return { givname: parts[0], surname: parts.slice(1).join(' ') }
   }
 
-  // Toggle user status quickly from action menu
-  const handleToggleUserStatus = (user) => {
-    const newStatus = user.status === 'Active' ? 'Inactive' : 'Active'
-    updateAdminUser(user.id, { status: newStatus })
+  const roleToNewType = (role) => {
+    if (role === 'Super Admin') return 'SUPER ADMIN'
+    if (role === 'Admin') return 'ADMIN'
+    return 'STAFF'
+  }
+
+  // Save Modal Form — create (employee signup) or update via the accounts API.
+  const handleFormSubmit = async (e) => {
+    e.preventDefault()
+    if (isSaving) return
+    if (!formName.trim() || !formEmail.trim()) return
+
+    if (!isSuperAdmin) {
+      notify('Only the Super Admin may register or edit staff accounts (REQ-UM-01).', 'error')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      if (!editingUser) {
+        // ── Register a new staff account (REQ-UM-01 / REQ-UM-04) ──
+        // The server mints a one-time temporary password; surface it here.
+        const { givname, surname } = splitFullName(formName)
+        const { user, error } = await employeeSignUp({
+          surname,
+          givname,
+          email: formEmail.trim(),
+          phone: formPhone.trim(),
+          studnum: formStudnum.trim(),
+          college: formCollege.trim(),
+          program: formProgram.trim(),
+          year: formYear.trim(),
+          bloc: formBloc.trim(),
+          type: roleToNewType(formRole),
+        })
+        if (error) {
+          // Surface the server message verbatim; keep the form intact.
+          notify(error, 'error')
+          return
+        }
+        recordLog(
+          'REGISTER ACCOUNT',
+          `Registered staff account ${formEmail.trim()} as ${formRole}`,
+          { userId: user?.emp_id, accountType: 'employee' }
+        )
+        reloadAccounts()
+        setTempPassword(user?.temporary_password || '')
+        notify(`Staff account for ${formName.trim()} registered.`)
+        return
+      }
+
+      // ── Edit an existing account (PUT /accounts/update) ──
+      const isEmp = editingUser.accountType === 'employee'
+      const changes = isEmp
+        ? {
+            emp_givname: splitFullName(formName).givname,
+            emp_surname: splitFullName(formName).surname,
+            emp_email: formEmail.trim(),
+            emp_phone: formPhone.trim(),
+          }
+        : {
+            cust_nickname: formName.trim(),
+            cust_email: formEmail.trim(),
+            cust_phone: formPhone.trim(),
+          }
+      await updateAccount(editingUser.accountType, editingUser.userId, changes)
+      recordLog('UPDATE ACCOUNT', `Updated profile details for ${formName.trim()}`, editingUser)
+
+      // Role change → PUT /accounts/type (super admin only, REQ-UM-01)
+      if (isEmp && formRole !== editingUser.role) {
+        await changeAccountType('employee', editingUser.userId, roleToNewType(formRole))
+        recordLog(
+          'CHANGE ACCOUNT TYPE',
+          `Changed ${editingUser.name} from ${editingUser.role} to ${formRole}`,
+          editingUser
+        )
+      }
+
+      // Status change is routed through the ban (reason required) / recover flow
+      let pendingStatusAction = null
+      if (formStatus !== editingUser.status) {
+        pendingStatusAction = formStatus === 'Inactive' ? 'ban' : 'recover'
+      }
+
+      setShowModal(false)
+      reloadAccounts()
+
+      if (pendingStatusAction === 'ban') {
+        setBanTarget(editingUser)
+        setBanReason('')
+        notify('Profile saved. A ban reason is required to deactivate this account.', 'info')
+      } else if (pendingStatusAction === 'recover') {
+        handleRecover(editingUser)
+      } else {
+        notify('Account updated successfully.')
+      }
+    } catch (err) {
+      notify(errorMessage(err, 'Failed to save the account.'), 'error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // ── Ban flow (REQ-UM-02): reason is mandatory ──
+  const handleOpenBan = (user) => {
     setActiveMenuUserId(null)
+    if (!isSuperAdmin) {
+      notify('Only the Super Admin may ban accounts (REQ-UM-01).', 'error')
+      return
+    }
+    setBanTarget(user)
+    setBanReason('')
+  }
+
+  const handleConfirmBan = async () => {
+    if (!banTarget) return
+    const reason = banReason.trim()
+    if (!reason) {
+      notify('A reason is required to ban an account (REQ-UM-04).', 'error')
+      return
+    }
+    setIsSaving(true)
+    try {
+      await banAccount(banTarget.accountType, banTarget.userId, reason)
+      recordLog('BAN ACCOUNT', `Banned ${banTarget.name}. Reason: ${reason}`, banTarget)
+      setBanTarget(null)
+      setBanReason('')
+      reloadAccounts()
+      notify(`${banTarget.name} has been banned.`)
+    } catch (err) {
+      notify(errorMessage(err, 'Failed to ban the account.'), 'error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // ── Recover flow ──
+  const handleRecover = async (user) => {
+    if (!isSuperAdmin) {
+      notify('Only the Super Admin may recover accounts (REQ-UM-01).', 'error')
+      return
+    }
+    try {
+      await recoverAccount(user.accountType, user.userId)
+      recordLog('RECOVER ACCOUNT', `Recovered ${user.name}`, user)
+      reloadAccounts()
+      notify(`${user.name} has been recovered.`)
+    } catch (err) {
+      notify(errorMessage(err, 'Failed to recover the account.'), 'error')
+    }
+  }
+
+  // ── Delete flow (REQ-UM-03): two-step confirmation, irreversible ──
+  const handleOpenDelete = (user) => {
+    setActiveMenuUserId(null)
+    if (!isSuperAdmin) {
+      notify('Only the Super Admin may delete accounts (REQ-UM-01).', 'error')
+      return
+    }
+    setDeleteTarget(user)
+    setDeleteStep(1)
+    setDeleteConfirmText('')
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsSaving(true)
+    try {
+      await deleteAccount(deleteTarget.accountType, deleteTarget.userId)
+      recordLog('DELETE ACCOUNT', `Permanently deleted ${deleteTarget.name}`, deleteTarget)
+      setDeleteTarget(null)
+      setDeleteStep(1)
+      setDeleteConfirmText('')
+      reloadAccounts()
+      notify(`${deleteTarget.name} was deleted.`)
+    } catch (err) {
+      notify(errorMessage(err, 'Failed to delete the account.'), 'error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Toggle user status quickly from action menu → ban / recover flows
+  const handleToggleUserStatus = (user) => {
+    setActiveMenuUserId(null)
+    if (user.status === 'Active') {
+      handleOpenBan(user)
+    } else {
+      handleRecover(user)
+    }
   }
 
   // Helper for avatar colors matching the design
@@ -254,7 +589,9 @@ export default function AdminUsers() {
           <button
             type="button"
             onClick={handleOpenAdd}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#F97316] hover:bg-[#EA580C] text-white font-semibold text-sm rounded-xl shadow-xs transition-colors cursor-pointer w-fit"
+            disabled={!isSuperAdmin}
+            title={isSuperAdmin ? 'Add Staff Account' : 'Only the Super Admin may register staff accounts (REQ-UM-01)'}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#F97316] hover:bg-[#EA580C] text-white font-semibold text-sm rounded-xl shadow-xs transition-colors cursor-pointer w-fit disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -299,6 +636,7 @@ export default function AdminUsers() {
                 <option value="Super Admin">Super Admin</option>
                 <option value="Admin">Admin</option>
                 <option value="Staff">Staff</option>
+                <option value="Customer">Customer</option>
               </select>
               <svg
                 viewBox="0 0 24 24"
@@ -352,6 +690,43 @@ export default function AdminUsers() {
           </div>
         </div>
 
+        {/* ── Inline status banner (errors / action feedback) ── */}
+        {(notice || pageError) && (
+          <div
+            className={`flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-xs font-medium ${
+              notice?.type === 'error' || pageError
+                ? 'bg-rose-50 border-rose-200 text-rose-700'
+                : notice?.type === 'info'
+                ? 'bg-sky-50 border-sky-200 text-sky-700'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            }`}
+          >
+            <span>{pageError || notice?.text}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {pageError && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPageError('')
+                    reloadAccounts()
+                  }}
+                  className="font-bold underline cursor-pointer"
+                >
+                  Retry
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                title="Dismiss"
+                className="opacity-60 hover:opacity-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Table Card Container ── */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-visible">
           <div className="overflow-x-auto">
@@ -374,10 +749,21 @@ export default function AdminUsers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
-                {filteredUsers.length === 0 ? (
+                {isLoading ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-slate-400">
-                      No staff members match the current filter.
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-brand-orange animate-spin" />
+                        Loading accounts…
+                      </span>
+                    </td>
+                  </tr>
+                ) : filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                      {users.length === 0
+                        ? 'No accounts found. They will appear here once registered.'
+                        : 'No staff members match the current filter.'}
                     </td>
                   </tr>
                 ) : (
@@ -468,7 +854,9 @@ export default function AdminUsers() {
                                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                                 </svg>
                               )}
-                              <span>Staff</span>
+                              <span>
+                                {isAdmin ? 'Admin' : roleName === 'Customer' ? 'Customer' : 'Staff'}
+                              </span>
                             </span>
                           )}
                         </td>
@@ -488,7 +876,7 @@ export default function AdminUsers() {
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                              <span>Inactive</span>
+                              <span>{user.status === 'Deleted' ? 'Deleted' : 'Inactive'}</span>
                             </span>
                           )}
                         </td>
@@ -518,44 +906,48 @@ export default function AdminUsers() {
                               className="absolute right-5 top-12 w-44 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-40 text-left animate-slide-up"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEdit(user)}
-                                className="w-full px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                </svg>
-                                <span>Edit Member</span>
-                              </button>
+                              {!isSuperAdmin ? (
+                                // REQ-UM-01: admin & staff may only view the account list.
+                                <span className="block px-3.5 py-2 text-xs font-medium text-slate-400 select-none">
+                                  View only — Super Admin required
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEdit(user)}
+                                    className="w-full px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                    <span>Edit Member</span>
+                                  </button>
 
-                              <button
-                                type="button"
-                                onClick={() => handleToggleUserStatus(user)}
-                                className="w-full px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
-                              >
-                                <span className={`w-2 h-2 rounded-full ${user.status === 'Active' ? 'bg-slate-400' : 'bg-emerald-500'}`} />
-                                <span>{user.status === 'Active' ? 'Deactivate' : 'Activate'}</span>
-                              </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleUserStatus(user)}
+                                    className="w-full px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <span className={`w-2 h-2 rounded-full ${user.status === 'Active' ? 'bg-rose-400' : 'bg-emerald-500'}`} />
+                                    <span>{user.status === 'Active' ? 'Ban Account' : 'Recover Account'}</span>
+                                  </button>
 
-                              {!user.isOriginal && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (window.confirm(`Revoke staff access for ${user.name}?`)) {
-                                      deleteAdminUser(user.id)
-                                      setActiveMenuUserId(null)
-                                    }
-                                  }}
-                                  className="w-full px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer transition-colors"
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-rose-500">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                                  </svg>
-                                  <span>Revoke Access</span>
-                                </button>
+                                  {user.status !== 'Deleted' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenDelete(user)}
+                                      className="w-full px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer transition-colors"
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-rose-500">
+                                        <polyline points="3 6 5 6 21 6" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                                      </svg>
+                                      <span>Delete Account</span>
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </div>
                           )}
@@ -571,7 +963,7 @@ export default function AdminUsers() {
           {/* ── Table Footer (Count & Pagination) ── */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-100">
             <p className="text-xs text-slate-400 font-medium">
-              Showing 1–{filteredUsers.length} of {users.length} staff members
+              Showing 1–{filteredUsers.length} of {users.length} accounts
             </p>
 
             <div className="flex items-center gap-1.5 select-none">
@@ -715,16 +1107,108 @@ export default function AdminUsers() {
                   {/* Phone Number Input */}
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      Phone Number
+                      Phone Number <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="text"
+                      required
                       placeholder="+63 912 345 6789"
                       value={formPhone}
                       onChange={(e) => setFormPhone(e.target.value)}
                       className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
                     />
                   </div>
+
+                  {/* Employee record fields (required by POST /auth/emp_signup) */}
+                  {!editingUser && (
+                    <>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Student Number <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 2021-12345"
+                          value={formStudnum}
+                          onChange={(e) => setFormStudnum(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          College / Institute <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. College of Arts and Sciences"
+                          value={formCollege}
+                          onChange={(e) => setFormCollege(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                          Program <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Bachelor of Science in Information Systems"
+                          value={formProgram}
+                          onChange={(e) => setFormProgram(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Year <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. 3"
+                            value={formYear}
+                            onChange={(e) => setFormYear(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Bloc <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. A"
+                            value={formBloc}
+                            onChange={(e) => setFormBloc(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Temporary password minted by the server on registration */}
+                  {tempPassword && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                      <p className="text-[11px] font-bold text-emerald-800">
+                        Temporary password — share it securely
+                      </p>
+                      <p className="font-mono text-sm font-black text-emerald-900 break-all mt-0.5">
+                        {tempPassword}
+                      </p>
+                      <p className="text-[10px] text-emerald-700 mt-1">
+                        {formEmail} must change it at first sign-in.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Status Dropdown */}
                   <div>
@@ -750,6 +1234,13 @@ export default function AdminUsers() {
                         <polyline points="6 9 12 15 18 9" />
                       </svg>
                     </div>
+                    {editingUser && formStatus !== editingUser.status && (
+                      <p className="text-[10px] text-slate-400 mt-1 leading-tight">
+                        {formStatus === 'Inactive'
+                          ? 'Deactivating asks for a ban reason next (REQ-UM-02).'
+                          : 'Saving will recover this account (REQ-UM-02).'}
+                      </p>
+                    )}
                   </div>
 
                   {/* Bottom Information Callout Card */}
@@ -922,21 +1413,195 @@ export default function AdminUsers() {
 
               {/* Modal Footer Buttons */}
               <div className="flex items-center justify-end gap-2.5 pt-3 mt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-[#F97316] hover:bg-[#EA580C] rounded-lg transition-colors shadow-2xs cursor-pointer"
-                >
-                  Save Changes
-                </button>
+                {tempPassword ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="px-4 py-1.5 text-xs font-bold text-white bg-[#F97316] hover:bg-[#EA580C] rounded-lg transition-colors shadow-2xs cursor-pointer"
+                  >
+                    Done
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowModal(false)}
+                      className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="px-4 py-1.5 text-xs font-bold text-white bg-[#F97316] hover:bg-[#EA580C] rounded-lg transition-colors shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                    >
+                      {isSaving ? 'Saving…' : editingUser ? 'Save Changes' : 'Create Account'}
+                    </button>
+                  </>
+                )}
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ban Account Modal (reason required — REQ-UM-02 / REQ-UM-04) ── */}
+      {banTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 p-4 sm:p-5 relative animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900">Ban Account</h2>
+              <button
+                type="button"
+                onClick={() => setBanTarget(null)}
+                className="w-7 h-7 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="pt-3 space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Banning <strong className="text-slate-900">{banTarget.name}</strong> immediately revokes
+                their access and terminates active sessions (REQ-UM-02). The reason below is written to
+                the management log (REQ-UM-04).
+              </p>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Reason for ban <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)}
+                  placeholder="e.g. Repeated violations of the staff access policy..."
+                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all resize-none"
+                />
+                {!banReason.trim() && (
+                  <p className="text-[10px] text-slate-400 mt-1">A reason is required to ban an account.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 mt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setBanTarget(null)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBan}
+                disabled={!banReason.trim() || isSaving}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? 'Banning…' : 'Ban Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Account Modal (two-step confirmation — REQ-UM-03) ── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 p-4 sm:p-5 relative animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                {deleteStep === 1 ? 'Delete Account' : 'Confirm Permanent Deletion'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null)
+                  setDeleteStep(1)
+                  setDeleteConfirmText('')
+                }}
+                className="w-7 h-7 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="pt-3 space-y-3">
+              <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-rose-500 shrink-0 mt-0.5">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <p className="text-xs text-rose-700 leading-relaxed">
+                  {deleteStep === 1 ? (
+                    <>
+                      You are about to delete <strong>{deleteTarget.name}</strong> ({deleteTarget.email}).
+                      Deletion is <strong>permanent and cannot be undone</strong> — all data associated with
+                      this account is purged (REQ-UM-03).
+                    </>
+                  ) : (
+                    <>
+                      This is the final step. Type <strong>DELETE</strong> below to permanently remove{' '}
+                      <strong>{deleteTarget.name}</strong> and purge all associated data (REQ-UM-03).
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {deleteStep === 2 && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Type DELETE to confirm <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400 transition-all"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 mt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTarget(null)
+                  setDeleteStep(1)
+                  setDeleteConfirmText('')
+                }}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                {deleteStep === 1 ? 'Cancel' : 'Back'}
+              </button>
+              {deleteStep === 1 ? (
+                <button
+                  type="button"
+                  onClick={() => setDeleteStep(2)}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors shadow-2xs cursor-pointer"
+                >
+                  Continue
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteConfirmText.trim().toUpperCase() !== 'DELETE' || isSaving}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? 'Deleting…' : 'Delete Forever'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

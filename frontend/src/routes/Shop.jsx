@@ -4,6 +4,7 @@ import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import FiltersModal from '../components/ui/FiltersModal.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
+import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import backIcon from '../assets/icons/common/back.svg'
 import searchIcon from '../assets/icons/common/search.svg'
 
@@ -241,8 +242,9 @@ function Shop() {
         {/* Results grid */}
         <div className="px-4 py-4 lg:px-0 lg:py-0">
           {loading ? (
-            <div className="text-center py-20">
-              <p className="text-sm font-semibold text-gray-500">Loading catalog…</p>
+            <div className="flex items-center justify-center py-20 gap-3">
+              <LoadingSpinner size={28} />
+              <span className="text-sm font-semibold text-gray-500">Loading catalog…</span>
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-20 animate-fade-in">

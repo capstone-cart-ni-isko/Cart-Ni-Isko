@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useToast } from '../../hooks/useToast.js'
 import LoginPromptModal from './LoginPromptModal.jsx'
 import ViewAllLink from './ViewAllLink.jsx'
 import { CloseIcon } from './Icons.jsx'
+import { createReview, fetchProductReviews } from '../../services/reviews.js'
 
 export default function ProductReviews({ product }) {
   const { currentUser } = useAuth()
@@ -18,6 +19,24 @@ export default function ProductReviews({ product }) {
   const [hoverRating, setHoverRating] = useState(0)
   const [comment, setComment] = useState('')
   const [authorName, setAuthorName] = useState(currentUser?.name || '')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
+  const prodId = product.prodId ?? product.id ?? null
+  const custId = currentUser?.cust_id ?? currentUser?.id ?? null
+
+  // Hydrate with the reviews the backend actually has (falls back to the
+  // reviews embedded in the product payload when the API is unreachable).
+  useEffect(() => {
+    if (prodId == null) return undefined
+    let alive = true
+    fetchProductReviews(prodId).then((res) => {
+      if (alive && res.success) setReviewsList(res.items)
+    })
+    return () => {
+      alive = false
+    }
+  }, [prodId])
 
   const hasReviews = reviewsList.length > 0
   const avgRating = product.rating || (hasReviews ? (reviewsList.reduce((s, r) => s + r.rating, 0) / reviewsList.length).toFixed(1) : 0)
@@ -28,30 +47,55 @@ export default function ProductReviews({ product }) {
       setShowLoginModal(true)
       return
     }
+    setSubmitError('')
     setShowWriteModal(true)
   }
 
-  const handleSubmitReview = (e) => {
+  const handleSubmitReview = async (e) => {
     e.preventDefault()
+    setSubmitError('')
     if (!comment.trim()) {
       showToast('Please enter your review comments.', 'error')
       return
     }
-
-    const newReview = {
-      id: `rev-user-${Date.now()}`,
-      author: authorName.trim() || currentUser?.name || 'BU Student',
-      rating,
-      date: 'Just now',
-      variant: 'Verified Student Purchase',
-      comment: comment.trim(),
-      verified: true,
+    if (prodId == null) {
+      setSubmitError('This product cannot be reviewed right now.')
+      return
     }
 
-    setReviewsList([newReview, ...reviewsList])
-    setComment('')
-    setShowWriteModal(false)
-    showToast('Review submitted! Thank you for supporting BU merch.')
+    setSubmitting(true)
+    try {
+      // Reviews live on the order rows: both naming conventions are sent
+      // until the endpoint contract is confirmed (gap reported).
+      await createReview({
+        prod_id: prodId,
+        cust_id: custId,
+        rating,
+        ord_rating: rating,
+        review: comment.trim(),
+        ord_review: comment.trim(),
+      })
+
+      // Refresh from the server so moderation state is reflected truthfully.
+      const res = await fetchProductReviews(prodId)
+      if (res.success) setReviewsList(res.items)
+
+      setComment('')
+      setShowWriteModal(false)
+      showToast('Review submitted! Thank you for supporting BU merch.')
+    } catch (err) {
+      const status = err?.status
+      let message = err?.message || 'Unable to submit your review. Please try again.'
+      if (status === 403) {
+        message = err?.message || 'You can only review products you have ordered from this store.'
+      } else if (status === 409) {
+        message = err?.message || 'You have already reviewed this product. You can edit your existing review instead.'
+      }
+      setSubmitError(message)
+      showToast(message, 'error')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -251,6 +295,12 @@ export default function ProductReviews({ product }) {
                 />
               </div>
 
+              {submitError && (
+                <div className="p-2.5 rounded-md bg-red-50 border border-red-100 text-xs text-red-600 font-semibold">
+                  {submitError}
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
@@ -261,9 +311,10 @@ export default function ProductReviews({ product }) {
                 </button>
                 <button
                   type="submit"
-                  className="h-8 px-4 rounded-md bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark active:scale-95 transition-all cursor-pointer"
+                  disabled={submitting}
+                  className="h-8 px-4 rounded-md bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark active:scale-95 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Submit Review
+                  {submitting ? 'Submitting…' : 'Submit Review'}
                 </button>
               </div>
             </form>

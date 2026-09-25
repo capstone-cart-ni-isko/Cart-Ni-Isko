@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
-import avatarImg from '../../assets/avatar.png'
+import Avatar from '../../components/ui/Avatar.jsx'
 
 /* ── Breadcrumb map ── */
 const BREADCRUMB_MAP = {
@@ -27,11 +27,9 @@ const BREADCRUMB_MAP = {
 export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { adminState = {}, resolveAlert, currentAdminUser, logoutAdmin } = useAdmin()
+  const { alerts = [], resolveAlert, currentAdminUser, logoutAdmin } = useAdmin()
   const [showNotifications, setShowNotifications] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
-
-  const alerts = adminState?.alerts || []
 
   const breadcrumb =
     BREADCRUMB_MAP[location.pathname] ||
@@ -149,10 +147,12 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
             onClick={() => setShowProfileMenu(!showProfileMenu)}
             className="flex items-center gap-2 p-1 sm:px-1.5 sm:py-1 rounded-md hover:bg-gray-100 transition-colors cursor-pointer"
           >
-            <img
-              src={currentAdminUser?.avatarImage || avatarImg}
-              alt="Admin"
-              className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0"
+            <Avatar
+              src={currentAdminUser?.avatarImage}
+              name={currentAdminUser?.name || 'Admin'}
+              size={28}
+              className="border border-slate-200"
+              userId={currentAdminUser?.id}
             />
             <div className="hidden sm:flex flex-col text-left leading-tight">
               <span className="text-xs font-semibold text-slate-900 truncate max-w-[120px]">

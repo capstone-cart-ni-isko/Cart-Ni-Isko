@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
@@ -20,6 +21,12 @@ function readLocal() {
   } catch {
     return []
   }
+}
+
+/** REQ-CW-01: Check if a wishlist product is still offered (not removed from catalog). */
+function isProductOffered(product) {
+  if (!product) return false
+  return product.status !== 'Disabled' && product.status !== 'Deleted'
 }
 
 export function WishlistProvider({ children }) {
@@ -127,6 +134,8 @@ export function WishlistProvider({ children }) {
         wishlistItems,
         toggleWishlist,
         isInWishlist,
+        isProductOffered,
+        canAddToCart: (product) => isProductOffered(product),
       }}
     >
       {children}
