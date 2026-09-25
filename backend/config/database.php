@@ -102,6 +102,9 @@ return [
             // Laravel's lost-connection detector.
             'options' => array_filter([
                 \PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false) ?: null,
+                // Supabase's transaction pooler (port 6543) doesn't keep
+                // server-side prepared statements between queries.
+                \PDO::ATTR_EMULATE_PREPARES => env('DB_EMULATE_PREPARES', true) ?: null,
             ]),
         ],
 
