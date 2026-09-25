@@ -12,6 +12,14 @@ function isExemptNotification(message) {
   return msg.includes('to claim') || msg.includes('to receive')
 }
 
+/** REQ-AB-04 / REQ-SC-04: a closed-slot notice opens the updated calendar. */
+function calendarTarget(message) {
+  const text = String(message || '').toLowerCase()
+  return text.includes('appointment') && /clos|cancel|unavailable/.test(text)
+    ? '/appointments'
+    : null
+}
+
 // SVG Icons tailored for notification types
 function NotifTypeIcon({ icon, className = 'w-5 h-5' }) {
   switch (icon) {
@@ -173,19 +181,21 @@ function mapNotification(row, index) {
 
   const style = CATEGORY_STYLES[category] || CATEGORY_STYLES.system
   const created = row.custnotif_created ?? row.empnotif_created ?? row.created_at
+  // REQ-AN-02: priority notices stand out from the rest of the inbox.
+  const priority = /^\s*\[priority\]/i.test(String(message))
 
   return {
     id: row.custnotif_id ?? row.empnotif_id ?? row.id ?? `notif-${index}`,
     category,
     icon: style.icon,
     iconBg: style.iconBg,
-    tag: style.tag,
-    tagColor: style.tagColor,
+    tag: priority ? 'Priority' : style.tag,
+    tagColor: priority ? 'bg-amber-100 text-amber-700' : style.tagColor,
     title: style.title,
     message,
     time: created ? timeAgo(new Date(created)) : 'Just now',
     unread: !(row.custnotif_read || row.empnotif_read),
-    targetUrl: row.notif_link || null,
+    targetUrl: row.notif_link || calendarTarget(message),
     isExempt: isExemptNotification(message),
   }
 }
@@ -225,7 +235,9 @@ export default function Notifications() {
     const target = items.find((n) => n.id === id)
     if (target?.unread) {
       setItems((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)))
-      markRead(id, 'customer').catch(() => {})
+      markRead(id, 'customer')
+        .catch(() => {})
+        .finally(() => window.dispatchEvent(new Event('notifications-changed')))
     }
     if (targetUrl) {
       navigate(targetUrl)

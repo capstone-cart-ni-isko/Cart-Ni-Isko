@@ -100,10 +100,13 @@
                 // the remote database times out over an 80-slot grid).
                 $open = $base->format('Y-m-d H:i:s');
                 $close = $base->copy()->addDay()->format('Y-m-d H:i:s');
+                // REQ-SC-01: customers get a restricted view - they only see
+                // their own bookings, everyone else's stays anonymous.
+                $custId = $this->customerId($json);
                 $bookedRows = Appointment::whereNull('appoint_closed')
                     ->where('appoint_date', '>=', $open)
                     ->where('appoint_date', '<', $close)
-                    ->get(['appoint_type', 'appoint_date']);
+                    ->get(['appoint_type', 'appoint_date', 'cust_id']);
                 $inStore = Employee::where('emp_instore', true)
                     ->whereNull('emp_disabled')
                     ->whereNull('emp_deleted')
@@ -119,13 +122,15 @@
                     for ($minutes = self::OPEN_MINUTES; $minutes + $duration <= self::CLOSE_MINUTES; $minutes += $duration) {
                         $start = $base->copy()->addMinutes($minutes);
                         $end = $start->copy()->addMinutes($duration);
-                        $booked = $bookedRows->filter(function ($a) use ($type, $start, $end) {
+                        $rows = $bookedRows->filter(function ($a) use ($type, $start, $end) {
                             if ($a->appoint_type !== $type) return false;
                             $at = $a->appoint_date instanceof \DateTimeInterface
                                 ? Carbon::instance($a->appoint_date)
                                 : Carbon::parse($a->appoint_date);
                             return $at->gte($start) && $at->lt($end);
-                        })->count();
+                        });
+                        $booked = $rows->count();
+                        $mine = $custId !== null && $rows->contains('cust_id', $custId);
 
                         $reason = null;
                         if ($booked >= $capacities[$type]) {
@@ -138,10 +143,13 @@
                             'start'     => $start->format('Y-m-d H:i'),
                             'end'       => $end->format('Y-m-d H:i'),
                             'type'      => $type,
-                            'booked'    => $booked,
+                            // Customers receive only status and their own marker;
+                            // other users' booking counts remain private.
+                            'booked'    => $custId !== null && ! $mine ? 0 : $booked,
                             'capacity'  => $capacities[$type],
                             'available' => $reason === null,
                             'reason'    => $reason,
+                            'mine'      => $mine,
                         ];
                     }
                 }
@@ -205,6 +213,13 @@
                 } else {
                     $slotStart->minute(intdiv($slotStart->minute, 10) * 10);
                     $duration = 10;
+                }
+
+                if ($slotStart->isPast()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Appointments must be booked for a future time.'
+                    ], 422);
                 }
 
                 // Booking outside operating hours is unavailable
@@ -294,11 +309,11 @@
             try {
                 $query = Appointment::query();
                 $user = $json->user();
-                $isMaster = $json->input('scope') === 'master';
+                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($user);
 
                 if ($this->isEmployee($user)) {
-                    // REQ-SC-01: the master calendar shows every appointment;
-                    // without the master scope employees filter by cust_id
+                    // REQ-SC-01: administrators receive the master calendar;
+                    // ordinary staff must provide a customer filter.
                     if ($isMaster) {
                         // No cust_id filter - full master view
                     } elseif ($json->filled('cust_id')) {
@@ -347,10 +362,15 @@
                 $q = $json->input('q', '');
                 $query = Appointment::query();
                 $customerId = $this->customerId($json);
+                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('sanctum'));
                 if ($customerId !== null) {
                     $query->where('cust_id', $customerId);
-                } elseif ($json->has('cust_id')) {
+                } elseif ($isMaster) {
+                    // Only administrators may search the complete appointment book.
+                } elseif ($json->filled('cust_id')) {
                     $query->where('cust_id', $json->input('cust_id'));
+                } else {
+                    $query->whereRaw('1 = 0');
                 }
 
                 if (!empty($q)) {
@@ -394,8 +414,15 @@
                 $col = $sortBy === 'created' ? 'appoint_created' : ($sortBy === 'type' ? 'appoint_type' : 'appoint_date');
                 $query = Appointment::query();
                 $customerId = $this->customerId($json);
+                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('sanctum'));
                 if ($customerId !== null) {
                     $query->where('cust_id', $customerId);
+                } elseif ($isMaster) {
+                    // Only administrators may sort the complete appointment book.
+                } elseif ($json->filled('cust_id')) {
+                    $query->where('cust_id', $json->input('cust_id'));
+                } else {
+                    $query->whereRaw('1 = 0');
                 }
 
                 $appointments = $query->orderBy($col, $order)->get();
@@ -447,6 +474,13 @@
                     return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
                 }
 
+                if ($appointment->appoint_closed) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Closed appointments cannot be modified.'
+                    ], 409);
+                }
+
                 $updates = $json->only(['appoint_date', 'appoint_type', 'appoint_desc']);
                 if (isset($updates['appoint_date']) || isset($updates['appoint_type'])) {
                     $type = strtoupper((string) ($updates['appoint_type'] ?? $appointment->appoint_type));
@@ -458,6 +492,12 @@
                     $duration = $type === 'CLAIM' ? 30 : 10;
                     $start->minute($type === 'CLAIM' ? ($start->minute >= 30 ? 30 : 0) : intdiv($start->minute, 10) * 10);
                     $end = $start->copy()->addMinutes($duration);
+                    if ($start->isPast()) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Appointments cannot be rescheduled to a past time.'
+                        ], 422);
+                    }
                     $minutes = $start->hour * 60 + $start->minute;
                     if ($minutes < self::OPEN_MINUTES || $minutes + $duration > self::CLOSE_MINUTES) {
                         return response()->json(['success' => false, 'message' => 'Selected time is outside operating hours.'], 422);

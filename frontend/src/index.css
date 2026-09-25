@@ -9,15 +9,18 @@
   --color-surface-gray: #F5F5F5;
   --color-text-muted: #757575;
   --color-gray-150: #E5E7EB;
+  --color-gray-450: #6B7280;
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 
+  /* Corner scale: every card/element sits a notch rounder than before, while
+     the homepage banner (rounded-[1.5rem]) stays the roundest box on screen. */
   --radius-xs: 2px;
   --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
-  --radius-2xl: 8px;
-  --radius-3xl: 8px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-3xl: 16px;
 
   --shadow-none: none;
   --shadow-2xs: none;
@@ -40,8 +43,13 @@
   --tw-drop-shadow: none !important;
 }
 
-*:focus, *:focus-visible {
+*:focus:not(:focus-visible) {
   outline: none !important;
+}
+
+*:focus-visible {
+  outline: 2px solid #F97316 !important;
+  outline-offset: 2px;
 }
 
 html {
@@ -109,6 +117,33 @@ input[type="checkbox"].check-plain:checked::after {
   border-width: 0 2px 2px 0;
   transform: rotate(45deg) translateY(-1px);
 }
+
+/* ── Shared brand surfaces ── */
+.gradient-orange-header {
+  background: linear-gradient(135deg, #F97316 0%, #FB923C 50%, #FDBA74 100%);
+}
+
+.gradient-splash {
+  background: linear-gradient(160deg, #F97316 0%, #FB923C 40%, #2563EB 100%);
+}
+
+.watermark-text {
+  position: absolute;
+  font-size: clamp(4rem, 18vw, 8rem);
+  font-weight: 700;
+  color: rgb(255 255 255 / 8%);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  letter-spacing: 0.05em;
+}
+
+@keyframes slideRight {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-slide-right { animation: slideRight 0.25s ease-out both; }
 
 /* ── Animation Utilities ── */
 @keyframes fadeIn {
@@ -187,3 +222,42 @@ body {
 .btn-press:active {
   transform: scale(0.97);
 }
+
+/* ── Dark mode (Menu → Dark/Light Mode) ─────────────────────────────
+   Written outside Tailwind's layers so these overrides win over the
+   matching light-mode utilities without editing every component. */
+html.dark {
+  background: #0b1220;
+  color-scheme: dark;
+}
+
+html.dark body {
+  background: #0b1220;
+  color: #e5e7eb;
+}
+
+html.dark .bg-white { background-color: #111827; }
+html.dark .bg-gray-50,
+html.dark .bg-slate-50 { background-color: #1f2937; }
+html.dark .bg-gray-100,
+html.dark .bg-slate-100 { background-color: #334155; }
+html.dark [class*="#F8F9FA"],
+html.dark [class*="#f8f9fa"] { background-color: #0b1220; }
+
+html.dark .text-gray-900,
+html.dark .text-slate-900 { color: #f9fafb; }
+html.dark .text-gray-700,
+html.dark .text-gray-600,
+html.dark .text-slate-700,
+html.dark .text-slate-600 { color: #d1d5db; }
+html.dark .text-gray-500,
+html.dark .text-gray-400,
+html.dark .text-slate-500,
+html.dark .text-slate-400,
+html.dark .text-text-muted { color: #9ca3af; }
+html.dark .placeholder-gray-400::placeholder { color: #6b7280; }
+
+html.dark [class*="border-gray-100"],
+html.dark [class*="border-slate-100"],
+html.dark [class*="border-gray-200"],
+html.dark [class*="border-slate-200"] { border-color: #334155; }

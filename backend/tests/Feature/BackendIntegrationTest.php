@@ -182,12 +182,18 @@ class BackendIntegrationTest extends TestCase
             'prod_id' => $prodId,
             'item_qty' => 5
         ], $authHeader);
-        // creates a cart order + item, so the API answers 201 Created
+        // The first transfer creates the customer's single cart order.
         $transferResponse->assertStatus(201);
+        $this->assertDatabaseCount('orders', 1);
 
+        // Wishlist and cart are independent; transferring must not remove the saved item.
         $customerAfterTransfer = Customer::find($custId);
-        $this->assertEquals(0, $customerAfterTransfer->cust_wishlist);
+        $this->assertEquals(1, $customerAfterTransfer->cust_wishlist);
         $this->assertEquals(1, $customerAfterTransfer->cust_cart);
+        $this->assertDatabaseHas('wishlist', [
+            'cust_id' => $custId,
+            'prod_id' => $prodId,
+        ]);
 
         // REMOVE FROM WISHLIST (CLEANUP CHECK)
         $removeResponse = $this->json('DELETE', '/api/wishlist/remove', [

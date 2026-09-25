@@ -40,8 +40,7 @@ function AccountInfo() {
   const navigate = useNavigate()
   const { currentUser, setCurrentUser } = useAuth()
   const [form, setForm] = useState({
-    firstName: currentUser?.firstName || '',
-    lastName: currentUser?.lastName || '',
+    nickname: currentUser?.nickname || currentUser?.fullName || '',
     username: currentUser?.username || '',
     email: currentUser?.email || '',
     phone: currentUser?.phone || '',
@@ -132,7 +131,7 @@ function AccountInfo() {
     setSaveState('Saving…')
     try {
       const response = await updateAccount('customer', customerId, {
-        cust_nickname: fullName,
+        cust_nickname: form.nickname.trim(),
         cust_email: form.email,
         cust_phone: form.phone,
         cust_college: form.college,
@@ -157,9 +156,8 @@ function AccountInfo() {
       setCurrentUser((user) => ({
         ...user,
         ...response.data,
-        firstName: form.firstName,
-        lastName: form.lastName,
-        fullName,
+        nickname: form.nickname.trim(),
+        fullName: form.nickname.trim(),
         username: form.username,
         email: form.email,
         phone: form.phone,
@@ -185,7 +183,7 @@ function AccountInfo() {
     }
   }
 
-  const fullName = `${form.firstName} ${form.lastName}`
+  const fullName = form.nickname.trim() || 'User'
 
   /* ── Shared form field components ── */
   const inputClasses = 'w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all placeholder-gray-400'
@@ -219,27 +217,21 @@ function AccountInfo() {
           </div>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClasses}>First Name <span className="text-red-500">*</span></label>
-                <input name="firstName" value={form.firstName} onChange={handleChange} className={inputClasses} />
-              </div>
-              <div>
-                <label className={labelClasses}>Last Name <span className="text-red-500">*</span></label>
-                <input name="lastName" value={form.lastName} onChange={handleChange} className={inputClasses} />
-              </div>
+            <div>
+              <label className={labelClasses}>Nickname <span className="text-red-500">*</span></label>
+              <input name="nickname" required minLength={2} maxLength={100} value={form.nickname} onChange={handleChange} className={inputClasses} />
             </div>
             <div>
               <label className={labelClasses}>Username <span className="text-red-500">*</span></label>
-              <input name="username" value={form.username} onChange={handleChange} className={inputClasses} />
+              <input name="username" required minLength={3} value={form.username} onChange={handleChange} className={inputClasses} />
             </div>
             <div>
               <label className={labelClasses}>Email <span className="text-red-500">*</span></label>
-              <input name="email" type="email" value={form.email} onChange={handleChange} className={inputClasses} />
+              <input name="email" type="email" required value={form.email} onChange={handleChange} className={inputClasses} />
             </div>
             <div>
               <label className={labelClasses}>Phone <span className="text-red-500">*</span></label>
-              <input name="phone" type="tel" value={form.phone} onChange={handleChange} className={inputClasses} />
+              <input name="phone" type="tel" required pattern="[0-9]{10,11}" value={form.phone} onChange={handleChange} className={inputClasses} />
             </div>
 
             {/* Year Level */}
@@ -379,24 +371,20 @@ function AccountInfo() {
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
-                  <label className={labelClasses}>First Name <span className="text-red-500">*</span></label>
-                  <input name="firstName" value={form.firstName} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>Last Name <span className="text-red-500">*</span></label>
-                  <input name="lastName" value={form.lastName} onChange={handleChange} className={inputClasses} />
+                  <label className={labelClasses}>Nickname <span className="text-red-500">*</span></label>
+                  <input name="nickname" required minLength={2} maxLength={100} value={form.nickname} onChange={handleChange} className={inputClasses} />
                 </div>
                 <div>
                   <label className={labelClasses}>Username <span className="text-red-500">*</span></label>
-                  <input name="username" value={form.username} onChange={handleChange} className={inputClasses} />
+                  <input name="username" required minLength={3} value={form.username} onChange={handleChange} className={inputClasses} />
                 </div>
                 <div>
                   <label className={labelClasses}>Email <span className="text-red-500">*</span></label>
-                  <input name="email" type="email" value={form.email} onChange={handleChange} className={inputClasses} />
+                  <input name="email" type="email" required value={form.email} onChange={handleChange} className={inputClasses} />
                 </div>
                 <div>
                   <label className={labelClasses}>Phone <span className="text-red-500">*</span></label>
-                  <input name="phone" type="tel" value={form.phone} onChange={handleChange} className={inputClasses} />
+                  <input name="phone" type="tel" required pattern="[0-9]{10,11}" value={form.phone} onChange={handleChange} className={inputClasses} />
                 </div>
               </div>
             </div>

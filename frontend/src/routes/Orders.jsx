@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
@@ -126,11 +126,21 @@ function tabMatch(order, key) {
 
 function Orders() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { showToast } = useToast()
   const { currentUser } = useAuth()
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
-  const [activeTab, setActiveTab] = useState('all')
+  const statusToTab = {
+    in_progress: 'processing',
+    processing: 'processing',
+    for_pickup: 'receive',
+    for_delivery: 'receive',
+    completed: 'history',
+    history: 'history',
+  }
+  const initialTab = statusToTab[searchParams.get('status')] || searchParams.get('tab') || 'all'
+  const [activeTab, setActiveTab] = useState(tabs.some((tab) => tab.key === initialTab) ? initialTab : 'all')
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
@@ -160,6 +170,11 @@ function Orders() {
     () => orders.filter((o) => tabMatch(o, activeTab)),
     [orders, activeTab]
   )
+
+  const selectTab = (key) => {
+    setActiveTab(key)
+    setSearchParams(key === 'all' ? {} : { tab: key }, { replace: true })
+  }
 
   const handleCopyOrderId = (e, orderId) => {
     e.preventDefault()
@@ -218,7 +233,7 @@ function Orders() {
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => selectTab(tab.key)}
                 className={`px-4 py-2 rounded-full text-xs font-bold shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 ${
                   activeTab === tab.key
                     ? 'bg-brand-orange border-brand-orange text-white shadow-xs'
@@ -257,7 +272,7 @@ function Orders() {
             </p>
             <button
               type="button"
-              onClick={() => setActiveTab('all')}
+              onClick={() => selectTab('all')}
               className="mt-5 text-brand-orange font-bold text-xs hover:underline cursor-pointer"
             >
               View All Orders

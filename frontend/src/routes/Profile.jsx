@@ -1,9 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useContext } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import { apiGet } from '../services/api.js'
+import { fetchOrders } from '../services/orders.js'
+import { fetchNotifications, unreadCount } from '../services/notifications.js'
+import { WishlistContext } from '../context/WishlistContext.jsx'
 import Avatar from '../components/ui/Avatar.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
@@ -116,6 +119,9 @@ function Profile() {
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
   const [appointments, setAppointments] = useState([])
+  const [orders, setOrders] = useState([])
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const { wishlistItems } = useContext(WishlistContext)
 
   const handleLogout = () => {
     logout()
@@ -127,22 +133,45 @@ function Profile() {
   useEffect(() => {
     if (!custId) return undefined
     let cancelled = false
-    apiGet('/appoint/display', { cust_id: custId })
-      .then((data) => {
-        if (!cancelled) setAppointments(data?.data || [])
+    Promise.all([
+      apiGet('/appoint/display', { cust_id: custId }).then((data) => data?.data || []),
+      fetchOrders(custId),
+      fetchNotifications('customer', custId),
+    ])
+      .then(([appointmentRows, orderRows, notificationRows]) => {
+        if (cancelled) return
+        setAppointments(appointmentRows)
+        setOrders(orderRows)
+        setUnreadNotifications(unreadCount(notificationRows))
       })
       .catch(() => {
-        if (!cancelled) setAppointments([])
+        if (cancelled) return
+        setAppointments([])
+        setOrders([])
+        setUnreadNotifications(0)
       })
     return () => { cancelled = true }
   }, [custId])
 
   const overview = useMemo(() => ({
-    totalOrders: appointments.length,
+    totalOrders: orders.length,
     appointments: appointments.filter((a) => !a.appoint_closed).length,
-    completedOrders: appointments.filter((a) => a.appoint_closed || a.appoint_type === 'completed').length,
-    savedItems: 0,
-  }), [appointments])
+    completedOrders: orders.filter((o) => ['CLAIMED', 'COMPLETED'].includes(String(o.ord_status).toUpperCase())).length,
+    savedItems: wishlistItems.length,
+    inProgress: orders.filter((o) => o.ord_status === 'TO PROCESS').length,
+    forPickup: orders.filter((o) => o.ord_status === 'TO CLAIM').length,
+    forDelivery: orders.filter((o) => o.ord_status === 'TO RECEIVE').length,
+    completed: orders.filter((o) => ['CLAIMED', 'COMPLETED'].includes(String(o.ord_status).toUpperCase())).length,
+  }), [appointments, orders, wishlistItems])
+
+  const appointmentCards = appointments.map((row) => ({
+    ...row,
+    id: row.appoint_id,
+    type: row.appoint_type,
+    label: row.appoint_desc || `Appointment #${row.appoint_id}`,
+    location: row.appoint_closed ? 'Completed or unavailable' : 'Tindahan ni Isko · Main Campus',
+    date: new Date(row.appoint_date).toLocaleString(),
+  }))
 
   return (
     <AccountLayout>
@@ -160,9 +189,11 @@ function Profile() {
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
-              <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white">
-                3
-              </span>
+              {unreadNotifications > 0 && (
+                <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white">
+                  {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                </span>
+              )}
             </Link>
           </div>
         </div>
@@ -314,7 +345,7 @@ function Profile() {
                   <PipelineIcon id="in_progress" className="w-4 h-4 text-[#2563EB]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">2</p>
+                  <p className="text-lg font-black text-gray-900 leading-none">{overview.inProgress}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">In Progress</p>
                 </div>
               </Link>
@@ -324,7 +355,7 @@ function Profile() {
                   <PipelineIcon id="for_pickup" className="w-4 h-4 text-[#FF6A00]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">3</p>
+                  <p className="text-lg font-black text-gray-900 leading-none">{overview.forPickup}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">For Pickup</p>
                 </div>
               </Link>
@@ -334,7 +365,7 @@ function Profile() {
                   <PipelineIcon id="for_delivery" className="w-4 h-4 text-[#10B981]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">5</p>
+                  <p className="text-lg font-black text-gray-900 leading-none">{overview.forDelivery}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">For Delivery</p>
                 </div>
               </Link>
@@ -344,7 +375,7 @@ function Profile() {
                   <PipelineIcon id="completed" className="w-4 h-4 text-[#8B5CF6]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">2</p>
+                  <p className="text-lg font-black text-gray-900 leading-none">{overview.completed}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">Completed</p>
                 </div>
               </Link>
@@ -361,9 +392,9 @@ function Profile() {
             </div>
 
             <div className="space-y-2.5">
-              {appointments.map((appt) => (
+              {appointmentCards.map((appt) => (
                 <div
-                  key={appt.id}
+                  key={appt.appoint_id}
                   className="flex items-center justify-between p-3.5 rounded-2xl border border-gray-100 bg-white shadow-2xs"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -499,7 +530,7 @@ function Profile() {
                     <PipelineIcon id="in_progress" className="w-4.5 h-4.5 text-[#2563EB]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">2</p>
+                    <p className="text-lg font-black text-gray-900 leading-none">{overview.inProgress}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">In Progress</p>
                   </div>
                 </Link>
@@ -509,7 +540,7 @@ function Profile() {
                     <PipelineIcon id="for_pickup" className="w-4.5 h-4.5 text-brand-orange" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">3</p>
+                    <p className="text-lg font-black text-gray-900 leading-none">{overview.forPickup}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">For Pickup</p>
                   </div>
                 </Link>
@@ -519,7 +550,7 @@ function Profile() {
                     <PipelineIcon id="for_delivery" className="w-4.5 h-4.5 text-emerald-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">5</p>
+                    <p className="text-lg font-black text-gray-900 leading-none">{overview.forDelivery}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">For Delivery</p>
                   </div>
                 </Link>
@@ -529,7 +560,7 @@ function Profile() {
                     <PipelineIcon id="completed" className="w-4.5 h-4.5 text-purple-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">2</p>
+                    <p className="text-lg font-black text-gray-900 leading-none">{overview.completed}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">Completed</p>
                   </div>
                 </Link>
@@ -587,9 +618,9 @@ function Profile() {
               </div>
 
               <div className="space-y-2.5">
-                {appointments.map((appt) => (
+                {appointmentCards.map((appt) => (
                   <div
-                    key={appt.id}
+                    key={appt.appoint_id}
                     className="p-3.5 rounded-xl border border-gray-100 bg-white hover:border-orange-200 transition-all shadow-2xs space-y-2.5"
                   >
                     {/* Header Row */}
@@ -640,12 +671,12 @@ function Profile() {
                         >
                           View Ticket
                         </Link>
-                        <button
-                          type="button"
-                          className="px-2.5 py-1 bg-brand-orange text-white text-[11px] font-bold rounded-lg hover:bg-orange-600 cursor-pointer"
+                        <Link
+                          to="/appointments"
+                          className="px-2.5 py-1 bg-brand-orange text-white text-[11px] font-bold rounded-lg hover:bg-orange-600"
                         >
                           Reschedule
-                        </button>
+                        </Link>
                       </div>
                     </div>
                   </div>

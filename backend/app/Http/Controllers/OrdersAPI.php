@@ -126,10 +126,12 @@
 
                 $status = strtoupper((string) $json->input('ord_status'));
                 $allowed = [
-                    'TO PROCESS' => ['TO CLAIM', 'TO RECEIVE', 'CANCELLED'],
-                    'TO CLAIM' => ['CLAIMED', 'UNCLAIMED', 'CANCELLED'],
-                    'TO RECEIVE' => ['CLAIMED', 'UNCLAIMED', 'CANCELLED'],
-                    'CLAIMED' => ['RETURNED', 'REFUNDED'],
+                    'TO PROCESS' => ['TO CLAIM', 'TO RECEIVE', 'CANCEL REQUESTED', 'RETURN REQUESTED', 'CANCELLED'],
+                    'TO CLAIM' => ['CLAIMED', 'UNCLAIMED', 'CANCEL REQUESTED', 'RETURN REQUESTED', 'CANCELLED'],
+                    'TO RECEIVE' => ['CLAIMED', 'UNCLAIMED', 'CANCEL REQUESTED', 'RETURN REQUESTED', 'CANCELLED'],
+                    'CANCEL REQUESTED' => ['CANCELLED'],
+                    'RETURN REQUESTED' => ['RETURNED'],
+                    'CLAIMED' => ['RETURN REQUESTED', 'RETURNED', 'REFUNDED'],
                     'RETURNED' => ['REFUNDED', 'CLAIMED'],
                 ];
 
@@ -137,9 +139,10 @@
                     if ((int) $order->cust_id !== $this->customerId($json)) {
                         return response()->json(['success' => false, 'message' => 'Order not found'], 404);
                     }
-                    $canRequestCancellation = $status === 'CANCEL REQUESTED'
+                    $isAllowedRequest = in_array($status, ['CANCEL REQUESTED', 'RETURN REQUESTED'], true)
                         && in_array($order->ord_status, ['TO PROCESS', 'TO CLAIM', 'TO RECEIVE'], true);
-                    if (! $canRequestCancellation) {
+                    $isReturnRequest = $status === 'RETURN REQUESTED' && $order->ord_status === 'CLAIMED';
+                    if (! $isAllowedRequest && ! $isReturnRequest) {
                         return response()->json([
                             'success' => false,
                             'message' => 'This order change requires staff review.',
@@ -162,7 +165,12 @@
 
                 // REQ-OT-01: "to claim"/"to receive" changes are not regular
                 // notifications (they are driven by the QR scan instead).
-                if ((int) $order->cust_id > 0 && ! in_array($status, ['CANCEL REQUESTED', 'TO CLAIM', 'TO RECEIVE'], true)) {
+                if ((int) $order->cust_id > 0 && ! in_array($status, [
+                    'CANCEL REQUESTED',
+                    'RETURN REQUESTED',
+                    'TO CLAIM',
+                    'TO RECEIVE',
+                ], true)) {
                     $this->notifyCustomer(
                         (int) $order->cust_id,
                         'Order ' . $order->ord_tag . ' status changed to ' . $status . '.'

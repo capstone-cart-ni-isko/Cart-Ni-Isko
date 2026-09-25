@@ -446,7 +446,7 @@ class InputValidatorAPI extends Controller
     {
         return $this->validateFields($json, [
             'appoint_id' => 'required',
-            'reason'     => 'nullable|string|max:500',
+            'reason'     => 'required|string|max:500',
         ], [
             'appoint_id.required' => 'Appointment ID is required.',
             'reason.string'       => 'Reason must be a string.',

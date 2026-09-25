@@ -783,6 +783,66 @@ class SrsRequirementsTest extends TestCase
             ->assertJsonCount(0, 'data');
     }
 
+    public function test_profile_order_and_appointment_scope_contracts()
+    {
+        $customer = $this->makeCustomer(['cust_cred_changed' => now()]);
+        $other = $this->makeCustomer();
+
+        $this->putJson('/api/accounts/update', [
+            'account_type' => 'customer',
+            'user_id' => $other->cust_id,
+            'cust_nickname' => 'Not Allowed',
+        ], $this->headers($customer))->assertStatus(403);
+
+        $this->putJson('/api/accounts/update', [
+            'account_type' => 'customer',
+            'user_id' => $customer->cust_id,
+            'cust_email' => 'not-an-email',
+        ], $this->headers($customer))->assertStatus(422);
+
+        // Ordinary profile changes remain available during the 30-day window.
+        $this->putJson('/api/accounts/update', [
+            'account_type' => 'customer',
+            'user_id' => $customer->cust_id,
+            'cust_nickname' => 'Updated Nickname',
+        ], $this->headers($customer))->assertStatus(200);
+
+        // Login identifiers are locked for thirty days.
+        $customer->update(['cust_cred_changed' => now()]);
+        $this->putJson('/api/accounts/update', [
+            'account_type' => 'customer',
+            'user_id' => $customer->cust_id,
+            'cust_username' => 'new-username',
+        ], $this->headers($customer))->assertStatus(409);
+
+        $claimed = $this->makeOrder($customer, ['ord_status' => 'CLAIMED']);
+        $this->putJson('/api/orders/update', [
+            'ord_id' => $claimed->ord_id,
+            'ord_status' => 'RETURN REQUESTED',
+        ], $this->headers($customer))->assertStatus(200);
+        $admin = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        $this->putJson('/api/orders/update', [
+            'ord_id' => $claimed->ord_id,
+            'ord_status' => 'RETURNED',
+        ], $this->headers($admin))->assertStatus(200);
+
+        Appointment::create([
+            'cust_id' => $customer->cust_id,
+            'appoint_created' => now(),
+            'appoint_date' => now()->addDay(),
+            'appoint_type' => 'VISIT',
+            'appoint_qr' => 'SCOPE-' . uniqid(),
+            'appoint_desc' => 'Scope test',
+        ]);
+        $staff = $this->makeEmployee(['emp_type' => 'STAFF']);
+        $this->getJson('/api/appoint/display?scope=master', $this->headers($staff))
+            ->assertStatus(200)
+            ->assertJsonCount(0, 'data');
+        $this->getJson('/api/appoint/display?scope=master', $this->headers($admin))
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data');
+    }
+
     // ==========================================
     // POS WALK-IN SALES (REQ-POS-01)
     // ==========================================

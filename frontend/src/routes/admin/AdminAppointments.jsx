@@ -197,7 +197,11 @@ export default function AdminAppointments() {
         icon: 'desk',
         action: 'Cancel',
         actionKind: 'cancel',
-        onAction: () => handleOpenCancel(a),
+        onAction: () => {
+          setCancelTarget(a)
+          setCancelReason('')
+          setShowDeclineModal(true)
+        },
         raw: a,
       })
     })
@@ -321,7 +325,7 @@ export default function AdminAppointments() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
-              <span>Good morning, {staffName}!</span>
+              <span>{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, {staffName}!</span>
             </h1>
             <p className="text-xs text-slate-500 font-normal mt-0.5">
               Here's your assigned shift and today's schedule at a glance.

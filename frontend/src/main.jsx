@@ -5,6 +5,11 @@ import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
 
+// Apply the stored light/dark preference before the first paint.
+if (localStorage.getItem('isko_theme') === 'dark') {
+  document.documentElement.classList.add('dark')
+}
+
 if (import.meta.env.PROD) {
   // Production PWA: register the service worker.
   registerSW({ immediate: true })

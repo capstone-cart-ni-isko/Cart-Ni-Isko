@@ -439,20 +439,4 @@
                 'message' => 'Credentials updated successfully. Please sign in again.',
             ]);
         }
-
-        // REQ-APC-01 helper: returns a 409 response when the account's most
-        // recent credential change happened within the last thirty days.
-        // A null stamp means the credentials were never changed, so the
-        // change is allowed.
-        protected function credentialChangeBlocked($stamp)
-        {
-            if ($stamp && $stamp->copy()->addDays(30)->isFuture()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Sensitive credentials cannot be changed within thirty days of the most recent change'
-                ], 409);
-            }
-
-            return null;
-        }
     }

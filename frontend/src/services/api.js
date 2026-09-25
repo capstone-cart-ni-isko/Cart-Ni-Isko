@@ -32,16 +32,29 @@ export class ApiError extends Error {
 }
 
 export async function apiRequest(path, { method = 'GET', body, headers } = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      Accept: 'application/json',
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...headers,
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 1000)
+  let response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...headers,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new ApiError('The server did not respond within one second.', 408)
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
 
   let data = null
   try {

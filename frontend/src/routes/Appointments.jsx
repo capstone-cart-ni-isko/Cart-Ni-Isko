@@ -12,6 +12,7 @@ import {
   fetchAppointments,
   fetchSlots,
   createAppointment,
+  updateAppointment,
   SLOT_RULES,
 } from '../services/appointments.js'
 import { fetchOrder } from '../services/orders.js'
@@ -29,6 +30,22 @@ function formatClock(value) {
   return `${h}:${m[2]} ${suffix}`
 }
 
+/** "9:00 AM" from a bare clock or a full "YYYY-MM-DD HH:MM" slot value. */
+function clockOf(value) {
+  const m = String(value || '').match(/(\d{1,2}):(\d{2})(?::\d{2})?/)
+  return m ? formatClock(`${m[1]}:${m[2]}`) : String(value || '')
+}
+
+/** "9:00 AM – 9:10 AM" for a booked slot of the given type. */
+function timeRange(value, type) {
+  const clock = String(value || '').match(/(\d{1,2}):(\d{2})/)
+  if (!clock) return 'To be confirmed'
+  const minutes = (SLOT_RULES[type] || SLOT_RULES.CLAIM).minutes
+  const from = Number(clock[1]) * 60 + Number(clock[2])
+  const stamp = (mins) => formatClock(`${Math.floor(mins / 60) % 24}:${String(mins % 60).padStart(2, '0')}`)
+  return `${stamp(from)} – ${stamp(from + minutes)}`
+}
+
 function parseDateParts(value) {
   const s = String(value || '')
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
@@ -36,6 +53,7 @@ function parseDateParts(value) {
     const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
     if (!Number.isNaN(d.getTime())) {
       return {
+        iso: m[0],
         date: d.toLocaleDateString('en-US', {
           month: 'long',
           day: 'numeric',
@@ -45,7 +63,7 @@ function parseDateParts(value) {
       }
     }
   }
-  return { date: s || 'To be scheduled', dayOfWeek: '' }
+  return { iso: '', date: s || 'To be scheduled', dayOfWeek: '' }
 }
 
 function slotTime(slot) {
@@ -77,19 +95,43 @@ function itemsOfOrder(ordRow) {
   })
 }
 
-function mapAppointment(row, ordRow) {
-  const rawStatus = String(row.appoint_status ?? row.status ?? '').toUpperCase()
-  let status = 'upcoming'
-  if (rawStatus.includes('CANCEL')) status = 'cancelled'
-  else if (['COMPLETED', 'CLAIMED', 'CLOSED', 'DONE', 'FULFILLED'].some((k) => rawStatus.includes(k)))
-    status = 'completed'
+/** Last moment the booking is still valid: its start time, or end of day. */
+function endsAt(value) {
+  const raw = String(value || '')
+  const day = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!day) return null
+  const moment = new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
+  const clock = raw.match(/(\d{1,2}):(\d{2})/)
+  if (clock) moment.setHours(Number(clock[1]), Number(clock[2]))
+  else moment.setHours(23, 59)
+  return moment
+}
 
-  const start = row.appoint_start ?? row.slot_start ?? row.appoint_time ?? ''
-  const end = row.appoint_end ?? ''
-  const time = start
-    ? `${formatClock(start)}${end ? ` – ${formatClock(end)}` : ''}`
-    : 'To be confirmed'
-  const { date, dayOfWeek } = parseDateParts(row.appoint_date ?? row.appoint_day ?? '')
+/** Local YYYY-MM-DD (toISOString() would drift a day in UTC+ timezones). */
+function todayISO() {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+function mapAppointment(row, ordRow) {
+  // APPOINTMENT carries no status column: closed → done, expired but never
+  // closed → cancelled. Everything else is upcoming (REQ-AB filters).
+  const rawStatus = String(row.appoint_status ?? row.status ?? '').toUpperCase()
+  const closed = Boolean(row.appoint_closed)
+  const ends = endsAt(row.appoint_date ?? row.appoint_day ?? '')
+  const expired = ends ? ends.getTime() < Date.now() : false
+
+  let status = 'upcoming'
+  if (rawStatus.includes('CANCEL') || (!closed && expired)) status = 'cancelled'
+  else if (closed || ['COMPLETED', 'CLAIMED', 'CLOSED', 'DONE', 'FULFILLED'].some((k) => rawStatus.includes(k)))
+    status = 'done'
+
+  // APPOINTMENT stores one appoint_date timestamp: derive the start clock
+  // from it and the end from the SRS slot length (VISIT 10 min / CLAIM 30).
+  const start = row.appoint_start ?? row.slot_start ?? row.appoint_time ?? row.appoint_date ?? ''
+  const time = timeRange(start, String(row.appoint_type || 'CLAIM').toUpperCase())
+  const { iso, date, dayOfWeek } = parseDateParts(row.appoint_date ?? row.appoint_day ?? '')
   const items = itemsOfOrder(ordRow)
 
   return {
@@ -98,6 +140,9 @@ function mapAppointment(row, ordRow) {
     type: String(row.appoint_type || 'CLAIM').toUpperCase(),
     itemCount: items.length || Number(row.item_count ?? 1),
     status,
+    isToday: Boolean(iso) && iso === todayISO(),
+    dateISO: iso,
+    desc: String(row.appoint_desc || ''),
     date,
     dayOfWeek,
     time,
@@ -107,39 +152,71 @@ function mapAppointment(row, ordRow) {
   }
 }
 
-/** Booking form: date → slots → POST /appoint/create (REQ-SC-02). */
-function BookAppointmentCard({ custId, onBooked }) {
+/** Landscape card button that opens the Add Appointment flow. */
+function AddAppointmentCta({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="add-appointment-cta w-full h-24 flex items-center justify-between gap-4 px-5 rounded-xl bg-brand-orange text-white text-left cursor-pointer transition-transform active:scale-[0.99]"
+    >
+      <span className="min-w-0">
+        <span className="block text-base font-extrabold">Add Appointment</span>
+        <span className="block text-xs font-medium text-white/80 leading-snug mt-0.5">
+          Reserve a 10-minute store visit or a 30-minute order claiming slot.
+        </span>
+      </span>
+      <span className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-5 h-5">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </span>
+    </button>
+  )
+}
+
+/**
+ * Booking form: date → slots → POST /appoint/create (REQ-SC-02).
+ * Pass `reschedule` to switch it to PUT /appoint/update for that booking.
+ */
+function BookAppointmentCard({ custId, reschedule, onBooked, onCancel }) {
   const { showToast } = useToast()
-  const [date, setDate] = useState('')
-  const [type, setType] = useState('CLAIM')
+  const [date, setDate] = useState(reschedule?.dateISO || '')
+  const [type, setType] = useState(reschedule?.type || 'CLAIM')
+  const [details, setDetails] = useState(reschedule?.desc || '')
   const [slots, setSlots] = useState([])
   const [slot, setSlot] = useState('')
   const [slotsError, setSlotsError] = useState('')
   const [booking, setBooking] = useState(false)
 
+  /** GET /appoint/slots for the picked day (restricted customer view). */
+  const loadSlots = useCallback(async () => {
+    if (!date) return
+    try {
+      const rows = await fetchSlots(date)
+      setSlots(Array.isArray(rows) ? rows : [])
+    } catch (err) {
+      setSlots([])
+      setSlotsError(err?.message || 'Unable to load time slots right now.')
+    }
+  }, [date])
+
+  // Picking a day resets the selection; while the grid is open it re-polls so
+  // a slot flips to "unavailable" the moment it fills up (REQ-SC-04).
   useEffect(() => {
+    setSlot('')
+    setSlotsError('')
     if (!date) {
       setSlots([])
       return undefined
     }
-    let cancelled = false
-    ;(async () => {
-      setSlot('')
-      setSlotsError('')
-      try {
-        const rows = await fetchSlots(date)
-        if (!cancelled) setSlots(Array.isArray(rows) ? rows : [])
-      } catch (err) {
-        if (!cancelled) {
-          setSlots([])
-          setSlotsError(err?.message || 'Unable to load time slots right now.')
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [date])
+    loadSlots()
+    const timer = setInterval(loadSlots, 5000)
+    return () => clearInterval(timer)
+  }, [date, loadSlots])
+
+  // Slots arrive as "YYYY-MM-DD HH:MM"; a bare "HH:MM" gets the picked date.
+  const slotStamp = /^\d{4}-\d{2}-\d{2} /.test(slot) ? slot : `${date} ${slot}`
 
   const handleBook = async () => {
     if (booking) return
@@ -148,20 +225,27 @@ function BookAppointmentCard({ custId, onBooked }) {
       showToast('Please pick a date and a time slot first.', 'error')
       return
     }
+    if (!details.trim()) {
+      showToast('Please describe the purpose of your appointment.', 'error')
+      return
+    }
     setBooking(true)
     try {
-      await createAppointment({
-        cust_id: custId,
+      // The API reads the slot as one "YYYY-MM-DD HH:MM" timestamp.
+      const payload = {
+        appoint_date: slotStamp,
         appoint_type: type,
-        appoint_date: date,
-        appoint_desc: `${type === 'CLAIM' ? 'Order claim' : 'Store visit'} appointment on ${date} at ${slot}`,
-        // Start time is sent under several keys until the API contract is fixed.
-        slot_start: slot,
-        appoint_start: slot,
-        appoint_time: slot,
-      })
-      showToast('Appointment booked! See it in your list below.', 'success')
+        appoint_desc: details.trim(),
+      }
+      if (reschedule) {
+        await updateAppointment(reschedule.id, payload)
+        showToast('Appointment rescheduled.', 'success')
+      } else {
+        await createAppointment({ cust_id: custId, ...payload })
+        showToast('Appointment booked! See it in your list below.', 'success')
+      }
       setSlot('')
+      await loadSlots() // the taken/freed slot updates immediately
       onBooked?.()
     } catch (err) {
       showToast(err?.message || 'Unable to book that slot. Try another one.', 'error')
@@ -172,17 +256,27 @@ function BookAppointmentCard({ custId, onBooked }) {
 
   const rules = SLOT_RULES[type] || SLOT_RULES.CLAIM
 
+  // The calendar only lists the slots that match the selected type.
+  const daySlots = slots.filter((s) => !s.type || s.type === type)
+
   return (
     <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
       <div>
         <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
-          Book an Appointment
+          {reschedule ? 'Reschedule Appointment' : 'Book an Appointment'}
         </h2>
         <p className="text-xs text-slate-500 leading-relaxed mt-0.5">
-          Reserve a slot to claim your order or visit the store. Slots are{' '}
-          {rules.minutes} minutes long (up to {rules.capacity}{' '}
+          {reschedule
+            ? 'Pick a different date or time slot for this booking. '
+            : 'Reserve a slot to claim your order or visit the store. '}
+          Slots are {rules.minutes} minutes long (up to {rules.capacity}{' '}
           {rules.capacity === 1 ? 'person' : 'people'} per slot).
         </p>
+        {reschedule && (
+          <button type="button" onClick={onCancel} className="mt-1.5 text-xs font-bold text-brand-orange hover:underline cursor-pointer">
+            ← Keep my current slot
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -208,7 +302,7 @@ function BookAppointmentCard({ custId, onBooked }) {
           <input
             type="date"
             value={date}
-            min={new Date().toISOString().slice(0, 10)}
+            min={todayISO()}
             onChange={(e) => setDate(e.target.value)}
             className="px-2 py-1.5 rounded-md border border-slate-200 text-xs text-gray-700 focus:border-brand-orange"
           />
@@ -221,44 +315,60 @@ function BookAppointmentCard({ custId, onBooked }) {
           Pick a date to see the available time slots.
         </p>
       )}
-      {date && !slotsError && slots.length === 0 && (
+      {date && !slotsError && daySlots.length === 0 && (
         <p className="text-xs text-slate-500 bg-slate-50 rounded-md p-2.5">
           No slots are open for this date yet. Try another date.
         </p>
       )}
 
-      {slots.length > 0 && (
+      {daySlots.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {slots.map((s, idx) => {
+          {daySlots.map((s, idx) => {
             const time = slotTime(s)
-            const open = slotOpen(s)
+            const mine = s.mine === true
+            const open = !mine && slotOpen(s)
             const active = open && slot === time
             return (
               <button
                 key={time || `slot-${idx}`}
                 type="button"
                 disabled={!open}
-                title={open ? time : slotReason(s)}
+                title={mine ? 'Your booking' : open ? clockOf(time) : slotReason(s)}
                 onClick={() => open && setSlot(time)}
                 className={`py-2 rounded-md text-xs font-semibold border transition-colors ${
                   active
                     ? 'bg-brand-orange text-white border-brand-orange'
+                    : mine
+                    ? 'bg-orange-50 text-brand-orange border-orange-200 cursor-not-allowed'
                     : open
                     ? 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange cursor-pointer'
                     : 'bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed line-through'
                 }`}
               >
-                {time || `Slot ${idx + 1}`}
-                {!open && (
-                  <span className="block text-[10px] font-normal no-underline">
-                    {slotReason(s)}
-                  </span>
-                )}
+                {clockOf(time) || `Slot ${idx + 1}`}
+                {mine ? (
+                  <span className="block text-[10px] font-normal no-underline">Your booking</span>
+                ) : !open ? (
+                  <span className="block text-[10px] font-normal no-underline">{slotReason(s)}</span>
+                ) : null}
               </button>
             )
           })}
         </div>
       )}
+
+      {/* Appointment details form (appoint_desc) */}
+      <label className="block">
+        <span className="text-xs font-semibold text-slate-600">Appointment details</span>
+        <textarea
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
+          rows={2}
+          maxLength={300}
+          placeholder="e.g. Claiming order #ORD-1234 — BU Varsity Jacket"
+          className="w-full mt-1 px-2.5 py-2 rounded-md border border-slate-200 text-xs text-gray-700 focus:border-brand-orange resize-none"
+        />
+      </label>
 
       <button
         type="button"
@@ -267,9 +377,11 @@ function BookAppointmentCard({ custId, onBooked }) {
         className="w-full h-9 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {booking
-          ? 'Booking…'
+          ? 'Saving…'
           : slot
-          ? `Book ${type === 'CLAIM' ? 'claim' : 'visit'} slot • ${date} ${slot}`
+          ? `${reschedule ? 'Reschedule' : 'Book'} ${type === 'CLAIM' ? 'claim' : 'visit'} slot • ${slotStamp}`
+          : reschedule
+          ? 'Select a new time slot'
           : 'Select a time slot to book'}
       </button>
     </div>
@@ -338,7 +450,9 @@ function CheckmarkCircleIcon({ className = 'w-8 h-8' }) {
 function Appointments() {
   const { currentUser } = useAuth()
   const { showToast } = useToast()
-  const [activeFilter, setActiveFilter] = useState('all')
+  const [activeFilter, setActiveFilter] = useState('today')
+  const [bookingOpen, setBookingOpen] = useState(false)
+  const [reschedule, setReschedule] = useState(null)
   const [appointments, setAppointments] = useState([])
   const [loading, setLoading] = useState(true)
   const [unread, setUnread] = useState(0)
@@ -407,17 +521,54 @@ function Appointments() {
     }
   }, [custId])
 
-  const filteredAppointments = appointments.filter((appt) => {
-    if (activeFilter === 'all') return true
-    return appt.status === activeFilter
-  })
+  // REQ-AB filters evaluated from appoint_date + appoint_closed.
+  const filteredAppointments = appointments.filter((appt) =>
+    activeFilter === 'today'
+      ? appt.isToday && appt.status === 'upcoming'
+      : appt.status === activeFilter,
+  )
 
   const filterTabs = [
-    { id: 'all', label: 'All Appointments' },
+    { id: 'today', label: 'Today' },
     { id: 'upcoming', label: 'Upcoming' },
-    { id: 'completed', label: 'Completed' },
+    { id: 'done', label: 'Done' },
     { id: 'cancelled', label: 'Cancelled' },
   ]
+
+  // The CTA sits near the top while the reschedule buttons live at the bottom
+  // of the list, so jump to whichever CTA (mobile/desktop) is on screen.
+  const scrollToAdd = () =>
+    requestAnimationFrame(() => {
+      const visible = [...document.querySelectorAll('.add-appointment-cta')]
+        .find((node) => node.offsetParent !== null)
+      visible?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+
+  // Opens the booking form fresh, or pointed at an upcoming appointment.
+  const openBooking = (appointment = null) => {
+    setReschedule(appointment)
+    setBookingOpen(true)
+    scrollToAdd()
+  }
+
+  const closeBooking = () => {
+    setReschedule(null)
+    setBookingOpen(false)
+  }
+
+  // Slots for the form: key it so a different target remounts with fresh state.
+  const bookingForm = bookingOpen && (
+    <BookAppointmentCard
+      key={reschedule ? `reschedule-${reschedule.id}` : 'new'}
+      custId={custId}
+      reschedule={reschedule}
+      onBooked={() => {
+        closeBooking()
+        loadAppointments()
+      }}
+      onCancel={closeBooking}
+    />
+  )
 
   return (
     <AccountLayout>
@@ -483,6 +634,10 @@ function Appointments() {
             </div>
           </div>
 
+          {/* Landscape card button that opens the Add Appointment flow */}
+          <AddAppointmentCta onClick={() => (bookingOpen ? closeBooking() : openBooking())} />
+          {bookingForm}
+
           {/* Section Title & Subtitle */}
           <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
             <div className="flex items-start gap-3">
@@ -512,8 +667,6 @@ function Appointments() {
               ))}
             </div>
           </div>
-
-          <BookAppointmentCard custId={custId} onBooked={loadAppointments} />
 
           {/* Appointments Cards (Matching 2-Column inner card layout of Image 1) */}
           <div className="space-y-4">
@@ -579,7 +732,7 @@ function Appointments() {
                             Appointment #{appt.id}
                           </p>
                           <p className="text-[11px] text-slate-500">
-                            Order #{appt.orderId} · {appt.itemCount} {appt.itemCount === 1 ? 'item' : 'items'}
+                            {appt.orderId ? `Order #${appt.orderId} · ${appt.itemCount} ${appt.itemCount === 1 ? 'item' : 'items'}` : appt.type === 'CLAIM' ? 'Order Claiming' : 'Store Visit'}
                           </p>
                         </div>
 
@@ -628,6 +781,13 @@ function Appointments() {
                               <span>View Order Details</span>
                               <span>→</span>
                             </Link>
+                            <button
+                              type="button"
+                              onClick={() => openBooking(appt)}
+                              className="w-full h-8 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Reschedule appointment
+                            </button>
                           </div>
                         ) : (
                           <div className="space-y-2 pt-1">
@@ -809,6 +969,9 @@ function Appointments() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Center Main Column (8 Cols) */}
             <div className="lg:col-span-8 space-y-6">
+              {/* Landscape card button that opens the Add Appointment flow */}
+              <AddAppointmentCta onClick={() => (bookingOpen ? closeBooking() : openBooking())} />
+
               {/* Header Title + Subtitle */}
               <div className="bg-white rounded-lg p-5 border border-slate-200 space-y-3">
                 <div className="flex items-start gap-3">
@@ -842,7 +1005,7 @@ function Appointments() {
                 </div>
               </div>
 
-              <BookAppointmentCard custId={custId} onBooked={loadAppointments} />
+              {bookingForm}
 
               {/* Appointments List */}
               <div className="space-y-4">
@@ -882,7 +1045,7 @@ function Appointments() {
                               Appointment #{appt.id}
                             </span>
                             <span className="text-xs text-slate-500">
-                              Order #{appt.orderId} · {appt.itemCount} {appt.itemCount === 1 ? 'item' : 'items'}
+                              {appt.orderId ? `Order #${appt.orderId} · ${appt.itemCount} ${appt.itemCount === 1 ? 'item' : 'items'}` : appt.type === 'CLAIM' ? 'Order Claiming' : 'Store Visit'}
                             </span>
                           </div>
                         </div>
@@ -962,6 +1125,13 @@ function Appointments() {
                                   <span>View Order Details</span>
                                   <span>→</span>
                                 </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => openBooking(appt)}
+                                  className="w-full h-9 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  Reschedule appointment
+                                </button>
                               </div>
                             ) : (
                               <div className="bg-slate-50 border border-slate-200 rounded-md p-3 flex flex-col items-center justify-center text-center space-y-1">

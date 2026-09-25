@@ -70,6 +70,41 @@ abstract class Controller
     }
 
     // ==========================================
+    // ACCOUNT PROTECTION HELPERS
+    // ==========================================
+
+    // REQ-APC-01: returns a 409 response when the account's most recent
+    // credential change happened within the last thirty days. A null stamp
+    // means the credentials were never changed, so the change is allowed.
+    protected function credentialChangeBlocked($stamp)
+    {
+        if ($stamp && $stamp->copy()->addDays(30)->isFuture()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sensitive credentials cannot be changed within thirty days of the most recent change'
+            ], 409);
+        }
+
+        return null;
+    }
+
+    // REQ-APC-01: true only when the payload really rewrites one of the given
+    // login identifiers, so an ordinary profile save is never blocked.
+    protected function sensitiveFieldsTouched($user, array $payload, array $fields): bool
+    {
+        foreach ($fields as $field) {
+            if (! array_key_exists($field, $payload)) {
+                continue;
+            }
+            if (trim((string) $payload[$field]) !== trim((string) $user->{$field})) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ==========================================
     // NOTIFICATION HELPERS
     // ==========================================
 

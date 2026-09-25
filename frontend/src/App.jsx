@@ -5,6 +5,7 @@ import { useAuth } from './hooks/useAuth.js'
 import LoginPromptModal from './components/ui/LoginPromptModal.jsx'
 import { CartProvider } from './context/CartContext.jsx'
 import { WishlistProvider } from './context/WishlistContext.jsx'
+import { ThemeProvider } from './context/ThemeContext.jsx'
 
 import { AdminProvider } from './context/AdminContext.jsx'
 
@@ -68,7 +69,8 @@ function RequireAuth() {
 function App() {
   return (
     <ToastProvider>
-      <AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
         <AdminProvider>
           <CartProvider>
             <WishlistProvider>
@@ -136,7 +138,8 @@ function App() {
             </WishlistProvider>
           </CartProvider>
         </AdminProvider>
-      </AuthProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </ToastProvider>
   )
 }
