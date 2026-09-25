@@ -4,7 +4,7 @@ import { adminLogin, adminLogout } from '../services/adminAuth.js'
 import { getApiToken, setApiToken } from '../services/api.js'
 import { clearSession, loadSession, saveSession } from '../services/session.js'
 import { useToast } from '../hooks/useToast.js'
-import { fetchOrders, updateOrder } from '../services/orders.js'
+import { fetchAllOrders, updateOrder, approveRequest, rejectRequest } from '../services/orders.js'
 import { addPosItem, removePosItem, checkoutPos } from '../services/pos.js'
 import { fetchAdminProducts, createAdminProduct, updateAdminProduct as updateAdminProductAPI, removeAdminProduct as removeAdminProductAPI, unlistAdminProduct as unlistAdminProductAPI, sellAdminProduct as sellAdminProductAPI } from '../services/adminProducts.js'
 import { buildAlerts } from '../services/dashboard.js'
@@ -103,22 +103,26 @@ export function AdminProvider({ children }) {
   // Fetch orders from backend (mount + every refreshOrders() call - the pages
   // re-run this on a 30s interval per REQ-SD-02). logoutAdmin() clears the list,
   // so there is no synchronous setState in this effect body.
+  // Only the first failure of a streak is toasted, so the 30s polling never
+  // stacks the same error.
+  const ordersFailingRef = useRef(false)
   useEffect(() => {
     if (!currentAdminUser) return undefined
     let cancelled = false
-    fetchOrders()
+    fetchAllOrders()
       .then((rows) => {
         if (cancelled) return
-        const list = (rows || []).filter(
-          (row) => !String(row?.ord_tag || '').toUpperCase().startsWith('CART-')
-        )
-        setOrders(list)
+        ordersFailingRef.current = false
+        setOrders(rows || [])
       })
-      .catch(() => {
-        // Transient failure: keep the last known rows on screen.
+      .catch((e) => {
+        // Keep the last known rows on screen, but say why they are stale.
+        if (cancelled || ordersFailingRef.current) return
+        ordersFailingRef.current = true
+        showToast(e?.message || 'Unable to load orders from the server.', 'error')
       })
     return () => { cancelled = true }
-  }, [currentAdminUser, ordersRefreshKey])
+  }, [currentAdminUser, ordersRefreshKey, showToast])
 
   const refreshOrders = useCallback(() => {
     setOrdersRefreshKey((k) => k + 1)
@@ -193,6 +197,20 @@ export function AdminProvider({ children }) {
         return { success: true }
       } catch (e) {
         return { success: false, error: e?.message || 'Failed to update the order status.' }
+      }
+    },
+    [refreshOrders]
+  )
+
+  /** Approve / decline a customer CANCEL REQUESTED or RETURN REQUESTED order. */
+  const decideRequest = useCallback(
+    async (row, approve) => {
+      try {
+        await (approve ? approveRequest(row) : rejectRequest(row))
+        refreshOrders()
+        return { success: true }
+      } catch (e) {
+        return { success: false, error: e?.message || 'Failed to update the request.' }
       }
     },
     [refreshOrders]
@@ -531,6 +549,7 @@ export function AdminProvider({ children }) {
         logoutAdmin,
         updateCurrentAdminProfile,
         updateOrderStatus,
+        decideRequest,
         addProduct,
         updateProduct,
         deleteProduct,

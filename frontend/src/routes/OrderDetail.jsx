@@ -20,6 +20,7 @@ import { fetchOrder,
   fetchOrders,
   requestCancel,
   requestReturn,
+  dispatchModeOf,
 } from '../services/orders.js'
 import { getTrack, scanQr } from '../services/tracking.js'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
@@ -27,7 +28,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
 const CAN_CANCEL = ['TO PROCESS']
-const CAN_RETURN = ['CLAIMED', 'UNCLAIMED']
+const CAN_RETURN = ['CLAIMED']
 
 /** Normalise the tracking payload into timeline steps (shape is unconfirmed). */
 function parseTimeline(res) {
@@ -93,8 +94,11 @@ function OrderDetail() {
       setTrackRes(null)
 
       // Fulfillment track: pickup QR/queue state, or the delivery track + QR.
+      // Orders that have not been checked out yet own no track at all.
       const trackType =
-        mapped.fulfillment.method === 'Courier Delivery' ? 'delivery' : 'pickup'
+        dispatchModeOf(row) ??
+        (mapped.fulfillment.method === 'Courier Delivery' ? 'delivery' : 'pickup')
+      if (!dispatchModeOf(row) && mapped.status === 'TO PROCESS') return
       try {
         const res = await getTrack(mapped.id, trackType)
         setTrackRes(res)
@@ -241,8 +245,11 @@ function OrderDetail() {
 
   const orderItems = order.raw?.items || []
   const subtotal = order.subtotal
-  const deliveryFee = isDelivery ? Number(order.raw?.ord_fee ?? order.raw?.dispatch_fee ?? 0) : 0
-  const total = Number(order.raw?.ord_total ?? subtotal + deliveryFee)
+  // pay_due on the checkout payment is the authoritative total (items + fee).
+  const payment = order.raw?.parcel?.payment || order.raw?.pickup?.payment || null
+  const paidTotal = payment?.pay_due != null ? Number(payment.pay_due) : null
+  const deliveryFee = isDelivery && paidTotal != null ? Math.max(paidTotal - subtotal, 0) : 0
+  const total = paidTotal ?? subtotal + deliveryFee
   const statusContext = STATUS_CONTEXT[order.status] || order.statusContext
 
   return (
@@ -421,8 +428,11 @@ function OrderDetail() {
                   product.images?.[0] ||
                   null
                 const name = product.name || product.prod_name || order.name
-                const price = Number(entry?.item_amount ?? order.price ?? 0)
                 const qty = Number(entry?.item_qty ?? order.qty ?? 1)
+                // item_amount is the line total; show the unit price.
+                const price = entry
+                  ? Number(entry.item_amount ?? 0) / (qty || 1)
+                  : Number(order.price ?? 0)
                 const size = entry?.size ?? order.size ?? product.size ?? null
                 const color = entry?.color ?? order.color ?? null
                 const itemKey = entry?.prod_id ?? idx

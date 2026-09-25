@@ -12,7 +12,7 @@ import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon } from '../components/ui/Icons.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
-import { fetchOrders, requestCancel, requestReturn } from '../services/orders.js'
+import { fetchOrders, requestCancel, requestReturn, dispatchModeOf } from '../services/orders.js'
 
 const tabs = [
   { key: 'all', label: 'All' },
@@ -47,6 +47,10 @@ function formatDate(value) {
 }
 
 function dispatchOf(row) {
+  // The pickup / parcel record made at checkout is authoritative.
+  const mode = dispatchModeOf(row)
+  if (mode === 'delivery') return 'Courier Delivery'
+  if (mode === 'pickup') return 'Store Pickup'
   const raw = String(
     row.dispatch_type ?? row.ord_dispatch ?? row.deliver_type ?? row.ord_type ?? ''
   ).toLowerCase()
@@ -73,12 +77,11 @@ export function mapServerOrder(row) {
   const first = items[0] || null
   const product = first?.product || {}
   const qty = items.reduce((sum, i) => sum + Number(i.item_qty || 0), 0)
-  const subtotal = items.reduce(
-    (sum, i) => sum + Number(i.item_amount ?? 0) * Number(i.item_qty || 0),
-    0
-  )
+  // item_amount is already the line total (prod_price x qty).
+  const subtotal = items.reduce((sum, i) => sum + Number(i.item_amount ?? 0), 0)
   const status = String(row.ord_status || 'TO PROCESS').toUpperCase()
   const method = dispatchOf(row)
+  const delivery = row.parcel?.delivery || null
 
   return {
     id: row.ord_id ?? row.id,
@@ -98,17 +101,22 @@ export function mapServerOrder(row) {
       (Array.isArray(product.prod_img) ? product.prod_img[0] : product.prod_img) ||
       null,
     productId: product.prod_tag ?? product.id ?? product.prod_id ?? null,
-    price: Number(first?.item_amount ?? product.price ?? 0),
+    // Unit price of the first line (item_amount is that line's total).
+    price: first
+      ? Number(first.item_amount ?? 0) / (Number(first.item_qty) || 1)
+      : Number(product.price ?? 0),
     size: first?.size ?? product.size ?? null,
     color: first?.color ?? product.color ?? null,
     preOrder: isPreOrderRow(row),
     subtotal,
-    deliverQr: row.deliver_qr || null,
+    deliverQr: delivery?.deliver_qr || row.deliver_qr || null,
+    deliverStatus: delivery?.deliver_status || null,
+    deliverDate: delivery?.deliver_date || null,
     fulfillment: {
       method,
       location:
         method === 'Courier Delivery'
-          ? row.deliver_addr || row.ord_addr || 'Delivery address on file'
+          ? delivery?.deliver_address || row.deliver_addr || row.ord_addr || 'Delivery address on file'
           : 'Tindahan ni Isko · BU Student Center',
     },
     raw: row,
@@ -199,7 +207,8 @@ function Orders() {
   }
 
   const canCancel = useCallback((o) => o.status === 'TO PROCESS', [])
-  const canReturn = useCallback((o) => ['CLAIMED', 'UNCLAIMED'].includes(o.status), [])
+  // The backend only accepts return requests on claimed orders.
+  const canReturn = useCallback((o) => o.status === 'CLAIMED', [])
 
   return (
     <AccountLayout>

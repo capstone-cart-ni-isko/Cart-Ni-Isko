@@ -135,6 +135,10 @@ export function CartProvider({ children }) {
 
   const hydrateFromRows = useCallback(
     (rows) => {
+      // Removing a row's last line (or checking out its lines through a temp
+      // order) leaves an empty CART- order behind; delete those as they surface.
+      const empty = (rows || []).filter((row) => (row.items || []).length === 0)
+      empty.forEach((row) => removeCartOrder(row.ord_id ?? row.id).catch(() => null))
       const items = mapServerRows(rows, cartItemsRef.current)
       applyItems(items)
       return items
@@ -308,8 +312,12 @@ export function CartProvider({ children }) {
     if (!item) return
     applyItems([item, ...cartItemsRef.current])
     setSelectedItemIds((prev) => (prev.includes(item.cartItemId) ? prev : [...prev, item.cartItemId]))
-    // Put the line back on the server row it came from (or recreate it).
-    pushItem(item, item.qty)
+    // Put the line back on the server row it came from. If that row was the
+    // item's alone it has been deleted, so recreate it as a new cart order.
+    const rowSurvived = cartItemsRef.current.some(
+      (i) => i.ordId === item.ordId && i.cartItemId !== item.cartItemId
+    )
+    pushItem(rowSurvived ? item : { ...item, ordId: null }, item.qty)
   }
 
   const updateQuantity = (cartItemId, qty) => {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import QRCode from 'qrcode'
 import { useCart } from '../hooks/useCart.js'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
@@ -19,11 +20,12 @@ import {
   closeAppointment,
 } from '../services/appointments.js'
 
-/* Delivery tiers previewed through POST /checkout/dispatch (SRS shipping fees). */
+/* Delivery tiers previewed through POST /checkout/dispatch (SRS shipping fees).
+   ETAs match the server's estimate: +24 hours / +2 days / +5 days. */
 const DELIVERY_TIERS = [
-  { key: 'priority', label: 'Priority', fee: 100, eta: 'Same-day' },
-  { key: 'standard', label: 'Standard', fee: 50, eta: '1–2 days' },
-  { key: 'saver', label: 'Saver', fee: 30, eta: '3–5 days' },
+  { key: 'priority', label: 'Priority', fee: 100, eta: '24 hours' },
+  { key: 'standard', label: 'Standard', fee: 50, eta: '2 days' },
+  { key: 'saver', label: 'Saver', fee: 30, eta: '5 days' },
 ]
 
 function prodIdOf(item) {
@@ -66,6 +68,35 @@ function addressText(addr) {
     .join(', ')
 }
 
+/** Receipt summary from the POST /checkout/payment response. */
+function receiptFrom(data, ordId, dispatchType, pickupDate, slot) {
+  const payment = data?.payment || {}
+  const dispatch = data?.dispatch || {}
+  const order = data?.order || {}
+  const isDelivery = dispatchType === 'delivery'
+  return {
+    ordId: order.ord_id ?? ordId,
+    tag: order.ord_tag || `#${ordId}`,
+    isDelivery,
+    paid: Number(payment.pay_given ?? 0),
+    due: Number(payment.pay_due ?? 0),
+    change: Number(payment.pay_change ?? 0),
+    deliverRef: dispatch.deliver_ref || '',
+    deliverAddress: dispatch.deliver_address || '',
+    deliverDate: dispatch.deliver_date || null,
+    pickupWhen: !isDelivery && pickupDate && slot ? `${pickupDate} at ${slot}` : '',
+    // Delivery: the parcel code the customer scans on arrival. Pickup: the
+    // ORD- tag staff scan at the counter (both accepted by /tracking/scan).
+    qrCode: isDelivery ? dispatch.deliver_qr || '' : order.ord_tag || '',
+  }
+}
+
+function formatWhen(value) {
+  if (!value) return ''
+  const d = new Date(String(value).replace(' ', 'T'))
+  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString()
+}
+
 function CheckoutPlaceholder() {
   const navigate = useNavigate()
   const {
@@ -100,6 +131,8 @@ function CheckoutPlaceholder() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [paidRef, setPaidRef] = useState('')
+  const [receipt, setReceipt] = useState(null)
+  const [receiptQr, setReceiptQr] = useState('')
 
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
   const itemsToCheckout = selectedItems.length > 0 ? selectedItems : cartItems
@@ -299,6 +332,7 @@ function CheckoutPlaceholder() {
       //    (REQ-OC-02) and returns it on the payment record.
       const payRes = await payOrder(ordId, dispatchType, due, dispatchOptions(appointId))
       const payRef = payRes?.data?.payment?.pay_ref ?? ''
+      setReceipt(receiptFrom(payRes?.data, ordId, dispatchType, pickupDate, slot))
 
       // 5. Success: clean up the source rows and resync the cart.
       if (tempOrdId) await removeSourceLines()
@@ -322,9 +356,35 @@ function CheckoutPlaceholder() {
     }
   }
 
-  // Countdown back to the cart when the order is confirmed.
+  // Scannable copy of the order's claim / delivery code for the receipt.
   useEffect(() => {
-    if (step !== 'confirmed') return undefined
+    let alive = true
+    if (!receipt?.qrCode) {
+      setReceiptQr('')
+      return () => {
+        alive = false
+      }
+    }
+    QRCode.toDataURL(String(receipt.qrCode), {
+      margin: 1,
+      width: 200,
+      color: { dark: '#111827', light: '#ffffff' },
+    })
+      .then((url) => {
+        if (alive) setReceiptQr(url)
+      })
+      .catch(() => {
+        if (alive) setReceiptQr('')
+      })
+    return () => {
+      alive = false
+    }
+  }, [receipt])
+
+  // Countdown back to the cart when the order is confirmed. Paused while a
+  // receipt is on screen so the customer can save the claim code.
+  useEffect(() => {
+    if (step !== 'confirmed' || receipt) return undefined
 
     const timer = setInterval(() => {
       setCountdown((prev) => {
@@ -338,7 +398,7 @@ function CheckoutPlaceholder() {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [step, navigate])
+  }, [step, receipt, navigate])
 
   if (step === 'confirmed') {
     return (
@@ -362,18 +422,104 @@ function CheckoutPlaceholder() {
             </p>
           )}
 
-          {/* Dynamic countdown indicator */}
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-orange-50 text-brand-orange text-sm font-semibold rounded-lg mb-6">
-            <span>Redirecting back to your cart in {countdown}s...</span>
-          </div>
+          {receipt ? (
+            <div className="w-full max-w-sm bg-white border border-slate-100 rounded-xl p-4 mb-6 text-left text-sm space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Receipt</p>
+                <span className="font-mono text-xs font-bold text-gray-900">{receipt.tag}</span>
+              </div>
+
+              {receipt.qrCode && (
+                <div className="flex flex-col items-center gap-1.5 py-1">
+                  {receiptQr ? (
+                    <img
+                      src={receiptQr}
+                      alt={receipt.isDelivery ? 'Delivery verification QR code' : 'Pickup claim QR code'}
+                      className="w-36 h-36 rounded-lg border border-slate-200 p-1.5 bg-white"
+                    />
+                  ) : (
+                    <div className="w-36 h-36 rounded-lg border border-slate-200 flex items-center justify-center text-xs text-gray-400">
+                      Generating QR…
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 text-center">
+                    {receipt.isDelivery
+                      ? 'Scan this code from your order page when the courier hands over your parcel.'
+                      : 'Show this code at the pickup counter to claim your order.'}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between text-gray-600">
+                  <span>Fulfillment</span>
+                  <span className="font-semibold text-gray-900">
+                    {receipt.isDelivery ? 'Courier Delivery' : 'Store Pickup'}
+                  </span>
+                </div>
+                {receipt.pickupWhen && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Claim slot</span>
+                    <span className="font-semibold text-gray-900">{receipt.pickupWhen}</span>
+                  </div>
+                )}
+                {receipt.isDelivery && receipt.deliverRef && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Delivery ref</span>
+                    <span className="font-mono font-semibold text-gray-900">{receipt.deliverRef}</span>
+                  </div>
+                )}
+                {receipt.isDelivery && receipt.deliverDate && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Estimated arrival</span>
+                    <span className="font-semibold text-gray-900">{formatWhen(receipt.deliverDate)}</span>
+                  </div>
+                )}
+                {receipt.isDelivery && receipt.deliverAddress && (
+                  <p className="text-gray-500 truncate" title={receipt.deliverAddress}>
+                    Ship to: {receipt.deliverAddress}
+                  </p>
+                )}
+                <div className="h-px bg-slate-100 my-1.5" />
+                <div className="flex justify-between text-gray-600">
+                  <span>Total due</span>
+                  <span className="font-semibold text-gray-900">₱{receipt.due.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Paid</span>
+                  <span className="font-semibold text-gray-900">₱{receipt.paid.toFixed(2)}</span>
+                </div>
+                {receipt.change > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Change</span>
+                    <span className="font-semibold text-gray-900">₱{receipt.change.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Dynamic countdown indicator */
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-orange-50 text-brand-orange text-sm font-semibold rounded-lg mb-6">
+              <span>Redirecting back to your cart in {countdown}s...</span>
+            </div>
+          )}
 
           <div className="w-full max-w-xs space-y-2">
-            <Button
-              onClick={() => navigate('/orders')}
-              className="w-full h-11 rounded-lg font-bold text-sm cursor-pointer"
-            >
-              View My Orders Now
-            </Button>
+            {receipt?.ordId ? (
+              <Link
+                to={`/orders/${receipt.ordId}`}
+                className="w-full h-11 rounded-lg font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white flex items-center justify-center transition-colors"
+              >
+                View This Order
+              </Link>
+            ) : (
+              <Button
+                onClick={() => navigate('/orders')}
+                className="w-full h-11 rounded-lg font-bold text-sm cursor-pointer"
+              >
+                View My Orders Now
+              </Button>
+            )}
             <button
               type="button"
               onClick={() => navigate('/cart')}

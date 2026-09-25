@@ -162,15 +162,13 @@
         public function displayOrders(Request $json)
         {
             try {
-                $custId = $this->customerId($json);
-                if ($custId === null) {
+                $query = $this->scopedOrders($json);
+                if ($query === null) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Customer authentication is required.',
+                        'message' => 'Customer or employee authentication is required.',
                     ], 403);
                 }
-
-                $query = Order::with(['items.product'])->where('cust_id', $custId);
 
                 if ($json->has('ord_status')) {
                     $query->where('ord_status', $json->input('ord_status'));
@@ -178,14 +176,6 @@
 
                 if ($json->has('ord_id')) {
                     $query->where('ord_id', $json->input('ord_id'));
-                }
-
-                if ($json->filled('tag_prefix')) {
-                    $query->where('ord_tag', 'like', $json->input('tag_prefix') . '%');
-                }
-
-                if ($json->filled('exclude_prefix')) {
-                    $query->where('ord_tag', 'not like', $json->input('exclude_prefix') . '%');
                 }
 
                 $orders = $query->orderBy('ord_created', 'desc')->get();
@@ -223,16 +213,16 @@
         public function searchOrders(Request $json)
         {
             try {
-                $custId = $this->customerId($json);
-                if ($custId === null) {
+                $query = $this->scopedOrders($json);
+                if ($query === null) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Customer authentication is required.',
+                        'message' => 'Customer or employee authentication is required.',
                     ], 403);
                 }
 
                 $q = $json->input('q', '');
-                $query = Order::with(['items.product', 'customer'])->where('cust_id', $custId);
+                $query->with('customer');
 
                 if (!empty($q)) {
                     $query->where(function($builder) use ($q) {
@@ -275,11 +265,11 @@
         public function sortOrders(Request $json)
         {
             try {
-                $custId = $this->customerId($json);
-                if ($custId === null) {
+                $query = $this->scopedOrders($json);
+                if ($query === null) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Customer authentication is required.',
+                        'message' => 'Customer or employee authentication is required.',
                     ], 403);
                 }
 
@@ -296,8 +286,7 @@
 
                 $column = $columnMap[$sortBy] ?? 'ord_created';
 
-                $query = Order::with(['items.product', 'customer'])->where('cust_id', $custId);
-                $orders = $query->orderBy($column, $orderDir)->get();
+                $orders = $query->with('customer')->orderBy($column, $orderDir)->get();
 
                 return response()->json([
                     'success' => true,
@@ -375,5 +364,41 @@
                     'error'   => $e->getMessage()
                 ], 500);
             }
+        }
+
+        /*
+            Base query for the order listings (display / search / sort)
+            ----------
+            Customers only ever see their own orders. Employees see every
+            order (optionally narrowed by cust_id) so the staff console can
+            track fulfillment. Returns null for any other account.
+
+            tag_prefix - string (opt: only orders whose ord_tag starts with it)
+            exclude_prefix - string (opt: only orders whose ord_tag does NOT start with it)
+        */
+        private function scopedOrders(Request $json)
+        {
+            $query = Order::with(['items.product', 'pickup.payment', 'parcel.delivery', 'parcel.payment']);
+
+            $custId = $this->customerId($json);
+            if ($custId !== null) {
+                $query->where('cust_id', $custId);
+            } elseif ($this->isEmployee($json->user('sanctum'))) {
+                if ($json->filled('cust_id')) {
+                    $query->where('cust_id', $json->input('cust_id'));
+                }
+            } else {
+                return null;
+            }
+
+            if ($json->filled('tag_prefix')) {
+                $query->where('ord_tag', 'like', $json->input('tag_prefix') . '%');
+            }
+
+            if ($json->filled('exclude_prefix')) {
+                $query->where('ord_tag', 'not like', $json->input('exclude_prefix') . '%');
+            }
+
+            return $query;
         }
     }

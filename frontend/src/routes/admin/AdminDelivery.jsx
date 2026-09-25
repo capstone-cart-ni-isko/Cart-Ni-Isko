@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
-import { getTrack, updateTrack } from '../../services/tracking.js'
+import { updateTrack } from '../../services/tracking.js'
 import { mapOrderRows, parseDate } from '../../services/dashboard.js'
 
 // ─── Delivery Workflow (live data) ────────────────────────────────────────
@@ -13,7 +13,6 @@ import { mapOrderRows, parseDate } from '../../services/dashboard.js'
 // Close      = PUT /tracking/close {track_id: parcel_id} (marks DELIVERED).
 
 const REFRESH_MS = 30000 // REQ-SD-02: keep the delivery queues fresh
-const HISTORY_STATUSES = new Set(['CLAIMED', 'RETURNED', 'CANCELLED'])
 const TODAY_LABEL = new Date().toLocaleDateString('en-US', {
   month: 'long',
   day: 'numeric',
@@ -90,7 +89,7 @@ function itemsInfo(order) {
 const trackStatusOf = (track) =>
   String(track?.delivery?.deliver_status || '').trim().toUpperCase()
 
-/** Merge a mapped order row with its probed delivery/parcel track. */
+/** Merge a mapped order row with its embedded delivery/parcel track. */
 function enrichDelivery(order, track) {
   const delivery = track?.delivery || null
   const parcel = track?.parcel || null
@@ -648,49 +647,28 @@ export default function AdminDelivery() {
   const [dispatchingId, setDispatchingId] = useState(null)
   const [toast, setToast] = useState('')
 
-  // ordId -> { delivery, parcel } | null (null = no delivery track on file).
-  // An absent key means the track has not been probed yet.
-  const [tracks, setTracks] = useState({})
-
   const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
   const activeOrders = useMemo(
     () => orders.filter((o) => o.rawStatus === 'TO RECEIVE'),
     [orders]
   )
-  const activeIds = useMemo(() => activeOrders.map((o) => o.ordId), [activeOrders])
-  const historyKey = useMemo(
-    () =>
-      orders
-        .filter((o) => HISTORY_STATUSES.has(o.rawStatus))
-        .map((o) => o.ordId)
-        .join(','),
-    [orders]
-  )
+
+  // ordId -> { delivery, parcel } | null. Order rows embed the parcel (with
+  // its delivery + payment) created at checkout, so no per-order lookup is
+  // needed; null means the order has no delivery track.
+  const tracks = useMemo(() => {
+    const map = {}
+    for (const o of orders) {
+      const parcel = o.raw?.parcel || null
+      map[o.ordId] = parcel ? { delivery: parcel.delivery || null, parcel } : null
+    }
+    return map
+  }, [orders])
 
   const showToast = (msg) => {
     setToast(msg)
     setTimeout(() => setToast(''), 3500)
   }
-
-  // Probe delivery tracks (GET via POST /tracking/create). setState only runs
-  // inside the promise callback, never synchronously in an effect body.
-  const probe = useCallback((ids) => {
-    if (!Array.isArray(ids) || ids.length === 0) return
-    Promise.all(
-      ids.map((id) =>
-        getTrack(id, 'delivery')
-          .then((res) => [id, { delivery: res?.data?.delivery || null, parcel: res?.data?.parcel || null }])
-          // 404 (no parcel) or a transient failure: record "no confirmed track".
-          .catch(() => [id, null])
-      )
-    ).then((pairs) => {
-      setTracks((prev) => {
-        const next = { ...prev }
-        for (const [id, entry] of pairs) next[id] = entry
-        return next
-      })
-    })
-  }, [])
 
   // Keep the order list fresh on mount and every 30s (REQ-SD-02).
   useEffect(() => {
@@ -699,24 +677,13 @@ export default function AdminDelivery() {
     return () => clearInterval(timer)
   }, [refreshOrders])
 
-  // Active tracks are re-probed whenever the order list refreshes (30s).
-  useEffect(() => {
-    probe(activeIds)
-  }, [probe, activeIds])
-
-  // Completed/Issues history is re-probed when its membership changes.
-  useEffect(() => {
-    probe(historyKey ? historyKey.split(',').map(Number) : [])
-  }, [probe, historyKey])
-
   // ── Derived queues ──
   const queue = useMemo(
     () =>
       activeOrders
         .filter((o) => {
           const track = tracks[o.ordId]
-          if (track === undefined) return false // probe still pending
-          if (track === null) return true // no delivery track -> not confirmed TRANSIT
+          if (!track) return true // no delivery track -> not confirmed TRANSIT
           return trackStatusOf(track) !== 'TRANSIT'
         })
         .map((o) => enrichDelivery(o, tracks[o.ordId])),
@@ -789,14 +756,12 @@ export default function AdminDelivery() {
     setConfirmOrder(null)
     setDispatchingId(order.id)
     try {
-      const res = await getTrack(order.ordId, 'delivery')
-      const delivery = res?.data?.delivery
+      const delivery = tracks[order.ordId]?.delivery
       if (!delivery?.deliver_id) {
-        throw new Error(res?.message || 'No delivery/parcel record found for this order')
+        throw new Error('No delivery/parcel record found for this order')
       }
       await updateTrack(delivery.deliver_id, 'delivery', 'TRANSIT')
       showToast(`${order.id} dispatched — courier ref ${delivery.delvier_ref || '—'}`)
-      probe([order.ordId])
       refreshOrders()
     } catch (e) {
       showToast(e?.message || `Could not dispatch ${order.id}.`)

@@ -10,13 +10,13 @@
  *  2. The builders are pure, so pages can recompute KPIs on every 30s refresh
  *     without touching component state beyond the fetched rows.
  *
- * NOTE (backend contract): GET /cart/display ignores `exclude_prefix` /
- * `tag_prefix`, so CART- rows (open carts) are split from real orders here,
- * client-side.
+ * NOTE (backend contract): GET /cart/display honours `exclude_prefix` /
+ * `tag_prefix`; staff tokens see every customer's orders. `isCartRow` stays as
+ * a client-side guard for callers that fetch without the prefix filter.
  */
 import { apiGet } from './api.js'
 import { CART_PREFIX } from './cart.js'
-import { fetchOrders } from './orders.js'
+import { fetchAllOrders, dispatchModeOf } from './orders.js'
 import { fetchAppointments, fetchSlots, SLOT_RULES } from './appointments.js'
 import { fetchAccounts } from './accounts.js'
 import { fetchAdminProducts } from './adminProducts.js'
@@ -107,7 +107,7 @@ function isTruthy(value) {
 }
 
 /**
- * Map a backend `Order::with(['items.product','customer'])` row into the shape
+ * Map a backend `Order::with(['items.product','customer','pickup','parcel.delivery'])` row into the shape
  * every admin orders/fulfillment/dashboard table renders.
  */
 export function mapOrderRow(row) {
@@ -120,6 +120,15 @@ export function mapOrderRow(row) {
   const rawStatus = String(row.ord_status || '').trim().toUpperCase()
   const isPos = custId === null || custId === undefined || tag.toUpperCase().startsWith('POS-')
   const preorder = /PRE/i.test(tag) || items.some((item) => item.preorder)
+  // Fulfillment comes from the pickup / parcel record made at checkout; the
+  // status guess only covers rows fetched before those relations existed.
+  const mode = dispatchModeOf(row)
+  const delivery = row.parcel?.delivery || null
+  const fulfillment = isPos
+    ? 'Instant POS'
+    : mode === 'delivery' || (!mode && rawStatus === 'TO RECEIVE')
+      ? 'Courier'
+      : 'Store Pickup'
 
   return {
     ordId: row.ord_id,
@@ -141,7 +150,14 @@ export function mapOrderRow(row) {
     preorder,
     isPos,
     type: isPos ? 'Onsite Regular' : preorder ? 'Online Pre-order' : 'Online Regular',
-    fulfillment: isPos ? 'Instant POS' : rawStatus === 'TO RECEIVE' ? 'Courier' : 'Store Pickup',
+    fulfillment,
+    dispatchMode: mode,
+    pickupId: row.pickup?.pickup_id ?? null,
+    deliverId: delivery?.deliver_id ?? null,
+    deliverStatus: delivery ? String(delivery.deliver_status || '').toUpperCase() : null,
+    deliverAddress: delivery?.deliver_address || '',
+    deliverDate: delivery?.deliver_date || null,
+    deliverQr: delivery?.deliver_qr || null,
     paymentMethod: 'Cash',
     createdAt: row.ord_created || null,
     completedAt: row.ord_completed || null,
@@ -502,7 +518,7 @@ export async function fetchDashboardSnapshot(date = new Date()) {
 
   const [orderRows, cartPayload, appointments, accountsPayload, products, slotsPayload] =
     await Promise.all([
-      fetchOrders().catch(() => []),
+      fetchAllOrders().catch(() => []),
       apiGet('/cart/display', { tag_prefix: CART_PREFIX }).catch(() => ({ data: [] })),
       fetchAppointments({ scope: 'master' }).catch(() => []),
       fetchAccounts().catch(() => ({ customers: [], employees: [] })),

@@ -1,7 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import Avatar from '../../components/ui/Avatar.jsx'
+import { fetchStaffNotifications, markRead, unreadCount } from '../../services/notifications.js'
+import { timeAgoLabel } from '../../services/dashboard.js'
+
+const INBOX_REFRESH_MS = 60000
+const INBOX_LIMIT = 20
+const PRIORITY_PREFIX = '[PRIORITY]'
 
 /* ── Breadcrumb map ── */
 const BREADCRUMB_MAP = {
@@ -30,6 +36,42 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
   const { alerts = [], resolveAlert, currentAdminUser, logoutAdmin } = useAdmin()
   const [showNotifications, setShowNotifications] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
+
+  // Staff inbox (GET /notif/display as an employee): low-stock alerts, QR
+  // scan results and manual notifications from other staff.
+  const [inbox, setInbox] = useState([])
+  const refreshInbox = useCallback(async () => {
+    if (!currentAdminUser) {
+      setInbox([])
+      return
+    }
+    try {
+      setInbox(await fetchStaffNotifications())
+    } catch {
+      // Keep the last known inbox when the API is unreachable.
+    }
+  }, [currentAdminUser])
+
+  useEffect(() => {
+    refreshInbox()
+    if (!currentAdminUser) return undefined
+    const timer = setInterval(refreshInbox, INBOX_REFRESH_MS)
+    return () => clearInterval(timer)
+  }, [currentAdminUser, refreshInbox])
+
+  // REQ-AN-01: a notification is marked read only when it is clicked.
+  const handleReadNotification = (notif) => {
+    if (notif.empnotif_read) return
+    setInbox((prev) =>
+      prev.map((n) =>
+        n.empnotif_id === notif.empnotif_id ? { ...n, empnotif_read: new Date().toISOString() } : n
+      )
+    )
+    markRead(notif.empnotif_id, 'employee').catch(() => refreshInbox())
+  }
+
+  const unreadInbox = unreadCount(inbox)
+  const pendingCount = unreadInbox + alerts.length
 
   const breadcrumb =
     BREADCRUMB_MAP[location.pathname] ||
@@ -92,22 +134,76 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
-            <span className="absolute top-2 right-2 w-2 h-2 bg-brand-orange rounded-full ring-2 ring-white" />
+            {pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-brand-orange text-white text-[10px] font-bold rounded-full ring-2 ring-white flex items-center justify-center">
+                {pendingCount > 99 ? '99+' : pendingCount}
+              </span>
+            )}
           </button>
 
           {showNotifications && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-              <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-lg border border-slate-200 p-3 z-50 animate-slide-up">
+              <div className="absolute right-0 mt-1.5 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-lg border border-slate-200 p-3 z-50 animate-slide-up">
                 <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
                   <h3 className="text-xs font-semibold text-gray-900">Alerts &amp; notifications</h3>
                   <span className="text-[10px] font-semibold bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md border border-rose-100">
-                    {alerts.length} Pending
+                    {pendingCount} Pending
                   </span>
                 </div>
-                <div className="divide-y divide-slate-100 max-h-56 overflow-y-auto py-1.5 space-y-1.5">
+
+                {/* Staff inbox */}
+                <p className="pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Inbox{unreadInbox > 0 ? ` · ${unreadInbox} unread` : ''}
+                </p>
+                <div className="max-h-56 overflow-y-auto py-1 space-y-0.5">
+                  {inbox.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-2 text-center">No notifications yet.</p>
+                  ) : (
+                    inbox.slice(0, INBOX_LIMIT).map((notif) => {
+                      const message = String(notif.empnotif_msg || '')
+                      const priority = message.startsWith(PRIORITY_PREFIX)
+                      const unread = !notif.empnotif_read
+                      return (
+                        <button
+                          key={notif.empnotif_id}
+                          type="button"
+                          onClick={() => handleReadNotification(notif)}
+                          className={`w-full text-left px-2 py-1.5 rounded-md flex items-start gap-2 transition-colors cursor-pointer ${
+                            unread ? 'bg-orange-50/60 hover:bg-orange-50' : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <span
+                            className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                              unread ? (priority ? 'bg-rose-500' : 'bg-brand-orange') : 'bg-transparent'
+                            }`}
+                          />
+                          <span className="min-w-0">
+                            {priority && (
+                              <span className="inline-block mb-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-px rounded">
+                                Priority
+                              </span>
+                            )}
+                            <span className={`block text-[11px] leading-snug ${unread ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                              {priority ? message.slice(PRIORITY_PREFIX.length).trim() : message}
+                            </span>
+                            <span className="block text-[10px] text-gray-400">
+                              {timeAgoLabel(notif.empnotif_created)}
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* Derived store alerts (stock, pending requests) */}
+                <p className="pt-2 border-t border-slate-100 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  Store alerts
+                </p>
+                <div className="divide-y divide-slate-100 max-h-40 overflow-y-auto py-1.5 space-y-1.5">
                   {alerts.length === 0 ? (
-                    <p className="text-xs text-gray-400 py-3 text-center">All systems operating normally.</p>
+                    <p className="text-xs text-gray-400 py-2 text-center">All systems operating normally.</p>
                   ) : (
                     alerts.map((alert) => (
                       <div key={alert.id} className="pt-1.5 flex items-start justify-between gap-2">

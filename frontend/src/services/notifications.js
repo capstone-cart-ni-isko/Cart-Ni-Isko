@@ -9,6 +9,19 @@ export async function fetchNotifications(recipientType, recipientId) {
   return data.data || []
 }
 
+/** GET /notif/display - the signed-in employee's inbox (id comes from the token). */
+export async function fetchStaffNotifications() {
+  const data = await apiGet('/notif/display', { recipient_type: 'employee' })
+  return data.data || []
+}
+
+/** POST /notif/distribute - broadcast to every active account of a type, or to recipientIds only. */
+export function distributeNotifications(recipientType, message, recipientIds = []) {
+  const body = { recipient_type: recipientType, notif_msg: message }
+  if (recipientIds.length > 0) body.recipient_ids = recipientIds
+  return apiPost('/notif/distribute', body)
+}
+
 /** POST /notif/create - manual notification. */
 export function createNotification(recipientType, recipientId, message) {
   return apiPost('/notif/create', {

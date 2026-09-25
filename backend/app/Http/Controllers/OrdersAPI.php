@@ -131,6 +131,9 @@
                     'TO RECEIVE' => ['CLAIMED', 'UNCLAIMED', 'CANCELLED'],
                     'CLAIMED' => ['RETURNED', 'REFUNDED'],
                     'RETURNED' => ['REFUNDED', 'CLAIMED'],
+                    // Customer requests: approve, or reject back to the active state
+                    'CANCEL REQUESTED' => ['CANCELLED', 'TO PROCESS', 'TO CLAIM', 'TO RECEIVE'],
+                    'RETURN REQUESTED' => ['RETURNED', 'CLAIMED'],
                 ];
 
                 if ($this->customerId($json) !== null) {
@@ -139,7 +142,9 @@
                     }
                     $canRequestCancellation = $status === 'CANCEL REQUESTED'
                         && in_array($order->ord_status, ['TO PROCESS', 'TO CLAIM', 'TO RECEIVE'], true);
-                    if (! $canRequestCancellation) {
+                    $canRequestReturn = $status === 'RETURN REQUESTED'
+                        && $order->ord_status === 'CLAIMED';
+                    if (! $canRequestCancellation && ! $canRequestReturn) {
                         return response()->json([
                             'success' => false,
                             'message' => 'This order change requires staff review.',
@@ -154,19 +159,32 @@
                     ], 409);
                 }
 
+                $previous = $order->ord_status;
+                $rejectedRequest = in_array($previous, ['CANCEL REQUESTED', 'RETURN REQUESTED'], true)
+                    && ! in_array($status, ['CANCELLED', 'RETURNED'], true);
+
                 $updatable = ['ord_status' => $status];
-                if (in_array($status, ['CLAIMED', 'CANCELLED', 'RETURNED', 'REFUNDED'], true)) {
+                // A rejected return goes back to CLAIMED and keeps its original completion stamp
+                if (in_array($status, ['CLAIMED', 'CANCELLED', 'RETURNED', 'REFUNDED'], true) && ! $rejectedRequest) {
                     $updatable['ord_completed'] = now();
                 }
                 $order->update($updatable);
 
-                // REQ-OT-01: "to claim"/"to receive" changes are not regular
-                // notifications (they are driven by the QR scan instead).
-                if ((int) $order->cust_id > 0 && ! in_array($status, ['CANCEL REQUESTED', 'TO CLAIM', 'TO RECEIVE'], true)) {
-                    $this->notifyCustomer(
-                        (int) $order->cust_id,
-                        'Order ' . $order->ord_tag . ' status changed to ' . $status . '.'
-                    );
+                if ((int) $order->cust_id > 0) {
+                    if ($rejectedRequest) {
+                        $this->notifyCustomer(
+                            (int) $order->cust_id,
+                            'Your ' . ($previous === 'CANCEL REQUESTED' ? 'cancellation' : 'return') .
+                            ' request for order ' . $order->ord_tag . ' was declined. Status: ' . $status . '.'
+                        );
+                    } elseif (! in_array($status, ['CANCEL REQUESTED', 'RETURN REQUESTED', 'TO CLAIM', 'TO RECEIVE'], true)) {
+                        // REQ-OT-01: "to claim"/"to receive" changes are not regular
+                        // notifications (they are driven by the QR scan instead).
+                        $this->notifyCustomer(
+                            (int) $order->cust_id,
+                            'Order ' . $order->ord_tag . ' status changed to ' . $status . '.'
+                        );
+                    }
                 }
 
                 return response()->json([

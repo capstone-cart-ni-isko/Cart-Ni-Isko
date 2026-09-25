@@ -11,6 +11,19 @@ export async function fetchOrders(custId = null) {
   return data.data || []
 }
 
+/** GET /cart/display (staff token) - every customer's orders, carts excluded. */
+export async function fetchAllOrders(params = {}) {
+  const data = await apiGet('/cart/display', { exclude_prefix: CART_PREFIX, ...params })
+  return data.data || []
+}
+
+/** Order rows embed the pickup / parcel record created at checkout. */
+export function dispatchModeOf(row) {
+  if (row?.parcel) return 'delivery'
+  if (row?.pickup) return 'pickup'
+  return null
+}
+
 /** GET /cart/display?ord_id - one order with its items. */
 export async function fetchOrder(ordId) {
   const data = await apiGet('/cart/display', { ord_id: ordId, exclude_prefix: CART_PREFIX })
@@ -53,6 +66,27 @@ export function requestCancel(ordId) {
 
 export function requestReturn(ordId) {
   return updateOrder(ordId, { ord_status: 'RETURN REQUESTED' })
+}
+
+export const REQUEST_STATUSES = ['CANCEL REQUESTED', 'RETURN REQUESTED']
+
+/** Admin decision on a customer request: approve moves it to CANCELLED / RETURNED. */
+export function approveRequest(row) {
+  const status = String(row?.ord_status || '').toUpperCase()
+  return updateOrder(row.ord_id, {
+    ord_status: status === 'RETURN REQUESTED' ? 'RETURNED' : 'CANCELLED',
+  })
+}
+
+/** Declining puts the order back where it was before the request. */
+export function rejectRequest(row) {
+  const status = String(row?.ord_status || '').toUpperCase()
+  let previous = 'CLAIMED'
+  if (status === 'CANCEL REQUESTED') {
+    const mode = dispatchModeOf(row)
+    previous = mode === 'pickup' ? 'TO CLAIM' : mode === 'delivery' ? 'TO RECEIVE' : 'TO PROCESS'
+  }
+  return updateOrder(row.ord_id, { ord_status: previous })
 }
 
 export { ACTIVE as ORDER_STATUSES }

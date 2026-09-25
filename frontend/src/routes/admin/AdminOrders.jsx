@@ -49,7 +49,7 @@ function sortClientSide(rows, sortValue) {
 }
 
 export default function AdminOrders() {
-  const { orders: rawOrders = [], refreshOrders, updateOrderStatus, products = [] } = useAdmin()
+  const { orders: rawOrders = [], refreshOrders, updateOrderStatus, decideRequest, products = [] } = useAdmin()
   const { showToast } = useToast()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -89,7 +89,7 @@ export default function AdminOrders() {
       searchOrders(query)
         .then((res) => {
           if (cancelled) return
-          setSearchRows((res?.data || []).filter((row) => !isCartRow(row)))
+          setSearchRows(mapOrderRows((res?.data || []).filter((row) => !isCartRow(row))))
         })
         .catch(() => {
           if (!cancelled) setSearchRows([])
@@ -111,7 +111,7 @@ export default function AdminOrders() {
     let cancelled = false
     sortOrders(option.sortBy, option.dir)
       .then((res) => {
-        if (!cancelled) setSortedRows((res?.data || []).filter((row) => !isCartRow(row)))
+        if (!cancelled) setSortedRows(mapOrderRows((res?.data || []).filter((row) => !isCartRow(row))))
       })
       .catch(() => {
         if (!cancelled) setSortedRows(null)
@@ -187,6 +187,23 @@ export default function AdminOrders() {
       return result
     },
     [updateOrderStatus, showToast]
+  )
+
+  /** Approve or decline a customer cancel/return request. */
+  const applyDecision = useCallback(
+    async (order, approve) => {
+      setActionBusy(true)
+      const result = await decideRequest(order.raw, approve)
+      setActionBusy(false)
+      if (result.success) {
+        setActiveOrderDetail(null)
+        showToast(`${order.id}: request ${approve ? 'approved' : 'declined'}.`, 'success')
+      } else {
+        showToast(result.error || 'Failed to update the request.', 'error')
+      }
+      return result
+    },
+    [decideRequest, showToast]
   )
 
   const handleBulkUpdate = useCallback(async () => {
@@ -574,35 +591,37 @@ export default function AdminOrders() {
               <p className="font-semibold text-gray-600 uppercase text-[10px] tracking-wider">
                 Update order status
               </p>
-              <select
-                value={activeOrderDetail.status}
-                disabled={actionBusy}
-                onChange={(e) => applyStatus(activeOrderDetail, e.target.value)}
-                className="w-full p-2 bg-white border border-gray-200 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange disabled:opacity-60"
-              >
-                {!STATUS_OPTIONS.includes(activeOrderDetail.status) && (
-                  <option value={activeOrderDetail.status}>{activeOrderDetail.status}</option>
-                )}
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
+              {/* A pending request is decided with the buttons below, which
+                  know the order's previous state; the free select would not. */}
+              {pendingAction ? (
+                <p className="text-xs text-gray-700">
+                  Customer requested a{' '}
+                  {activeOrderDetail.rawStatus === 'CANCEL REQUESTED' ? 'cancellation' : 'return'}.
+                </p>
+              ) : (
+                <select
+                  value={activeOrderDetail.status}
+                  disabled={actionBusy}
+                  onChange={(e) => applyStatus(activeOrderDetail, e.target.value)}
+                  className="w-full p-2 bg-white border border-gray-200 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange disabled:opacity-60"
+                >
+                  {!STATUS_OPTIONS.includes(activeOrderDetail.status) && (
+                    <option value={activeOrderDetail.status}>{activeOrderDetail.status}</option>
+                  )}
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               {pendingAction && (
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     type="button"
                     disabled={actionBusy}
-                    onClick={() =>
-                      applyStatus(
-                        activeOrderDetail,
-                        activeOrderDetail.rawStatus === 'CANCEL REQUESTED'
-                          ? 'Cancelled'
-                          : 'Returned'
-                      )
-                    }
+                    onClick={() => applyDecision(activeOrderDetail, true)}
                     className="flex-1 h-8 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60"
                   >
                     Approve {activeOrderDetail.rawStatus === 'CANCEL REQUESTED' ? 'cancel' : 'return'}
@@ -610,14 +629,7 @@ export default function AdminOrders() {
                   <button
                     type="button"
                     disabled={actionBusy}
-                    onClick={() =>
-                      applyStatus(
-                        activeOrderDetail,
-                        activeOrderDetail.rawStatus === 'CANCEL REQUESTED'
-                          ? 'To Process'
-                          : 'Claimed'
-                      )
-                    }
+                    onClick={() => applyDecision(activeOrderDetail, false)}
                     className="flex-1 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-60"
                   >
                     Reject request

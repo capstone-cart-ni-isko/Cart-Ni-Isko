@@ -31,4 +31,16 @@
         {
             return $this->belongsTo(Customer::class, 'cust_id', 'cust_id');
         }
+
+        // In-store pickup record created at checkout (pickup modality)
+        public function pickup()
+        {
+            return $this->hasOne(Pickup::class, 'ord_id', 'ord_id');
+        }
+
+        // Parcel record created at checkout (delivery modality)
+        public function parcel()
+        {
+            return $this->hasOne(Parcel::class, 'ord_id', 'ord_id');
+        }
     }

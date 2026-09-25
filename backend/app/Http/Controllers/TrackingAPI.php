@@ -87,7 +87,7 @@
                             'parcel'     => $parcel,
                             'delivery'   => $parcel->delivery,
                             'ord_status' => $order->ord_status,
-                            'qr_code' => $delivery->deliver_qr,
+                            'qr_code'    => $parcel->delivery?->deliver_qr,
                         ]
                     ], 200);
                 }
