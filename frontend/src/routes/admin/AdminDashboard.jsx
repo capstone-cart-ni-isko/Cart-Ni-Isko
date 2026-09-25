@@ -86,7 +86,10 @@ export default function AdminDashboard() {
   )
   const stages = useMemo(() => buildFulfillmentStages(orders), [orders])
   const categorySales = useMemo(() => buildCategorySales(rangeOrders), [rangeOrders])
-  const onDuty = useMemo(() => buildOnDuty(snapshot?.accounts || {}), [snapshot])
+  const onDuty = useMemo(
+    () => buildOnDuty(snapshot?.accounts || {}, snapshot?.shifts || []),
+    [snapshot]
+  )
 
   const recentOrders = orders.slice(0, 5)
   const preOrders = rangeOrders.filter(

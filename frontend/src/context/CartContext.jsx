@@ -17,7 +17,12 @@ const GUEST = 'guest'
 function readLocal() {
   try {
     const saved = localStorage.getItem('isko_cart')
-    return saved ? JSON.parse(saved) : []
+    const items = saved ? JSON.parse(saved) : []
+    // Lines picked from the old offline sample catalog carry no real product
+    // id and can never be saved to the server, so they are dropped.
+    return Array.isArray(items)
+      ? items.filter((i) => (i?.prodId ?? i?.product?.prodId) != null)
+      : []
   } catch {
     return []
   }
@@ -53,9 +58,8 @@ function amountOf(item) {
 function isItemAvailable(item) {
   if (!item || !item.product) return false
   if (item.product.preOrder) return true
-  const stock = item.product.stockMatrix?.[item.color?.name]?.[item.size]
-    ?? item.product.qty ?? 0
-  return stock > 0
+  // One stock number per product (prod_qty); sizes/colours share it.
+  return (Number(item.product.qty) || 0) > 0
 }
 
 /**
@@ -152,17 +156,81 @@ export function CartProvider({ children }) {
     cartItemsRef.current = cartItems
   }, [cartItems])
 
+  // ── Server sync ──
+  // Every cart write runs through one serial queue, so a later step always
+  // sees the order id an earlier "add" created (no duplicate orders), and the
+  // cart is re-read from the server only once the queue is empty.
+  const syncQueueRef = useRef(Promise.resolve())
+  const pendingSyncsRef = useRef(0)
+  const refreshSeqRef = useRef(0)
+  // cartItemId -> server ord_id learned from /cart/add, for lines not yet refreshed
+  const knownOrdIdsRef = useRef({})
+
   /** Pull the server cart; server wins whenever it responds. */
   const refreshCart = useCallback(async () => {
     if (!custId) return null
+    const seq = ++refreshSeqRef.current
     try {
       const rows = await fetchCart(custId)
+      // A newer refresh or a queued write supersedes this response: applying
+      // it would briefly revert changes the user has already made.
+      if (seq !== refreshSeqRef.current || pendingSyncsRef.current > 0) return null
+      knownOrdIdsRef.current = {}
       return hydrateFromRows(rows)
     } catch (err) {
       console.warn('Cart refresh failed, using local cart:', err.message)
       return null
     }
   }, [custId, hydrateFromRows])
+
+  const enqueueSync = useCallback(
+    (task) => {
+      pendingSyncsRef.current += 1
+      const run = syncQueueRef.current.then(task)
+      syncQueueRef.current = run
+        .catch((err) => {
+          // API unreachable: the local cart stays as the read-through fallback.
+          console.warn('Cart sync failed, keeping local change:', err?.message)
+        })
+        .finally(() => {
+          pendingSyncsRef.current -= 1
+          if (pendingSyncsRef.current === 0) refreshCart()
+        })
+      return run
+    },
+    [refreshCart]
+  )
+
+  /** Server ord_id of a line: from the last refresh, or learned from /cart/add since. */
+  const ordIdOf = (item) => item?.ordId ?? knownOrdIdsRef.current[item?.cartItemId] ?? null
+
+  /** Latest local copy of a line (with its known ord_id). */
+  const lineOf = (cartItemId, fallback = null) => {
+    const item = cartItemsRef.current.find((i) => i.cartItemId === cartItemId) || fallback
+    return item ? { ...item, ordId: ordIdOf(item) } : null
+  }
+
+  /** Add qty units of a line to the server cart (its row, a twin row, or a new order). */
+  const syncAdd = (target, qty, { reuseOrder = true } = {}) =>
+    enqueueSync(async () => {
+      const item = lineOf(target.cartItemId, target)
+      const prodId = prodIdOf(item)
+      if (!prodId) return
+      const twin = cartItemsRef.current.find(
+        (i) => i.cartItemId !== item.cartItemId && prodIdOf(i) === prodId && ordIdOf(i)
+      )
+      const ordId = reuseOrder ? item.ordId ?? ordIdOf(twin) : null
+      if (ordId) {
+        await addProductToOrder(ordId, prodId, qty, amountOf(item))
+        knownOrdIdsRef.current[item.cartItemId] = ordId
+        return
+      }
+      const res = await addCartOrder(custId, [
+        { prod_id: prodId, item_qty: qty, item_amount: amountOf(item) },
+      ])
+      const newOrdId = res?.data?.order?.ord_id ?? null
+      if (newOrdId) knownOrdIdsRef.current[item.cartItemId] = newOrdId
+    })
 
   // Whenever the signed-in customer changes, reload from the backend.
   useEffect(() => {
@@ -229,29 +297,6 @@ export function CartProvider({ children }) {
     }
   }, [owner, custId, applyItems, hydrateFromRows])
 
-  /** Fire-and-forget server sync for one item; local state is the fallback. */
-  const pushItem = (item, qtyDelta) => {
-    const prodId = prodIdOf(item)
-    if (!custId || !prodId) return
-    const rows = cartItemsRef.current
-    const twin =
-      (item.ordId ? null : rows.find((i) => i.ordId && prodIdOf(i) === prodId)) ||
-      null
-
-    const run = item.ordId
-      ? addProductToOrder(item.ordId, prodId, qtyDelta, amountOf(item))
-      : twin
-      ? addProductToOrder(twin.ordId, prodId, qtyDelta, amountOf(item))
-      : addCartOrder(custId, [
-          { prod_id: prodId, item_qty: qtyDelta, item_amount: amountOf(item) },
-        ])
-
-    run.then(() => refreshCart()).catch((err) => {
-      // API unreachable: keep the local cart as the read-through fallback.
-      console.warn('Cart sync failed, keeping local change:', err.message)
-    })
-  }
-
   // Add item to cart (local first, then mirror to the backend)
   const addToCart = (product, qty, size, color) => {
     const prev = cartItemsRef.current
@@ -288,7 +333,7 @@ export function CartProvider({ children }) {
     setSelectedItemIds((curr) =>
       curr.includes(target.cartItemId) ? curr : [...curr, target.cartItemId]
     )
-    pushItem(target, qty)
+    if (custId) syncAdd(target, qty)
   }
 
   // Remove item from cart and return it for undo
@@ -297,12 +342,12 @@ export function CartProvider({ children }) {
     applyItems(cartItemsRef.current.filter((item) => item.cartItemId !== cartItemId))
     setSelectedItemIds((prev) => prev.filter((id) => id !== cartItemId))
 
-    if (removedItem && custId && removedItem.ordId && prodIdOf(removedItem)) {
-      removeProductFromOrder(removedItem.ordId, prodIdOf(removedItem))
-        .then(() => refreshCart())
-        .catch((err) => {
-          console.warn('Cart remove sync failed:', err.message)
-        })
+    if (removedItem && custId && prodIdOf(removedItem)) {
+      enqueueSync(async () => {
+        const ordId = ordIdOf(removedItem)
+        if (ordId) await removeProductFromOrder(ordId, prodIdOf(removedItem))
+        delete knownOrdIdsRef.current[cartItemId]
+      })
     }
     return removedItem
   }
@@ -313,11 +358,12 @@ export function CartProvider({ children }) {
     applyItems([item, ...cartItemsRef.current])
     setSelectedItemIds((prev) => (prev.includes(item.cartItemId) ? prev : [...prev, item.cartItemId]))
     // Put the line back on the server row it came from. If that row was the
-    // item's alone it has been deleted, so recreate it as a new cart order.
+    // item's alone it is swept once empty, so recreate it as a new cart order.
+    if (!custId) return
     const rowSurvived = cartItemsRef.current.some(
-      (i) => i.ordId === item.ordId && i.cartItemId !== item.cartItemId
+      (i) => i.ordId && i.ordId === item.ordId && i.cartItemId !== item.cartItemId
     )
-    pushItem(rowSurvived ? item : { ...item, ordId: null }, item.qty)
+    syncAdd(rowSurvived ? item : { ...item, ordId: null }, item.qty, { reuseOrder: rowSurvived })
   }
 
   const updateQuantity = (cartItemId, qty) => {
@@ -335,25 +381,25 @@ export function CartProvider({ children }) {
       prev.map((item) => (item.cartItemId === cartItemId ? { ...item, qty } : item))
     )
 
-    if (!custId || !current.ordId || !prodIdOf(current)) {
-      if (custId) pushItem({ ...current, qty }, qty)
-      return
-    }
+    if (!custId || !prodIdOf(current)) return
 
-    if (delta > 0) {
-      // Merge the extra units into the existing order line.
-      addProductToOrder(current.ordId, prodIdOf(current), delta, amountOf(current))
-        .then(() => refreshCart())
-        .catch((err) => console.warn('Quantity sync failed:', err.message))
-    } else {
-      // Remove then re-add with the new quantity.
-      removeProductFromOrder(current.ordId, prodIdOf(current))
-        .then(() =>
-          addProductToOrder(current.ordId, prodIdOf(current), qty, amountOf(current))
-        )
-        .then(() => refreshCart())
-        .catch((err) => console.warn('Quantity sync failed:', err.message))
-    }
+    // Set the server line to the quantity shown *when this step runs*, so a
+    // burst of +/- clicks settles on the final number.
+    enqueueSync(async () => {
+      const item = lineOf(cartItemId)
+      if (!item) return // removed meanwhile; its own queued step updates the server
+      const prodId = prodIdOf(item)
+      if (!item.ordId) {
+        const res = await addCartOrder(custId, [
+          { prod_id: prodId, item_qty: item.qty, item_amount: amountOf(item) },
+        ])
+        const newOrdId = res?.data?.order?.ord_id ?? null
+        if (newOrdId) knownOrdIdsRef.current[cartItemId] = newOrdId
+        return
+      }
+      await removeProductFromOrder(item.ordId, prodId)
+      await addProductToOrder(item.ordId, prodId, item.qty, amountOf(item))
+    })
   }
 
   const clearCart = () => {
@@ -361,12 +407,11 @@ export function CartProvider({ children }) {
     setSelectedItemIds([])
     if (!custId) return
     // Only CART- tagged rows are deleted, never a checked-out ORD- order.
-    fetchCart(custId)
-      .then((rows) =>
-        Promise.allSettled(rows.map((row) => removeCartOrder(row.ord_id ?? row.id)))
-      )
-      .then(() => refreshCart())
-      .catch((err) => console.warn('Clear cart sync failed:', err.message))
+    enqueueSync(async () => {
+      const rows = await fetchCart(custId)
+      await Promise.allSettled(rows.map((row) => removeCartOrder(row.ord_id ?? row.id)))
+      knownOrdIdsRef.current = {}
+    })
   }
 
   /**
@@ -428,13 +473,7 @@ export function CartProvider({ children }) {
         subtotal,
         total,
         isItemAvailable,
-        canCheckoutItem: (item) => {
-          if (!item || !item.product) return false
-          if (item.product.preOrder) return true
-          const stock = item.product.stockMatrix?.[item.color?.name]?.[item.size]
-            ?? item.product.qty ?? 0
-          return stock > 0
-        },
+        canCheckoutItem: isItemAvailable,
       }}
     >
       {children}

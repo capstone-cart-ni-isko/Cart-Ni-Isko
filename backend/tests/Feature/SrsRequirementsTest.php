@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\CustNotif;
 use App\Models\Customer;
 use App\Models\Delivery;
+use App\Models\DutyShift;
 use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Item;
@@ -283,8 +284,15 @@ class SrsRequirementsTest extends TestCase
             ->assertStatus(409)
             ->assertJson(['success' => false, 'message' => 'Not enough in-store employees available (minimum 2 required)']);
 
-        // One in-store employee unlocks CLAIM slots (minimum is one)
-        $this->makeEmployee(['emp_instore' => 1]);
+        // One employee on a full-day shift unlocks CLAIM slots (minimum is one)
+        $onDuty = $this->makeEmployee();
+        DutyShift::create([
+            'emp_id'      => $onDuty->emp_id,
+            'shift_date'  => $date,
+            'shift_start' => '08:00',
+            'shift_end'   => '18:00',
+            'shift_type'  => 'DESK DUTY',
+        ]);
 
         // --- REQ-SC-01: customers always book on their own behalf ---
         // A mismatched cust_id is refused rather than silently reassigned

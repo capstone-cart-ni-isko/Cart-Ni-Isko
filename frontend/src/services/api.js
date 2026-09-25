@@ -5,13 +5,9 @@ const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1
 export const API_BASE_URL = configuredBaseUrl.replace(/\/$/, '')
 
 let authToken = null
-const cache = new Map()
-const CACHE_TTL = 5 * 60 * 1000
 
 export function setApiToken(token) {
-  const nextToken = token || null
-  if (nextToken !== authToken) cache.clear()
-  authToken = nextToken
+  authToken = token || null
 }
 
 export function getApiToken() {
@@ -58,7 +54,6 @@ export async function apiRequest(path, { method = 'GET', body, headers } = {}) {
     throw new ApiError(data?.message || 'Request failed', response.status, data)
   }
 
-  if (method !== 'GET') cache.clear()
   return data
 }
 
@@ -71,16 +66,10 @@ function withQuery(path, params) {
   return suffix ? `${path}?${suffix}` : path
 }
 
-export async function apiGet(path, params = {}) {
-  const url = withQuery(path, params)
-  if (authToken) return apiRequest(url)
-
-  const cached = cache.get(url)
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data
-
-  const data = await apiRequest(url)
-  cache.set(url, { data, timestamp: Date.now() })
-  return data
+// Reads always go to the server: the API's own read cache (CacheReads) is
+// invalidated on every write, so a browser-side copy would only go stale.
+export function apiGet(path, params = {}) {
+  return apiRequest(withQuery(path, params))
 }
 
 export function apiPost(path, body) {
@@ -95,6 +84,5 @@ export function apiDelete(path, body) {
   return apiRequest(path, { method: 'DELETE', body })
 }
 
-export function invalidateCache() {
-  cache.clear()
-}
+/** Kept for callers that still invalidate after writes; nothing is cached client-side. */
+export function invalidateCache() {}

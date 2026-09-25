@@ -57,7 +57,10 @@ class CacheReads
         $response = $next($request);
 
         if ($response->isSuccessful()) {
-            Cache::increment('api:version');
+            // Not Cache::increment(): on the database store it is a silent
+            // no-op for a missing key, so the version never moved and reads
+            // stayed stale for the full TTL after every write.
+            Cache::forever('api:version', (int) Cache::get('api:version', 0) + 1);
         }
 
         return $response;

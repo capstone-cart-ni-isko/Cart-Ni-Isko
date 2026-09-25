@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth.js'
 import { useCart } from '../hooks/useCart.js'
 import { useWishlist } from '../hooks/useWishlist.js'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ViewAllLink from '../components/ui/ViewAllLink.jsx'
@@ -29,6 +30,8 @@ function ProductDetail() {
   const [product, setProduct] = useState(null)
   const [relatedProducts, setRelatedProducts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   const [selectedSize, setSelectedSize] = useState('')
   const [selectedColor, setSelectedColor] = useState(null)
@@ -46,8 +49,10 @@ function ProductDetail() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
 
-    Promise.all([fetchProduct(id), fetchCatalog()])
+    // Related products are a nice-to-have: their failure never hides the product.
+    Promise.all([fetchProduct(id), fetchCatalog().catch(() => [])])
       .then(([item, catalog]) => {
         if (cancelled) return
         setProduct(item)
@@ -63,10 +68,11 @@ function ProductDetail() {
         setActiveImage(newColor?.image || item?.images?.[0] || '')
         setQty(1)
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
           setProduct(null)
           setRelatedProducts([])
+          setLoadError(err?.message || "Can't reach the store server. Please try again.")
         }
       })
       .finally(() => {
@@ -76,7 +82,7 @@ function ProductDetail() {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, reloadKey])
 
   if (loading) {
     return (
@@ -85,6 +91,18 @@ function ProductDetail() {
           <LoadingSpinner size={32} />
           <p className="text-sm font-semibold text-gray-500">Loading product…</p>
         </div>
+      </AppShell>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <AppShell showNav={true}>
+        <ServerErrorNotice
+          message={loadError}
+          onRetry={() => setReloadKey((k) => k + 1)}
+          className="min-h-[50vh]"
+        />
       </AppShell>
     )
   }
@@ -134,26 +152,13 @@ function ProductDetail() {
     setActiveImage(currentGallery[nextIndex])
   }
 
-  // 2. Stock / Inventory calculation per variant
-  const calculateStock = (colorObj, sizeVal) => {
-    if (product.stockMatrix && colorObj?.name) {
-      const colorStock = product.stockMatrix[colorObj.name]
-      if (colorStock) {
-        if (sizeVal && colorStock[sizeVal] !== undefined) {
-          return colorStock[sizeVal]
-        }
-        const values = Object.values(colorStock)
-        if (values.length > 0) return values[0]
-      }
-    }
-    return product.preOrder
-      ? (product.preOrderInfo?.maxPreOrderQty || 10)
-      : (product.qty ?? 15)
-  }
-
-  const availableStock = calculateStock(selectedColor, selectedSize)
+  // 2. Stock: one number per product (prod_qty), shared by every size/colour -
+  // the same figure the admin edits and checkout deducts.
+  const availableStock = product.preOrder
+    ? (product.preOrderInfo?.maxPreOrderQty || 10)
+    : Number(product.qty) || 0
   const isOutOfStock = !product.preOrder && availableStock === 0
-  const isLowStock = !product.preOrder && availableStock > 0 && availableStock <= 3
+  const isLowStock = !product.preOrder && availableStock > 0 && availableStock <= 5
 
   // Color selection handler
   const handleSelectColor = (color) => {
@@ -162,19 +167,11 @@ function ProductDetail() {
     if (newImage) {
       setActiveImage(newImage)
     }
-    const newStock = calculateStock(color, selectedSize)
-    if (!product.preOrder && qty > newStock) {
-      setQty(Math.max(1, newStock))
-    }
   }
 
   // Size selection handler
   const handleSelectSize = (sz) => {
     setSelectedSize(sz)
-    const newStock = calculateStock(selectedColor, sz)
-    if (!product.preOrder && qty > newStock) {
-      setQty(Math.max(1, newStock))
-    }
   }
 
   const handleAddToCart = () => {
@@ -519,9 +516,7 @@ function ProductDetail() {
                   <div className="flex gap-2.5 flex-wrap">
                     {product.sizes.map((sz) => {
                       const isSelected = selectedSize === sz
-                      const sizeStock =
-                        product.stockMatrix?.[selectedColor?.name]?.[sz] ?? 10
-                      const isSizeOutOfStock = !product.preOrder && sizeStock === 0
+                      const isSizeOutOfStock = isOutOfStock
 
                       return (
                         <button

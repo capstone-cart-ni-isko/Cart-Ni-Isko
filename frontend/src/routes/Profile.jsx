@@ -4,6 +4,9 @@ import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import { apiGet } from '../services/api.js'
+import { fetchOrders } from '../services/orders.js'
+import { fetchNotifications, unreadCount } from '../services/notifications.js'
+import { useWishlist } from '../hooks/useWishlist.js'
 import Avatar from '../components/ui/Avatar.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
@@ -116,6 +119,9 @@ function Profile() {
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
   const [appointments, setAppointments] = useState([])
+  const [orders, setOrders] = useState([])
+  const [unreadNotifs, setUnreadNotifs] = useState(0)
+  const { wishlistItems = [] } = useWishlist() || {}
 
   const handleLogout = () => {
     logout()
@@ -137,12 +143,38 @@ function Profile() {
     return () => { cancelled = true }
   }, [custId])
 
-  const overview = useMemo(() => ({
-    totalOrders: appointments.length,
-    appointments: appointments.filter((a) => !a.appoint_closed).length,
-    completedOrders: appointments.filter((a) => a.appoint_closed || a.appoint_type === 'completed').length,
-    savedItems: 0,
-  }), [appointments])
+  // Real orders (cart rows excluded) and the unread inbox count
+  useEffect(() => {
+    if (!custId) return undefined
+    let cancelled = false
+    fetchOrders(custId)
+      .then((rows) => {
+        if (!cancelled) setOrders(rows || [])
+      })
+      .catch(() => {
+        if (!cancelled) setOrders([])
+      })
+    fetchNotifications('customer', custId)
+      .then((rows) => {
+        if (!cancelled) setUnreadNotifs(unreadCount(rows || []))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [custId])
+
+  const overview = useMemo(() => {
+    const byStatus = (status) =>
+      orders.filter((o) => String(o.ord_status || '').toUpperCase() === status).length
+    return {
+      totalOrders: orders.length,
+      appointments: appointments.filter((a) => !a.appoint_closed).length,
+      completedOrders: byStatus('CLAIMED'),
+      savedItems: wishlistItems.length,
+      inProgress: byStatus('TO PROCESS'),
+      forPickup: byStatus('TO CLAIM'),
+      forDelivery: byStatus('TO RECEIVE'),
+    }
+  }, [orders, appointments, wishlistItems])
 
   return (
     <AccountLayout>
@@ -160,9 +192,11 @@ function Profile() {
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
-              <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white">
-                3
-              </span>
+              {unreadNotifs > 0 && (
+                <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white">
+                  {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                </span>
+              )}
             </Link>
           </div>
         </div>
@@ -309,42 +343,42 @@ function Profile() {
             </div>
 
             <div className="flex items-center justify-between px-1">
-              <Link to="/orders?status=in_progress" className="flex items-center gap-2">
+              <Link to="/orders?tab=processing" className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
                   <PipelineIcon id="in_progress" className="w-4 h-4 text-[#2563EB]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">2</p>
+                  <p className="text-lg font-black text-gray-900 leading-none">{overview.inProgress}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">In Progress</p>
                 </div>
               </Link>
               <span className="text-gray-300 font-light text-xs">→</span>
-              <Link to="/orders?status=for_pickup" className="flex items-center gap-2">
+              <Link to="/orders?tab=receive" className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-[#FFF4E5] text-[#FF6A00] flex items-center justify-center">
                   <PipelineIcon id="for_pickup" className="w-4 h-4 text-[#FF6A00]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">3</p>
+                  <p className="text-lg font-black text-gray-900 leading-none">{overview.forPickup}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">For Pickup</p>
                 </div>
               </Link>
               <span className="text-gray-300 font-light text-xs">→</span>
-              <Link to="/orders?status=for_delivery" className="flex items-center gap-2">
+              <Link to="/orders?tab=receive" className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-[#E8F8EE] text-[#10B981] flex items-center justify-center">
                   <PipelineIcon id="for_delivery" className="w-4 h-4 text-[#10B981]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">5</p>
+                  <p className="text-lg font-black text-gray-900 leading-none">{overview.forDelivery}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">For Delivery</p>
                 </div>
               </Link>
               <span className="text-gray-300 font-light text-xs">→</span>
-              <Link to="/orders?status=completed" className="flex items-center gap-2">
+              <Link to="/orders?tab=history" className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-[#F3E8FF] text-[#8B5CF6] flex items-center justify-center">
                   <PipelineIcon id="completed" className="w-4 h-4 text-[#8B5CF6]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">2</p>
+                  <p className="text-lg font-black text-gray-900 leading-none">{overview.completedOrders}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">Completed</p>
                 </div>
               </Link>
@@ -494,42 +528,42 @@ function Profile() {
               </div>
 
               <div className="grid grid-cols-4 gap-2.5 pt-1">
-                <Link to="/orders?status=in_progress" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-blue-50/60 border border-blue-100/70 hover:bg-blue-50 transition-colors group">
+                <Link to="/orders?tab=processing" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-blue-50/60 border border-blue-100/70 hover:bg-blue-50 transition-colors group">
                   <div className="w-9 h-9 rounded-lg bg-blue-100 text-[#2563EB] flex items-center justify-center shrink-0">
                     <PipelineIcon id="in_progress" className="w-4.5 h-4.5 text-[#2563EB]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">2</p>
+                    <p className="text-lg font-black text-gray-900 leading-none">{overview.inProgress}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">In Progress</p>
                   </div>
                 </Link>
 
-                <Link to="/orders?status=for_pickup" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-orange-50/60 border border-orange-100/70 hover:bg-orange-50 transition-colors group">
+                <Link to="/orders?tab=receive" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-orange-50/60 border border-orange-100/70 hover:bg-orange-50 transition-colors group">
                   <div className="w-9 h-9 rounded-lg bg-orange-100 text-brand-orange flex items-center justify-center shrink-0">
                     <PipelineIcon id="for_pickup" className="w-4.5 h-4.5 text-brand-orange" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">3</p>
+                    <p className="text-lg font-black text-gray-900 leading-none">{overview.forPickup}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">For Pickup</p>
                   </div>
                 </Link>
 
-                <Link to="/orders?status=for_delivery" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100/70 hover:bg-emerald-50 transition-colors group">
+                <Link to="/orders?tab=receive" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100/70 hover:bg-emerald-50 transition-colors group">
                   <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
                     <PipelineIcon id="for_delivery" className="w-4.5 h-4.5 text-emerald-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">5</p>
+                    <p className="text-lg font-black text-gray-900 leading-none">{overview.forDelivery}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">For Delivery</p>
                   </div>
                 </Link>
 
-                <Link to="/orders?status=completed" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-purple-50/60 border border-purple-100/70 hover:bg-purple-50 transition-colors group">
+                <Link to="/orders?tab=history" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-purple-50/60 border border-purple-100/70 hover:bg-purple-50 transition-colors group">
                   <div className="w-9 h-9 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
                     <PipelineIcon id="completed" className="w-4.5 h-4.5 text-purple-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">2</p>
+                    <p className="text-lg font-black text-gray-900 leading-none">{overview.completedOrders}</p>
                     <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">Completed</p>
                   </div>
                 </Link>

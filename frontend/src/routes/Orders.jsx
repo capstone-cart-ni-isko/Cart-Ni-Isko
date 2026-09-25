@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
@@ -138,7 +138,12 @@ function Orders() {
   const { currentUser } = useAuth()
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
-  const [activeTab, setActiveTab] = useState('all')
+  // ?tab= deep links (e.g. from My Account's order status shortcuts)
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = searchParams.get('tab')
+    return tabs.some((t) => t.key === requested) ? requested : 'all'
+  })
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)

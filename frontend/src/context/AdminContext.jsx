@@ -37,7 +37,13 @@ export function AdminProvider({ children }) {
   const [currentAdminUser, setCurrentAdminUser] = useState(() => {
     const saved = loadSession('staff')
     if (saved) setApiToken(saved.token)
-    return saved?.user ?? null
+    const user = saved?.user ?? null
+    // Sessions saved before the SUPER_ADMIN spelling fix carry roleKey
+    // 'ADMIN'; re-derive it from the raw type so no re-login is needed.
+    if (user && user.roleKey !== 'SUPER_ADMIN' && /super[\s_]*admin/i.test(String(user.type || ''))) {
+      return { ...user, role: 'Super Admin', roleKey: 'SUPER_ADMIN', permissions: 'Full System Access' }
+    }
+    return user
   })
 
   useEffect(() => {
@@ -98,6 +104,26 @@ export function AdminProvider({ children }) {
 
   const refreshProducts = useCallback(() => {
     setProductsRefreshKey((k) => k + 1)
+  }, [])
+
+  /** Optimistically patch one inventory row; the follow-up refetch confirms it. */
+  const patchProduct = useCallback((numericId, patch) => {
+    setProducts((list) =>
+      list.map((p) => {
+        if (p.id !== `prod-${numericId}`) return p
+        const next = { ...p, ...(typeof patch === 'function' ? patch(p) : patch) }
+        const qty = Number(next.totalStock) || 0
+        return {
+          ...next,
+          availability: next.preOrder ? 'Pre-order' : qty > 0 ? 'Regular' : 'Out of Stock',
+          variants: (next.variants || []).map((v) => ({
+            ...v,
+            stock: qty,
+            status: qty > 0 ? 'In Stock' : 'Out of Stock',
+          })),
+        }
+      })
+    )
   }, [])
 
   // Fetch orders from backend (mount + every refreshOrders() call - the pages
@@ -243,6 +269,12 @@ export function AdminProvider({ children }) {
     const numericId = toNumericProductId(productId)
     if (numericId === null) return { success: false, error: 'Invalid product ID.' }
     try {
+      patchProduct(numericId, {
+        ...(updatedFields.prod_name !== undefined ? { name: updatedFields.prod_name } : {}),
+        ...(updatedFields.prod_desc !== undefined ? { description: updatedFields.prod_desc } : {}),
+        ...(updatedFields.prod_price !== undefined ? { price: Number(updatedFields.prod_price) || 0 } : {}),
+        ...(updatedFields.prod_qty !== undefined ? { totalStock: Math.max(0, Number(updatedFields.prod_qty) || 0) } : {}),
+      })
       await updateAdminProductAPI(numericId, updatedFields)
       showToast('Product updated successfully!', 'success')
       refreshProducts()
@@ -253,7 +285,7 @@ export function AdminProvider({ children }) {
       refreshProducts()
       return { success: false, error: e.message || 'Failed to update product.' }
     }
-  }, [refreshProducts, showToast])
+  }, [refreshProducts, showToast, patchProduct])
 
   const deleteProduct = useCallback(async (productId) => {
     const numericId = toNumericProductId(productId)
@@ -275,6 +307,7 @@ export function AdminProvider({ children }) {
     const numericId = toNumericProductId(productId)
     if (numericId === null) return { success: false, error: 'Invalid product ID.' }
     try {
+      patchProduct(numericId, { disabled: true, published: false, status: 'Unlisted' })
       await unlistAdminProductAPI(numericId)
       showToast('Product unlisted from the customer catalog.', 'success')
       refreshProducts()
@@ -285,12 +318,17 @@ export function AdminProvider({ children }) {
       refreshProducts()
       return { success: false, error: e.message || 'Failed to unlist product.' }
     }
-  }, [refreshProducts, showToast])
+  }, [refreshProducts, showToast, patchProduct])
 
   const sellProduct = useCallback(async (productId) => {
     const numericId = toNumericProductId(productId)
     if (numericId === null) return { success: false, error: 'Invalid product ID.' }
     try {
+      patchProduct(numericId, (p) => ({
+        disabled: false,
+        published: true,
+        status: (Number(p.totalStock) || 0) > 0 ? 'Published' : 'Out of Stock',
+      }))
       await sellAdminProductAPI(numericId)
       showToast('Product listed back for sale.', 'success')
       refreshProducts()
@@ -301,12 +339,13 @@ export function AdminProvider({ children }) {
       refreshProducts()
       return { success: false, error: e.message || 'Failed to list product for sale.' }
     }
-  }, [refreshProducts, showToast])
+  }, [refreshProducts, showToast, patchProduct])
 
   const adjustStock = useCallback(async (productId, newStock) => {
     const numericId = toNumericProductId(productId)
     if (numericId === null) return
     try {
+      patchProduct(numericId, { totalStock: Math.max(0, newStock) })
       await updateAdminProductAPI(numericId, { prod_qty: Math.max(0, newStock) })
       refreshProducts()
     } catch (e) {
@@ -314,7 +353,7 @@ export function AdminProvider({ children }) {
       showToast(e.message || 'Failed to adjust stock.', 'error')
       refreshProducts()
     }
-  }, [refreshProducts, showToast])
+  }, [refreshProducts, showToast, patchProduct])
 
   // ── ALERTS ACTIONS ──
   // Alerts are derived from live data, so "resolving" one records the dismissal

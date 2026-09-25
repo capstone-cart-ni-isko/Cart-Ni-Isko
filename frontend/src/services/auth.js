@@ -93,7 +93,8 @@ export function mapEmployee(employeeData) {
   let roleKey = 'STAFF'
   let permissions = 'Fulfillment, Orders, POS'
   let modules = ['orders']
-  if (/super\s*admin|root/i.test(rawType)) {
+  // [\s_]: older seeds stored "SUPER_ADMIN"; the canonical value is "SUPER ADMIN".
+  if (/super[\s_]*admin|root/i.test(rawType)) {
     role = 'Super Admin'
     roleKey = 'SUPER_ADMIN'
     permissions = 'Full System Access'

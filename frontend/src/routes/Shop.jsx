@@ -5,6 +5,7 @@ import ProductCard from '../components/ui/ProductCard.jsx'
 import FiltersModal from '../components/ui/FiltersModal.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import backIcon from '../assets/icons/common/back.svg'
 import searchIcon from '../assets/icons/common/search.svg'
 
@@ -13,7 +14,7 @@ const categories = ['All', 'Shirts', 'Hoodie', 'Varsity Jacket', 'Accessories', 
 function Shop() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { products: productsData, loading } = useCatalog()
+  const { products: productsData, loading, error, reload } = useCatalog()
 
   const [query, setQuery] = useState('')
   const [filterModalOpen, setFilterModalOpen] = useState(false)
@@ -246,6 +247,8 @@ function Shop() {
               <LoadingSpinner size={28} />
               <span className="text-sm font-semibold text-gray-500">Loading catalog…</span>
             </div>
+          ) : error ? (
+            <ServerErrorNotice message={error} onRetry={reload} />
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-20 animate-fade-in">
               <div className="w-16 h-16 bg-gray-55 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">

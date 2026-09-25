@@ -201,6 +201,52 @@ class OrderFulfillmentIntegrationTest extends TestCase
     }
 
     // ==========================================
+    // READ CACHE INVALIDATION
+    // ==========================================
+
+    public function test_writes_invalidate_cached_reads_on_the_database_cache_store()
+    {
+        // The dev/prod store; Cache::increment on a missing key is a no-op here
+        config(['cache.default' => 'database']);
+
+        $admin = $this->makeEmployee('ADMIN');
+        $product = $this->makeProduct();
+
+        $this->json('GET', '/api/products/view', ['prod_id' => $product->prod_id])
+            ->assertStatus(200)
+            ->assertJsonPath('data.prod_qty', 50);
+
+        $this->putJson('/api/products/update', ['prod_id' => $product->prod_id, 'prod_qty' => 3], $this->headers($admin))
+            ->assertStatus(200);
+
+        $this->app['auth']->forgetGuards();
+        $this->json('GET', '/api/products/view', ['prod_id' => $product->prod_id])
+            ->assertStatus(200)
+            ->assertJsonPath('data.prod_qty', 3);
+    }
+
+    // ==========================================
+    // SUPER ADMIN TYPE SPELLINGS
+    // ==========================================
+
+    public function test_legacy_super_admin_spelling_keeps_super_admin_rights()
+    {
+        $legacy = $this->makeEmployee('SUPER_ADMIN');
+        $staff = $this->makeEmployee();
+
+        // Only a super admin may edit another employee's account
+        $this->putJson('/api/accounts/update', [
+            'account_type' => 'employee',
+            'user_id'      => $staff->emp_id,
+            'emp_instore'  => true,
+        ], $this->headers($legacy))->assertStatus(200);
+
+        // The data migration rewrites the legacy value to the canonical one
+        (require database_path('migrations/2026_09_28_000000_normalize_super_admin_type.php'))->up();
+        $this->assertSame('SUPER ADMIN', $legacy->fresh()->emp_type);
+    }
+
+    // ==========================================
     // DELIVERY TRACKING
     // ==========================================
 

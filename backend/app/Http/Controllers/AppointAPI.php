@@ -4,6 +4,7 @@
 
     use App\Models\Appointment;
     use App\Models\Customer;
+    use App\Models\DutyShift;
     use App\Models\Employee;
     use Illuminate\Http\Request;
     use Illuminate\Support\Carbon;
@@ -104,10 +105,9 @@
                     ->where('appoint_date', '>=', $open)
                     ->where('appoint_date', '<', $close)
                     ->get(['appoint_type', 'appoint_date']);
-                $inStore = Employee::where('emp_instore', true)
-                    ->whereNull('emp_disabled')
-                    ->whereNull('emp_deleted')
-                    ->count();
+                // Staffing comes from the day's duty shifts: an employee counts
+                // for a slot only when their shift covers the whole block
+                $shifts = DutyShift::activeOn($date);
                 $capacities = [
                     'CLAIM' => (int) $this->settingValue('max_claiming_slots', 10),
                     'VISIT' => (int) $this->settingValue('max_visit_slots', 1),
@@ -127,6 +127,8 @@
                             return $at->gte($start) && $at->lt($end);
                         })->count();
 
+                        $inStore = DutyShift::staffCovering($start, $end, $shifts);
+
                         $reason = null;
                         if ($booked >= $capacities[$type]) {
                             $reason = 'Slot fully booked';
@@ -140,6 +142,7 @@
                             'type'      => $type,
                             'booked'    => $booked,
                             'capacity'  => $capacities[$type],
+                            'staff'     => $inStore,
                             'available' => $reason === null,
                             'reason'    => $reason,
                         ];
@@ -515,13 +518,10 @@
                 ->where('appoint_date', '<', $end)
                 ->count();
 
-            // Staffing: VISIT needs at least two in-store employees,
-            // CLAIM needs at least one (REQ-AB-03 / REQ-SC-03)
+            // Staffing: VISIT needs at least two employees on shift for the
+            // whole block, CLAIM needs at least one (REQ-AB-03 / REQ-SC-03)
             $minStaff = $type === 'CLAIM' ? 1 : 2;
-            $inStore = Employee::where('emp_instore', true)
-                ->whereNull('emp_disabled')
-                ->whereNull('emp_deleted')
-                ->count();
+            $inStore = DutyShift::staffCovering($start, $end);
 
             $reason = null;
             if ($booked >= $capacity) {

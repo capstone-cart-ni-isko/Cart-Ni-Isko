@@ -1,30 +1,53 @@
-import React, { useState, useMemo, useRef } from 'react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { uploadImage } from '../../services/upload.js'
+import { fetchSettings } from '../../services/settings.js'
+
+const DEFAULT_LOW_STOCK = 5
+
+/** Stock bucket for one product, using the store's low-stock threshold. */
+function stockStatusOf(prod, lowStockAt) {
+  const qty = Number(prod.totalStock) || 0
+  if (qty <= 0) return 'Out of Stock'
+  if (qty <= lowStockAt) return 'Low Stock'
+  return 'In Stock'
+}
 
 export default function AdminInventory() {
   const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, products: backendProducts } = useAdmin()
 
   // Product data state - synced directly from backend (refetched on every change)
   const productsList = backendProducts
-  const [expandedRows, setExpandedRows] = useState({ 'prod-01': true }) // Row 1 expanded by default (Photo 3)
-  const [selectedVariantIds, setSelectedVariantIds] = useState(['var-1', 'var-2']) // Two selected by default (Photo 3)
+  const [expandedRows, setExpandedRows] = useState({})
+  const [selectedVariantIds, setSelectedVariantIds] = useState([])
   const [selectedProductIds, setSelectedProductIds] = useState([])
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterCollection, setFilterCollection] = useState('All')
   const [filterCategory, setFilterCategory] = useState('All')
   const [filterAvailability, setFilterAvailability] = useState('All')
   const [filterStockStatus, setFilterStockStatus] = useState('All')
   const [filterPublication, setFilterPublication] = useState('All')
   const [sortBy, setSortBy] = useState('featured')
 
-  // Active tags (demonstrating the mockup tag chips)
-  const [activeTags, setActiveTags] = useState(['2026 Collection', 'Pre-order'])
+  // Low-stock threshold from store settings (REQ-IM-03), same value the
+  // backend uses for its low-stock alerts.
+  const [lowStockAt, setLowStockAt] = useState(DEFAULT_LOW_STOCK)
+  useEffect(() => {
+    let cancelled = false
+    fetchSettings()
+      .then((s) => {
+        const value = Number(s?.low_stock_threshold)
+        if (!cancelled && Number.isFinite(value) && value >= 0) setLowStockAt(value)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Batch stock adjustment state
   const [batchActionType, setBatchActionType] = useState('add')
@@ -114,14 +137,6 @@ export default function AdminInventory() {
     )
   }
 
-  // Stock stepper increment / decrement (calls backend)
-  const handleVariantStockChange = (prodId, varId, delta) => {
-    const product = productsList.find((p) => p.id === prodId)
-    if (!product) return
-    const newTotal = Math.max(0, product.totalStock + delta)
-    adjustStock(prodId, newTotal)
-  }
-
   // Batch Apply stock change (calls backend)
   const handleApplyBatchStock = () => {
     const qty = parseInt(batchQtyInput, 10)
@@ -148,13 +163,6 @@ export default function AdminInventory() {
     setBatchQtyInput('')
   }
 
-  // Clear active tags
-  const removeTag = (tag) => {
-    setActiveTags((prev) => prev.filter((t) => t !== tag))
-  }
-  const clearAllTags = () => {
-    setActiveTags([])
-  }
 
   // Add Product Form submit (calls backend; keeps input on failure per REQ-IM-01)
   const handleCreateProduct = async (e) => {
@@ -215,17 +223,64 @@ export default function AdminInventory() {
     setDeleteTarget(null)
   }
 
-  // Filtered list
-  const filteredProducts = useMemo(() => {
-    return productsList.filter((p) => {
-      const matchSearch =
-        !searchQuery ||
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.categoryName.toLowerCase().includes(searchQuery.toLowerCase())
-      return matchSearch
+  // Category choices come from the live catalog, not a fixed list.
+  const categoryOptions = useMemo(
+    () => [...new Set(productsList.map((p) => p.categoryName).filter(Boolean))].sort(),
+    [productsList]
+  )
+
+  // Live KPI cards (whole catalog, independent of the filters below).
+  const kpis = useMemo(() => {
+    let low = 0
+    let out = 0
+    let preorders = 0
+    productsList.forEach((p) => {
+      if (p.preOrder) {
+        preorders += 1
+        return
+      }
+      const bucket = stockStatusOf(p, lowStockAt)
+      if (bucket === 'Low Stock') low += 1
+      else if (bucket === 'Out of Stock') out += 1
     })
-  }, [productsList, searchQuery])
+    return { total: productsList.length, low, out, preorders }
+  }, [productsList, lowStockAt])
+
+  const hasActiveFilters =
+    filterCategory !== 'All' ||
+    filterAvailability !== 'All' ||
+    filterStockStatus !== 'All' ||
+    filterPublication !== 'All'
+
+  const clearFilters = () => {
+    setFilterCategory('All')
+    setFilterAvailability('All')
+    setFilterStockStatus('All')
+    setFilterPublication('All')
+  }
+
+  // Filtered + sorted list
+  const filteredProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    const rows = productsList.filter((p) => {
+      const matchSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.categoryName.toLowerCase().includes(q)
+      const matchCategory = filterCategory === 'All' || p.categoryName === filterCategory
+      const matchAvailability = filterAvailability === 'All' || p.availability === filterAvailability
+      const matchStock = filterStockStatus === 'All' || stockStatusOf(p, lowStockAt) === filterStockStatus
+      const matchPublication =
+        filterPublication === 'All' ||
+        (filterPublication === 'Listed' ? !p.disabled : p.disabled)
+      return matchSearch && matchCategory && matchAvailability && matchStock && matchPublication
+    })
+    if (sortBy === 'price-asc') return [...rows].sort((a, b) => a.price - b.price)
+    if (sortBy === 'price-desc') return [...rows].sort((a, b) => b.price - a.price)
+    if (sortBy === 'orders-desc') return [...rows].sort((a, b) => b.orders - a.orders)
+    return rows
+  }, [productsList, searchQuery, filterCategory, filterAvailability, filterStockStatus, filterPublication, sortBy, lowStockAt])
 
   return (
     <AdminLayout>
@@ -272,7 +327,7 @@ export default function AdminInventory() {
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">TOTAL PRODUCTS</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{filteredProducts.length}</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{kpis.total}</h3>
             </div>
           </div>
 
@@ -286,8 +341,8 @@ export default function AdminInventory() {
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">LOW STOCK</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">12</h3>
+              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400" title={`1–${lowStockAt} units left`}>LOW STOCK</p>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{kpis.low}</h3>
             </div>
           </div>
 
@@ -302,7 +357,7 @@ export default function AdminInventory() {
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">OUT OF STOCK</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">3</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{kpis.out}</h3>
             </div>
           </div>
 
@@ -316,7 +371,7 @@ export default function AdminInventory() {
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">PRE-ORDERS</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">45</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{kpis.preorders}</h3>
             </div>
           </div>
         </div>
@@ -347,15 +402,6 @@ export default function AdminInventory() {
 
             {/* Dropdown Filters */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
-              <select
-                value={filterCollection}
-                onChange={(e) => setFilterCollection(e.target.value)}
-                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
-              >
-                <option value="All">Collection ▾</option>
-                <option value="2026 Collection">2026 Collection</option>
-                <option value="Core Classics">Core Classics</option>
-              </select>
 
               <select
                 value={filterCategory}
@@ -363,10 +409,9 @@ export default function AdminInventory() {
                 className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="All">Category ▾</option>
-                <option value="Shirts">Shirts</option>
-                <option value="Hoodies">Hoodies</option>
-                <option value="Lanyards">Lanyards</option>
-                <option value="Caps">Caps</option>
+                {categoryOptions.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
 
               <select
@@ -377,6 +422,7 @@ export default function AdminInventory() {
                 <option value="All">Availability ▾</option>
                 <option value="Regular">Regular</option>
                 <option value="Pre-order">Pre-order</option>
+                <option value="Out of Stock">Out of Stock</option>
               </select>
 
               <select
@@ -395,9 +441,9 @@ export default function AdminInventory() {
                 onChange={(e) => setFilterPublication(e.target.value)}
                 className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
-                <option value="All">Publication ▾</option>
-                <option value="Published">Published</option>
-                <option value="Draft">Draft</option>
+                <option value="All">Listing ▾</option>
+                <option value="Listed">Listed</option>
+                <option value="Unlisted">Unlisted</option>
               </select>
 
               <select
@@ -408,35 +454,22 @@ export default function AdminInventory() {
                 <option value="featured">Sort by ▾</option>
                 <option value="price-asc">Price: Low to High</option>
                 <option value="price-desc">Price: High to Low</option>
-                <option value="orders-desc">Most Orders</option>
+                <option value="orders-desc">Best Sellers</option>
               </select>
             </div>
           </div>
 
-          {/* Active Filter Chips Row */}
-          {activeTags.length > 0 && (
-            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 flex-wrap">
-              {activeTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200"
-                >
-                  <span>{tag}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeTag(tag)}
-                    className="text-slate-400 hover:text-slate-700 cursor-pointer text-sm font-bold"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
+          {hasActiveFilters && (
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+              <span>
+                Showing {filteredProducts.length} of {productsList.length} products
+              </span>
               <button
                 type="button"
-                onClick={clearAllTags}
-                className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer ml-1"
+                onClick={clearFilters}
+                className="font-semibold text-brand-orange hover:underline cursor-pointer"
               >
-                Clear all
+                Clear filters
               </button>
             </div>
           )}
@@ -521,7 +554,6 @@ export default function AdminInventory() {
                         {/* Category Column */}
                         <td className="p-4">
                           <p className="font-bold text-gray-900 text-xs">{prod.categoryName}</p>
-                          <p className="text-[10px] text-gray-400">{prod.collectionName}</p>
                         </td>
 
                         {/* Availability Column - Rectangular Badge */}
@@ -663,7 +695,7 @@ export default function AdminInventory() {
                                       <th className="px-3 py-2 w-8" />
                                       <th className="px-3 py-2">VARIANT</th>
                                       <th className="px-3 py-2">SKU</th>
-                                      <th className="px-3 py-2">STOCK</th>
+                                      <th className="px-3 py-2">STOCK (SHARED)</th>
                                       <th className="px-3 py-2">PRICE</th>
                                       <th className="px-3 py-2">STATUS</th>
                                       <th className="px-3 py-2">LAST UPDATED</th>
@@ -698,26 +730,14 @@ export default function AdminInventory() {
                                             {variant.sku}
                                           </td>
                                           <td className="px-3 py-2">
-                                            {/* Stepper [- count +] - Rectangular */}
-                                            <div className="inline-flex items-center border border-gray-200 rounded-md bg-white overflow-hidden shadow-2xs">
-                                              <button
-                                                type="button"
-                                                onClick={() => handleVariantStockChange(prod.id, variant.id, -1)}
-                                                className="px-2.5 py-1 text-gray-500 hover:bg-gray-100 font-bold text-xs cursor-pointer"
-                                              >
-                                                −
-                                              </button>
-                                              <span className="px-3 py-1 font-bold text-gray-900 text-xs min-w-[28px] text-center">
-                                                {variant.stock}
-                                              </span>
-                                              <button
-                                                type="button"
-                                                onClick={() => handleVariantStockChange(prod.id, variant.id, 1)}
-                                                className="px-2.5 py-1 text-gray-500 hover:bg-gray-100 font-bold text-xs cursor-pointer"
-                                              >
-                                                +
-                                              </button>
-                                            </div>
+                                            {/* Sizes/colours share the product's one stock number
+                                                (edit it with the product's Edit button or the batch bar). */}
+                                            <span
+                                              className="text-xs text-gray-500"
+                                              title="All sizes share this product's stock"
+                                            >
+                                              Shared · <strong className="text-gray-900">{variant.stock}</strong>
+                                            </span>
                                           </td>
                                           <td className="px-3 py-2 font-extrabold text-gray-900 text-xs">
                                             ₱{variant.price.toFixed(2)}

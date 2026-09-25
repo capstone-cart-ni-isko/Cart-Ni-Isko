@@ -28,11 +28,12 @@ abstract class Controller
         return $user instanceof Employee;
     }
 
-    // True when the employee account carries the SUPER ADMIN type (REQ-UM-01)
+    // True when the employee account carries the SUPER ADMIN type (REQ-UM-01).
+    // Also accepts the legacy "SUPER_ADMIN" spelling from older seeds.
     protected function isSuperAdmin($user): bool
     {
         return $user instanceof Employee
-            && stripos((string) $user->emp_type, 'SUPER ADMIN') !== false;
+            && preg_match('/SUPER[\s_]*ADMIN/i', (string) $user->emp_type) === 1;
     }
 
     protected function isAdmin($user): bool

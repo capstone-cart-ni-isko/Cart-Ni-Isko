@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
+import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import Avatar from '../components/ui/Avatar.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
@@ -197,7 +198,7 @@ function Home() {
     }
   }
 
-  const { products: productsData } = useCatalog()
+  const { products: productsData, error: catalogError, reload: reloadCatalog } = useCatalog()
   const featuredProductsMobile = productsData.slice(0, 4)
   const featuredProductsDesktop = productsData.slice(0, 8)
 
@@ -365,11 +366,15 @@ function Home() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {featuredProductsMobile.map((prod) => (
-              <ProductCard key={prod.id} product={prod} />
-            ))}
-          </div>
+          {catalogError ? (
+            <ServerErrorNotice message={catalogError} onRetry={reloadCatalog} className="py-8" />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {featuredProductsMobile.map((prod) => (
+                <ProductCard key={prod.id} product={prod} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 4. How It Works Section (Mobile) */}
@@ -563,11 +568,15 @@ function Home() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-4 gap-6">
-            {featuredProductsDesktop.map((prod) => (
-              <ProductCard key={prod.id} product={prod} />
-            ))}
-          </div>
+          {catalogError ? (
+            <ServerErrorNotice message={catalogError} onRetry={reloadCatalog} />
+          ) : (
+            <div className="grid grid-cols-4 gap-6">
+              {featuredProductsDesktop.map((prod) => (
+                <ProductCard key={prod.id} product={prod} />
+              ))}
+            </div>
+          )}
         </section>
 
         {/* 4. How It Works Section (Desktop) */}

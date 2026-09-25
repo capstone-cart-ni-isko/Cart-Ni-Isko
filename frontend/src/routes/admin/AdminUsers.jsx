@@ -49,7 +49,7 @@ function normalizeAccountList(payload) {
 function roleFromAccountType(group, rawType) {
   if (group === 'customer') return 'Customer'
   const t = String(rawType || '')
-  if (/super\s*admin|root/i.test(t)) return 'Super Admin'
+  if (/super[\s_]*admin|root/i.test(t)) return 'Super Admin'
   if (/admin|manager|officer/i.test(t)) return 'Admin'
   return 'Staff'
 }

@@ -1,5 +1,31 @@
 import { apiGet } from './api.js'
-import localProducts from '../data/products.json'
+
+// The single-threaded dev server can be slow under parallel requests; give it
+// time instead of giving up early.
+const REQUEST_TIMEOUT_MS = 15000
+
+function withTimeout(promise) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Can't reach the store server. Please try again.")), REQUEST_TIMEOUT_MS)
+    ),
+  ])
+}
+
+/** Sizes/colours are options only; the legacy stock matrix's keys still name them. */
+function colorsFromMatrix(matrix, fallback) {
+  const names = matrix && typeof matrix === 'object' ? Object.keys(matrix) : []
+  if (names.length === 0) return fallback
+  const image = fallback[0]?.image
+  return names.map((name) => ({ name, value: name, image, gallery: image ? [image] : [] }))
+}
+
+function sizesFromMatrix(matrix, fallback) {
+  const first = matrix && typeof matrix === 'object' ? Object.values(matrix)[0] : null
+  const sizes = first && typeof first === 'object' ? Object.keys(first) : []
+  return sizes.length > 0 ? sizes : fallback
+}
 
 const CATEGORY_ALIASES = {
   HOODIE: 'Hoodie',
@@ -79,8 +105,8 @@ export function mapProduct(row) {
 
   return {
     ...fallback,
-    sizes: row.prod_sizes || fallback.sizes,
-    colors: row.prod_colors || fallback.colors,
+    sizes: row.prod_sizes || sizesFromMatrix(row.prod_stock_matrix, fallback.sizes),
+    colors: row.prod_colors || colorsFromMatrix(row.prod_stock_matrix, fallback.colors),
     images: row.prod_images || fallback.images,
     preOrder: row.prod_preorder ?? preOrder,
     details: row.prod_details || fallback.details,
@@ -88,7 +114,9 @@ export function mapProduct(row) {
     reviewCount: row.prod_review_count ?? 0,
     ratingBreakdown: row.prod_rating_breakdown || fallback.ratingBreakdown,
     reviews: row.prod_reviews || [],
-    stockMatrix: row.prod_stock_matrix || {},
+    // Stock is one number per product (prod_qty): the admin edits it and
+    // checkout deducts it. Per-size counts are intentionally not exposed.
+    stockMatrix: {},
     id: tag,
     prodId: row.prod_id,
     name: row.prod_name || tag,
@@ -103,34 +131,24 @@ export function mapProduct(row) {
   }
 }
 
+/** GET /products/filter - live catalog. Throws when the server can't be reached. */
 export async function fetchCatalog(params = {}) {
-  try {
-    const data = await Promise.race([
-      apiGet('/products/filter', { status: 'active', ...params }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('API Timeout')), 4000))
-    ])
-    const rows = (data.data || []).map(mapProduct).filter(Boolean)
-    if (rows.length > 0) return rows
-  } catch (err) {
-    console.warn('API catalog fetch failed or timed out, using fallback catalog:', err?.message || err)
-  }
-  return localProducts
+  const data = await withTimeout(apiGet('/products/filter', { status: 'active', ...params }))
+  return (data.data || []).map(mapProduct).filter(Boolean)
 }
 
+/** GET /products/view - one product, or null when it doesn't exist. Throws on network failure. */
 export async function fetchProduct(id) {
   const isNumeric = /^\d+$/.test(String(id))
   try {
-    const data = await Promise.race([
-      apiGet('/products/view', isNumeric ? { prod_id: id } : { prod_tag: id }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('API Timeout')), 4000))
-    ])
-    if (data?.data) {
-      return mapProduct(data.data)
-    }
+    const data = await withTimeout(
+      apiGet('/products/view', isNumeric ? { prod_id: id } : { prod_tag: id })
+    )
+    return data?.data ? mapProduct(data.data) : null
   } catch (err) {
-    console.warn('API product fetch failed, checking local catalog:', err?.message || err)
+    if (err?.status === 404) return null
+    throw err
   }
-  return localProducts.find((p) => p.id === String(id) || String(p.prod_id) === String(id)) || null
 }
 
 export async function fetchProductReviews(prodId) {

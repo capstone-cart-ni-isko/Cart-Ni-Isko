@@ -9,7 +9,7 @@ import {
   closeAppointment,
   SLOT_RULES,
 } from '../../services/appointments.js'
-import { fetchAccounts } from '../../services/accounts.js'
+import { fetchShifts } from '../../services/duty.js'
 import { logAction } from '../../services/access.js'
 
 // ── Date / time helpers (Schedule Calendar, REQ-SC-01 master view) ─────────
@@ -130,26 +130,16 @@ export default function AdminAppointments() {
     loadSchedule(selectedDate)
   }, [selectedDate, reloadKey, loadSchedule])
 
-  // In-store headcount (REQ-AB-03 thresholds drive the summary copy)
+  // Staff on shift that day (REQ-AB-03 thresholds drive the summary copy)
   useEffect(() => {
     let cancelled = false
-    fetchAccounts({ account_type: 'employee' })
-      .then((payload) => {
-        if (cancelled) return
-        const employees = Array.isArray(payload?.employees)
-          ? payload.employees
-          : Array.isArray(payload)
-          ? payload.filter((r) => r.emp_id != null)
-          : []
-        const count = employees.filter((r) => {
-          const v = r.emp_instore
-          return v === true || v === 1 || v === '1'
-        }).length
-        setInStoreStaff(count)
+    fetchShifts(dayKey(selectedDate))
+      .then(({ shifts }) => {
+        if (!cancelled) setInStoreStaff(new Set(shifts.map((s) => s.emp_id)).size)
       })
       .catch(() => { if (!cancelled) setInStoreStaff(null) })
     return () => { cancelled = true }
-  }, [])
+  }, [selectedDate])
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), [])
   const shiftDate = (delta) => setSelectedDate((d) => addDays(d, delta))
@@ -407,7 +397,7 @@ export default function AdminAppointments() {
                           <circle cx="12" cy="7" r="4" />
                         </svg>
                         <span>
-                          In-store staff: {inStoreStaff == null ? '—' : inStoreStaff}
+                          Staff on shift: {inStoreStaff == null ? '—' : inStoreStaff}
                         </span>
                       </div>
                     </div>

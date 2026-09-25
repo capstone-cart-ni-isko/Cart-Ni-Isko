@@ -87,16 +87,10 @@ function Cart() {
     navigate('/checkout')
   }
 
-  // Helper to determine max stock per variant (Requirement 12)
-  const getItemMaxStock = (item) => {
-    if (item.product.stockMatrix && item.color?.name) {
-      const colorStock = item.product.stockMatrix[item.color.name]
-      if (colorStock && item.size && colorStock[item.size] !== undefined) {
-        return colorStock[item.size]
-      }
-    }
-    return item.product.preOrder ? 10 : 15
-  }
+  // Max quantity per line (Requirement 12): the product's one shared stock
+  // number, the same figure the admin edits and checkout deducts.
+  const getItemMaxStock = (item) =>
+    item.product.preOrder ? 10 : Math.max(0, Number(item.product.qty) || 0)
 
   return (
     <AppShell>

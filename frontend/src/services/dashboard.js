@@ -20,6 +20,7 @@ import { fetchAllOrders, dispatchModeOf } from './orders.js'
 import { fetchAppointments, fetchSlots, SLOT_RULES } from './appointments.js'
 import { fetchAccounts } from './accounts.js'
 import { fetchAdminProducts } from './adminProducts.js'
+import { fetchShifts, onDutyAt, timeLabel } from './duty.js'
 
 /** Store operating hours used to bucket "Today" sales (08:00 - 18:00). */
 const OPEN_HOUR = 8
@@ -395,14 +396,17 @@ export function buildFulfillmentStages(rows = []) {
 }
 
 /**
- * Staff currently inside the store (SRS: employees on duty).
- * `emp_instore` is cast to a boolean by the API; 1 / '1' are accepted too.
+ * Staff inside the store right now: employees whose duty shift for today
+ * covers the current time (SRS: employees on duty).
  */
-export function buildOnDuty(accounts = {}) {
+export function buildOnDuty(accounts = {}, shifts = [], now = new Date()) {
   const employees = accounts.employees || []
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const current = new Map(onDutyAt(shifts, hhmm).map((s) => [String(s.emp_id), s]))
   return employees
-    .filter((emp) => emp.emp_instore === true || Number(emp.emp_instore) === 1)
+    .filter((emp) => current.has(String(emp.emp_id)))
     .map((emp) => {
+      const shift = current.get(String(emp.emp_id))
       const name = `${emp.emp_givname || ''} ${emp.emp_surname || ''}`.trim() || emp.emp_email || 'Staff'
       const initials = name
         .split(' ')
@@ -415,7 +419,7 @@ export function buildOnDuty(accounts = {}) {
         id: `emp-${emp.emp_id}`,
         name,
         role: emp.emp_type || 'Staff',
-        timeSlot: 'In store now',
+        timeSlot: `${timeLabel(shift.shift_start)} – ${timeLabel(shift.shift_end)}`,
         status: 'On Duty',
         avatar: initials,
       }
@@ -516,7 +520,7 @@ export async function fetchDashboardSnapshot(date = new Date()) {
   const pad = (n) => String(n).padStart(2, '0')
   const today = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 
-  const [orderRows, cartPayload, appointments, accountsPayload, products, slotsPayload] =
+  const [orderRows, cartPayload, appointments, accountsPayload, products, slotsPayload, duty] =
     await Promise.all([
       fetchAllOrders().catch(() => []),
       apiGet('/cart/display', { tag_prefix: CART_PREFIX }).catch(() => ({ data: [] })),
@@ -524,6 +528,7 @@ export async function fetchDashboardSnapshot(date = new Date()) {
       fetchAccounts().catch(() => ({ customers: [], employees: [] })),
       fetchAdminProducts().catch(() => []),
       fetchSlots(today).catch(() => null),
+      fetchShifts(today).catch(() => ({ shifts: [] })),
     ])
 
   const accounts = normalizeAccounts(accountsPayload)
@@ -535,6 +540,7 @@ export async function fetchDashboardSnapshot(date = new Date()) {
     accounts,
     products: products || [],
     slots: normalizeSlots(slotsPayload),
+    shifts: duty.shifts,
     claimCapacity: SLOT_RULES.CLAIM.capacity,
     fetchedAt: Date.now(),
   }

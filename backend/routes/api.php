@@ -8,6 +8,7 @@ use App\Http\Controllers\AppointAPI;
 use App\Http\Controllers\AuthAPI;
 use App\Http\Controllers\CartAPI;
 use App\Http\Controllers\CheckoutAPI;
+use App\Http\Controllers\DutyAPI;
 use App\Http\Controllers\OrdersAPI;
 use App\Http\Controllers\PosAPI;
 use App\Http\Controllers\NotifAPI;
@@ -97,6 +98,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/appoint/sort', [AppointAPI::class, 'sortAppointments']);
     Route::get('/appoint/slots', [AppointAPI::class, 'displaySlots']);
     Route::put('/appoint/update', [AppointAPI::class, 'updateAppointmentDetails']);
+
+    // Duty API Routes (dated staff shifts; staffing for appointment slots)
+    Route::get('/duty/display', [DutyAPI::class, 'displayShifts'])->middleware('role:staff');
+    Route::post('/duty/assign', [DutyAPI::class, 'assignShift'])->middleware('role:staff');
+    Route::delete('/duty/remove', [DutyAPI::class, 'removeShift'])->middleware('role:staff');
 
     // Uploads API Routes (real file uploads for product / profile photos)
     Route::post('/uploads', [UploadAPI::class, 'uploadImage']);

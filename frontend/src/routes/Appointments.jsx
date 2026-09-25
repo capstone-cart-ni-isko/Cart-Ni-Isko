@@ -8,9 +8,9 @@ import Avatar from '../components/ui/Avatar.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import { SettingsIcon, ShirtIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
+import SlotPicker from '../components/ui/SlotPicker.jsx'
 import {
   fetchAppointments,
-  fetchSlots,
   createAppointment,
   SLOT_RULES,
 } from '../services/appointments.js'
@@ -48,20 +48,19 @@ function parseDateParts(value) {
   return { date: s || 'To be scheduled', dayOfWeek: '' }
 }
 
-function slotTime(slot) {
-  return slot.slot_start ?? slot.start_time ?? slot.start ?? slot.time ?? slot.slot_time ?? ''
+/** "2026-09-26 10:30" -> "Sat, Sep 26 at 10:30 AM". */
+function slotWhen(start) {
+  const at = new Date(String(start || '').replace(' ', 'T'))
+  if (Number.isNaN(at.getTime())) return String(start || '')
+  const day = at.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const time = at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return `${day} at ${time}`
 }
 
-function slotOpen(slot) {
-  if (slot.available === false || slot.is_available === false) return false
-  if (slot.open === false || slot.full === true) return false
-  const booked = Number(slot.booked ?? slot.taken ?? slot.reserved ?? slot.used ?? 0)
-  const capacity = Number(slot.capacity ?? slot.limit ?? 0)
-  return !(capacity > 0 && booked >= capacity)
-}
-
-function slotReason(slot) {
-  return slot.reason || slot.disabled_reason || 'Fully booked'
+/** Local YYYY-MM-DD (toISOString would give the UTC date). */
+function todayLocal() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /** Items preview taken from the linked order (when one exists). */
@@ -112,40 +111,15 @@ function BookAppointmentCard({ custId, onBooked }) {
   const { showToast } = useToast()
   const [date, setDate] = useState('')
   const [type, setType] = useState('CLAIM')
-  const [slots, setSlots] = useState([])
+  // Full slot start from GET /appoint/slots ("YYYY-MM-DD HH:MM")
   const [slot, setSlot] = useState('')
-  const [slotsError, setSlotsError] = useState('')
   const [booking, setBooking] = useState(false)
-
-  useEffect(() => {
-    if (!date) {
-      setSlots([])
-      return undefined
-    }
-    let cancelled = false
-    ;(async () => {
-      setSlot('')
-      setSlotsError('')
-      try {
-        const rows = await fetchSlots(date)
-        if (!cancelled) setSlots(Array.isArray(rows) ? rows : [])
-      } catch (err) {
-        if (!cancelled) {
-          setSlots([])
-          setSlotsError(err?.message || 'Unable to load time slots right now.')
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [date])
 
   const handleBook = async () => {
     if (booking) return
     if (!custId) return
     if (!date || !slot) {
-      showToast('Please pick a date and a time slot first.', 'error')
+      showToast('Please pick a date and a time first.', 'error')
       return
     }
     setBooking(true)
@@ -153,12 +127,8 @@ function BookAppointmentCard({ custId, onBooked }) {
       await createAppointment({
         cust_id: custId,
         appoint_type: type,
-        appoint_date: date,
-        appoint_desc: `${type === 'CLAIM' ? 'Order claim' : 'Store visit'} appointment on ${date} at ${slot}`,
-        // Start time is sent under several keys until the API contract is fixed.
-        slot_start: slot,
-        appoint_start: slot,
-        appoint_time: slot,
+        appoint_date: slot,
+        appoint_desc: `${type === 'CLAIM' ? 'Order claim' : 'Store visit'} appointment on ${slotWhen(slot)}`,
       })
       showToast('Appointment booked! See it in your list below.', 'success')
       setSlot('')
@@ -191,7 +161,10 @@ function BookAppointmentCard({ custId, onBooked }) {
             <button
               key={key}
               type="button"
-              onClick={() => setType(key)}
+              onClick={() => {
+                setType(key)
+                setSlot('')
+              }}
               className={`h-8 px-3 rounded-md text-xs font-bold transition-colors cursor-pointer ${
                 type === key
                   ? 'bg-brand-orange text-white'
@@ -208,57 +181,14 @@ function BookAppointmentCard({ custId, onBooked }) {
           <input
             type="date"
             value={date}
-            min={new Date().toISOString().slice(0, 10)}
+            min={todayLocal()}
             onChange={(e) => setDate(e.target.value)}
             className="px-2 py-1.5 rounded-md border border-slate-200 text-xs text-gray-700 focus:border-brand-orange"
           />
         </label>
       </div>
 
-      {slotsError && <p className="text-xs text-red-500 bg-red-50 rounded-md p-2">{slotsError}</p>}
-      {!date && (
-        <p className="text-xs text-slate-500 bg-slate-50 rounded-md p-2.5">
-          Pick a date to see the available time slots.
-        </p>
-      )}
-      {date && !slotsError && slots.length === 0 && (
-        <p className="text-xs text-slate-500 bg-slate-50 rounded-md p-2.5">
-          No slots are open for this date yet. Try another date.
-        </p>
-      )}
-
-      {slots.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {slots.map((s, idx) => {
-            const time = slotTime(s)
-            const open = slotOpen(s)
-            const active = open && slot === time
-            return (
-              <button
-                key={time || `slot-${idx}`}
-                type="button"
-                disabled={!open}
-                title={open ? time : slotReason(s)}
-                onClick={() => open && setSlot(time)}
-                className={`py-2 rounded-md text-xs font-semibold border transition-colors ${
-                  active
-                    ? 'bg-brand-orange text-white border-brand-orange'
-                    : open
-                    ? 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange cursor-pointer'
-                    : 'bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed line-through'
-                }`}
-              >
-                {time || `Slot ${idx + 1}`}
-                {!open && (
-                  <span className="block text-[10px] font-normal no-underline">
-                    {slotReason(s)}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      <SlotPicker date={date} type={type} value={slot} onChange={setSlot} />
 
       <button
         type="button"
@@ -269,8 +199,8 @@ function BookAppointmentCard({ custId, onBooked }) {
         {booking
           ? 'Booking…'
           : slot
-          ? `Book ${type === 'CLAIM' ? 'claim' : 'visit'} slot • ${date} ${slot}`
-          : 'Select a time slot to book'}
+          ? `Book ${type === 'CLAIM' ? 'claim' : 'visit'} • ${slotWhen(slot)}`
+          : 'Select a time to book'}
       </button>
     </div>
   )

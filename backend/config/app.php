@@ -67,6 +67,11 @@ return [
 
     'timezone' => 'UTC',
 
+    // Wall-clock timezone of the physical store. Used for store-day rules
+    // (e.g. the 7:00 AM duty-schedule lock, REQ-SS-02) while stored
+    // timestamps stay in UTC.
+    'store_timezone' => env('STORE_TIMEZONE', 'Asia/Manila'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

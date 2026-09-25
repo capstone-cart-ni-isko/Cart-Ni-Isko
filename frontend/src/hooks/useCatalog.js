@@ -1,10 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { fetchCatalog } from '../services/products.js'
 
+/**
+ * Live catalog from the API. There is no offline sample data: on failure
+ * `error` is set and the page offers `reload()` (a Retry button).
+ */
 export function useCatalog(params = {}) {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const query = JSON.stringify(params)
 
   useEffect(() => {
@@ -21,7 +26,7 @@ export function useCatalog(params = {}) {
       .catch((err) => {
         if (!cancelled) {
           setProducts([])
-          setError(err?.message || 'Unable to load catalog')
+          setError(err?.message || "Can't reach the store server. Please try again.")
         }
       })
       .finally(() => {
@@ -33,7 +38,9 @@ export function useCatalog(params = {}) {
     return () => {
       cancelled = true
     }
-  }, [query])
+  }, [query, reloadKey])
 
-  return { products, loading, error }
+  const reload = useCallback(() => setReloadKey((k) => k + 1), [])
+
+  return { products, loading, error, reload }
 }

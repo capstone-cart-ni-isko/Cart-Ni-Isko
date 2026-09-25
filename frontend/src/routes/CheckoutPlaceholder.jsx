@@ -14,11 +14,8 @@ import { getImageUrl } from '../utils/imageUtils.js'
 import { getDispatch, payOrder } from '../services/checkout.js'
 import { addToCart as addCartOrder, removeFromCart as removeCartOrder } from '../services/cart.js'
 import { removeProductFromOrder } from '../services/orders.js'
-import {
-  fetchSlots,
-  createAppointment,
-  closeAppointment,
-} from '../services/appointments.js'
+import { createAppointment, closeAppointment } from '../services/appointments.js'
+import SlotPicker from '../components/ui/SlotPicker.jsx'
 
 /* Delivery tiers previewed through POST /checkout/dispatch (SRS shipping fees).
    ETAs match the server's estimate: +24 hours / +2 days / +5 days. */
@@ -42,22 +39,19 @@ function pickOrdId(res) {
   return res?.ord_id ?? null
 }
 
-function slotTime(slot) {
-  return (
-    slot.slot_start ?? slot.start_time ?? slot.start ?? slot.time ?? slot.slot_time ?? ''
-  )
+/** "2026-09-26 10:30" -> "Sat, Sep 26 at 10:30 AM". */
+function slotWhen(start) {
+  const at = new Date(String(start || '').replace(' ', 'T'))
+  if (Number.isNaN(at.getTime())) return String(start || '')
+  const day = at.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const time = at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return `${day} at ${time}`
 }
 
-function slotOpen(slot) {
-  if (slot.available === false || slot.is_available === false) return false
-  if (slot.open === false || slot.full === true) return false
-  const booked = Number(slot.booked ?? slot.taken ?? slot.reserved ?? slot.used ?? 0)
-  const capacity = Number(slot.capacity ?? slot.limit ?? 0)
-  return !(capacity > 0 && booked >= capacity)
-}
-
-function slotReason(slot) {
-  return slot.reason || slot.disabled_reason || 'Fully booked'
+/** Local YYYY-MM-DD (toISOString would give the UTC date). */
+function todayLocal() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function addressText(addr) {
@@ -69,7 +63,7 @@ function addressText(addr) {
 }
 
 /** Receipt summary from the POST /checkout/payment response. */
-function receiptFrom(data, ordId, dispatchType, pickupDate, slot) {
+function receiptFrom(data, ordId, dispatchType, slot) {
   const payment = data?.payment || {}
   const dispatch = data?.dispatch || {}
   const order = data?.order || {}
@@ -84,7 +78,7 @@ function receiptFrom(data, ordId, dispatchType, pickupDate, slot) {
     deliverRef: dispatch.deliver_ref || '',
     deliverAddress: dispatch.deliver_address || '',
     deliverDate: dispatch.deliver_date || null,
-    pickupWhen: !isDelivery && pickupDate && slot ? `${pickupDate} at ${slot}` : '',
+    pickupWhen: !isDelivery && slot ? slotWhen(slot) : '',
     // Delivery: the parcel code the customer scans on arrival. Pickup: the
     // ORD- tag staff scan at the counter (both accepted by /tracking/scan).
     qrCode: isDelivery ? dispatch.deliver_qr || '' : order.ord_tag || '',
@@ -116,14 +110,11 @@ function CheckoutPlaceholder() {
 
   // Pickup scheduling (REQ-OC-01: pickup claim slot is part of checkout)
   const [pickupDate, setPickupDate] = useState('')
-  const [slots, setSlots] = useState([])
+  // Full slot start from GET /appoint/slots ("YYYY-MM-DD HH:MM")
   const [slot, setSlot] = useState('')
-  const [slotsError, setSlotsError] = useState('')
 
   // Delivery (address + priority tier)
   const [addressIdx, setAddressIdx] = useState(0)
-  const [customAddress, setCustomAddress] = useState('')
-  const [useCustomAddress, setUseCustomAddress] = useState(false)
   const [tier, setTier] = useState('standard')
 
   // Server checkout state
@@ -146,10 +137,8 @@ function CheckoutPlaceholder() {
   const sortedAddresses = [...(addresses || [])].sort(
     (a, b) => Number(b.isDefault) - Number(a.isDefault)
   )
-  const chosenAddress = useCustomAddress ? null : sortedAddresses[addressIdx]
-  const deliveryAddress = useCustomAddress
-    ? customAddress.trim()
-    : addressText(chosenAddress)
+  const chosenAddress = sortedAddresses[addressIdx] || null
+  const deliveryAddress = addressText(chosenAddress)
 
   // The selection can be checked out directly only when it covers whole cart
   // rows; anything else becomes a temporary order that is rolled back on failure.
@@ -200,32 +189,8 @@ function CheckoutPlaceholder() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directOrdId, dispatchType, tier, addressIdx, useCustomAddress, customAddress])
+  }, [directOrdId, dispatchType, tier, addressIdx])
 
-  /* Bookable pickup slots for the chosen date. */
-  useEffect(() => {
-    if (dispatchType !== 'pickup' || !pickupDate) {
-      setSlots([])
-      return undefined
-    }
-    let cancelled = false
-    ;(async () => {
-      setSlotsError('')
-      setSlot('')
-      try {
-        const rows = await fetchSlots(pickupDate)
-        if (!cancelled) setSlots(Array.isArray(rows) ? rows : [])
-      } catch (err) {
-        if (!cancelled) {
-          setSlots([])
-          setSlotsError(err?.message || 'Unable to load time slots right now.')
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [dispatchType, pickupDate])
 
   // Never leave the checkout empty-handed.
   useEffect(() => {
@@ -257,18 +222,18 @@ function CheckoutPlaceholder() {
     }
     // REQ-CW-02: Block checkout if any non-pre-order item is out of stock
     const outOfStockItems = itemsToCheckout.filter(
-      (i) => !i.product.preOrder && ((i.product.qty ?? 0) <= 0 || (i.product.stockMatrix?.[i.color?.name]?.[i.size] ?? i.product.qty ?? 0) <= 0)
+      (i) => !i.product.preOrder && (Number(i.product.qty) || 0) <= 0
     )
     if (outOfStockItems.length > 0) {
       setError('Some items are currently out of stock and cannot be checked out. Please remove them from your selection.')
       return
     }
     if (dispatchType === 'pickup' && (!pickupDate || !slot)) {
-      setError('Please choose a pickup date and time slot to continue.')
+      setError('Please choose a pickup date and time to continue.')
       return
     }
     if (dispatchType === 'delivery' && !deliveryAddress) {
-      setError('Please choose or enter a delivery address to continue.')
+      setError('Please add a delivery address in My Address to continue.')
       return
     }
 
@@ -308,7 +273,7 @@ function CheckoutPlaceholder() {
       if (dispatchType === 'pickup') {
         const res = await createAppointment({
           cust_id: custId,
-          appoint_date: `${pickupDate} ${slot}`,
+          appoint_date: slot,
           appoint_type: 'CLAIM',
           appoint_desc: `Pickup of order ${ordId}`,
         })
@@ -332,7 +297,7 @@ function CheckoutPlaceholder() {
       //    (REQ-OC-02) and returns it on the payment record.
       const payRes = await payOrder(ordId, dispatchType, due, dispatchOptions(appointId))
       const payRef = payRes?.data?.payment?.pay_ref ?? ''
-      setReceipt(receiptFrom(payRes?.data, ordId, dispatchType, pickupDate, slot))
+      setReceipt(receiptFrom(payRes?.data, ordId, dispatchType, slot))
 
       // 5. Success: clean up the source rows and resync the cart.
       if (tempOrdId) await removeSourceLines()
@@ -599,7 +564,7 @@ function CheckoutPlaceholder() {
               </div>
               <p className="text-xs text-gray-500 pt-0.5">
                 {dispatchType === 'pickup'
-                  ? 'Pickup at BU Main Campus Student Center — choose a claim slot below'
+                  ? 'Pickup at BU Main Campus Student Center — choose a date and time below'
                   : 'Courier delivery to your chosen address'}
               </p>
             </div>
@@ -615,66 +580,18 @@ function CheckoutPlaceholder() {
                   <input
                     type="date"
                     value={pickupDate}
-                    min={new Date().toISOString().slice(0, 10)}
+                    min={todayLocal()}
                     onChange={(e) => setPickupDate(e.target.value)}
                     className="px-2 py-1.5 rounded-md border border-slate-200 text-xs text-gray-700 focus:border-brand-orange focus:ring-brand-orange/30"
                   />
                 </label>
               </div>
 
-              {!pickupDate && (
-                <p className="text-xs text-gray-500 bg-slate-50 rounded-lg p-3">
-                  Pick a date to see available claim slots (30 minutes each).
-                </p>
-              )}
-
-              {slotsError && (
-                <p className="text-xs text-red-500 bg-red-50 rounded-lg p-3">{slotsError}</p>
-              )}
-
-              {pickupDate && !slotsError && slots.length === 0 && (
-                <p className="text-xs text-gray-500 bg-slate-50 rounded-lg p-3">
-                  No slots are open for this date yet. Try another date.
-                </p>
-              )}
-
-              {slots.length > 0 && (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {slots.map((s, idx) => {
-                    const time = slotTime(s)
-                    const open = slotOpen(s)
-                    const active = open && slot === time
-                    const key = time || `slot-${idx}`
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        disabled={!open}
-                        title={open ? time : slotReason(s)}
-                        onClick={() => open && setSlot(time)}
-                        className={`py-2 rounded-md text-xs font-semibold border transition-colors ${
-                          active
-                            ? 'bg-brand-orange text-white border-brand-orange'
-                            : open
-                            ? 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange cursor-pointer'
-                            : 'bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed line-through'
-                        }`}
-                      >
-                        {time || `Slot ${idx + 1}`}
-                        {!open && (
-                          <span className="block text-[10px] font-normal no-underline">
-                            {slotReason(s)}
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+              <SlotPicker date={pickupDate} type="CLAIM" value={slot} onChange={setSlot} />
 
               {slot && (
                 <p className="text-xs font-semibold text-brand-orange bg-orange-50 rounded-lg p-2.5">
-                  Claim slot reserved for review: {pickupDate} at {slot}
+                  Pickup time: {slotWhen(slot)}
                 </p>
               )}
             </div>
@@ -690,12 +607,9 @@ function CheckoutPlaceholder() {
                     <button
                       key={addr.id ?? idx}
                       type="button"
-                      onClick={() => {
-                        setAddressIdx(idx)
-                        setUseCustomAddress(false)
-                      }}
+                      onClick={() => setAddressIdx(idx)}
                       className={`w-full text-left p-3 rounded-lg border transition-colors cursor-pointer ${
-                        !useCustomAddress && addressIdx === idx
+                        addressIdx === idx
                           ? 'border-brand-orange bg-orange-50/60'
                           : 'border-slate-100 bg-white hover:bg-gray-50'
                       }`}
@@ -716,23 +630,17 @@ function CheckoutPlaceholder() {
                 </div>
               )}
 
-              <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={useCustomAddress}
-                  onChange={(e) => setUseCustomAddress(e.target.checked)}
-                  className="mt-0.5 accent-[var(--color-brand-orange,#f97316)]"
-                />
-                Ship to a different address
-              </label>
-              {useCustomAddress && (
-                <textarea
-                  value={customAddress}
-                  onChange={(e) => setCustomAddress(e.target.value)}
-                  rows={2}
-                  placeholder="House/Unit no., street, barangay, city"
-                  className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2 focus:border-brand-orange focus:ring-brand-orange/30"
-                />
+              {sortedAddresses.length === 0 ? (
+                <div className="text-xs text-gray-600 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                  Add a delivery address first.{' '}
+                  <Link to="/settings/address" className="font-bold text-brand-orange hover:underline">
+                    Add address
+                  </Link>
+                </div>
+              ) : (
+                <Link to="/settings/address" className="inline-block text-xs font-semibold text-brand-orange hover:underline">
+                  Manage addresses
+                </Link>
               )}
 
               <p className="font-bold text-gray-900">Delivery Speed</p>

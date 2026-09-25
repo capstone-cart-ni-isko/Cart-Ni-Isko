@@ -46,7 +46,8 @@ export function mapAdminProduct(row) {
     : rawStatus === 'Out of Stock'
     ? 'Out of Stock'
     : rawStatus || (qty > 0 ? 'Published' : 'Out of Stock')
-  const availability = qty > 0 ? 'Regular' : 'Out of Stock'
+  const preOrder = row.prod_preorder === true || row.prod_preorder === 1 || row.prod_preorder === '1'
+  const availability = preOrder ? 'Pre-order' : qty > 0 ? 'Regular' : 'Out of Stock'
   const variants = (row.prod_sizes || []).map((size, i) => ({
     id: `var-${row.prod_id}-${i}`,
     name: `${category === 'Accessories' ? 'Standard' : size}`,
@@ -63,7 +64,6 @@ export function mapAdminProduct(row) {
     sku: row.prod_tag || `PROD-${row.prod_id}`,
     category,
     categoryName: category,
-    collectionName: 'Core Classics',
     availability,
     totalStock: qty,
     price: Number(row.prod_price) || 0,
@@ -71,6 +71,7 @@ export function mapAdminProduct(row) {
     status,
     image,
     variants,
+    preOrder,
     disabled,
     description: row.prod_desc || '',
     published: !disabled && status !== 'Draft',
