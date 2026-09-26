@@ -658,6 +658,7 @@ function SignUp() {
           {(step === 1 || step === 2 || (!location.pathname.includes('/signup/') && step !== 0 && step !== 3 && step !== 5)) && (
             <div className="p-10 animate-fade-in bg-white min-h-[540px] flex flex-col justify-between">
               <div>
+                <BackButton onClick={handleBack} label="Back to Role Selection" className="mb-6" />
                 <div className="mb-8">
                   <h1 className="text-3xl font-black text-gray-900 leading-tight">Sign Up</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
@@ -801,6 +802,7 @@ function SignUp() {
           {step === 3 && (
             <div className="p-10 animate-fade-in bg-white min-h-[500px] flex flex-col justify-between">
               <div>
+                <BackButton onClick={handleBack} label="Back to Credentials" className="mb-6" />
                 <div className="mb-8">
                   <h1 className="text-3xl font-black text-gray-900 leading-tight">Verify Phone</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2">
@@ -844,6 +846,7 @@ function SignUp() {
           {step === 5 && form.role === 'Student' && (
             <div className="p-10 animate-fade-in bg-white min-h-[520px] flex flex-col justify-between">
               <div>
+                <BackButton onClick={handleBack} label="Back to Phone Verification" className="mb-6" />
                 <div className="mb-6">
                   <h1 className="page-title text-gray-900">Academic Details</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2">

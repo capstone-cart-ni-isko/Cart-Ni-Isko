@@ -5,6 +5,7 @@ import { apiErrorMessage } from '../hooks/useApi.js'
 import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
 import AppointmentCard from '../components/appointment/AppointmentCard.jsx'
 import AppointmentDetailsModal from '../components/appointment/AppointmentDetailsModal.jsx'
+import PageHeader from '../components/ui/PageHeader.jsx'
 import {
   APPOINT_TYPE,
   fetchAppointments,
@@ -224,6 +225,7 @@ function Appointments() {
 
   return (
     <AppShell>
+      <PageHeader title="My Appointments" backTo="/home" />
       <div className="max-w-3xl mx-auto w-full px-4 md:px-6 py-5 pb-28 space-y-4">
         {/* Top action: full-width landscape card that mounts <AppointmentForm/> */}
         <button

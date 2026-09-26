@@ -5,6 +5,7 @@ import AppShell from '../components/layout/AppShell.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
 import { fetchNotifications, markRead, readNotificationsCache } from '../services/notifications.js'
+import BackButton from '../components/ui/BackButton.jsx'
 
 /** REQ-OT-01: "to claim"/"to receive" notifications are handled by QR scanning, not regular notifications. */
 function isExemptNotification(message) {
@@ -281,7 +282,8 @@ export default function Notifications() {
 
         {/* Header (Matching Photo 5 on desktop & Photo 2 on mobile) */}
         <div className="flex items-start gap-4 mb-8">
-          <div>
+          <div className="flex-1">
+            <BackButton to="/home" label="Back to Home" className="lg:hidden mb-4" />
             <h1 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">Notifications</h1>
             <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
               Stay updated with your orders, production, and important announcements.

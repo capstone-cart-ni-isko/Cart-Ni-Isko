@@ -111,6 +111,7 @@
             status - string (req)
                 pickup: CLAIMED | UNCLAIMED | CANCELLED
                 delivery: TRANSIT | DELIVERED | RETURNED | CANCELLED
+                (TRANSIT can transition to DELIVERED or RETURNED)
         */
         public function updateFulfillmentStatus(Request $json)
         {
@@ -136,7 +137,7 @@
 
                 $allowed = [
                     'PENDING' => ['TRANSIT'],
-                    'TRANSIT' => ['RETURNED'],
+                    'TRANSIT' => ['DELIVERED', 'RETURNED'],
                 ];
                 if (! in_array($status, $allowed[$delivery->deliver_status] ?? [], true)) {
                     return response()->json([

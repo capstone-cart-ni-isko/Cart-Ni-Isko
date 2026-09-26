@@ -7,6 +7,8 @@ import Button from '../../components/ui/Button.jsx'
 import Input from '../../components/ui/Input.jsx'
 import { DownloadIcon, FileTextIcon, CalendarIcon, UsersIcon, PackageIcon, Trash2Icon, SaveIcon } from '../../components/ui/Icons.jsx'
 import { apiPost, apiGet } from '../../services/api.js'
+import { jsPDF } from 'jspdf'
+import 'jspdf-autotable'
 
 const REPORT_TYPES = [
   { id: 'sales', label: 'Sales Report', icon: PackageIcon, desc: 'Revenue, transactions, top products by date' },
@@ -195,46 +197,102 @@ function AdminReports() {
 
   const handleExportPDF = () => {
     if (!generatedData) return
-    showToast('PDF export uses browser print (Ctrl+P) on the report table', 'info')
-    // In a real app, you'd use a library like jspdf or pdfkit
-    // For now, we'll open a print-friendly view
-    printReport()
-  }
-
-  const printReport = () => {
-    const printWindow = window.open('', '_blank')
-    const title = REPORT_TYPES.find(t => t.id === reportType)?.label || 'Report'
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${title}</title>
-          <style>
-            body { font-family: sans-serif; padding: 20px; }
-            table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
-            th { background: #f3f4f6; }
-            h1 { color: #1f2937; }
-            .summary { background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-          </style>
-        </head>
-        <body>
-          <h1>${title}</h1>
-          <p>Generated: ${new Date().toLocaleString()}</p>
-          <div class="summary">
-            <h3>Summary</h3>
-            <div class="summary-grid">
-              ${Object.entries(generatedData.summary || {}).map(([k, v]) => `
-                <div><strong>${k.replace(/_/g, ' ')}:</strong> ${v}</div>
-              `).join('')}
-            </div>
-          </div>
-          ${renderPrintTables(generatedData)}
-        </body>
-      </html>
-    `)
-    printWindow.document.close()
-    setTimeout(() => printWindow.print(), 500)
+    try {
+      const doc = new jsPDF()
+      const title = REPORT_TYPES.find(t => t.id === reportType)?.label || 'Report'
+      
+      doc.setFontSize(18)
+      doc.text(title, 14, 22)
+      doc.setFontSize(10)
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28)
+      
+      // Summary
+      let y = 36
+      doc.setFontSize(12)
+      doc.text('Summary', 14, y)
+      y += 6
+      doc.setFontSize(9)
+      Object.entries(generatedData.summary || {}).forEach(([k, v]) => {
+        doc.text(`${k.replace(/_/g, ' ')}: ${v}`, 14, y)
+        y += 5
+      })
+      y += 4
+      
+      // Tables based on report type
+      switch (reportType) {
+        case 'sales':
+          if (generatedData.by_date?.length) {
+            doc.text('By Date', 14, y)
+            y += 6
+            doc.autoTable({
+              startY: y,
+              head: [['Date', 'Transactions', 'Revenue']],
+              body: generatedData.by_date.map(d => [d.date, d.transactions, `₱${d.revenue.toLocaleString()}`]),
+              theme: 'striped',
+              headStyles: { fillColor: [249, 115, 22] },
+            })
+            y = doc.lastAutoTable.finalY + 10
+          }
+          if (generatedData.by_product?.length) {
+            doc.text('By Product', 14, y)
+            y += 6
+            doc.autoTable({
+              startY: y,
+              head: [['Product', 'Qty Sold', 'Revenue', 'Orders']],
+              body: generatedData.by_product.slice(0, 30).map(p => [p.prod_name, p.total_qty, `₱${p.total_revenue.toLocaleString()}`, p.orders_count]),
+              theme: 'striped',
+              headStyles: { fillColor: [249, 115, 22] },
+            })
+          }
+          break
+        case 'inventory':
+          if (generatedData.items?.length) {
+            doc.text('Items', 14, y)
+            y += 6
+            doc.autoTable({
+              startY: y,
+              head: [['Name', 'Category', 'Price', 'Qty', 'Stock Value', 'Low Stock']],
+              body: generatedData.items.slice(0, 50).map(i => [i.prod_name, i.prod_categ, `₱${i.prod_price}`, i.prod_qty, `₱${i.stock_value.toLocaleString()}`, i.is_low_stock ? 'Yes' : 'No']),
+              theme: 'striped',
+              headStyles: { fillColor: [249, 115, 22] },
+            })
+          }
+          break
+        case 'appointments':
+          if (generatedData.items?.length) {
+            doc.text('Appointments', 14, y)
+            y += 6
+            doc.autoTable({
+              startY: y,
+              head: [['ID', 'Type', 'Date', 'Status', 'Customer']],
+              body: generatedData.items.slice(0, 50).map(a => [a.appoint_id, a.appoint_type, new Date(a.appoint_date).toLocaleString(), a.appoint_status, a.customer]),
+              theme: 'striped',
+              headStyles: { fillColor: [249, 115, 22] },
+            })
+          }
+          break
+        case 'staffing':
+          if (generatedData.staff?.length) {
+            doc.text('Staff', 14, y)
+            y += 6
+            doc.autoTable({
+              startY: y,
+              head: [['Name', 'Type', 'Email', 'In-Store', 'Shifts', 'Hours']],
+              body: generatedData.staff.map(s => [s.name, s.emp_type, s.emp_email, s.availability, `${s.total_shifts} (${s.upcoming_shifts} upcoming)`, `${s.total_hours}h`]),
+              theme: 'striped',
+              headStyles: { fillColor: [249, 115, 22] },
+            })
+          }
+          break
+      }
+      
+      const filename = `${reportType}-report-${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(filename)
+      showToast('PDF exported', 'success')
+    } catch (e) {
+      console.error('PDF export failed:', e)
+      showToast('PDF export failed', 'error')
+    }
   }
 
   const generateSalesCSV = (data) => {
