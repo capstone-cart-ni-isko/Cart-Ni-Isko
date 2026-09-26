@@ -60,6 +60,27 @@
                 }
                 $this->notifyCustomer((int) $appointment->cust_id, $message);
 
+                // REQ-AB-04 / REQ-SC-04: cancelling one booking also cancels the
+                // block it sits in, so every other open booking that overlaps the
+                // same block is told to reschedule.
+                $blockMinutes = $appointment->appoint_type === 'CLAIM' ? 30 : 10;
+                $blockEnd = Carbon::parse($appointment->appoint_date)->addMinutes($blockMinutes);
+                $others = Appointment::whereNull('appoint_closed')
+                    ->where('appoint_type', $appointment->appoint_type)
+                    ->where('appoint_id', '!=', $appointment->appoint_id)
+                    ->where('appoint_date', '>=', $appointment->appoint_date)
+                    ->where('appoint_date', '<', $blockEnd)
+                    ->get();
+
+                foreach ($others as $other) {
+                    $this->notifyCustomer((int) $other->cust_id,
+                        '[PRIORITY] Your appointment #' . $other->appoint_id .
+                        ' on ' . $other->appoint_date .
+                        ' is unavailable. Please reschedule at your earliest convenience. ' .
+                        ($reason !== '' ? 'Reason: ' . $reason : 'Reason: slot cancelled.')
+                    );
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Appointment closed successfully',
@@ -202,7 +223,7 @@
                     return response()->json([
                         'success' => false,
                         'message' => 'Appointment type must be CLAIM or VISIT'
-                    ], 400);
+                    ], 422);
                 }
 
                 // Align the requested time to the slot grid (REQ-SC-02):

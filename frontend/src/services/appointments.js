@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from './api.js'
+import { apiGet, apiPost, apiPut, cacheRead, cacheWrite } from './api.js'
 
 /** Timeslot geometry from the SRS (REQ-AB-01/02, REQ-SC-02). */
 export const SLOT_RULES = {
@@ -22,23 +22,13 @@ export async function fetchAppointments(params = {}) {
    (customer, filter) is mirrored in localStorage: the page paints instantly
    and the request that follows only refreshes what is on screen. */
 const CACHE_KEY = (custId, status) => `cartniisko:appointments:${custId}:${status}`
-const CACHE_TTL = 60 * 1000
 
 export function readAppointmentsCache(custId, status) {
-  try {
-    const hit = JSON.parse(localStorage.getItem(CACHE_KEY(custId, status)) || 'null')
-    return hit && Date.now() - hit.at < CACHE_TTL ? hit.rows : null
-  } catch {
-    return null
-  }
+  return cacheRead(CACHE_KEY(custId, status))
 }
 
 export function writeAppointmentsCache(custId, status, rows) {
-  try {
-    localStorage.setItem(CACHE_KEY(custId, status), JSON.stringify({ at: Date.now(), rows }))
-  } catch {
-    // A full or blocked storage must never break the list.
-  }
+  cacheWrite(CACHE_KEY(custId, status), rows)
 }
 
 /** GET /appoint/slots?date= - bookable slots with availability + reasons. */

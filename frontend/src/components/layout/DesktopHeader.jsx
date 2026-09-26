@@ -10,9 +10,7 @@ import { MenuIcon } from '../ui/Icons.jsx'
 import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import searchIcon from '../../assets/icons/common/search.svg'
 import notificationIcon from '../../assets/icons/common/notification.svg'
-import wishlistIcon from '../../assets/icons/navigation-bar/wishlist.svg'
 import cartIcon from '../../assets/icons/navigation-bar/cart.svg'
-import profileIcon from '../../assets/icons/navigation-bar/profile.svg'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
 
 /** Same geometry as the mobile ribbon's calendar glyph. */
@@ -88,12 +86,12 @@ function DesktopHeader() {
   // `active` lists the routes that light the icon up, so the ribbon, the left
   // sidebar and the mobile bottom ribbon always agree on the current page.
   const ribbon = [
+    // Wishlist and Profile live in the Menu drawer only, so the ribbon stays
+    // exactly: Home · Bag · Appointments · Notifications · Menu.
     { to: '/home', label: 'Home', icon: Painted, src: homeIcon, active: ['/', '/home'] },
-    { to: '/wishlist', label: 'Wishlist', icon: Painted, src: wishlistIcon },
     { to: '/cart', label: 'Bag', icon: Painted, src: cartIcon, active: ['/cart', '/checkout'], badge: cartCount },
     { to: '/appointments', label: 'Appointments', icon: CalendarIcon },
     { to: '/notifications', label: 'Notifications', icon: Painted, src: notificationIcon, badge: unreadNotifCount },
-    { to: '/profile', label: 'My Account', icon: Painted, src: profileIcon, active: ['/profile', '/orders', '/account', '/settings'] },
   ]
   const path = location.pathname
   const isOn = (item) => (item.active || [item.to]).some((p) => path === p || path.startsWith(p))

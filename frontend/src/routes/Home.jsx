@@ -202,7 +202,7 @@ function Home() {
   const featuredProductsDesktop = productsData.slice(0, 8)
 
   return (
-    <AppShell>
+    <AppShell showSideNav={false}>
       {/* ────────────────── MOBILE HOME PAGE LAYOUT ────────────────── */}
       <div className="md:hidden pb-28">
         {/* Sidebar menu drawer */}

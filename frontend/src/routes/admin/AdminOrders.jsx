@@ -94,7 +94,7 @@ export default function AdminOrders() {
         .catch(() => {
           if (!cancelled) setSearchRows([])
         })
-    }, 400)
+    }, 250)
     return () => {
       cancelled = true
       clearTimeout(timer)

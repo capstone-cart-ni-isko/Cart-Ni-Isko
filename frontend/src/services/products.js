@@ -1,4 +1,17 @@
-import { apiGet } from './api.js'
+import { apiGet, cacheRead, cacheWrite } from './api.js'
+
+/* The catalog is public and only changes when an admin edits it, so the last
+   answer per filter set is mirrored for 60s: the storefront paints instantly
+   and the request that follows only refreshes what is on screen. */
+const CACHE_KEY = (params) => `cartniisko:catalog:${JSON.stringify(params)}`
+
+export function readCatalogCache(params) {
+  return cacheRead(CACHE_KEY(params))
+}
+
+export function writeCatalogCache(params, rows) {
+  cacheWrite(CACHE_KEY(params), rows)
+}
 
 const CATEGORY_ALIASES = {
   HOODIE: 'Hoodie',
@@ -104,7 +117,9 @@ export function mapProduct(row) {
 
 export async function fetchCatalog(params = {}) {
   const data = await apiGet('/products/filter', { status: 'active', ...params })
-  return (data.data || []).map(mapProduct)
+  const rows = (data.data || []).map(mapProduct)
+  writeCatalogCache(params, rows)
+  return rows
 }
 
 export async function fetchProduct(id) {

@@ -188,7 +188,7 @@ export default function AdminUsers() {
 
   // Debounce the search box before it hits the API
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 350)
+    const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 250)
     return () => clearTimeout(t)
   }, [searchQuery])
 

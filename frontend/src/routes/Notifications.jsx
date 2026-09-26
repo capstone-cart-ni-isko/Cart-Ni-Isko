@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
-import { fetchNotifications, markRead } from '../services/notifications.js'
+import { fetchNotifications, markRead, readNotificationsCache } from '../services/notifications.js'
 
 /** REQ-OT-01: "to claim"/"to receive" notifications are handled by QR scanning, not regular notifications. */
 function isExemptNotification(message) {
@@ -216,6 +216,14 @@ export default function Notifications() {
       setLoading(false)
       return
     }
+    // Paint the 60-second mirror first, then let the request refresh it. An
+    // already-populated inbox is left alone so a refresh never flickers back.
+    const cached = readNotificationsCache('customer', custId)
+    if (cached) {
+      setItems((prev) => (prev.length ? prev : cached.map(mapNotification)))
+      setLoading(false)
+    }
+
     try {
       const rows = await fetchNotifications('customer', custId)
       setItems((rows || []).map(mapNotification))

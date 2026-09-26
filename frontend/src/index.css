@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* `dark:` follows the app's own ThemeContext (the `dark` class this project
+   toggles on <html>), not the OS preference, so every dark-styled component -
+   MenuSidebar included - always matches the active theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-brand-orange: #F97316;
   --color-brand-orange-dark: #EA580C;

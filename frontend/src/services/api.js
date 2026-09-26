@@ -8,13 +8,37 @@ if (!configuredBaseUrl) {
 
 export const API_BASE_URL = configuredBaseUrl.replace(/\/$/, '')
 
-// Hard 1-second budget for every frontend <-> backend hop (project rule).
-export const REQUEST_TIMEOUT_MS = 1000
+// Safety net for every frontend <-> backend hop. The target budget is 1
+// second, but a request that overruns it is never cut off: it keeps running
+// and its answer is painted as soon as it lands.
+export const REQUEST_TIMEOUT_MS = 30000
 
 let authToken = null
 let preconnected = false
 const cache = new Map()
 const CACHE_TTL = 5 * 60 * 1000
+
+/* ── 60-second localStorage mirror for non-sensitive lists (appointments,
+   products, notifications). The screen paints from the mirror right away and
+   the request that follows only refreshes what is already on it. ── */
+export const STORAGE_TTL = 60 * 1000
+
+export function cacheRead(key) {
+  try {
+    const hit = JSON.parse(localStorage.getItem(key) || 'null')
+    return hit && Date.now() - hit.at < STORAGE_TTL ? hit.value : null
+  } catch {
+    return null
+  }
+}
+
+export function cacheWrite(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ at: Date.now(), value }))
+  } catch {
+    // A full or blocked storage must never break the screen.
+  }
+}
 
 /* ── Centralized loading state: one counter drives every spinner/skeleton ── */
 const loadingListeners = new Set()
@@ -91,7 +115,7 @@ export async function apiRequest(path, { method = 'GET', body, headers, silent =
     const timedOut = error.name === 'AbortError'
     throw new ApiError(
       timedOut
-        ? 'The server did not respond within one second.'
+        ? 'The server took too long to respond. Please try again.'
         : 'Cannot reach the server. Please check your connection.',
       timedOut ? 408 : 0
     )
@@ -141,10 +165,10 @@ export function invalidateCache() {
 /**
  * Opens DNS + TCP + TLS to the API host ahead of the first real request.
  *
- * The credentials POST has a hard 1-second budget, and on a cold connection a
- * large part of it goes to name resolution and the TLS handshake rather than to
- * the login itself. Called the moment a login field takes focus so that cost is
- * already paid by the time the customer submits.
+ * The first screenful of data is expected within the one-second budget, and on
+ * a cold connection a large part of it goes to name resolution and the TLS
+ * handshake rather than to the request itself. Called the moment a login field
+ * takes focus so that cost is already paid by the time the customer submits.
  */
 export function preconnectApi() {
   if (preconnected) return

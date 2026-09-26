@@ -579,6 +579,13 @@
 
                 $user->update($payload);
 
+                // REQ-SS-03 / REQ-AB-03: an availability change is cross-checked
+                // against open bookings, and customers still holding one are told
+                // to reschedule when the in-store minimum is no longer met.
+                if (! $isCustomer && array_key_exists('emp_instore', $payload)) {
+                    $this->notifyStaffShortage();
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Account details updated successfully',

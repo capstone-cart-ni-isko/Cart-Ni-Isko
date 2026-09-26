@@ -1,4 +1,16 @@
-import { apiGet, apiPost, apiPut } from './api.js'
+import { apiGet, apiPost, apiPut, cacheRead, cacheWrite } from './api.js'
+
+/* The inbox mirrors its last answer for 60s: reopening it paints straight
+   away and the request that follows only refreshes what is on screen. */
+const CACHE_KEY = (recipientType, recipientId) => `cartniisko:notifs:${recipientType}:${recipientId}`
+
+export function readNotificationsCache(recipientType, recipientId) {
+  return cacheRead(CACHE_KEY(recipientType, recipientId))
+}
+
+export function writeNotificationsCache(recipientType, recipientId, rows) {
+  cacheWrite(CACHE_KEY(recipientType, recipientId), rows)
+}
 
 /** GET /notif/display - inbox for one account (unread have no *_read stamp). */
 export async function fetchNotifications(recipientType, recipientId) {
@@ -6,7 +18,9 @@ export async function fetchNotifications(recipientType, recipientId) {
     recipient_type: recipientType,
     recipient_id: recipientId,
   })
-  return data.data || []
+  const rows = data.data || []
+  writeNotificationsCache(recipientType, recipientId, rows)
+  return rows
 }
 
 /** POST /notif/create - manual notification. */

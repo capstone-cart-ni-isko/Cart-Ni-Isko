@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\CustNotif;
 use App\Models\EmpNotif;
@@ -117,6 +118,34 @@ abstract class Controller
             'custnotif_read'    => null,
             'custnotif_msg'     => $message,
         ]);
+    }
+
+    // REQ-AB-03 / REQ-SS-03: dropping below the in-store minimum (1 for CLAIM,
+    // 2 for VISIT) makes every still-open booking of that type unworkable, so
+    // those customers are told to reschedule. Slots already read as
+    // unavailable through slotState(); this only sends the messages.
+    protected function notifyStaffShortage(): void
+    {
+        $inStore = Employee::where('emp_instore', true)
+            ->whereNull('emp_disabled')
+            ->whereNull('emp_deleted')
+            ->count();
+
+        foreach (['CLAIM' => 1, 'VISIT' => 2] as $type => $minimum) {
+            if ($inStore >= $minimum) continue;
+
+            Appointment::whereNull('appoint_closed')
+                ->where('appoint_type', $type)
+                ->where('appoint_date', '>=', now())
+                ->get()
+                ->each(fn (Appointment $appointment) => $this->notifyCustomer(
+                    (int) $appointment->cust_id,
+                    '[PRIORITY] Your appointment #' . $appointment->appoint_id .
+                    ' on ' . $appointment->appoint_date .
+                    ' is unavailable. Reason: staff shortage. ' .
+                    'Please reschedule at your earliest convenience.'
+                ));
+        }
     }
 
     // Inserts a notification for a single employee
