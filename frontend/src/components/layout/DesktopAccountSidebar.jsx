@@ -18,16 +18,6 @@ function OrdersNavIcon({ className = 'w-4.5 h-4.5' }) {
   )
 }
 
-function CalendarNavIcon({ className = 'w-4.5 h-4.5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  )
-}
-
 function MapPinNavIcon({ className = 'w-4.5 h-4.5' }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -41,7 +31,6 @@ const navItems = [
   { id: 'overview', label: 'Overview', icon: UserIcon, path: '/profile', match: (p) => p === '/profile' },
   { id: 'account', label: 'Edit Profile', icon: UserIcon, path: '/account', match: (p) => p.startsWith('/account') },
   { id: 'orders', label: 'My Orders', icon: OrdersNavIcon, path: '/orders', match: (p) => p.startsWith('/orders') },
-  { id: 'appointments', label: 'My Appointments', icon: CalendarNavIcon, path: '/appointments', match: (p) => p.startsWith('/appointments') },
   { id: 'address', label: 'My Addresses', icon: MapPinNavIcon, path: '/settings/address', match: (p) => p.startsWith('/settings/address') },
   { id: 'settings', label: 'Settings', icon: SettingsIcon, path: '/settings', match: (p) => p === '/settings' },
 ]

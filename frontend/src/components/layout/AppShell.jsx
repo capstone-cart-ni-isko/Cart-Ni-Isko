@@ -71,7 +71,9 @@ function AppShell({ children, showNav = true, showBottomNav = true, showHeader =
         )}
         {children}
 
-        {showBottomNav && <MenuSidebar />}
+        {/* The drawer belongs to the ribbon's Menu button, not to the bottom
+            ribbon, so it stays mounted even where `showBottomNav={false}`. */}
+        <MenuSidebar />
       </SidebarLayout>
     </MenuProvider>
   )

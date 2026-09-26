@@ -41,8 +41,9 @@ function SignUp() {
   const step = getStepIndex(location.pathname)
 
   // Initial State from localStorage
+  // Guarded like every other storage read in the app: this initializer runs
+  // during render, so one unparsable value would blank the whole page.
   const [form, setForm] = useState(() => {
-    const saved = localStorage.getItem('isko_signup_progress')
     const defaults = {
       role: 'Student',
       firstName: '',
@@ -56,9 +57,11 @@ function SignUp() {
       yearLevel: '',
       block: '',
     }
-    return saved
-      ? { ...defaults, ...JSON.parse(saved) }
-      : defaults
+    try {
+      return { ...defaults, ...JSON.parse(localStorage.getItem('isko_signup_progress')) }
+    } catch {
+      return defaults
+    }
   })
 
   const [password, setPassword] = useState('')

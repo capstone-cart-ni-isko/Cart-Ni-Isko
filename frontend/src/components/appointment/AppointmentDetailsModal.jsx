@@ -28,7 +28,7 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit }
       <div
         role="dialog"
         aria-modal="true"
-        className="relative w-full sm:max-w-md bg-white rounded-lg border border-slate-200 animate-slide-up max-h-[90vh] overflow-y-auto"
+        className="relative w-full sm:max-w-md bg-white rounded-xl border border-slate-200 animate-slide-up max-h-[90vh] overflow-y-auto"
       >
         <header className="sticky top-0 bg-white flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100">
           <h3 className="text-sm font-extrabold text-slate-900">Appointment #{appointment.id}</h3>

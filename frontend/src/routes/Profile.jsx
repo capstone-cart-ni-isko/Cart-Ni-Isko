@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
-import { apiGet } from '../services/api.js'
 import { fetchOrders } from '../services/orders.js'
 import { fetchNotifications, unreadCount } from '../services/notifications.js'
 import { WishlistContext } from '../context/WishlistContext.jsx'
@@ -27,29 +26,11 @@ function OrdersNavIcon({ className = 'w-5 h-5' }) {
   )
 }
 
-function CalendarNavIcon({ className = 'w-5 h-5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  )
-}
-
 function PencilIcon({ className = 'w-4 h-4' }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  )
-}
-
-function MoreVertIcon({ className = 'w-5 h-5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
-      <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
     </svg>
   )
 }
@@ -118,7 +99,6 @@ function Profile() {
   const fullName = baseUser.fullName || 'User'
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
-  const [appointments, setAppointments] = useState([])
   const [orders, setOrders] = useState([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const { wishlistItems } = useContext(WishlistContext)
@@ -129,24 +109,19 @@ function Profile() {
     navigate('/')
   }
 
-  // Fetch appointments from the backend
+  // Appointments live on their own standalone route (/appointments), so Profile
+  // only needs orders and notifications.
   useEffect(() => {
     if (!custId) return undefined
     let cancelled = false
-    Promise.all([
-      apiGet('/appoint/display', { cust_id: custId }).then((data) => data?.data || []),
-      fetchOrders(custId),
-      fetchNotifications('customer', custId),
-    ])
-      .then(([appointmentRows, orderRows, notificationRows]) => {
+    Promise.all([fetchOrders(custId), fetchNotifications('customer', custId)])
+      .then(([orderRows, notificationRows]) => {
         if (cancelled) return
-        setAppointments(appointmentRows)
         setOrders(orderRows)
         setUnreadNotifications(unreadCount(notificationRows))
       })
       .catch(() => {
         if (cancelled) return
-        setAppointments([])
         setOrders([])
         setUnreadNotifications(0)
       })
@@ -155,23 +130,13 @@ function Profile() {
 
   const overview = useMemo(() => ({
     totalOrders: orders.length,
-    appointments: appointments.filter((a) => !a.appoint_closed).length,
     completedOrders: orders.filter((o) => ['CLAIMED', 'COMPLETED'].includes(String(o.ord_status).toUpperCase())).length,
     savedItems: wishlistItems.length,
     inProgress: orders.filter((o) => o.ord_status === 'TO PROCESS').length,
     forPickup: orders.filter((o) => o.ord_status === 'TO CLAIM').length,
     forDelivery: orders.filter((o) => o.ord_status === 'TO RECEIVE').length,
     completed: orders.filter((o) => ['CLAIMED', 'COMPLETED'].includes(String(o.ord_status).toUpperCase())).length,
-  }), [appointments, orders, wishlistItems])
-
-  const appointmentCards = appointments.map((row) => ({
-    ...row,
-    id: row.appoint_id,
-    type: row.appoint_type,
-    label: row.appoint_desc || `Appointment #${row.appoint_id}`,
-    location: row.appoint_closed ? 'Completed or unavailable' : 'Tindahan ni Isko · Main Campus',
-    date: new Date(row.appoint_date).toLocaleString(),
-  }))
+  }), [orders, wishlistItems])
 
   return (
     <AccountLayout>
@@ -273,17 +238,6 @@ function Profile() {
                 </div>
               </div>
 
-              {/* Appointments */}
-              <div className="bg-[#FFF7ED] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-                <div className="w-9 h-9 rounded-lg bg-orange-100 text-[#FF6A00] flex items-center justify-center shrink-0">
-                  <CalendarNavIcon className="w-4.5 h-4.5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-xl font-black text-gray-900 leading-none">{overview.appointments}</span>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Appointments</p>
-                </div>
-              </div>
-
               {/* Saved Items */}
               <div className="bg-[#FAF5FF] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
                 <div className="w-9 h-9 rounded-lg bg-purple-100 text-[#8B5CF6] flex items-center justify-center shrink-0">
@@ -382,40 +336,7 @@ function Profile() {
             </div>
           </div>
 
-          {/* 4. My Appointments */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black text-gray-900">My Appointments</h2>
-              </div>
-              <ViewAllLink to="/appointments">View calendar</ViewAllLink>
-            </div>
-
-            <div className="space-y-2.5">
-              {appointmentCards.map((appt) => (
-                <div
-                  key={appt.appoint_id}
-                  className="flex items-center justify-between p-3.5 rounded-2xl border border-gray-100 bg-white shadow-2xs"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="bg-[#FF6A00] text-white font-bold text-xs tracking-wider px-2.5 py-1 rounded-lg uppercase whitespace-nowrap">
-                      {appt.type === 'Visit Store' ? 'VISIT STORE' : 'PICK-UP ORDER'}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-gray-900 truncate">{appt.label}</p>
-                      <p className="text-xs text-gray-500 mt-0.5 truncate">{appt.location}</p>
-                      <p className="text-xs text-gray-600 font-medium mt-0.5">{appt.date} · {appt.time}</p>
-                    </div>
-                  </div>
-                  <button type="button" className="text-gray-400 hover:text-gray-600 p-1">
-                    <MoreVertIcon className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 5. Contact Information */}
+          {/* 4. Contact Information */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -602,85 +523,6 @@ function Profile() {
                   <p className="text-[10px] font-bold text-gray-400 uppercase">College</p>
                   <p className="font-bold text-gray-900 mt-0.5 truncate">{college}</p>
                 </div>
-              </div>
-            </div>
-
-            {/* 3. My Appointments */}
-            <div className="bg-white rounded-2xl p-4.5 border border-gray-100/90 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div>
-                    <h2 className="text-sm font-black text-gray-900">My Appointments</h2>
-                    <p className="text-[10px] text-gray-400 font-medium">Scheduled store visits &amp; pickup slots</p>
-                  </div>
-                </div>
-                <ViewAllLink to="/appointments">View calendar</ViewAllLink>
-              </div>
-
-              <div className="space-y-2.5">
-                {appointmentCards.map((appt) => (
-                  <div
-                    key={appt.appoint_id}
-                    className="p-3.5 rounded-xl border border-gray-100 bg-white hover:border-orange-200 transition-all shadow-2xs space-y-2.5"
-                  >
-                    {/* Header Row */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-brand-orange text-white font-extrabold text-[9px] tracking-wider px-2 py-0.5 rounded uppercase">
-                          {appt.type === 'Visit Store' ? 'VISIT STORE' : 'PICK-UP ORDER'}
-                        </span>
-                        <span className="text-xs font-bold text-gray-900">{appt.label}</span>
-                        <span className="text-[10px] font-mono text-gray-400 bg-gray-50 border border-gray-200 px-1 py-0.5 rounded">
-                          #APT-2026-04{appt.id}
-                        </span>
-                      </div>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        Confirmed
-                      </span>
-                    </div>
-
-                    {/* Detailed Row */}
-                    <div className="grid grid-cols-3 gap-2 text-xs bg-gray-50/70 p-2.5 rounded-xl border border-gray-100">
-                      <div>
-                        <p className="text-[9px] text-gray-400 font-bold uppercase">Location</p>
-                        <p className="font-bold text-gray-800 truncate mt-0.5">{appt.location}</p>
-                        <p className="text-[10px] text-gray-400">BU Main Campus</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] text-gray-400 font-bold uppercase">Time Window</p>
-                        <p className="font-bold text-gray-800 mt-0.5">{appt.date}</p>
-                        <p className="text-[10px] text-brand-orange font-bold">{appt.time}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] text-gray-400 font-bold uppercase">Order Reference</p>
-                        <p className="font-bold text-gray-800 mt-0.5">#ORD-8915</p>
-                        <p className="text-[10px] text-gray-500 truncate">BU Varsity Jacket</p>
-                      </div>
-                    </div>
-
-                    {/* Footer Actions */}
-                    <div className="flex items-center justify-between pt-0.5">
-                      <p className="text-[10px] text-gray-400">
-                        ⓘ Please arrive 5 minutes early with your Student ID.
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        <Link
-                          to="/appointments"
-                          className="px-2.5 py-1 bg-white border border-gray-200 text-[11px] font-bold text-gray-700 rounded-lg hover:bg-gray-50"
-                        >
-                          View Ticket
-                        </Link>
-                        <Link
-                          to="/appointments"
-                          className="px-2.5 py-1 bg-brand-orange text-white text-[11px] font-bold rounded-lg hover:bg-orange-600"
-                        >
-                          Reschedule
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
 

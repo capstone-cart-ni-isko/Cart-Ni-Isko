@@ -43,9 +43,16 @@ export function AuthProvider({ children }) {
     return saved?.user ?? null
   })
 
+  // Guarded like every other storage read in the app: this initializer runs
+  // inside AuthProvider, which sits ABOVE the error boundary, so a single
+  // unparsable value would throw during render and blank the whole page.
   const [addresses, setAddresses] = useState(() => {
-    const saved = localStorage.getItem('isko_addresses')
-    return saved ? JSON.parse(saved) : DEFAULT_ADDRESSES
+    try {
+      const saved = JSON.parse(localStorage.getItem('isko_addresses'))
+      return Array.isArray(saved) ? saved : DEFAULT_ADDRESSES
+    } catch {
+      return DEFAULT_ADDRESSES
+    }
   })
 
   // Mirror every user change (login, edit, logout) into the shared slot.

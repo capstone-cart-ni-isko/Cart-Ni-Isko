@@ -18,6 +18,29 @@ export async function fetchAppointments(params = {}) {
   return data.data || []
 }
 
+/* The ribbon opens the list often, so the last answer for each
+   (customer, filter) is mirrored in localStorage: the page paints instantly
+   and the request that follows only refreshes what is on screen. */
+const CACHE_KEY = (custId, status) => `cartniisko:appointments:${custId}:${status}`
+const CACHE_TTL = 60 * 1000
+
+export function readAppointmentsCache(custId, status) {
+  try {
+    const hit = JSON.parse(localStorage.getItem(CACHE_KEY(custId, status)) || 'null')
+    return hit && Date.now() - hit.at < CACHE_TTL ? hit.rows : null
+  } catch {
+    return null
+  }
+}
+
+export function writeAppointmentsCache(custId, status, rows) {
+  try {
+    localStorage.setItem(CACHE_KEY(custId, status), JSON.stringify({ at: Date.now(), rows }))
+  } catch {
+    // A full or blocked storage must never break the list.
+  }
+}
+
 /** GET /appoint/slots?date= - bookable slots with availability + reasons. */
 export async function fetchSlots(date) {
   const data = await apiGet('/appoint/slots', { date })

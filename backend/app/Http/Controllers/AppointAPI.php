@@ -38,6 +38,15 @@
                     return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
                 }
 
+                // A done or cancelled appointment is final: it can never be
+                // closed again, moved or removed.
+                if ($appointment->appoint_closed) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Closed appointments cannot be closed again.'
+                    ], 409);
+                }
+
                 $appointment->update([
                     'appoint_closed' => now()
                 ]);
@@ -187,7 +196,8 @@
             if ($validator) return $validator;
 
             try {
-                $type = strtoupper((string) $json->input('appoint_type', 'VISIT'));
+                // SRS stores the kind verbatim: CLAIM or VISIT, uppercase only.
+                $type = (string) $json->input('appoint_type', 'VISIT');
                 if (!in_array($type, ['CLAIM', 'VISIT'], true)) {
                     return response()->json([
                         'success' => false,
@@ -303,6 +313,7 @@
             scope - string (opt: master for employees - REQ-SC-01)
             cust_id - integer (opt, employees only)
             type - string (opt)
+            status - string (opt: today | upcoming | done | cancelled)
         */
         public function displayAppointments(Request $json)
         {
@@ -330,6 +341,8 @@
                 if ($json->has('type')) {
                     $query->where('appoint_type', $json->input('type'));
                 }
+
+                $this->filterByStatus($query, strtolower(trim((string) $json->input('status', ''))));
 
                 $appointments = $query->orderBy('appoint_date', 'asc')->get();
 
@@ -503,7 +516,7 @@
 
                 $updates = $json->only(['appoint_date', 'appoint_type', 'appoint_desc']);
                 if (isset($updates['appoint_date']) || isset($updates['appoint_type'])) {
-                    $type = strtoupper((string) ($updates['appoint_type'] ?? $appointment->appoint_type));
+                    $type = (string) ($updates['appoint_type'] ?? $appointment->appoint_type);
                     if (! in_array($type, ['CLAIM', 'VISIT'], true)) {
                         return response()->json(['success' => false, 'message' => 'Appointment type must be CLAIM or VISIT.'], 422);
                     }
@@ -550,6 +563,40 @@
         // ==========================================
         // SLOT AVAILABILITY RULES (REQ-AB-01 / REQ-AB-02 / REQ-AB-03 / REQ-SC-03)
         // ==========================================
+
+        /*
+            Applies one of the ribbon's four filter pills - today, upcoming,
+            done, cancelled - to an appointment query. SRS keeps the status
+            implicit, so it is derived exactly like the customer list does it:
+            a closed appointment is done, a still-open one whose slot has
+            already elapsed is cancelled, "today" is today's open bookings and
+            everything else is upcoming. Unknown values are ignored, so the
+            endpoint stays usable without a status at all.
+        */
+        protected function filterByStatus($query, string $status): void
+        {
+            if (!in_array($status, ['today', 'upcoming', 'done', 'cancelled'], true)) {
+                return;
+            }
+
+            // A slot runs 30 minutes for a CLAIM, 10 minutes for a VISIT.
+            $ends = "(appoint_date + case when appoint_type = 'CLAIM'
+                then interval '30 minutes' else interval '10 minutes' end)";
+
+            if ($status === 'done') {
+                $query->whereNotNull('appoint_closed');
+                return;
+            }
+
+            $query->whereNull('appoint_closed');
+            if ($status === 'cancelled') {
+                $query->whereRaw("$ends < ?", [now()]);
+            } elseif ($status === 'today') {
+                $query->whereBetween('appoint_date', [now()->startOfDay(), now()->endOfDay()]);
+            } else {
+                $query->whereRaw("$ends >= ?", [now()]);
+            }
+        }
 
         /*
             Resolves the order behind each appointment, keyed by appoint_id.

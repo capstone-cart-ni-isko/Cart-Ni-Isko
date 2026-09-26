@@ -1,13 +1,17 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../hooks/useAuth.js'
-import { useApiData } from '../hooks/useApi.js'
 import AppShell from '../components/layout/AppShell.jsx'
-import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
-import { ApiErrorText } from '../components/ui/ApiErrorBoundary.jsx'
+import { apiErrorMessage } from '../hooks/useApi.js'
 import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
 import AppointmentCard from '../components/appointment/AppointmentCard.jsx'
 import AppointmentDetailsModal from '../components/appointment/AppointmentDetailsModal.jsx'
-import { APPOINT_TYPE, fetchAppointments, SLOT_RULES } from '../services/appointments.js'
+import {
+  APPOINT_TYPE,
+  fetchAppointments,
+  readAppointmentsCache,
+  SLOT_RULES,
+  writeAppointmentsCache,
+} from '../services/appointments.js'
 import { fetchOrder } from '../services/orders.js'
 
 const STORE = {
@@ -22,6 +26,9 @@ const FILTERS = [
   { id: 'done', label: 'Done' },
   { id: 'cancelled', label: 'Cancelled' },
 ]
+
+/** How many cards render before "Load more" - keeps long lists instant. */
+const PAGE_SIZE = 20
 
 /* ── Slot / date formatting (APPOINTMENT stores one appoint_date stamp) ── */
 
@@ -114,10 +121,10 @@ function mapAppointment(row, order) {
   }
 }
 
-/** GET /appoint/display, then the order behind each claim (PICKUP link). */
-async function loadAppointments(custId) {
+/** GET /appoint/display?status=..., then the order behind each claim (PICKUP link). */
+async function loadAppointments({ custId, status }) {
   if (!custId) return []
-  const rows = await fetchAppointments({ cust_id: custId })
+  const rows = await fetchAppointments({ cust_id: custId, status })
   const list = Array.isArray(rows) ? rows : []
 
   const orderIds = [...new Set(list.map((r) => r.ord_id ?? r.order_id).filter(Boolean))].slice(0, 12)
@@ -134,27 +141,86 @@ function Appointments() {
   const { currentUser } = useAuth()
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
+  // The pill the customer pressed (instant) and the filter the request uses
+  // (debounced), so tapping pills never fires competing requests.
   const [filter, setFilter] = useState('today')
+  const [status, setStatus] = useState('today')
+  const [list, setList] = useState([])
+  const [limit, setLimit] = useState(PAGE_SIZE)
+  const [loading, setLoading] = useState(true) // first paint → skeleton
+  const [switching, setSwitching] = useState(false) // pill switch → spinner
+  const [error, setError] = useState('')
   const [form, setForm] = useState(null) // null | 'new' | appointment
   const [viewing, setViewing] = useState(null)
+  const alive = useRef(true)
+  const firstRun = useRef(true)
 
-  const { data, error, isLoading, refresh } = useApiData(loadAppointments, { custId })
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
 
-  // REQ-AB filters evaluated from appoint_date + appoint_closed.
-  const visible = useMemo(
-    () =>
-      (data || []).filter((appt) =>
-        filter === 'today' ? appt.isToday && appt.status === 'upcoming' : appt.status === filter
-      ),
-    [data, filter]
-  )
+  useEffect(() => {
+    const timer = setTimeout(() => setStatus(filter), 250)
+    return () => clearTimeout(timer)
+  }, [filter])
 
+  const load = useCallback(async () => {
+    if (!custId) {
+      setList([])
+      setLoading(false)
+      return
+    }
+
+    const first = firstRun.current
+    firstRun.current = false
+    if (first) {
+      setLoading(true)
+      setList(readAppointmentsCache(custId, status) || [])
+    } else {
+      setSwitching(true)
+    }
+    setError('')
+
+    try {
+      const rows = await loadAppointments({ custId, status })
+      if (!alive.current) return
+      setList(rows)
+      writeAppointmentsCache(custId, status, rows)
+    } catch (err) {
+      if (!alive.current) return
+      setError(
+        apiErrorMessage(
+          err,
+          first
+            ? 'Failed to load appointments. Please try again.'
+            : 'Failed to filter appointments. Please try again.'
+        )
+      )
+    } finally {
+      if (alive.current) {
+        setLoading(false)
+        setSwitching(false)
+      }
+    }
+  }, [custId, status])
+
+  useEffect(() => {
+    setLimit(PAGE_SIZE)
+    load()
+  }, [load])
+
+  const refresh = useCallback(() => load(), [load])
   const startAdd = useCallback(() => setForm('new'), [])
   const startEdit = useCallback((appt) => {
     setViewing(null)
     setForm(appt)
   }, [])
   const closeForm = useCallback(() => setForm(null), [])
+
+  const cards = list.slice(0, limit)
 
   return (
     <AppShell>
@@ -164,7 +230,7 @@ function Appointments() {
           type="button"
           onClick={() => (form === 'new' ? closeForm() : startAdd())}
           aria-expanded={form === 'new'}
-          className="add-appointment-cta w-full h-24 px-5 flex items-center justify-between gap-4 rounded-lg bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] text-white text-left cursor-pointer transition-transform active:scale-[0.99]"
+          className="add-appointment-cta w-full h-24 px-5 flex items-center justify-between gap-4 rounded-xl bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] text-white text-left cursor-pointer transition-transform active:scale-[0.99]"
         >
           <span className="min-w-0">
             <span className="block text-base font-extrabold">Add Appointment</span>
@@ -172,30 +238,15 @@ function Appointments() {
               Reserve a 10-minute store visit or a 30-minute order claiming slot.
             </span>
           </span>
-          <span className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+          <span className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-5 h-5">
               <path d="M12 5v14M5 12h14" />
             </svg>
           </span>
         </button>
 
-        {/* This page always books a VISIT; Checkout is the only CLAIM caller. */}
-        {form && (
-          <AppointmentForm
-            key={form === 'new' ? 'new' : `edit-${form.id}`}
-            type={APPOINT_TYPE.VISIT}
-            custId={custId}
-            reschedule={form === 'new' ? null : form}
-            onSuccess={() => {
-              closeForm()
-              refresh()
-            }}
-            onCancel={closeForm}
-          />
-        )}
-
-        {/* Filter row: four pill toggles, the list reacts instantly */}
-        <div className="bg-white rounded-lg p-4 border border-slate-200">
+        {/* Filter row: four pill toggles, the list follows without a reload */}
+        <div className="bg-white rounded-xl p-4 border border-slate-200">
           <h1 className="text-base font-extrabold text-slate-900 tracking-tight">My Appointments</h1>
           <p className="text-xs text-slate-500 leading-relaxed mt-0.5 mb-3">
             Your pickup schedule and store visits. Arrive at the campus store at your designated slot.
@@ -219,23 +270,49 @@ function Appointments() {
           </div>
         </div>
 
-        <ApiErrorText error={error} fallback="Unable to load your appointments. Please try again." />
+        {/* A failed refresh keeps the last good list on screen under this note */}
+        {error && list.length > 0 && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-600">
+            {error}
+          </p>
+        )}
+
+        {/* This page always books a VISIT; Checkout is the only CLAIM caller. */}
+        {form && (
+          <AppointmentForm
+            key={form === 'new' ? 'new' : `edit-${form.id}`}
+            type={APPOINT_TYPE.VISIT}
+            custId={custId}
+            reschedule={form === 'new' ? null : form}
+            onSuccess={() => {
+              closeForm()
+              refresh()
+            }}
+            onCancel={closeForm}
+          />
+        )}
 
         {/* Data list */}
-        {isLoading ? (
-          <div className="bg-white rounded-lg p-8 border border-slate-200 flex items-center justify-center gap-3">
-            <LoadingSpinner size={22} />
-            <p className="text-sm font-bold text-slate-500">Loading your appointments…</p>
+        {loading ? (
+          <Skeleton />
+        ) : error && list.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center border border-slate-200 space-y-3">
+            <p className="text-sm font-bold text-red-500">{error}</p>
+            <button
+              type="button"
+              onClick={refresh}
+              className="h-8 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              Try again
+            </button>
           </div>
-        ) : visible.length === 0 ? (
-          <div className="bg-white rounded-lg p-8 text-center border border-slate-200">
-            <p className="text-sm font-bold text-slate-500">
-              {error ? 'Could not load appointments right now.' : 'No appointments in this category.'}
-            </p>
+        ) : list.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center border border-slate-200">
+            <p className="text-sm font-bold text-slate-500">No appointments found</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {visible.map((appt) => (
+            {cards.map((appt) => (
               <AppointmentCard
                 key={appt.id}
                 appointment={appt}
@@ -243,6 +320,23 @@ function Appointments() {
                 onEdit={() => startEdit(appt)}
               />
             ))}
+
+            {switching && (
+              <p className="flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
+                <span className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-brand-orange animate-spin" />
+                Loading…
+              </p>
+            )}
+
+            {list.length > cards.length && (
+              <button
+                type="button"
+                onClick={() => setLimit(limit + PAGE_SIZE)}
+                className="w-full h-9 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Load more ({list.length - cards.length} left)
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -253,6 +347,27 @@ function Appointments() {
         onEdit={() => startEdit(viewing)}
       />
     </AppShell>
+  )
+}
+
+/** Placeholder cards shown while the first list request is in flight. */
+function Skeleton() {
+  return (
+    <div className="space-y-3">
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="bg-white rounded-xl p-4 border border-slate-200 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-2 flex-1">
+              <div className="h-3 w-20 rounded-full bg-slate-100 animate-pulse" />
+              <div className="h-3.5 w-32 rounded-full bg-slate-100 animate-pulse" />
+            </div>
+            <div className="h-8 w-24 rounded-full bg-slate-100 animate-pulse" />
+          </div>
+          <div className="h-2 w-full rounded-full bg-slate-100 animate-pulse" />
+          <div className="h-8 w-full rounded-xl bg-slate-100 animate-pulse" />
+        </div>
+      ))}
+    </div>
   )
 }
 

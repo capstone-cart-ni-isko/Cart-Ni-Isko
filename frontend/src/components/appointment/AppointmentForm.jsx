@@ -148,19 +148,25 @@ export default function AppointmentForm({
         ...(res?.data || {}),
         appoint_id: res?.data?.appoint_id ?? reschedule?.id,
       }
-      showToast(reschedule ? 'Appointment rescheduled.' : 'Appointment booked!', 'success')
+      showToast(reschedule ? 'Appointment updated successfully.' : 'Appointment created successfully.', 'success')
       setSlot('')
       await loadSlots()
       onSuccess?.(saved)
     } catch (err) {
-      showToast(err?.message || 'Unable to book that slot. Try another one.', 'error')
+      showToast(
+        err?.message ||
+          (reschedule
+            ? 'Failed to update appointment. Please try again.'
+            : 'Failed to create appointment. Please try again.'),
+        'error'
+      )
     } finally {
       setBooking(false)
     }
   }
 
   return (
-    <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+    <div className="bg-white rounded-xl p-4 border border-slate-200 space-y-3">
       <div>
         <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
           {title || (reschedule ? `Reschedule ${TYPE_LABEL[appointType]}` : `Book a ${TYPE_LABEL[appointType]}`)}
