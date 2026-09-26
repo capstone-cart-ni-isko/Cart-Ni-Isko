@@ -28,15 +28,17 @@ const DEFAULT_USER = {
 const DEFAULT_ADDRESSES = []
 
 /**
- * Customer session. The last signed-in account (user + bearer token) is kept
- * in the shared `isko_session` slot (services/session.js), so a refresh or a
- * code reload restores it - REQ-ALR-01's "relogin on refresh" is intentionally
- * overridden here; a 401 from the API still ends the session immediately.
+ * Customer session. The signed-in account (user + bearer token) is held in the
+ * shared in-memory slot (services/session.js), so it survives client-side
+ * navigation but never a reload — REQ-ALR-01 requires a fresh login after a
+ * logout, a refresh, a browser reopen, or a device restart. A 401 from the API
+ * still ends the session immediately.
  */
 export function AuthProvider({ children }) {
   const navigate = useNavigate()
 
-  // Lazy restore so the token is back in place before the first API call.
+  // Restores nothing on a cold start, which is exactly what REQ-ALR-01 wants.
+  // The token is still in place for the rest of the tab after a login.
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = loadSession('customer')
     if (saved) setApiToken(saved.token)

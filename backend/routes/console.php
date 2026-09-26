@@ -1,7 +1,7 @@
 <?php
 
-use App\Models\CustNotif;
-use App\Models\EmpNotif;
+use App\Jobs\NotificationFollowUpJob;
+use App\Support\AcademicPeriodRoster;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -11,57 +11,37 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 /*
-    REQ-AN-03: every priority notification that is still unread after a day
+    REQ-AN-03: every priority notification that is still unread after 2 hours
     gets an automated follow-up notification. A follow-up is tagged with
     [FOLLOW-UP] and references the original notification id, which is what
     keeps this job from sending the same follow-up twice.
+    Runs every 15 minutes; controlled by ENABLE_NOTIFICATION_FOLLOWUPS env flag.
+*/
+Schedule::job(new NotificationFollowUpJob())
+    ->everyFifteenMinutes()
+    ->name('priority-notification-follow-ups')
+    ->withoutOverlapping();
+
+/*
+    Scheduler watchdog: the job writes a heartbeat file that
+    GET /api/health/scheduler reads, so a stopped or hung schedule:work
+    process is detectable over HTTP. It runs every minute so the reported age
+    is accurate; the write is a single file.
 */
 Schedule::call(function () {
-    $cutoff = now()->subDay();
+    file_put_contents(storage_path('framework/scheduler-heartbeat'), now()->toDateTimeString());
+})->everyMinute()->name('scheduler-heartbeat')->withoutOverlapping();
 
-    $followUpCustomer = function (CustNotif $notif) {
-        $exists = CustNotif::where('cust_id', $notif->cust_id)
-            ->where('custnotif_msg', 'like', '%[FOLLOW-UP] #' . $notif->custnotif_id . '%')
-            ->exists();
+/*
+    REQ-SS-01: at the start of an academic period the baseline duty roster is
+    rebuilt - every active employee back to Available, with one duty_shift block
+    per day over the standard operating hours. The rebuild is inert until a
+    term is configured and then runs once per term; see AcademicPeriodRoster
+    for the guards and the exception rule.
+*/
+Schedule::call(fn () => AcademicPeriodRoster::apply())
+    ->hourly()
+    ->name('academic-period-start')
+    ->withoutOverlapping();
 
-        if ($exists) return;
 
-        CustNotif::create([
-            'cust_id'           => $notif->cust_id,
-            'custnotif_created' => now(),
-            'custnotif_read'    => null,
-            'custnotif_msg'     => '[FOLLOW-UP] [PRIORITY] ' . $notif->custnotif_msg
-                . ' (follow-up for notification #' . $notif->custnotif_id . ')',
-        ]);
-    };
-
-    $followUpEmployee = function (EmpNotif $notif) {
-        $exists = EmpNotif::where('emp_id', $notif->emp_id)
-            ->where('empnotif_msg', 'like', '%[FOLLOW-UP] #' . $notif->empnotif_id . '%')
-            ->exists();
-
-        if ($exists) return;
-
-        EmpNotif::create([
-            'emp_id'           => $notif->emp_id,
-            'empnotif_created' => now(),
-            'empnotif_read'    => null,
-            'empnotif_msg'     => '[FOLLOW-UP] [PRIORITY] ' . $notif->empnotif_msg
-                . ' (follow-up for notification #' . $notif->empnotif_id . ')',
-        ]);
-    };
-
-    CustNotif::whereNull('custnotif_read')
-        ->where('custnotif_created', '<=', $cutoff)
-        ->where('custnotif_msg', 'like', '%[PRIORITY]%')
-        ->where('custnotif_msg', 'not like', '%[FOLLOW-UP%')
-        ->orderBy('custnotif_id')
-        ->each($followUpCustomer);
-
-    EmpNotif::whereNull('empnotif_read')
-        ->where('empnotif_created', '<=', $cutoff)
-        ->where('empnotif_msg', 'like', '%[PRIORITY]%')
-        ->where('empnotif_msg', 'not like', '%[FOLLOW-UP%')
-        ->orderBy('empnotif_id')
-        ->each($followUpEmployee);
-})->hourlyAt(0)->name('priority-notification-follow-ups')->withoutOverlapping();

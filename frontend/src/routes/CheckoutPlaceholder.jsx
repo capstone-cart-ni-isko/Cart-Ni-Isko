@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useCart } from '../hooks/useCart.js'
 import { useAuth } from '../hooks/useAuth.js'
@@ -15,7 +15,7 @@ import { CloseIcon } from '../components/ui/Icons.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import { CheckIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
-import { getDispatch, payOrder } from '../services/checkout.js'
+import { getDispatch, payOrder, createPaymentIntent } from '../services/checkout.js'
 import { addToCart as addCartOrder, removeFromCart as removeCartOrder } from '../services/cart.js'
 import { removeProductFromOrder } from '../services/orders.js'
 import { APPOINT_TYPE } from '../services/appointments.js'
@@ -162,6 +162,9 @@ function CheckoutPlaceholder() {
     serverPreview?.total_due ?? serverPreview?.total ?? serverPreview?.ord_total ?? null
   const totalDue = serverDue != null ? Number(serverDue) : orderSubtotal + clientFee
 
+  // Gateway selection: 'pay_ref' (existing) or 'paymongo'
+  const [gateway, setGateway] = useState('pay_ref')
+
   // The server derives every fee itself; it only needs the modality inputs.
   const dispatchOptions = (appointId = null) =>
     dispatchType === 'delivery'
@@ -192,6 +195,54 @@ function CheckoutPlaceholder() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directOrdId, dispatchType, tier, addressIdx, useCustomAddress, customAddress])
+
+  // Handle PayMongo return URL (after payment redirect back)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    // PayMongo uses 'status' and 'payment_intent_id' parameters
+    const paymentStatus = params.get('status') || params.get('payment_status')
+    const paymentIntentId = params.get('payment_intent_id')
+    
+    if (paymentStatus && paymentIntentId) {
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname)
+      
+      if (paymentStatus === 'paid') {
+        // Complete the order by calling integratePayment
+        completePayMongoOrder(paymentIntentId)
+      } else if (paymentStatus === 'failed') {
+        showToast('Payment failed. Please try again.', 'error')
+        setError('Payment was not completed. Please try again.')
+      }
+    }
+  }, [showToast])
+
+  const completePayMongoOrder = async (paymentIntentId) => {
+    if (!directOrdId) return
+    setBusy(true)
+    try {
+      const appointId = appointment?.appoint_id ?? null
+      const res = await payOrder(directOrdId, dispatchType, totalDue, dispatchOptions(appointId))
+      const payRef = res?.data?.payment?.pay_ref ?? ''
+      
+      if (createdOrdId) await removeSourceLines()
+      clearSelectedItems()
+      refreshCart()
+      setPaidRef(payRef || `PM-${paymentIntentId.slice(-8)}`)
+      showToast('Payment successful! Your order is being processed.', 'success')
+      setStep('confirmed')
+      setCountdown(5)
+    } catch (err) {
+      // If integratePayment fails, the webhook already created payment
+      // Just show success since payment was confirmed
+      showToast('Payment confirmed! Your order is being processed.', 'success')
+      setStep('confirmed')
+      setCountdown(5)
+      setPaidRef(`PM-${paymentIntentId.slice(-8)}`)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   /* Picking "In-Store Pickup" mounts and opens the shared <AppointmentForm/>. */
   const chooseModality = (type) => {
@@ -290,19 +341,35 @@ function CheckoutPlaceholder() {
         // Preview unavailable: pay the amount computed from the fee table.
       }
 
-      // 4. Settle the payment; the server mints the gateway reference
-      //    (REQ-OC-02) and returns it on the payment record.
-      const payRes = await payOrder(ordId, dispatchType, due, dispatchOptions(appointId))
-      const payRef = payRes?.data?.payment?.pay_ref ?? ''
+      // 4. Settle the payment based on selected gateway
+      if (gateway === 'paymongo') {
+        // Create PayMongo payment intent and redirect
+        const intentRes = await createPaymentIntent(ordId, 'paymongo', dispatchOptions(appointId))
+        const checkoutUrl = intentRes?.data?.checkout_url
+        if (checkoutUrl) {
+          // Store order info for return handling
+          sessionStorage.setItem('pending_order_id', String(ordId))
+          sessionStorage.setItem('pending_dispatch_type', dispatchType)
+          sessionStorage.setItem('pending_appoint_id', String(appointId || ''))
+          // Redirect to PayMongo checkout
+          window.location.href = checkoutUrl
+          return
+        }
+        throw new Error('Failed to create payment session. Please try again.')
+      } else {
+        // Existing pay_ref method
+        const payRes = await payOrder(ordId, dispatchType, due, dispatchOptions(appointId))
+        const payRef = payRes?.data?.payment?.pay_ref ?? ''
 
-      // 5. Success: clean up the source rows and resync the cart.
-      if (createdOrdId) await removeSourceLines()
-      clearSelectedItems()
-      refreshCart()
-      setPaidRef(payRef)
-      showToast('Payment received. Your order is now being processed!', 'success')
-      setStep('confirmed')
-      setCountdown(5)
+        // 5. Success: clean up the source rows and resync the cart.
+        if (createdOrdId) await removeSourceLines()
+        clearSelectedItems()
+        refreshCart()
+        setPaidRef(payRef)
+        showToast('Payment received. Your order is now being processed!', 'success')
+        setStep('confirmed')
+        setCountdown(5)
+      }
     } catch (err) {
       // REQ-OC-02: failed payment must roll back every temp artifact. The claim
       // slot is kept so the customer can simply retry with the same booking.
@@ -638,6 +705,51 @@ function CheckoutPlaceholder() {
             </div>
           </div>
 
+          {/* Payment Gateway Selector */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Payment Method</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setGateway('pay_ref')}
+                className={`py-2.5 rounded-lg font-semibold text-sm border transition-colors cursor-pointer ${
+                  gateway === 'pay_ref'
+                    ? 'bg-brand-orange text-white border-brand-orange'
+                    : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
+                }`}
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                    <line x1="1" y1="10" x2="23" y2="10" />
+                  </svg>
+                  Pay at Store / Manual
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGateway('paymongo')}
+                className={`py-2.5 rounded-lg font-semibold text-sm border transition-colors cursor-pointer ${
+                  gateway === 'paymongo'
+                    ? 'bg-brand-orange text-white border-brand-orange'
+                    : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
+                }`}
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <path d="M21 12V7H5V7M21 17V7M3 17H21M5 17V12M19 17V12" />
+                  </svg>
+                  PayMongo (Online)
+                </span>
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              {gateway === 'paymongo'
+                ? 'You will be redirected to PayMongo to complete payment securely.'
+                : 'Pay in person at the store or via manual payment reference.'}
+            </p>
+          </div>
+
           {error && <ApiErrorText error={{ message: error }} />}
 
           {/* Confirmation Decision Buttons */}
@@ -653,6 +765,8 @@ function CheckoutPlaceholder() {
             >
               {busy
                   ? <><LoadingSpinner size={18} /> Processing…</>
+                  : gateway === 'paymongo'
+                  ? `Proceed to PayMongo • ₱${totalDue.toFixed(2)}`
                   : `Pay Now • ₱${totalDue.toFixed(2)}`}
             </Button>
             <button

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DutyShift;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -90,6 +91,26 @@ class InputValidatorAPI extends Controller
         ]);
         if ($emailCheck) {
             return $emailCheck;
+        }
+
+        // Optional fields validation
+        $optionalCheck = $this->validateFields($json, [
+            'midname'   => 'nullable|string|max:100',
+            'suffix'    => 'nullable|string|max:20',
+            'pronoun'   => 'nullable|string|max:50',
+            'birthday'  => 'nullable|date|before:today',
+            'brgy'      => 'nullable|string|max:100',
+            'city'      => 'nullable|string|max:100',
+            'province'  => 'nullable|string|max:100',
+            'country'   => 'nullable|string|max:100',
+            'callcode'  => 'nullable|regex:/^\+?[0-9]{1,4}$/',
+            'instore'   => 'nullable|boolean',
+        ], [
+            'callcode.regex' => 'Call code must be a valid country code (e.g., +63).',
+            'instore.boolean' => 'In-store status must be true or false.',
+        ]);
+        if ($optionalCheck) {
+            return $optionalCheck;
         }
 
         return $this->validateAllFormats($json);
@@ -429,6 +450,71 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
+    // REQ-SS-01/02/03: duty shift blocks. duty_shift stores the window as
+    // 'HH:MM' 24-hour strings, so the time rules match that format. A status
+    // is accepted but never stored: the table has no status column, so the
+    // value is validated for completeness and the real status is derived.
+    public function createShift(Request $json)
+    {
+        $requiredCheck = $this->validateFields($json, [
+            'emp_id'      => 'required|integer|exists:employee,emp_id',
+            'shift_date'  => 'required|date_format:Y-m-d',
+            'shift_start' => 'required|date_format:H:i',
+            'shift_end'   => 'required|date_format:H:i|after:shift_start',
+        ], [
+            'emp_id.required'         => 'Employee ID is required.',
+            'emp_id.integer'          => 'Employee ID must be a whole number.',
+            'emp_id.exists'           => 'Employee does not exist.',
+            'shift_date.required'     => 'Shift date is required.',
+            'shift_date.date_format'  => 'Shift date must use the YYYY-MM-DD format.',
+            'shift_start.required'    => 'Shift start time is required.',
+            'shift_start.date_format' => 'Shift start time must use the HH:MM 24-hour format.',
+            'shift_end.required'      => 'Shift end time is required.',
+            'shift_end.date_format'   => 'Shift end time must use the HH:MM 24-hour format.',
+            'shift_end.after'         => 'Shift end time must be later than the start time.',
+        ]);
+        if ($requiredCheck) return $requiredCheck;
+
+        return $this->validateFields($json, [
+            'status'         => 'nullable|in:SCHEDULED,ACTIVE,COMPLETED,PENDING REPLACEMENT',
+            'shift_type'     => 'nullable|string|max:100',
+            'shift_location' => 'nullable|string|max:100',
+        ], [
+            'status.in' => 'Status must be SCHEDULED, ACTIVE, COMPLETED or PENDING REPLACEMENT.',
+        ]);
+    }
+
+    public function updateShift(Request $json, DutyShift $shift)
+    {
+        $requiredCheck = $this->validateFields($json, [
+            'emp_id'      => 'nullable|integer|exists:employee,emp_id',
+            'shift_date'  => 'nullable|date_format:Y-m-d',
+            'shift_start' => 'nullable|date_format:H:i',
+            'shift_end'   => 'nullable|date_format:H:i',
+            'emp_instore' => 'nullable|boolean',
+            'shift_type'     => 'nullable|string|max:100',
+            'shift_location' => 'nullable|string|max:100',
+        ], [
+            'emp_id.exists'           => 'Employee does not exist.',
+            'shift_date.date_format'  => 'Shift date must use the YYYY-MM-DD format.',
+            'shift_start.date_format' => 'Shift start time must use the HH:MM 24-hour format.',
+            'shift_end.date_format'   => 'Shift end time must use the HH:MM 24-hour format.',
+            'emp_instore.boolean'     => 'Availability must be true or false.',
+        ]);
+        if ($requiredCheck) return $requiredCheck;
+
+        // A partial update is checked against the window it will end up with,
+        // so moving only the end time past the start is still rejected.
+        $start = $json->input('shift_start', $shift->shift_start);
+        $end = $json->input('shift_end', $shift->shift_end);
+
+        if ($end <= $start) {
+            return $this->fail('Shift end time must be later than the start time.');
+        }
+
+        return null;
+    }
+
     public function createAppointment(Request $json)
     {
         return $this->validateFields($json, [
@@ -649,6 +735,22 @@ class InputValidatorAPI extends Controller
             'speed.in' => 'Delivery speed must be priority, standard, or saver.',
             'deliver_address.required_if' => 'Delivery address is required.',
             'appoint_id.required_if' => 'An order-claiming appointment is required.',
+        ]);
+    }
+
+    public function createPaymentIntent(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required|integer',
+            'gateway' => 'required|in:paymongo',
+            'dispatch_type' => 'nullable|in:pickup,delivery',
+            'speed' => 'nullable|in:priority,standard,saver',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+            'gateway.required' => 'Payment gateway is required.',
+            'gateway.in' => 'Payment gateway must be paymongo.',
+            'dispatch_type.in' => 'Dispatch type must be either pickup or delivery.',
+            'speed.in' => 'Delivery speed must be priority, standard, or saver.',
         ]);
     }
 

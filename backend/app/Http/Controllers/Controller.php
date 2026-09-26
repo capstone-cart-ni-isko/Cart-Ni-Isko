@@ -5,13 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\CustNotif;
+use App\Models\DutyShift;
 use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Setting;
+use App\Support\DayRoster;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 abstract class Controller
 {
+    // The single phone value every walk-in customer record carries
+    const WALK_IN_PHONE = '0000000000';
+
     // ==========================================
     // AUTHORIZATION HELPERS
     // ==========================================
@@ -106,6 +112,79 @@ abstract class Controller
     }
 
     // ==========================================
+    // AVAILABILITY DEADLINE (REQ-SS-02)
+    // ==========================================
+
+    // REQ-SS-02: availability stays editable until the exact minute the
+    // employee’s duty block starts, and is locked from that minute on.
+    // Only non-super-admins are restricted, so a super admin passes this gate
+    // for every block and may override the deadline at any time.
+    protected function availabilityDeadlineBlocked(Request $json, int $empId)
+    {
+        if ($this->isSuperAdmin($json->user('sanctum'))) {
+            return null;
+        }
+
+        $block = $this->currentBlock($empId);
+        if ($block === null || $block->startsAt()->isFuture()) {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Availability is locked: shift block #' . $block->shift_id
+                . ' started at ' . $block->startsAt()->toDateTimeString()
+                . '. A super admin must override this change.',
+            'code'    => 'ALR_AVAIL_AFTER_BLOCK_START',
+        ], 403);
+    }
+
+    // REQ-SS-02: the employee’s next duty block (the one whose start decides
+    // the deadline), or null when they have none today or later. Only today
+    // and later can qualify, and the window is joined in PHP because
+    // shift_date and shift_start are two columns in two different formats.
+    protected function currentBlock(int $empId): ?DutyShift
+    {
+        return DutyShift::where('emp_id', $empId)
+            ->where('shift_date', '>=', now()->format('Y-m-d'))
+            ->orderBy('shift_date')
+            ->orderBy('shift_start')
+            ->first();
+    }
+
+    // ==========================================
+    // WALK-IN GUARD (REQ-POS-02 / REQ-ALR-03)
+    // ==========================================
+
+    // A walk-in customer (cust_phone 0000000000) has no account to return to,
+    // so REQ-POS-02 only lets them cancel or return an order while an open
+    // VISIT appointment backs the request. Returns the REQ-ALR-03 error detail
+    // for a rejection, or null when the walk-in may proceed.
+    protected function walkInVisitRequired(Customer $customer, string $action): ?array
+    {
+        if ($customer === null || $customer->cust_phone !== self::WALK_IN_PHONE) {
+            return null;
+        }
+
+        $hasOpenVisit = Appointment::where('cust_id', $customer->cust_id)
+            ->where('appoint_type', 'VISIT')
+            ->whereNull('appoint_closed')
+            ->where('appoint_date', '>=', now())
+            ->exists();
+
+        if ($hasOpenVisit) {
+            return null;
+        }
+
+        return [
+            'code'        => 'ALR_WALK_IN_NO_VISIT',
+            'description' => 'Walk-in customers must hold an open VISIT appointment to request an order '
+                . $action . '. Please book a visit appointment first.',
+            'timestamp'   => now()->toDateTimeString(),
+        ];
+    }
+
+    // ==========================================
     // NOTIFICATION HELPERS
     // ==========================================
 
@@ -120,31 +199,45 @@ abstract class Controller
         ]);
     }
 
-    // REQ-AB-03 / REQ-SS-03: dropping below the in-store minimum (1 for CLAIM,
-    // 2 for VISIT) makes every still-open booking of that type unworkable, so
-    // those customers are told to reschedule. Slots already read as
-    // unavailable through slotState(); this only sends the messages.
+    /*
+        REQ-AB-03 / REQ-SS-03: a block whose in-store headcount falls below the
+        minimum (2 for VISIT, 1 for CLAIM) makes every still-open booking in
+        that block unworkable, so those customers are told to reschedule once.
+        The headcount is per block, not per day, and a customer already told
+        about a block is never told twice.
+    */
     protected function notifyStaffShortage(): void
     {
-        $inStore = Employee::where('emp_instore', true)
-            ->whereNull('emp_disabled')
-            ->whereNull('emp_deleted')
-            ->count();
+        foreach (Appointment::whereNull('appoint_closed')
+            ->where('appoint_date', '>=', now())
+            ->get() as $appointment) {
 
-        foreach (['CLAIM' => 1, 'VISIT' => 2] as $type => $minimum) {
-            if ($inStore >= $minimum) continue;
+            $type = (string) $appointment->appoint_type;
+            $minimum = $type === 'CLAIM' ? 1 : 2;
+            // The model carries no datetime cast, so parse rather than trust
+            $start = Carbon::parse($appointment->appoint_date);
+            $end = $start->copy()->addMinutes(
+                $type === 'CLAIM'
+                    ? (int) $this->settingValue('claim_slot_duration', 30)
+                    : (int) $this->settingValue('visit_slot_duration', 10)
+            );
 
-            Appointment::whereNull('appoint_closed')
-                ->where('appoint_type', $type)
-                ->where('appoint_date', '>=', now())
-                ->get()
-                ->each(fn (Appointment $appointment) => $this->notifyCustomer(
-                    (int) $appointment->cust_id,
-                    '[PRIORITY] Your appointment #' . $appointment->appoint_id .
-                    ' on ' . $appointment->appoint_date .
-                    ' is unavailable. Reason: staff shortage. ' .
-                    'Please reschedule at your earliest convenience.'
-                ));
+            if (DayRoster::for($start)->headcount($start, $end) >= $minimum) continue;
+
+            $message = '[PRIORITY] Your appointment #' . $appointment->appoint_id
+                . ' on ' . $start->format('Y-m-d H:i')
+                . ' is unavailable. Reason: staff shortage. '
+                . 'Please reschedule at your earliest convenience.';
+
+            // One notice per booking, no matter how often the roster changes
+            if (CustNotif::where('cust_id', $appointment->cust_id)
+                ->where('custnotif_msg', 'like', '%appointment #' . $appointment->appoint_id . '%')
+                ->where('custnotif_msg', 'like', '%staff shortage%')
+                ->exists()) {
+                continue;
+            }
+
+            $this->notifyCustomer((int) $appointment->cust_id, $message);
         }
     }
 

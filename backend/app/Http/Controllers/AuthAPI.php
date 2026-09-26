@@ -4,6 +4,7 @@
 
     use App\Models\Customer;
     use App\Models\Employee;
+    use App\Models\EmpLog;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\DB;
     use Illuminate\Support\Facades\Hash;
@@ -291,6 +292,21 @@
                 ];
 
                 $employee = Employee::create($attributes);
+
+                // REQ-UM-04: registrations are logged with the responsible
+                // super admin and the timestamp, like every other user
+                // management action.
+                $by = $json->user('sanctum');
+                EmpLog::create([
+                    'emp_id'         => $employee->emp_id,
+                    'emplog_created' => now(),
+                    'emplog_action'  => 'REGISTER',
+                    'emplog_desc'    => 'Registered employee ' . $employee->emp_id . ' ('
+                        . $employee->emp_givname . ' ' . $employee->emp_surname . ') as '
+                        . $employee->emp_type . ' by super admin '
+                        . ($by instanceof Employee ? $by->emp_id : 'unknown')
+                        . '. Reason: new employee onboarding.',
+                ]);
 
                 return response()->json([
                     'success' => true,

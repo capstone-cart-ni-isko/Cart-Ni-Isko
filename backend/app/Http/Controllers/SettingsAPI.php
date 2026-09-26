@@ -20,6 +20,14 @@
                 'min_in_store_staff' => 2,
                 'low_stock_threshold'=> 5,
                 'maintenance_mode'   => false,
+                // REQ-SS-01: the day the term opens. Active employees are set
+                // back to Available from this date. It stays a code default so
+                // the settings table keeps its zero-row baseline; storing it
+                // later simply overrides this value. The default is a future
+                // date on purpose: the academic-period job is a bulk write over
+                // live employee rows, so it must not fire until a term is
+                // actually configured here.
+                'academic_period_start' => '2027-08-02',
             ];
         }
 

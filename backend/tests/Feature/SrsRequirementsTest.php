@@ -508,7 +508,7 @@ class SrsRequirementsTest extends TestCase
         $delivery = Delivery::create([
             'deliver_created' => now(),
             'deliver_deleted' => null,
-            'delvier_ref'     => 'DEL-SCAN01',
+            'delivery_ref'    => 'DEL-SCAN01',
             'deliver_date'    => now()->addDay(),
             'deliver_address' => 'Legazpi City',
             'deliver_status'  => 'TRANSIT',

@@ -4,7 +4,8 @@
 
     use App\Models\Appointment;
     use App\Models\Customer;
-    use App\Models\Employee;
+    use App\Models\DutyShift;
+    use App\Support\DayRoster;
     use Illuminate\Http\Request;
     use Illuminate\Support\Carbon;
     use Illuminate\Support\Facades\DB;
@@ -137,15 +138,17 @@
                     ->where('appoint_date', '>=', $open)
                     ->where('appoint_date', '<', $close)
                     ->get(['appoint_type', 'appoint_date', 'cust_id']);
-                $inStore = Employee::where('emp_instore', true)
-                    ->whereNull('emp_disabled')
-                    ->whereNull('emp_deleted')
-                    ->count();
+                // REQ-AB-03 / REQ-SS-03: the headcount is per block, not per
+                // day, so the day's roster is loaded once here and every slot
+                // is scored against the blocks that actually span it.
+                $roster = DayRoster::for($base);
                 $capacities = [
                     'CLAIM' => (int) $this->settingValue('max_claiming_slots', 10),
                     'VISIT' => (int) $this->settingValue('max_visit_slots', 1),
                 ];
                 $minStaff = ['CLAIM' => 1, 'VISIT' => 2]; // REQ-AB-03 / REQ-SC-03
+                // REQ-SS-03: counted once for the whole grid, never per slot.
+                $pendingReplacements = DutyShift::pendingReplacements();
 
                 $slots = [];
                 foreach (['CLAIM' => 30, 'VISIT' => 10] as $type => $duration) {
@@ -162,6 +165,10 @@
                         $booked = $rows->count();
                         $mine = $custId !== null && $rows->contains('cust_id', $custId);
 
+                        // REQ-AB-03 / REQ-SS-03: only the employees whose duty
+                        // block spans this slot count towards its headcount.
+                        $inStore = $roster->headcount($start, $end);
+
                         $reason = null;
                         if ($booked >= $capacities[$type]) {
                             $reason = 'Slot fully booked';
@@ -177,9 +184,12 @@
                             // other users' booking counts remain private.
                             'booked'    => $custId !== null && ! $mine ? 0 : $booked,
                             'capacity'  => $capacities[$type],
+                            'in_store'  => $inStore,
                             'available' => $reason === null,
                             'reason'    => $reason,
                             'mine'      => $mine,
+                            // REQ-SS-03: blocks whose assignee is unavailable.
+                            'pending_replacements' => $pendingReplacements,
                         ];
                     }
                 }
@@ -674,12 +684,11 @@
                 ->count();
 
             // Staffing: VISIT needs at least two in-store employees,
-            // CLAIM needs at least one (REQ-AB-03 / REQ-SC-03)
+            // CLAIM needs at least one (REQ-AB-03 / REQ-SC-03). The count is
+            // per block, not per day: only an employee whose duty_shift block
+            // spans this slot counts towards it.
             $minStaff = $type === 'CLAIM' ? 1 : 2;
-            $inStore = Employee::where('emp_instore', true)
-                ->whereNull('emp_disabled')
-                ->whereNull('emp_deleted')
-                ->count();
+            $inStore = DayRoster::for($start)->headcount($start, $end);
 
             $reason = null;
             if ($booked >= $capacity) {
@@ -691,8 +700,14 @@
             return [
                 'booked'    => $booked,
                 'capacity'  => $capacity,
+                'in_store'  => $inStore,
                 'available' => $reason === null,
                 'reason'    => $reason,
+                // REQ-SS-03: blocks whose assignee is unavailable. They are
+                // counted separately from the in-store minimum above because
+                // the minimum only asks whether enough staff exist, not
+                // whether this block still has its own person.
+                'pending_replacements' => DutyShift::pendingReplacements(),
             ];
         }
     }

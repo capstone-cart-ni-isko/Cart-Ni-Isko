@@ -12,8 +12,10 @@
     use App\Models\Payment;
     use App\Models\Pickup;
     use App\Models\Product;
+    use App\Services\PayMongoService;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\DB;
+    use Illuminate\Support\Facades\Log;
     use Illuminate\Support\Str;
 
     class CheckoutAPI extends Controller
@@ -300,7 +302,7 @@
                         $delivery = Delivery::create([
                             'deliver_created' => now(),
                             'deliver_deleted' => null,
-                            'delvier_ref'     => 'DEL-' . strtoupper(Str::random(8)),
+                            'delivery_ref'    => 'DEL-' . strtoupper(Str::random(8)),
                             'deliver_date'    => $estDate,
                             'deliver_address' => $deliverAddress,
                             'deliver_status'  => 'PENDING',
@@ -321,7 +323,7 @@
                             'modality'        => 'DELIVERY',
                             'delivery_id'     => $delivery->deliver_id,
                             'parcel_id'       => $parcel->parcel_id,
-                            'deliver_ref'     => $delivery->delvier_ref,
+                            'delivery_ref'    => $delivery->delivery_ref,
                             'deliver_address' => $delivery->deliver_address,
                             'deliver_date'    => $delivery->deliver_date,
                             'deliver_qr'      => $delivery->deliver_qr,
@@ -414,5 +416,199 @@
                     'error'   => $e->getMessage()
                 ], 500);
             }
+        }
+
+        /*
+            Create PayMongo Payment Intent
+            ----------
+            JSON REQUEST
+
+            ord_id - integer (req)
+            gateway - string (req: paymongo)
+        */
+        public function createPaymentIntent(Request $json)
+        {
+            $validator = (new InputValidatorAPI())->createPaymentIntent($json);
+            if ($validator) return $validator;
+
+            try {
+                $ordId = $json->input('ord_id');
+                $gateway = strtolower($json->input('gateway'));
+
+                $order = Order::with(['items.product', 'customer'])->where('ord_id', $ordId)->first();
+                if (! $order) {
+                    return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                }
+                $customerId = $this->customerId($json);
+                if ($customerId === null || (int) $order->cust_id !== $customerId) {
+                    return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                }
+                if (! str_starts_with(strtoupper((string) $order->ord_tag), 'CART-')) {
+                    return response()->json(['success' => false, 'message' => 'Order has already been checked out.'], 409);
+                }
+
+                $subtotal = (float) $order->items->sum(
+                    fn ($item) => (float) $item->product->prod_price * (int) $item->item_qty
+                );
+                $dispatchFee = 0.00;
+                $dispatchType = strtolower($json->input('dispatch_type', 'pickup'));
+                $speed = strtolower($json->input('speed', 'standard'));
+
+                if ($dispatchType === 'delivery') {
+                    $feeMap = ['priority' => 100.00, 'standard' => 50.00, 'saver' => 30.00];
+                    $dispatchFee = $feeMap[$speed] ?? 50.00;
+                }
+
+                $totalDue = round($subtotal + $dispatchFee, 2);
+
+                if ($gateway === 'paymongo') {
+                    $paymongo = new PayMongoService();
+                    $result = $paymongo->createPaymentIntent($totalDue, (string) $ordId, "Order {$order->ord_tag}");
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Payment intent created successfully',
+                        'data' => [
+                            'checkout_url' => $result['checkout_url'],
+                            'payment_intent_id' => $result['payment_intent_id'],
+                            'client_key' => $result['client_key'],
+                            'total_due' => $totalDue,
+                        ],
+                    ], 200);
+                }
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unsupported payment gateway',
+                ], 400);
+
+            } catch (\Exception $e) {
+                Log::error('PayMongo createPaymentIntent error', ['error' => $e->getMessage()]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create payment intent',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
+        }
+
+        /*
+            PayMongo Webhook Handler
+            ----------
+            Receives payment confirmation webhooks from PayMongo
+        */
+        public function paymentWebhook(Request $json)
+        {
+            $signature = $json->header('Paymongo-Signature');
+            $payload = $json->getContent();
+
+            if (! $signature) {
+                Log::warning('PayMongo webhook missing signature');
+                return response()->json(['success' => false, 'message' => 'Missing signature'], 403);
+            }
+
+            try {
+                $paymongo = new PayMongoService();
+                if (! $paymongo->webhookVerify($payload, $signature)) {
+                    Log::warning('PayMongo webhook signature verification failed');
+                    return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
+                }
+
+                $event = json_decode($payload, true);
+                $eventType = $event['data']['attributes']['type'] ?? '';
+                $paymentIntent = $event['data']['attributes']['data']['attributes'] ?? [];
+                $metadata = $paymentIntent['metadata'] ?? [];
+                $orderId = $metadata['order_id'] ?? null;
+                $paymentStatus = $paymentIntent['status'] ?? '';
+
+                if (! $orderId || $paymentStatus !== 'succeeded') {
+                    return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+                }
+
+                $order = Order::where('ord_id', $orderId)->first();
+                if (! $order) {
+                    Log::warning('PayMongo webhook: order not found', ['order_id' => $orderId]);
+                    return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+                }
+
+                // Update order status to PAID when payment confirmed via webhook
+                // Create Payment record with PayMongo payment_intent_id
+                $paymentIntentId = $paymentIntent['id'] ?? null;
+                $amount = isset($paymentIntent['amount']) ? (float) $paymentIntent['amount'] / 100 : 0;
+
+                $payment = Payment::create([
+                    'pay_created' => now(),
+                    'pay_ref'     => $paymentIntentId ?? 'PM-' . strtoupper(Str::random(16)),
+                    'pay_given'   => $amount,
+                    'pay_due'     => $amount,
+                    'pay_change'  => 0.00,
+                ]);
+
+                $order->update([
+                    'ord_status' => 'PAID',
+                ]);
+
+                // Generate receipt and trigger notification
+                $this->generateReceiptAndNotify($order);
+
+                return response()->json(['success' => true, 'message' => 'Payment confirmed'], 200);
+
+            } catch (\Exception $e) {
+                Log::error('PayMongo webhook error', ['error' => $e->getMessage()]);
+                // Return 200 to prevent PayMongo retry loops
+                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+            }
+        }
+
+        private function generateReceiptAndNotify(Order $order): void
+        {
+            // Trigger order confirmation notification
+            if ($order->cust_id) {
+                $this->notifyCustomer((int) $order->cust_id,
+                    '[PRIORITY] Payment confirmed for order ' . $order->ord_tag . '. Your order is now being processed.');
+            }
+            $this->notifyEmployeesByType(
+                ['ADMIN', 'SUPER ADMIN'],
+                '[PRIORITY] Payment received for order ' . $order->ord_tag . '.'
+            );
+        }
+
+        protected function customerId(Request $json): ?int
+        {
+            $user = $json->user();
+            if ($user instanceof Customer) {
+                return (int) $user->getKey();
+            }
+            return null;
+        }
+
+        protected function notifyCustomer(int $custId, string $msg): void
+        {
+            \App\Models\CustNotif::create([
+                'cust_id' => $custId,
+                'custnotif_created' => now(),
+                'custnotif_read' => null,
+                'custnotif_msg' => $msg,
+            ]);
+        }
+
+        protected function notifyEmployeesByType(array $types, string $msg): void
+        {
+            $employees = \App\Models\Employee::whereIn('emp_type', $types)
+                ->whereNull('emp_disabled')
+                ->whereNull('emp_deleted')
+                ->get();
+            foreach ($employees as $emp) {
+                \App\Models\EmpNotif::create([
+                    'emp_id' => $emp->emp_id,
+                    'empnotif_created' => now(),
+                    'empnotif_read' => null,
+                    'empnotif_msg' => $msg,
+                ]);
+            }
+        }
+
+        protected function settingValue(string $key, $default = null)
+        {
+            return \App\Models\Setting::where('setting_key', $key)->value('setting_value') ?? $default;
         }
     }

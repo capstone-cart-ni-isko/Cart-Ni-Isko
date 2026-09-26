@@ -577,6 +577,14 @@
                     $payload[$stampField] = now();
                 }
 
+                // REQ-SS-02: availability locks at the exact start of the
+                // employee's duty block, so the change is checked before it is
+                // written. Super admins may override at any time.
+                if (! $isCustomer && array_key_exists('emp_instore', $payload)) {
+                    $blocked = $this->availabilityDeadlineBlocked($json, (int) $user->emp_id);
+                    if ($blocked) return $blocked;
+                }
+
                 $user->update($payload);
 
                 // REQ-SS-03 / REQ-AB-03: an availability change is cross-checked

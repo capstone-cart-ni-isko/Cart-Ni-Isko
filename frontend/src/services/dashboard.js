@@ -20,6 +20,7 @@ import { fetchOrders } from './orders.js'
 import { fetchAppointments, fetchSlots, SLOT_RULES } from './appointments.js'
 import { fetchAccounts } from './accounts.js'
 import { fetchAdminProducts } from './adminProducts.js'
+import { fetchShifts } from './shifts.js'
 
 /** Store operating hours used to bucket "Today" sales (08:00 - 18:00). */
 const OPEN_HOUR = 8
@@ -192,11 +193,53 @@ function rowTime(row) {
  * Rows without a parseable date are dropped from ranged views.
  */
 export function filterOrdersByRange(rows = [], range = 'Today') {
+  return filterByRange(rows, range, (row) => rowTime(row))
+}
+
+/**
+ * REQ-SD-03: keep only the rows whose timestamp falls inside the selected
+ * window. Used for every dashboard panel, so sales, bookings, attendance and
+ * fulfillment all answer to the same date range.
+ */
+export function filterByRange(rows = [], range = 'Today', getTime = rowTime) {
   const { from, duration } = rangeBounds(range)
   return rows.filter((row) => {
-    const time = rowTime(row)
-    return time !== null && time >= from && time < from + duration
+    const time = getTime(row)
+    return time !== null && time !== undefined && time >= from && time < from + duration
   })
+}
+
+/**
+ * REQ-SD-03: bookings and appointments for the selected window, split into the
+ * two SRS types with their occupied and remaining counts.
+ */
+export function buildBookingSummary(appointments = [], range = 'Today', slots = []) {
+  const inRange = filterByRange(
+    appointments,
+    range,
+    (row) => {
+      const date = parseDate(row?.appoint_date ?? row?.date ?? row?.createdAt)
+      return date ? date.getTime() : null
+    }
+  )
+
+  const closed = inRange.filter((row) => row.closed || row.appoint_closed)
+  const open = inRange.filter((row) => !(row.closed || row.appoint_closed))
+
+  const countOf = (type) => open.filter((row) => (row.type ?? row.appoint_type) === type).length
+  const capacityOf = (type) =>
+    slots
+      .filter((slot) => slot.type === type)
+      .reduce((total, slot) => total + Number(slot.capacity || 0), 0)
+
+  return {
+    total: inRange.length,
+    closed: closed.length,
+    rows: [
+      { type: 'CLAIM', label: 'Order claiming', occupied: countOf('CLAIM'), capacity: capacityOf('CLAIM') },
+      { type: 'VISIT', label: 'Store visit', occupied: countOf('VISIT'), capacity: capacityOf('VISIT') },
+    ],
+  }
 }
 
 /**
@@ -382,28 +425,61 @@ export function buildFulfillmentStages(rows = []) {
  * Staff currently inside the store (SRS: employees on duty).
  * `emp_instore` is cast to a boolean by the API; 1 / '1' are accepted too.
  */
-export function buildOnDuty(accounts = {}) {
+export function buildOnDuty(accounts = {}, shifts = [], range = 'Today') {
   const employees = accounts.employees || []
-  return employees
-    .filter((emp) => emp.emp_instore === true || Number(emp.emp_instore) === 1)
-    .map((emp) => {
-      const name = `${emp.emp_givname || ''} ${emp.emp_surname || ''}`.trim() || emp.emp_email || 'Staff'
-      const initials = name
-        .split(' ')
-        .filter(Boolean)
-        .map((n) => n[0])
-        .join('')
-        .substring(0, 2)
-        .toUpperCase() || 'ST'
-      return {
-        id: `emp-${emp.emp_id}`,
-        name,
-        role: emp.emp_type || 'Staff',
-        timeSlot: 'In store now',
-        status: 'On Duty',
-        avatar: initials,
-      }
-    })
+  const available = employees.filter(
+    (emp) => emp.emp_instore === true || Number(emp.emp_instore) === 1
+  )
+
+  // REQ-SD-03: when a wider window is selected, the roster decides who counts
+  // as on duty, not the single all-day emp_instore flag.
+  const rostered = rosteredEmployeeIds(shifts, range)
+  const rosteredSet = rostered === null ? null : new Set(rostered)
+  const staff = rosteredSet
+    ? available.filter((emp) => rosteredSet.has(Number(emp.emp_id)))
+    : available
+
+  return staff.map((emp) => {
+    const name = `${emp.emp_givname || ''} ${emp.emp_surname || ''}`.trim() || emp.emp_email || 'Staff'
+    const initials = name
+      .split(' ')
+      .filter(Boolean)
+      .map((n) => n[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase() || 'ST'
+    return {
+      id: `emp-${emp.emp_id}`,
+      name,
+      role: emp.emp_type || 'Staff',
+      timeSlot: rosteredSet ? 'Rostered in range' : 'In store now',
+      status: 'On Duty',
+      avatar: initials,
+    }
+  })
+}
+
+/**
+ * A `date` column ('YYYY-MM-DD') has no time and no zone, so it must be read at
+ * local midnight. parseDate would take it as UTC and land a shift on the
+ * neighbouring day for anyone west of Greenwich.
+ */
+function localDayTime(value) {
+  const text = String(value ?? '').trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text)
+  if (!match) return parseDate(value)?.getTime() ?? null
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).getTime()
+}
+
+/**
+ * The employee ids holding a duty block inside the selected window, or null
+ * when the window carries no roster at all (so the caller falls back to the
+ * live in-store list).
+ */
+function rosteredEmployeeIds(shifts = [], range = 'Today') {
+  const inRange = filterByRange(shifts, range, (row) => localDayTime(row?.shift_date))
+  if (inRange.length === 0) return null
+  return inRange.map((row) => Number(row.emp_id))
 }
 
 /**
@@ -500,7 +576,7 @@ export async function fetchDashboardSnapshot(date = new Date()) {
   const pad = (n) => String(n).padStart(2, '0')
   const today = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 
-  const [orderRows, cartPayload, appointments, accountsPayload, products, slotsPayload] =
+  const [orderRows, cartPayload, appointments, accountsPayload, products, slotsPayload, shifts] =
     await Promise.all([
       fetchOrders().catch(() => []),
       apiGet('/cart/display', { tag_prefix: CART_PREFIX }).catch(() => ({ data: [] })),
@@ -508,6 +584,9 @@ export async function fetchDashboardSnapshot(date = new Date()) {
       fetchAccounts().catch(() => ({ customers: [], employees: [] })),
       fetchAdminProducts().catch(() => []),
       fetchSlots(today).catch(() => null),
+      // REQ-SD-03: the duty roster lets the attendance panel answer for a
+      // wider window than today.
+      fetchShifts().catch(() => []),
     ])
 
   const accounts = normalizeAccounts(accountsPayload)
@@ -519,6 +598,7 @@ export async function fetchDashboardSnapshot(date = new Date()) {
     accounts,
     products: products || [],
     slots: normalizeSlots(slotsPayload),
+    shifts: shifts || [],
     claimCapacity: SLOT_RULES.CLAIM.capacity,
     fetchedAt: Date.now(),
   }

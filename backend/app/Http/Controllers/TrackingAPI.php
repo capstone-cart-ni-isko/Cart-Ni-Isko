@@ -266,11 +266,16 @@
                     // REQ-APC-03: failed scans notify the store side too
                     $this->notifyAllEmployees('[PRIORITY] Failed QR scan' . $byLabel .
                         ': code "' . $code . '" does not match any active order.');
+                    // Log scan attempt for audit
+                    $this->logScanAttempt($user, $code, false, 'Code not found');
                     return response()->json([
                         'success' => false,
                         'message' => 'QR code does not match any active order'
                     ], 404);
                 }
+
+                // Log successful scan match for audit
+                $this->logScanAttempt($user, $code, true, 'Code matched order ' . $order->ord_tag);
 
                 // Resolve the remaining fulfillment records if not found above
                 if (!$pickup) {
@@ -423,6 +428,19 @@
                     'error'   => $e->getMessage()
                 ], 500);
             }
+        }
+
+        private function logScanAttempt($user, string $code, bool $success, string $details): void
+        {
+            $userId = $user instanceof \App\Models\Employee ? $user->emp_id : ($user instanceof \App\Models\Customer ? $user->cust_id : null);
+            $userType = $user instanceof \App\Models\Employee ? 'employee' : ($user instanceof \App\Models\Customer ? 'customer' : 'unknown');
+
+            \App\Models\EmpLog::create([
+                'emp_id'         => $userType === 'employee' ? $userId : 0,
+                'emplog_created' => now(),
+                'emplog_action'  => 'QR_SCAN',
+                'emplog_desc'    => 'QR scan ' . ($success ? 'success' : 'failed') . ' by ' . $userType . ' #' . $userId . ': ' . $details . ' | Code: ' . $code,
+            ]);
         }
 
         private function orderQr(Order $order): string

@@ -138,6 +138,17 @@ export default function AdminUsers() {
   const [formProgram, setFormProgram] = useState('')
   const [formYear, setFormYear] = useState('')
   const [formBloc, setFormBloc] = useState('')
+  // Additional employee fields
+  const [formMidname, setFormMidname] = useState('')
+  const [formSuffix, setFormSuffix] = useState('')
+  const [formPronoun, setFormPronoun] = useState('they/them')
+  const [formBirthday, setFormBirthday] = useState('2000-01-01')
+  const [formBrgy, setFormBrgy] = useState('')
+  const [formCity, setFormCity] = useState('')
+  const [formProvince, setFormProvince] = useState('')
+  const [formCountry, setFormCountry] = useState('PH')
+  const [formCallcode, setFormCallcode] = useState('+63')
+  const [formInstore, setFormInstore] = useState(false)
   const [tempPassword, setTempPassword] = useState('')
   const [formStatus, setFormStatus] = useState('Active')
   const [formRole, setFormRole] = useState('Super Admin')
@@ -269,6 +280,16 @@ export default function AdminUsers() {
     setFormProgram('')
     setFormYear('')
     setFormBloc('')
+    setFormMidname('')
+    setFormSuffix('')
+    setFormPronoun('they/them')
+    setFormBirthday('2000-01-01')
+    setFormBrgy('')
+    setFormCity('')
+    setFormProvince('')
+    setFormCountry('PH')
+    setFormCallcode('+63')
+    setFormInstore(false)
     setTempPassword('')
     setFormStatus('Active')
     setFormRole('Staff')
@@ -382,7 +403,17 @@ export default function AdminUsers() {
           program: formProgram.trim(),
           year: formYear.trim(),
           bloc: formBloc.trim(),
+          midname: formMidname.trim(),
+          suffix: formSuffix.trim(),
+          pronoun: formPronoun.trim(),
+          birthday: formBirthday,
+          brgy: formBrgy.trim(),
+          city: formCity.trim(),
+          province: formProvince.trim(),
+          country: formCountry.trim(),
+          callcode: formCallcode.trim(),
           type: roleToNewType(formRole),
+          instore: formInstore,
         })
         if (error) {
           // Surface the server message verbatim; keep the form intact.
@@ -1207,6 +1238,138 @@ export default function AdminUsers() {
                       <p className="text-[10px] text-emerald-700 mt-1">
                         {formEmail} must change it at first sign-in.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Additional Employee Fields */}
+                  {!editingUser && (
+                    <div className="space-y-3 pt-2 border-t border-slate-100">
+                      <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Additional Details</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Middle Name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Santos"
+                            value={formMidname}
+                            onChange={(e) => setFormMidname(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Suffix
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Jr., III"
+                            value={formSuffix}
+                            onChange={(e) => setFormSuffix(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Pronoun
+                          </label>
+                          <input
+                            type="text"
+                            value={formPronoun}
+                            onChange={(e) => setFormPronoun(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Birthday
+                          </label>
+                          <input
+                            type="date"
+                            value={formBirthday}
+                            onChange={(e) => setFormBirthday(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Barangay
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Barangay 1"
+                            value={formBrgy}
+                            onChange={(e) => setFormBrgy(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            City
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Legazpi City"
+                            value={formCity}
+                            onChange={(e) => setFormCity(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Province
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Albay"
+                            value={formProvince}
+                            onChange={(e) => setFormProvince(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Country
+                          </label>
+                          <input
+                            type="text"
+                            value={formCountry}
+                            onChange={(e) => setFormCountry(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Call Code
+                          </label>
+                          <input
+                            type="text"
+                            value={formCallcode}
+                            onChange={(e) => setFormCallcode(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formInstore}
+                              onChange={(e) => setFormInstore(e.target.checked)}
+                              className="accent-[var(--color-brand-orange,#f97316)]"
+                            />
+                            In-Store Employee
+                          </label>
+                        </div>
+                      </div>
                     </div>
                   )}
 

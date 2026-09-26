@@ -14,3 +14,8 @@ export function payOrder(ordId, dispatchType, payGiven, options = {}) {
     ...options,
   })
 }
+
+/** POST /checkout/payment/intent - create payment intent for gateway (e.g., PayMongo). */
+export function createPaymentIntent(ordId, gateway, options = {}) {
+  return apiPost('/checkout/payment/intent', { ord_id: ordId, gateway, ...options })
+}

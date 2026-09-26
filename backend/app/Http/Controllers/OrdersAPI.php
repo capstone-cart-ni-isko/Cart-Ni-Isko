@@ -2,6 +2,8 @@
 
     namespace App\Http\Controllers;
 
+    use App\Models\CustLog;
+    use App\Models\Customer;
     use App\Models\Item;
     use App\Models\Order;
     use App\Models\Product;
@@ -139,6 +141,33 @@
                     if ((int) $order->cust_id !== $this->customerId($json)) {
                         return response()->json(['success' => false, 'message' => 'Order not found'], 404);
                     }
+
+                    // REQ-POS-02 / REQ-ALR-03: a walk-in customer (phone
+                    // 0000000000) may only request a cancel or return while an
+                    // open VISIT appointment backs it. Every rejection is
+                    // written to custlog for compliance tracking.
+                    if (in_array($status, ['CANCEL REQUESTED', 'RETURN REQUESTED'], true)) {
+                        $customer = Customer::find($this->customerId($json));
+                        $walkInError = $this->walkInVisitRequired($customer, $status);
+                        if ($walkInError) {
+                            CustLog::create([
+                                'cust_id'         => $customer->cust_id,
+                                'custlog_created' => now(),
+                                'custlog_action'  => $status,
+                                'custlog_desc'    => $walkInError['code'] . ' - order #' . $order->ord_tag
+                                    . ' - ' . $walkInError['description'],
+                            ]);
+
+                            return response()->json([
+                                'success'   => false,
+                                'message'   => $walkInError['description'],
+                                'code'      => $walkInError['code'],
+                                'error'     => $walkInError['description'],
+                                'timestamp' => $walkInError['timestamp'],
+                            ], 403);
+                        }
+                    }
+
                     $isAllowedRequest = in_array($status, ['CANCEL REQUESTED', 'RETURN REQUESTED'], true)
                         && in_array($order->ord_status, ['TO PROCESS', 'TO CLAIM', 'TO RECEIVE'], true);
                     $isReturnRequest = $status === 'RETURN REQUESTED' && $order->ord_status === 'CLAIMED';

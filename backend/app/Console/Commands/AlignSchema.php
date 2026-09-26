@@ -25,7 +25,6 @@ class AlignSchema extends Command
             'delivery_id' => 'deliver_id',
             'delivery_created' => 'deliver_created',
             'delivery_closed' => 'deliver_deleted',
-            'delivery_ref' => 'delvier_ref',
             'delivery_date' => 'deliver_date',
             'delivery_address' => 'deliver_address',
             'delivery_status' => 'deliver_status',

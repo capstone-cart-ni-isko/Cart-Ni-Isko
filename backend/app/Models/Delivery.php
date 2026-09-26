@@ -15,7 +15,7 @@
         protected $fillable = [
             'deliver_created',
             'deliver_deleted',
-            'delvier_ref',
+            'delivery_ref',
             'deliver_date',
             'deliver_address',
             'deliver_status',

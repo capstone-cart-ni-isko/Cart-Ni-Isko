@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import LoadingSpinner from '../../components/ui/LoadingSpinner.jsx'
+import QRScanner from '../../components/ui/QRScanner.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import {
   fetchAppointments,
@@ -842,6 +843,7 @@ export default function AdminPickup() {
   const [scanCode, setScanCode] = useState('')
   const [scanMsg, setScanMsg] = useState(null) // { type: 'ok' | 'error', text }
   const scanInputRef = useRef(null)
+  const [scanModalOpen, setScanModalOpen] = useState(false)
 
   // ordIds known to own a pickup track (null until the first probe resolves).
   const [pickupTrackIds, setPickupTrackIds] = useState(null)
@@ -1167,7 +1169,7 @@ export default function AdminPickup() {
             </div>
 
             {/* QR verification (REQ-APC-02) */}
-            <div className="w-80">
+            <div className="w-full sm:w-80">
               <div className="flex items-center gap-2">
                 <div className="relative flex-1">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
@@ -1193,6 +1195,19 @@ export default function AdminPickup() {
                 >
                   Scan QR
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setScanModalOpen(true)}
+                  className="h-9 px-3 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                  title="Open camera scanner"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <line x1="14" y1="14" x2="14" y2="14.01" /><line x1="21" y1="14" x2="21" y2="21" /><line x1="14" y1="21" x2="17" y2="21" />
+                  </svg>
+                </button>
               </div>
               {scanMsg && (
                 <p className={`mt-1 text-[11px] font-semibold ${scanMsg.type === 'ok' ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -1200,6 +1215,51 @@ export default function AdminPickup() {
                 </p>
               )}
             </div>
+
+            {/* QR Camera Scanner Modal */}
+            {scanModalOpen && (
+              <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
+                <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">QR Code Scanner</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Point camera at customer's QR code</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setScanModalOpen(false)}
+                      className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="p-4">
+                    <QRScanner
+                      onScan={(code) => {
+                        setScanCode(code)
+                        handleScan()
+                        setScanModalOpen(false)
+                      }}
+                      onError={(error) => {
+                        setScanMsg({ type: 'error', text: error })
+                      }}
+                      className="w-full aspect-video"
+                    />
+                  </div>
+                  <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/40">
+                    <button
+                      type="button"
+                      onClick={() => setScanModalOpen(false)}
+                      className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

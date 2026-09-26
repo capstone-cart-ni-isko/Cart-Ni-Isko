@@ -14,6 +14,7 @@ import {
   summarizeSales,
   countByStatus,
   buildTrendLabel,
+  buildBookingSummary,
   buildCategorySales,
   buildFulfillmentStages,
   buildOnDuty,
@@ -84,11 +85,20 @@ export default function AdminDashboard() {
     () => buildTrendLabel(orders, timeRange, () => 1),
     [orders, timeRange]
   )
-  const stages = useMemo(() => buildFulfillmentStages(orders), [orders])
+  // REQ-SD-03: the range reaches the fulfillment pipeline, the bookings
+  // summary and the attendance roster, not just the sales figures.
+  const stages = useMemo(() => buildFulfillmentStages(rangeOrders), [rangeOrders])
+  const bookings = useMemo(
+    () => buildBookingSummary(snapshot?.appointments || [], timeRange, snapshot?.slots || []),
+    [snapshot, timeRange]
+  )
   const categorySales = useMemo(() => buildCategorySales(rangeOrders), [rangeOrders])
-  const onDuty = useMemo(() => buildOnDuty(snapshot?.accounts || {}), [snapshot])
+  const onDuty = useMemo(
+    () => buildOnDuty(snapshot?.accounts || {}, snapshot?.shifts || [], timeRange),
+    [snapshot, timeRange]
+  )
 
-  const recentOrders = orders.slice(0, 5)
+  const recentOrders = rangeOrders.slice(0, 5)
   const preOrders = rangeOrders.filter(
     (order) => order.preorder && !['CLAIMED', 'CANCELLED', 'RETURNED', 'UNCLAIMED'].includes(order.rawStatus)
   ).length
@@ -224,6 +234,47 @@ export default function AdminDashboard() {
                 }
               />
               <BarChartStages stages={stages} />
+            </div>
+
+            {/* Bookings and appointments (SRS 3.16, REQ-SD-03) */}
+            <div className={CARD}>
+              <CardHeader
+                title="Bookings and appointments"
+                action={
+                  <Link to="/admin/appointments" className={ACTION_LINK}>
+                    <span>Open schedule</span>
+                    <Chevron />
+                  </Link>
+                }
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {bookings.rows.map((row) => {
+                  const remaining = Math.max(row.capacity - row.occupied, 0)
+                  return (
+                    <div
+                      key={row.type}
+                      className="p-3 rounded-md bg-slate-50 border border-slate-100 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">{row.label}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {row.occupied} occupied · {remaining} remaining
+                        </p>
+                      </div>
+                      <StatusPill
+                        status={`${row.occupied}/${row.capacity || '—'}`}
+                        variant={row.capacity === 0 ? 'amber' : remaining === 0 ? 'red' : 'green'}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                {bookings.total} booking{bookings.total === 1 ? '' : 's'} in range ·{' '}
+                {bookings.closed} closed
+              </p>
             </div>
 
             {/* Sales performance */}

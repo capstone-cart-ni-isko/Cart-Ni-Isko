@@ -9,6 +9,7 @@ import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
+import QRScanner from '../components/ui/QRScanner.jsx'
 import {
   PackageIcon,
   ShirtIcon,
@@ -63,6 +64,8 @@ function OrderDetail() {
   const [trackRes, setTrackRes] = useState(null)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [busy, setBusy] = useState(false)
+  const [scanModalOpen, setScanModalOpen] = useState(false)
+  const [scanError, setScanError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -187,6 +190,22 @@ function OrderDetail() {
       load()
     } catch (err) {
       showToast(err?.message || 'Unable to confirm receipt.', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleScanReceipt = async (code) => {
+    if (busy) return
+    setBusy(true)
+    setScanError('')
+    try {
+      const res = await scanQr(code, 'customer')
+      showToast(res?.message || 'Order marked as received.', 'success')
+      setScanModalOpen(false)
+      load()
+    } catch (err) {
+      setScanError(err?.message || 'Scan failed. Please try again.')
     } finally {
       setBusy(false)
     }
@@ -333,15 +352,66 @@ function OrderDetail() {
                       {String(qrPayload)}
                     </p>
                     {isDelivery && order.status === 'TO RECEIVE' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setScanModalOpen(true)}
+                          className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          Scan Parcel QR Code
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleConfirmReceipt}
+                          disabled={busy}
+                          className="mt-2 px-4 py-2 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          {busy ? 'Confirming…' : 'I received this order (manual)'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* QR Camera Scanner Modal for Delivery */}
+              {isDelivery && order.status === 'TO RECEIVE' && scanModalOpen && (
+                <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
+                  <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900">Scan Parcel QR Code</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Point camera at the QR code on your parcel</p>
+                      </div>
                       <button
                         type="button"
-                        onClick={handleConfirmReceipt}
-                        disabled={busy}
-                        className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
+                        onClick={() => setScanModalOpen(false)}
+                        className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
                       >
-                        {busy ? 'Confirming…' : 'I received this order'}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
                       </button>
-                    )}
+                    </div>
+                    <div className="p-4">
+                      <QRScanner
+                        onScan={(code) => handleScanReceipt(code)}
+                        onError={(error) => setScanError(error)}
+                        className="w-full aspect-video"
+                      />
+                      {scanError && (
+                        <p className="mt-2 text-center text-xs text-rose-600">{scanError}</p>
+                      )}
+                    </div>
+                    <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/40">
+                      <button
+                        type="button"
+                        onClick={() => setScanModalOpen(false)}
+                        className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
