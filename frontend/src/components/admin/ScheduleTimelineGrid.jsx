@@ -19,10 +19,10 @@ const hourLabel = (hour) => {
 }
 
 const TYPE_STYLES = {
-  'DESK DUTY': 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100',
-  'EVENT PREP': 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100',
-  INVENTORY: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
-  'POS CASHIER': 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
+  'DESK DUTY': 'bg-isko-blue/10 text-isko-blue-dark border-isko-blue/30 hover:bg-isko-blue/20',
+  'EVENT PREP': 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100',
+  INVENTORY: 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200',
+  'POS CASHIER': 'bg-isko-orange/10 text-isko-orange-dark border-isko-orange/30 hover:bg-isko-orange/20',
 }
 
 // REQ-SS-03: the assignee can no longer work this shift (disabled/deleted)
@@ -45,10 +45,10 @@ export default function ScheduleTimelineGrid({
   disabled = false,
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <div className="h-full overflow-auto rounded-md border border-slate-100 bg-white">
       <table className="w-full text-left border-collapse min-w-[860px]">
-        <thead>
-          <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        <thead className="sticky top-0 z-20">
+          <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             <th className="py-2.5 px-3.5 w-44 sticky left-0 bg-slate-50 z-10">Staff</th>
             <th className="py-2.5 px-2">
               <div className="grid" style={{ gridTemplateColumns: `repeat(${HOURS.length}, minmax(0, 1fr))` }}>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import DrawerPanel from '../DrawerPanel.jsx'
 import { useAdmin } from '../../../hooks/useAdmin.js'
 import { uploadImage } from '../../../services/upload.js'
-import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL } from './ui.js'
+import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL } from '../kit/ui.js'
 
 const CATEGORIES = ['Shirts', 'Hoodie', 'Varsity Jacket', 'Cap', 'Lanyard', 'Pins', 'Accessories']
 const EMPTY = { name: '', category: 'Shirts', price: '', stock: '', desc: '', photo: '' }

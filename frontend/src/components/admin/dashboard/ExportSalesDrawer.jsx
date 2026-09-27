@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import DrawerPanel from '../DrawerPanel.jsx'
 import { filterOrdersByRange, summarizeSales, toCsv, downloadText } from '../../../services/dashboard.js'
-import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, peso } from './ui.js'
+import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, peso } from '../kit/ui.js'
 
 const RANGES = ['Today', 'Week', 'Month', 'All']
 const STATUS_SETS = {

@@ -3,7 +3,7 @@ import DrawerPanel from '../DrawerPanel.jsx'
 import { useAdmin } from '../../../hooks/useAdmin.js'
 import { useToast } from '../../../hooks/useToast.js'
 import { fetchSettings } from '../../../services/settings.js'
-import { BTN_SECONDARY, INPUT } from './ui.js'
+import { BTN_SECONDARY, INPUT } from '../kit/ui.js'
 
 /*
   Restock from the dashboard: products at or below the low-stock threshold

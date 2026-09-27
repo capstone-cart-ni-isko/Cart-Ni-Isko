@@ -6,12 +6,17 @@ import StatCard from '../../components/admin/StatCard.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import DataTable from '../../components/admin/DataTable.jsx'
 import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
+import Panel from '../../components/admin/kit/Panel.jsx'
+import AdminPageHeader from '../../components/admin/kit/AdminPageHeader.jsx'
+import { BTN_PRIMARY_SM, BTN_SECONDARY_SM, INPUT, SELECT_SM, PAGE_ROOT } from '../../components/admin/kit/ui.js'
 import { searchOrders, sortOrders } from '../../services/orders.js'
 import {
   mapOrderRows,
   isCartRow,
   titleCaseStatus,
   parseDate,
+  toCsv,
+  downloadText,
 } from '../../services/dashboard.js'
 
 // SRS order status vocabulary (staff dashboard / REQ-SD-02)
@@ -226,23 +231,20 @@ export default function AdminOrders() {
     if (lastError) showToast(lastError, 'error')
   }, [orders, selectedOrderIds, bulkNewStatus, updateOrderStatus, showToast])
 
+  // Exports exactly the rows on screen; toCsv quotes fields and adds a BOM so
+  // commas in names and the peso sign survive in Excel.
   const handleExportCSV = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      ['Order ID,Batch,Customer,Date,Type,Fulfillment,Status,Total (PHP)']
-        .concat(
-          filteredOrders.map(
-            (o) =>
-              `${o.id},${o.batch || ''},${o.customer},${o.date},${o.type},${o.fulfillment},${o.status},${o.total}`
-          )
-        )
-        .join('\n')
-    const link = document.createElement('a')
-    link.setAttribute('href', encodeURI(csvContent))
-    link.setAttribute('download', `Tindahan_Orders_${Date.now()}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    const csv = toCsv(filteredOrders, [
+      { label: 'Order ID', value: (o) => o.id },
+      { label: 'Batch', value: (o) => o.batch || '' },
+      { label: 'Customer', value: (o) => o.customer },
+      { label: 'Date', value: (o) => o.createdAt || o.date },
+      { label: 'Type', value: (o) => o.type },
+      { label: 'Fulfillment', value: (o) => o.fulfillment },
+      { label: 'Status', value: (o) => o.status },
+      { label: 'Total (PHP)', value: (o) => Number(o.total || 0).toFixed(2) },
+    ])
+    downloadText(`Tindahan_Orders_${new Date().toISOString().slice(0, 10)}.csv`, csv)
   }
 
   const columns = [
@@ -254,7 +256,7 @@ export default function AdminOrders() {
           <button
             type="button"
             onClick={() => setActiveOrderDetail(row)}
-            className="font-semibold text-gray-900 hover:text-brand-orange text-left cursor-pointer"
+            className="font-semibold text-gray-900 hover:text-isko-blue text-left cursor-pointer"
           >
             {row.id}
           </button>
@@ -338,97 +340,90 @@ export default function AdminOrders() {
     activeOrderDetail &&
     ['CANCEL REQUESTED', 'RETURN REQUESTED'].includes(activeOrderDetail.rawStatus)
 
+  // KPI cards double as status filters (clicking the active one clears it)
+  const kpiFilter = (status) => setFilterStatus((current) => (current === status ? 'All' : status))
+
   return (
     <AdminLayout>
-      <div className="space-y-4">
-        {/* Page header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Orders</h1>
-            <p className="text-xs font-normal text-slate-500 mt-0.5">
-              Manage and track all online and in-store sales.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-md border border-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              <span>Export CSV</span>
+      <div className={PAGE_ROOT}>
+        <AdminPageHeader title="Orders" subtitle="Manage and track all online and in-store sales.">
+          {selectedOrderIds.length > 0 && (
+            <button type="button" onClick={() => setShowBulkModal(true)} className={BTN_PRIMARY_SM}>
+              Bulk update ({selectedOrderIds.length})
             </button>
+          )}
+          <button type="button" onClick={handleExportCSV} className={BTN_SECONDARY_SM}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-isko-blue" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export CSV
+          </button>
+        </AdminPageHeader>
 
-            {selectedOrderIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowBulkModal(true)}
-                className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <span>Bulk update ({selectedOrderIds.length})</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* KPI row: each card filters the table */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
           <StatCard
             title="Total orders"
             value={totalOrders}
+            subtitle={filterStatus === 'All' ? 'Showing every status' : 'Click to show all'}
+            onClick={() => setFilterStatus('All')}
+            hint="Show all statuses"
             icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <line x1="8" y1="6" x2="21" y2="6" />
-                <line x1="8" y1="12" x2="21" y2="12" />
-                <line x1="8" y1="18" x2="21" y2="18" />
-                <line x1="3" y1="6" x2="3.01" y2="6" />
-                <line x1="3" y1="12" x2="3.01" y2="12" />
-                <line x1="3" y1="18" x2="3.01" y2="18" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
               </svg>
             }
           />
           <StatCard
             title="Pre-orders"
             value={preOrdersCount}
+            subtitle={preOrdersCount > 0 ? 'Awaiting production' : 'None open'}
+            onClick={() => setFilterType((current) => (current === 'Pre-order' ? 'All' : 'Pre-order'))}
+            active={filterType === 'Pre-order'}
+            hint="Filter to pre-orders"
             icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
             }
-            iconBg="bg-amber-50 text-amber-600"
           />
           <StatCard
             title="Ready for pickup"
             value={readyPickupCount}
+            subtitle={readyPickupCount > 0 ? 'Awaiting customer claim' : 'Nothing waiting'}
+            accent="orange"
+            onClick={() => kpiFilter('To Claim')}
+            active={filterStatus === 'To Claim'}
+            hint="Filter to orders ready for pickup"
             icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             }
-            iconBg="bg-emerald-50 text-emerald-600"
           />
           <StatCard
             title="Completed"
             value={completedCount}
+            subtitle="Claimed by customers"
+            onClick={() => kpiFilter('Claimed')}
+            active={filterStatus === 'Claimed'}
+            hint="Filter to completed orders"
             icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
               </svg>
             }
-            iconBg="bg-blue-50 text-blue-600"
           />
         </div>
 
         {/* Filter bar */}
-        <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2.5">
-          <div className="flex flex-wrap items-center gap-2.5">
+        <Panel className="shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[200px]">
               <svg
                 viewBox="0 0 24 24"
@@ -436,12 +431,14 @@ export default function AdminOrders() {
                 stroke="currentColor"
                 strokeWidth="2"
                 className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"
+                aria-hidden="true"
               >
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input
                 type="search"
+                aria-label="Search orders"
                 placeholder="Search orders, customers, items, batch..."
                 value={searchQuery}
                 onChange={(e) => {
@@ -454,26 +451,18 @@ export default function AdminOrders() {
                     if (option.sortBy === 'date' && option.dir === 'desc') setSortedRows(null)
                   }
                 }}
-                className="w-full h-8 pl-8 pr-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange"
+                className={`${INPUT} h-8 pl-8 text-xs`}
               />
             </div>
 
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
-            >
+            <select aria-label="Type" value={filterType} onChange={(e) => setFilterType(e.target.value)} className={SELECT_SM}>
               <option value="All">Type: All</option>
               <option value="Regular">Online Regular</option>
               <option value="Pre-order">Online Pre-order</option>
               <option value="Onsite Regular">Onsite Regular</option>
             </select>
 
-            <select
-              value={filterFulfillment}
-              onChange={(e) => setFilterFulfillment(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
-            >
+            <select aria-label="Fulfillment" value={filterFulfillment} onChange={(e) => setFilterFulfillment(e.target.value)} className={SELECT_SM}>
               <option value="All">Fulfillment: All</option>
               <option value="Courier">Courier</option>
               <option value="Store Pickup">Store Pickup</option>
@@ -481,11 +470,7 @@ export default function AdminOrders() {
             </select>
 
             {/* Product item filter */}
-            <select
-              value={filterItem}
-              onChange={(e) => setFilterItem(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none max-w-[190px]"
-            >
+            <select aria-label="Item" value={filterItem} onChange={(e) => setFilterItem(e.target.value)} className={`${SELECT_SM} max-w-[190px]`}>
               <option value="All">Item: All</option>
               {itemOptions.map((name) => (
                 <option key={name} value={name}>
@@ -494,8 +479,9 @@ export default function AdminOrders() {
               ))}
             </select>
 
-            {/* Server-backed sort (/cart/sort) - replaces the old hardcoded Batch filter */}
+            {/* Server-backed sort (/cart/sort) */}
             <select
+              aria-label="Sort"
               value={sortValue}
               onChange={(e) => {
                 const value = e.target.value
@@ -503,7 +489,7 @@ export default function AdminOrders() {
                 const option = SORT_OPTIONS.find((o) => o.value === value) || SORT_OPTIONS[0]
                 if (option.sortBy === 'date' && option.dir === 'desc') setSortedRows(null)
               }}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
+              className={SELECT_SM}
             >
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -512,11 +498,7 @@ export default function AdminOrders() {
               ))}
             </select>
 
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
-            >
+            <select aria-label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={SELECT_SM}>
               <option value="All">Status: All</option>
               {STATUS_OPTIONS.map((status) => (
                 <option key={status} value={status}>
@@ -536,46 +518,48 @@ export default function AdminOrders() {
                   setFilterStatus('All')
                   setFilterItem('All')
                 }}
-                className="text-xs font-semibold text-rose-600 hover:underline px-2 cursor-pointer"
+                className="h-8 px-2 text-xs font-semibold text-isko-blue hover:text-isko-blue-dark cursor-pointer"
               >
-                Clear
+                Clear all
               </button>
             )}
           </div>
 
           {activeChips.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                Applied:
-              </span>
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 mt-2 border-t border-slate-100">
+              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Applied</span>
               {activeChips.map((chip) => (
                 <span
                   key={chip.key}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 text-[11px] font-medium border border-slate-200"
+                  className="inline-flex items-center gap-1 h-6 pl-2 pr-1 rounded-full bg-isko-blue text-white text-[11px] font-medium"
                 >
                   <span className="max-w-[160px] truncate">{chip.label}</span>
                   <button
                     type="button"
                     onClick={chip.reset}
-                    className="hover:text-rose-600 cursor-pointer"
+                    aria-label={`Remove ${chip.label}`}
+                    className="w-4 h-4 rounded-full hover:bg-white/20 flex items-center justify-center cursor-pointer"
                   >
-                    ×
+                    ✕
                   </button>
                 </span>
               ))}
             </div>
           )}
-        </div>
+        </Panel>
 
-        <DataTable
-          columns={columns}
-          data={filteredOrders}
-          keyField="id"
-          selectable
-          selectedIds={selectedOrderIds}
-          onSelectionChange={setSelectedOrderIds}
-          defaultPageSize={10}
-        />
+        {/* The table fills the rest of the screen and scrolls inside */}
+        <div className="min-h-[24rem] lg:min-h-0 lg:flex-1">
+          <DataTable
+            columns={columns}
+            data={filteredOrders}
+            keyField="id"
+            selectable
+            selectedIds={selectedOrderIds}
+            onSelectionChange={setSelectedOrderIds}
+            defaultPageSize={20}
+          />
+        </div>
       </div>
 
       {/* Order details drawer */}
@@ -603,7 +587,7 @@ export default function AdminOrders() {
                   value={activeOrderDetail.status}
                   disabled={actionBusy}
                   onChange={(e) => applyStatus(activeOrderDetail, e.target.value)}
-                  className="w-full p-2 bg-white border border-gray-200 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange disabled:opacity-60"
+                  className="w-full p-2 bg-white border border-gray-200 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-isko-blue/20 focus:border-isko-blue disabled:opacity-60"
                 >
                   {!STATUS_OPTIONS.includes(activeOrderDetail.status) && (
                     <option value={activeOrderDetail.status}>{activeOrderDetail.status}</option>
@@ -622,7 +606,7 @@ export default function AdminOrders() {
                     type="button"
                     disabled={actionBusy}
                     onClick={() => applyDecision(activeOrderDetail, true)}
-                    className="flex-1 h-8 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60"
+                    className="flex-1 h-8 rounded-md bg-isko-orange hover:bg-isko-orange-dark text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60"
                   >
                     Approve {activeOrderDetail.rawStatus === 'CANCEL REQUESTED' ? 'cancel' : 'return'}
                   </button>
@@ -661,7 +645,7 @@ export default function AdminOrders() {
                     <span className="font-semibold text-gray-700">Fulfillment method</span>
                     {activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
                     activeOrderDetail.fulfillment?.toLowerCase().includes('delivery') ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-medium">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-isko-orange/10 text-isko-orange-dark border border-isko-orange/30 text-[10px] font-medium">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5">
                           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -669,7 +653,7 @@ export default function AdminOrders() {
                         <span>Delivery locked</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-medium">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-isko-blue/10 text-isko-blue-dark border border-isko-blue/25 text-[10px] font-medium">
                         Store pickup
                       </span>
                     )}
@@ -677,9 +661,9 @@ export default function AdminOrders() {
                   <p className="text-gray-600 font-medium">{activeOrderDetail.fulfillment}</p>
                   {(activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
                     activeOrderDetail.fulfillment?.toLowerCase().includes('delivery')) && (
-                    <div className="text-[11px] text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 mt-1 space-y-0.5">
+                    <div className="text-[11px] text-slate-700 bg-isko-orange/5 p-2.5 rounded-lg border border-isko-orange/25 mt-1 space-y-0.5">
                       <p className="font-semibold">Method locked</p>
-                      <p className="text-amber-800">
+                      <p className="text-slate-600">
                         Delivery fee paid or courier dispatch confirmed. The fulfillment method can no
                         longer be switched to store pickup.
                       </p>
@@ -734,7 +718,7 @@ export default function AdminOrders() {
             <select
               value={bulkNewStatus}
               onChange={(e) => setBulkNewStatus(e.target.value)}
-              className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
+              className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-medium focus:outline-none focus:ring-2 focus:ring-isko-blue/20 focus:border-isko-blue"
             >
               {['To Process', 'To Claim', 'To Receive', 'Cancelled'].map((status) => (
                 <option key={status} value={status}>
@@ -746,7 +730,7 @@ export default function AdminOrders() {
               <button
                 type="button"
                 onClick={() => setShowBulkModal(false)}
-                className="h-8 px-3 bg-slate-100 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
+                className={BTN_SECONDARY_SM}
               >
                 Cancel
               </button>
@@ -754,7 +738,7 @@ export default function AdminOrders() {
                 type="button"
                 disabled={actionBusy}
                 onClick={handleBulkUpdate}
-                className="h-8 px-3 bg-brand-orange rounded-md text-xs font-semibold text-white hover:bg-brand-orange-dark cursor-pointer disabled:opacity-60"
+                className="h-8 px-3 bg-isko-orange rounded-md text-xs font-semibold text-white hover:bg-isko-orange-dark cursor-pointer disabled:opacity-60"
               >
                 Apply to {selectedOrderIds.length} orders
               </button>

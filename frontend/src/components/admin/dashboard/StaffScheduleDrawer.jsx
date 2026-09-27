@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import DrawerPanel from '../DrawerPanel.jsx'
 import { fetchShifts, timeLabel } from '../../../services/duty.js'
-import { BTN_SECONDARY } from './ui.js'
+import { BTN_SECONDARY } from '../kit/ui.js'
 
 function localDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`

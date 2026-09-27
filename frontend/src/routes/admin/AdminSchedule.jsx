@@ -5,6 +5,10 @@ import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ScheduleTimelineGrid from '../../components/admin/ScheduleTimelineGrid.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
+import Panel from '../../components/admin/kit/Panel.jsx'
+import AdminPageHeader from '../../components/admin/kit/AdminPageHeader.jsx'
+import Segmented from '../../components/admin/kit/Segmented.jsx'
+import { BTN_PRIMARY_SM, BTN_SECONDARY_SM, ICON_BTN, INPUT, SELECT_SM, SCROLL_FADE, PAGE_ROOT } from '../../components/admin/kit/ui.js'
 
 import { fetchAccounts } from '../../services/accounts.js'
 import { fetchSlots } from '../../services/appointments.js'
@@ -30,12 +34,9 @@ const TIME_OPTIONS = Array.from({ length: 21 }, (_, i) => {
 })
 
 const AVATAR_COLORS = [
-  'bg-orange-100 text-orange-700',
-  'bg-blue-100 text-blue-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-purple-100 text-purple-700',
-  'bg-rose-100 text-rose-700',
-  'bg-cyan-100 text-cyan-700',
+  'bg-isko-orange/15 text-isko-orange-dark',
+  'bg-isko-blue/15 text-isko-blue-dark',
+  'bg-slate-200 text-slate-700',
 ]
 
 const errMsg = (err, fallback) => err?.message || fallback
@@ -276,56 +277,33 @@ export default function AdminSchedule() {
 
   return (
     <AdminLayout>
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-              Staff Duty Schedule
-            </h1>
-            <p className="text-xs text-slate-500 font-normal mt-0.5">
-              Customers can only book store time slots when enough staff are on shift.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => openAssign(isAdmin ? officers[0]?.id : currentAdminUser?.id)}
-            disabled={assignableOfficers.length === 0}
-            className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed w-fit"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>Assign Duty</span>
-          </button>
-        </div>
-
-        {/* Date navigator */}
-        <div className="bg-white rounded-lg p-3 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-1.5">
+      <div className={PAGE_ROOT}>
+        {/* Header: title + day navigation (assigning happens per staff row) */}
+        <AdminPageHeader
+          title="Staff Duty Schedule"
+          subtitle="Customers can only book store time slots when enough staff are on shift."
+        >
+          {date !== dayKey(new Date()) && (
             <button
               type="button"
-              onClick={() => shiftDate(-1)}
-              aria-label="Previous day"
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer"
+              onClick={() => setSelectedDate(startOfDay(new Date()))}
+              className="h-8 px-2 text-xs font-semibold text-isko-blue hover:text-isko-blue-dark cursor-pointer"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+              Back to today
+            </button>
+          )}
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => shiftDate(-1)} aria-label="Previous day" className={ICON_BTN}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </button>
-            <span className="px-2.5 py-1 bg-slate-50 rounded-md text-xs font-semibold text-slate-900 border border-slate-200">
-              {date === dayKey(new Date()) ? 'Today: ' : ''}
+            <span className="h-8 px-3 inline-flex items-center rounded-md bg-isko-blue/10 text-isko-blue-dark text-xs font-semibold whitespace-nowrap">
+              {date === dayKey(new Date()) ? 'Today · ' : ''}
               {fmtLongDate(selectedDate)}
             </span>
-            <button
-              type="button"
-              onClick={() => shiftDate(1)}
-              aria-label="Next day"
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+            <button type="button" onClick={() => shiftDate(1)} aria-label="Next day" className={ICON_BTN}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
@@ -337,195 +315,173 @@ export default function AdminSchedule() {
                 if (y && m && d) setSelectedDate(new Date(y, m - 1, d))
               }}
               aria-label="Pick a date"
-              className="h-7 px-2 rounded-md border border-slate-200 text-xs text-slate-700"
+              className={`${SELECT_SM} pr-2.5`}
             />
           </div>
-          {date !== dayKey(new Date()) && (
-            <button
-              type="button"
-              onClick={() => setSelectedDate(startOfDay(new Date()))}
-              className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer w-fit"
-            >
-              Back to today
-            </button>
-          )}
-        </div>
+        </AdminPageHeader>
 
         {/* Staffing status for the selected day */}
-        <div className="bg-white rounded-lg p-3 border border-slate-200 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-wrap">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Bookable slots</span>
-          <StatusPill
-            status={`Order pickup · ${slots.length ? `${claimOpen} open` : '—'}`}
-            variant={slots.length === 0 ? 'amber' : claimOk ? 'green' : 'red'}
-          />
-          <StatusPill
-            status={`Walk-in visit · ${slots.length ? `${visitOpen} open` : '—'}`}
-            variant={slots.length === 0 ? 'amber' : visitOk ? 'green' : 'red'}
-          />
-          <span className="text-[11px] text-slate-500">
-            Pickup slots need 1 person on shift · walk-in visits need 2 at the same time
-          </span>
-          {!canEdit && (
-            <span className="text-xs font-semibold text-slate-500 sm:ml-auto">
-              🔒 {isPastDate ? 'Past date — view only' : 'Locked after 7:00 AM'}
+        <Panel className="shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Bookable slots</span>
+            <StatusPill
+              status={`Order pickup · ${slots.length ? `${claimOpen} open` : 'none'}`}
+              variant={slots.length > 0 && claimOk ? 'blue' : 'amber'}
+            />
+            <StatusPill
+              status={`Walk-in visit · ${slots.length ? `${visitOpen} open` : 'none'}`}
+              variant={slots.length > 0 && visitOk ? 'blue' : 'amber'}
+            />
+            <span className="text-[11px] text-slate-500">
+              Pickup slots need 1 person on shift · walk-in visits need 2 at the same time
             </span>
-          )}
-        </div>
+            {!canEdit && (
+              <span className="text-xs font-semibold text-slate-500 sm:ml-auto">
+                {isPastDate ? 'Past date · view only' : 'Locked after 7:00 AM'}
+              </span>
+            )}
+          </div>
+        </Panel>
 
         {shiftsError && (
-          <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-            <p className="text-xs font-semibold text-red-700">{shiftsError}</p>
-            <button
-              type="button"
-              onClick={reloadDay}
-              className="text-xs font-bold text-red-700 border border-red-300 rounded-md px-2 py-1 hover:bg-red-100 cursor-pointer"
-            >
+          <div className="shrink-0 flex items-center justify-between gap-3 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+            <p className="text-xs font-semibold text-rose-700">{shiftsError}</p>
+            <button type="button" onClick={reloadDay} className={BTN_SECONDARY_SM}>
               Retry
             </button>
           </div>
         )}
 
-        {/* Timeline */}
-        <ScheduleTimelineGrid
-          officers={officers}
-          shifts={shifts}
-          disabled={!canEdit}
-          onEmptyClick={(off, start) => openAssign(off.id, start)}
-          onShiftClick={(shift) => {
-            if (canRemove(shift)) setRemoveTarget(shift)
-            else
-              showToast(
-                `${shift.emp_name}: ${titleCase(shift.shift_type)}, ${timeLabel(shift.shift_start)} – ${timeLabel(shift.shift_end)}${
-                  shift.shift_location ? ` at ${shift.shift_location}` : ''
-                }`,
-                'info'
-              )
-          }}
-        />
+        {/* Body: timeline over staff cards; each scrolls inside its panel */}
+        <div className="grid grid-cols-1 gap-3 lg:flex-1 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+          <Panel title="Timeline" meta="Click an empty hour to add a shift, or a shift to remove it" className="min-h-[16rem] lg:min-h-0">
+            <ScheduleTimelineGrid
+              officers={officers}
+              shifts={shifts}
+              disabled={!canEdit}
+              onEmptyClick={(off, start) => openAssign(off.id, start)}
+              onShiftClick={(shift) => {
+                if (canRemove(shift)) setRemoveTarget(shift)
+                else
+                  showToast(
+                    `${shift.emp_name}: ${titleCase(shift.shift_type)}, ${timeLabel(shift.shift_start)} – ${timeLabel(shift.shift_end)}${
+                      shift.shift_location ? ` at ${shift.shift_location}` : ''
+                    }`,
+                    'info'
+                  )
+              }}
+            />
+          </Panel>
 
-        {/* Staff cards */}
-        <div className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">Staff on {fmtLongDate(selectedDate)}</h2>
-              <p className="text-[11px] text-slate-400 font-normal mt-0.5">
-                Click a shift to remove it, or an empty hour on the timeline to add one.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {[
-                ['all', `All (${officers.length})`, 'bg-brand-orange'],
-                ['on', `On Duty (${onDutyCount})`, 'bg-emerald-600'],
-                ['off', `Off Duty (${offDutyCount})`, 'bg-rose-600'],
-              ].map(([key, label, active]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setActiveFilter(key)}
-                  className={`h-7 px-2.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                    activeFilter === key ? `${active} text-white` : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {label}
+          <Panel
+            title="Staff"
+            meta={fmtLongDate(selectedDate)}
+            className="min-h-[18rem] lg:min-h-0"
+            actions={
+              <Segmented
+                size="sm"
+                label="Filter staff"
+                value={activeFilter}
+                onChange={setActiveFilter}
+                options={[
+                  { value: 'all', label: 'All', count: officers.length },
+                  { value: 'on', label: 'On duty', count: onDutyCount },
+                  { value: 'off', label: 'Off duty', count: offDutyCount },
+                ]}
+              />
+            }
+          >
+            {isLoadingOfficers ? (
+              <div className="h-full flex items-center justify-center gap-2 text-xs font-semibold text-slate-500">
+                <span className="spinner-circle !w-3.5 !h-3.5" /> Loading employees…
+              </div>
+            ) : officersError ? (
+              <div className="flex items-center justify-between gap-3 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+                <p className="text-xs font-semibold text-rose-700">{officersError}</p>
+                <button type="button" onClick={() => setRosterKey((k) => k + 1)} className={BTN_SECONDARY_SM}>
+                  Retry
                 </button>
-              ))}
-            </div>
-          </div>
+              </div>
+            ) : filteredOfficers.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                {officers.length === 0 ? 'No employee accounts found.' : 'No staff match this filter.'}
+              </div>
+            ) : (
+              <div className={`h-full ${SCROLL_FADE}`}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {filteredOfficers.map((off) => {
+                    const own = shifts.filter((s) => String(s.emp_id) === String(off.id))
+                    const mayAssign = assignableOfficers.some((o) => String(o.id) === String(off.id))
+                    return (
+                      <div key={off.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50/60 flex flex-col gap-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-[11px] shrink-0 ${off.avatarColor}`}>
+                            {off.initials}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 text-xs truncate">{off.name}</p>
+                            <p className="text-[11px] text-slate-500 truncate">{off.roleLabel}</p>
+                          </div>
+                        </div>
 
-          {isLoadingOfficers ? (
-            <div className="py-10 text-center text-xs font-semibold text-slate-500 flex items-center justify-center gap-2">
-              <span className="spinner-circle !w-3.5 !h-3.5" /> Loading employees…
-            </div>
-          ) : officersError ? (
-            <div className="flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-              <p className="text-xs font-semibold text-red-700">{officersError}</p>
-              <button
-                type="button"
-                onClick={() => setRosterKey((k) => k + 1)}
-                className="text-xs font-bold text-red-700 border border-red-300 rounded-md px-2 py-1 hover:bg-red-100 cursor-pointer"
-              >
-                Retry
-              </button>
-            </div>
-          ) : filteredOfficers.length === 0 ? (
-            <div className="py-10 text-center text-xs text-slate-400">
-              {officers.length === 0 ? 'No employee accounts found.' : 'No staff match this filter.'}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {filteredOfficers.map((off) => {
-                const own = shifts.filter((s) => String(s.emp_id) === String(off.id))
-                const mayAssign = assignableOfficers.some((o) => String(o.id) === String(off.id))
-                return (
-                  <div
-                    key={off.id}
-                    className="p-4 rounded-2xl border border-gray-100 bg-gray-50/50 flex flex-col gap-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${off.avatarColor}`}
-                      >
-                        {off.initials}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-black text-gray-900 text-xs truncate">{off.name}</p>
-                        <p className="text-[10px] text-gray-500 font-semibold truncate">{off.roleLabel}</p>
-                      </div>
-                    </div>
-
-                    {own.length === 0 ? (
-                      <StatusPill status="Off Duty" />
-                    ) : (
-                      <ul className="space-y-1.5">
-                        {own.map((s) => (
-                          <li
-                            key={s.shift_id}
-                            className="flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5"
-                          >
-                            <span className="min-w-0">
-                              <span className="block text-xs font-bold text-slate-900">
-                                {timeLabel(s.shift_start)} – {timeLabel(s.shift_end)}
-                                {s.pending_replacement && (
-                                  <span className="ml-1.5 text-[9px] font-bold uppercase text-rose-600 bg-rose-50 px-1 py-0.5 rounded">
-                                    Pending replacement
-                                  </span>
-                                )}
-                              </span>
-                              <span className="block text-[10px] text-slate-500 truncate">
-                                {titleCase(s.shift_type)}
-                                {s.shift_location ? ` · ${s.shift_location}` : ''}
-                              </span>
-                            </span>
-                            {canRemove(s) && (
-                              <button
-                                type="button"
-                                onClick={() => setRemoveTarget(s)}
-                                className="text-[10px] font-semibold text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
+                        {own.length === 0 ? (
+                          <StatusPill status="Off Duty" />
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {own.map((s) => (
+                              <li
+                                key={s.shift_id}
+                                className="flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-md px-2.5 py-1.5"
                               >
-                                Remove
-                              </button>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                                <span className="min-w-0">
+                                  <span className="block text-xs font-semibold text-slate-900">
+                                    {timeLabel(s.shift_start)} – {timeLabel(s.shift_end)}
+                                    {s.pending_replacement && (
+                                      <span className="ml-1.5 text-[9px] font-bold uppercase text-rose-700 bg-rose-50 px-1 py-0.5 rounded">
+                                        Pending replacement
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="block text-[11px] text-slate-500 truncate">
+                                    {titleCase(s.shift_type)}
+                                    {s.shift_location ? ` · ${s.shift_location}` : ''}
+                                  </span>
+                                </span>
+                                {canRemove(s) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setRemoveTarget(s)}
+                                    className="text-[11px] font-medium text-slate-400 hover:text-rose-600 cursor-pointer shrink-0"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
 
-                    {mayAssign && (
-                      <button
-                        type="button"
-                        onClick={() => openAssign(off.id)}
-                        disabled={!canEdit}
-                        className="w-full py-2 bg-white hover:bg-brand-orange hover:text-white text-gray-700 font-bold text-xs rounded-xl border border-gray-200 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-700"
-                      >
-                        + Assign Shift
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                        {mayAssign && (
+                          <button
+                            type="button"
+                            onClick={() => openAssign(off.id)}
+                            disabled={!canEdit}
+                            className={`${BTN_PRIMARY_SM} w-full mt-auto`}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5" aria-hidden="true">
+                              <line x1="12" y1="5" x2="12" y2="19" />
+                              <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            Assign Shift
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </Panel>
         </div>
       </div>
 
@@ -543,7 +499,7 @@ export default function AdminSchedule() {
                 <select
                   value={selectedOfficerId}
                   onChange={(e) => setSelectedOfficerId(e.target.value)}
-                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
+                  className={`${INPUT} h-8 text-xs`}
                 >
                   {assignableOfficers.map((off) => (
                     <option key={off.id} value={off.id}>
@@ -559,7 +515,7 @@ export default function AdminSchedule() {
                   <select
                     value={shiftStart}
                     onChange={(e) => setShiftStart(e.target.value)}
-                    className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
+                    className={`${INPUT} h-8 text-xs`}
                   >
                     {TIME_OPTIONS.slice(0, -1).map((t) => (
                       <option key={t} value={t}>{timeLabel(t)}</option>
@@ -571,7 +527,7 @@ export default function AdminSchedule() {
                   <select
                     value={shiftEnd}
                     onChange={(e) => setShiftEnd(e.target.value)}
-                    className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
+                    className={`${INPUT} h-8 text-xs`}
                   >
                     {TIME_OPTIONS.filter((t) => t > shiftStart).map((t) => (
                       <option key={t} value={t}>{timeLabel(t)}</option>
@@ -585,7 +541,7 @@ export default function AdminSchedule() {
                 <select
                   value={shiftType}
                   onChange={(e) => setShiftType(e.target.value)}
-                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
+                  className={`${INPUT} h-8 text-xs`}
                 >
                   {DUTY_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}</option>
@@ -601,7 +557,7 @@ export default function AdminSchedule() {
                   maxLength={100}
                   onChange={(e) => setDutyLocation(e.target.value)}
                   placeholder="e.g. Main Counter"
-                  className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-orange text-xs"
+                  className={`${INPUT} h-8 text-xs`}
                 />
               </div>
 
@@ -613,14 +569,14 @@ export default function AdminSchedule() {
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(false)}
-                  className="h-8 px-3 bg-slate-100 rounded-md font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer text-xs"
+                  className={BTN_SECONDARY_SM}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isAssigning || !selectedOfficerId}
-                  className="h-8 px-3 bg-brand-orange rounded-md font-semibold text-white hover:bg-brand-orange-dark cursor-pointer text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-8 px-3 bg-isko-orange rounded-md font-semibold text-white hover:bg-isko-orange-dark cursor-pointer text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isAssigning ? 'Assigning…' : 'Assign Shift'}
                 </button>

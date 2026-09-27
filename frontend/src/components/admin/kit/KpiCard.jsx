@@ -38,7 +38,7 @@ const ACCENT_CHIP = {
   blue: 'bg-isko-blue/10 text-isko-blue',
 }
 
-export default function KpiCard({ label, value, subtext, tone = 'neutral', icon, accent = 'blue', onClick, active = false, hint }) {
+export default function KpiCard({ label, value, subtext, tone = 'neutral', icon, accent = 'blue', onClick, active = false, hint, footer = null }) {
   const Tag = onClick ? 'button' : 'div'
   return (
     <Tag
@@ -46,13 +46,13 @@ export default function KpiCard({ label, value, subtext, tone = 'neutral', icon,
       onClick={onClick}
       aria-pressed={onClick ? active : undefined}
       title={hint}
-      className={`text-left w-full bg-white rounded-lg border p-3 flex flex-col gap-1 transition-colors ${
+      className={`text-left w-full h-full bg-white rounded-lg border p-3 flex flex-col gap-1 transition-colors ${
         active ? 'border-isko-blue ring-1 ring-isko-blue' : 'border-slate-200'
       } ${onClick ? 'cursor-pointer hover:border-isko-blue/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-isko-orange' : ''}`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-slate-500">{label}</span>
-        <span className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${ACCENT_CHIP[accent] || ACCENT_CHIP.blue}`}>
+        <span className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 [&>svg]:w-4 [&>svg]:h-4 ${ACCENT_CHIP[accent] || ACCENT_CHIP.blue}`}>
           {icon}
         </span>
       </div>
@@ -61,6 +61,7 @@ export default function KpiCard({ label, value, subtext, tone = 'neutral', icon,
         <ToneIcon tone={tone} />
         <span className="truncate">{subtext}</span>
       </span>
+      {footer && <div className="mt-1">{footer}</div>}
     </Tag>
   )
 }

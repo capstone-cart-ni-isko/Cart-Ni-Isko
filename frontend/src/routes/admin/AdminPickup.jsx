@@ -3,6 +3,12 @@ import { Link } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import LoadingSpinner from '../../components/ui/LoadingSpinner.jsx'
 import QRScanner from '../../components/ui/QRScanner.jsx'
+import StatusPill from '../../components/admin/StatusPill.jsx'
+import Panel from '../../components/admin/kit/Panel.jsx'
+import KpiCard from '../../components/admin/kit/KpiCard.jsx'
+import AdminPageHeader from '../../components/admin/kit/AdminPageHeader.jsx'
+import Segmented from '../../components/admin/kit/Segmented.jsx'
+import { BTN_PRIMARY_SM, BTN_SECONDARY_SM, ICON_BTN, INPUT, SCROLL_FADE, PAGE_ROOT } from '../../components/admin/kit/ui.js'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import {
   fetchAppointments,
@@ -140,19 +146,19 @@ function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
                   ${disabled
                     ? 'bg-slate-50 border-slate-200 text-slate-300 cursor-not-allowed'
                     : isSelected
-                      ? 'bg-orange-50 border-brand-orange text-brand-orange font-bold'
+                      ? 'bg-isko-blue/10 border-isko-blue text-isko-blue-dark font-semibold'
                       : issue
-                        ? 'bg-amber-50/60 border-amber-200 text-slate-700 hover:border-amber-400'
+                        ? 'bg-isko-orange/5 border-isko-orange/30 text-slate-700 hover:border-isko-orange/60'
                         : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                   }`}
               >
                 <span>{slotRangeLabel(slot)}</span>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-semibold ${isFull ? 'text-rose-500' : issue ? 'text-amber-600' : 'text-slate-400'}`}>
+                  <span className={`text-[11px] font-semibold ${isFull ? 'text-isko-orange-dark' : issue ? 'text-isko-orange' : 'text-slate-400'}`}>
                     {isFull ? 'Full' : `${slot.booked}/${slot.capacity}`}
                   </span>
                   {isSelected && (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-brand-orange">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-isko-blue">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   )}
@@ -183,7 +189,7 @@ function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
               disabled={!selectedSlot || busy}
               onClick={() => selectedSlot && onConfirm(selectedSlot)}
               className={`h-8 px-4 rounded-md text-xs font-bold transition-colors cursor-pointer
-                ${selectedSlot && !busy ? 'bg-brand-orange hover:bg-orange-600 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                ${selectedSlot && !busy ? 'bg-isko-orange hover:bg-isko-orange-dark text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
             >
               {busy ? 'Scheduling...' : 'Confirm Slot'}
             </button>
@@ -194,421 +200,318 @@ function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
   )
 }
 
-// ─── Slot status badge helper ──────────────────────────────────────────────
+// ─── Slot status badge helper (kit palette) ───────────────────────────────
 function SlotStatusBadge({ status }) {
-  if (status === 'covered') return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[10px] font-semibold">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Covered
-    </span>
-  )
-  if (status === 'issue') return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/60 text-[10px] font-semibold">
-      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Coverage Issue
-    </span>
-  )
-  if (status === 'closed') return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-semibold">
-      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Closed
-    </span>
-  )
+  if (status === 'covered') return <StatusPill status="Covered" variant="blue" />
+  if (status === 'issue') return <StatusPill status="Coverage issue" variant="amber" />
+  if (status === 'closed') return <StatusPill status="Closed" />
   return null
 }
 
-// ─── Avatar helper ─────────────────────────────────────────────────────────
+// ─── Avatar helper (brand tints) ──────────────────────────────────────────
+const AVATAR_TINTS = ['bg-isko-blue/15 text-isko-blue-dark', 'bg-isko-orange/15 text-isko-orange-dark', 'bg-slate-200 text-slate-700']
+
 function Avatar({ initials, size = 'sm' }) {
-  const palette = [
-    'bg-blue-100 text-blue-700', 'bg-pink-100 text-pink-700',
-    'bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700',
-    'bg-amber-100 text-amber-700', 'bg-purple-100 text-purple-700',
-    'bg-sky-100 text-sky-700', 'bg-rose-100 text-rose-700',
-    'bg-teal-100 text-teal-700', 'bg-violet-100 text-violet-700',
-  ]
   let hash = 0
-  for (const ch of String(initials || '#')) hash = (hash + ch.charCodeAt(0)) % palette.length
-  const c = palette[hash]
+  for (const ch of String(initials || '#')) hash = (hash + ch.charCodeAt(0)) % AVATAR_TINTS.length
   const sz = size === 'sm' ? 'w-7 h-7 text-[10px]' : 'w-8 h-8 text-xs'
   return (
-    <div className={`${sz} ${c} rounded-full flex items-center justify-center font-bold shrink-0`}>
+    <div className={`${sz} ${AVATAR_TINTS[hash]} rounded-full flex items-center justify-center font-semibold shrink-0`}>
       {initials}
     </div>
   )
 }
 
-// ─── Right Sidebar Panel (shared by Scheduled & Overview) ─────────────────
-function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
-  return (
-    <div className="w-80 shrink-0 space-y-3">
-      {/* Schedule Panel */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-500 shrink-0">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          <div>
-            <p className="text-xs font-bold text-slate-900">Pickup Schedule</p>
-            <p className="text-[10px] text-slate-400">Today • {TODAY_LABEL}</p>
-          </div>
-        </div>
-        <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
-          {slots.map((slot) => {
-            const isFull = slot.booked >= slot.capacity
-            const status = !slot.available && isStaffShortage(slot) ? 'issue' : 'covered'
-            return (
-              <div key={slot.start} className="flex items-center justify-between gap-2 px-4 py-2">
-                <span className="text-[11px] font-medium text-slate-700 w-28 shrink-0 whitespace-nowrap">{slotRangeLabel(slot)}</span>
-                <span className={`text-[11px] font-semibold shrink-0 whitespace-nowrap ${isFull ? 'text-rose-500' : 'text-slate-500'}`}>
-                  {slot.booked}/{slot.capacity}
-                </span>
-                <span className="shrink-0 whitespace-nowrap">
-                  <SlotStatusBadge status={status} />
-                </span>
-              </div>
-            )
-          })}
-          {slots.length === 0 && (
-            <div className="flex items-center gap-2 px-4 py-3">
-              <LoadingSpinner size={16} />
-              <p className="text-[11px] text-slate-400">Loading today&apos;s slots…</p>
-            </div>
-          )}
-        </div>
-        <div className="px-4 py-2.5 border-t border-slate-100">
-          <Link
-            to="/admin/schedule"
-            className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
-          >
-            View Full Schedule
-          </Link>
-        </div>
-      </div>
+// Shared table chrome: sticky header row inside a panel that scrolls
+const TH = 'px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200'
+const TD = 'px-3 py-2.5'
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-500 shrink-0">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          <p className="text-xs font-bold text-slate-900">Quick Actions</p>
-        </div>
-        <div className="p-3 space-y-2">
-          <button
-            type="button"
-            onClick={onSchedule}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-brand-orange text-white text-xs font-bold hover:bg-orange-600 transition-colors cursor-pointer"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-              <line x1="12" y1="14" x2="12" y2="18" /><line x1="10" y1="16" x2="14" y2="16" />
-            </svg>
-            Schedule Pickup
-          </button>
-          <button
-            type="button"
-            onClick={onViewUnscheduled}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0 text-slate-400">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-              <line x1="9" y1="14" x2="15" y2="14" />
-            </svg>
-            View Unscheduled
-          </button>
-          <Link
-            to="/admin/schedule"
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0 text-slate-400">
-              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-            </svg>
-            Manage Time Slots
-          </Link>
-        </div>
+function ScrollTable({ head, children }) {
+  return (
+    <div className={`h-full ${SCROLL_FADE} rounded-md border border-slate-100`}>
+      <table className="w-full text-xs text-left border-collapse min-w-[560px]">
+        <thead className="sticky top-0 z-10">
+          <tr>{head}</tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">{children}</tbody>
+      </table>
+    </div>
+  )
+}
+
+function EmptyRow({ colSpan, children }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="px-4 py-8 text-center text-slate-400">
+        {children}
+      </td>
+    </tr>
+  )
+}
+
+const whenLabel = (date) =>
+  date
+    ? `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+    : '—'
+
+function CustomerCell({ order }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <Avatar initials={initialsOf(order.customer)} />
+      <div className="min-w-0">
+        <p className="font-semibold text-slate-900 truncate">{order.customer}</p>
+        <p className="text-[11px] text-slate-400">{order.custPhone || '—'}</p>
       </div>
     </div>
   )
 }
 
-// ─── Tab Components ────────────────────────────────────────────────────────
-
-function OverviewTab({ kpis, scheduleRows, slots, onSchedule, onViewUnscheduled }) {
+function ItemsCell({ order }) {
+  const items = itemsInfo(order)
   return (
-    <div className="flex gap-4 min-h-0">
-      {/* Main content */}
-      <div className="flex-1 space-y-4 min-w-0">
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-          {[
-            { label: 'Ready for Pickup', value: kpis.ready, sub: 'orders',          color: 'emerald', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>) },
-            { label: 'Unscheduled',      value: kpis.unscheduled, sub: 'orders',      color: 'amber',   icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/></svg>) },
-            { label: "Today's Scheduled",value: kpis.scheduledToday, sub: 'appointments', color: 'blue', icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>) },
-            { label: "Today's Completed",value: kpis.completedToday, sub: 'pickups',   color: 'indigo',  icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><polyline points="20 6 9 17 4 12"/></svg>) },
-            { label: 'No-show',          value: kpis.noshow, sub: 'appointment',       color: 'rose',    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>) },
-          ].map(({ label, value, sub, color, icon }) => (
-            <div key={label} className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-md bg-${color}-50 border border-${color}-100 flex items-center justify-center text-${color}-600 shrink-0`}>
-                {icon}
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400 leading-tight truncate">{label}</p>
-                <h3 className="text-xl font-bold text-slate-900">{value}</h3>
-                <p className="text-[10px] text-slate-400">{sub}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+    <>
+      <p className="font-medium text-slate-700">{items.count}</p>
+      <p className="text-[11px] text-slate-400 mt-0.5 max-w-[16rem] truncate">{items.label}</p>
+    </>
+  )
+}
 
-        {/* Today's Pickup Schedule Table */}
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-500">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              <p className="text-sm font-bold text-slate-900">Today's Pickup Schedule</p>
+// ─── Right column (shared by Overview & Scheduled) ────────────────────────
+function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
+  return (
+    <div className="flex flex-col gap-3 lg:min-h-0 lg:h-full">
+      <Panel
+        title="Pickup schedule"
+        meta="Today"
+        actionLabel="Full schedule"
+        actionTo="/admin/schedule"
+        className="lg:flex-1 min-h-[14rem] lg:min-h-0"
+      >
+        <div className={`h-full ${SCROLL_FADE} divide-y divide-slate-100`}>
+          {slots.map((slot) => {
+            const isFull = slot.booked >= slot.capacity
+            const status = !slot.available && isStaffShortage(slot) ? 'issue' : 'covered'
+            return (
+              <div key={slot.start} className="flex items-center justify-between gap-2 py-2">
+                <span className="text-xs font-medium text-slate-700 whitespace-nowrap">{slotRangeLabel(slot)}</span>
+                <span className={`text-xs font-semibold tabular-nums whitespace-nowrap ${isFull ? 'text-isko-orange-dark' : 'text-slate-500'}`}>
+                  {slot.booked}/{slot.capacity}
+                </span>
+                <SlotStatusBadge status={status} />
+              </div>
+            )
+          })}
+          {slots.length === 0 && (
+            <div className="flex items-center gap-2 py-3">
+              <LoadingSpinner size={16} />
+              <p className="text-[11px] text-slate-400">Loading today&apos;s slots…</p>
             </div>
-            <span className="text-xs text-slate-500 font-medium">{TODAY_LABEL}</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/60 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  <th className="px-4 py-2.5 w-40">Time</th>
-                  <th className="px-4 py-2.5 w-32">Appointments</th>
-                  <th className="px-4 py-2.5 w-28">Staff Available</th>
-                  <th className="px-4 py-2.5">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {scheduleRows.map((row) => (
-                  <tr key={row.time} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-2.5 font-medium text-slate-700 whitespace-nowrap">{row.time}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className={`font-bold ${row.appts >= row.capacity ? 'text-rose-600' : 'text-slate-900'}`}>{row.appts}</span>
-                      <span className="text-slate-400 font-normal"> / {row.capacity}</span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {row.staffOk === true  && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-emerald-500"><polyline points="20 6 9 17 4 12"/></svg>}
-                      {row.staffOk === false && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-amber-500"><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/><circle cx="12" cy="12" r="10"/></svg>}
-                      {row.staffOk === null  && <span className="text-[10px] text-slate-400">—</span>}
-                    </td>
-                    <td className="px-4 py-2.5"><SlotStatusBadge status={row.status} /></td>
-                  </tr>
-                ))}
-                {scheduleRows.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-6 text-center text-slate-400">No slots available today.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          )}
         </div>
+      </Panel>
+
+      <Panel title="Quick actions" className="shrink-0">
+        <div className="grid grid-cols-1 gap-2">
+          <button type="button" onClick={onSchedule} className={`${BTN_PRIMARY_SM} w-full justify-start`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <line x1="12" y1="14" x2="12" y2="18" /><line x1="10" y1="16" x2="14" y2="16" />
+            </svg>
+            Schedule pickup
+          </button>
+          <button type="button" onClick={onViewUnscheduled} className={`${BTN_SECONDARY_SM} w-full justify-start`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0 text-isko-blue" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <line x1="9" y1="14" x2="15" y2="14" />
+            </svg>
+            View unscheduled
+          </button>
+          <Link to="/admin/schedule" className={`${BTN_SECONDARY_SM} w-full justify-start`}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0 text-isko-blue" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+            Manage time slots
+          </Link>
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+// ─── Tab Components ────────────────────────────────────────────────────────
+// Every tab fills the space under the tabs; panels scroll inside (no page scroll).
+
+const KPI_ICON = {
+  ready: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>),
+  unscheduled: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/></svg>),
+  scheduled: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/></svg>),
+  completed: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>),
+  noshow: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>),
+}
+
+function OverviewTab({ kpis, scheduleRows, slots, onSchedule, onViewUnscheduled, onOpenTab }) {
+  const cards = [
+    { key: 'ready', label: 'Ready for pickup', value: kpis.ready, sub: 'orders', accent: 'orange', tab: 'Unscheduled' },
+    { key: 'unscheduled', label: 'Unscheduled', value: kpis.unscheduled, sub: kpis.unscheduled ? 'need a pickup time' : 'all scheduled', accent: 'orange', tab: 'Unscheduled' },
+    { key: 'scheduled', label: "Today's scheduled", value: kpis.scheduledToday, sub: 'appointments', accent: 'blue', tab: 'Scheduled' },
+    { key: 'completed', label: "Today's completed", value: kpis.completedToday, sub: 'pickups', accent: 'blue', tab: 'Completed' },
+    { key: 'noshow', label: 'No-show', value: kpis.noshow, sub: 'missed windows', accent: 'orange', tab: 'No-show' },
+  ]
+
+  return (
+    <div className="flex flex-col gap-3 lg:h-full lg:min-h-0">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
+        {cards.map((card) => (
+          <KpiCard
+            key={card.key}
+            label={card.label}
+            value={card.value}
+            subtext={card.sub}
+            accent={card.accent}
+            icon={KPI_ICON[card.key]}
+            onClick={() => onOpenTab(card.tab)}
+            hint={`Open ${card.tab}`}
+          />
+        ))}
       </div>
 
-      {/* Right sidebar */}
-      <PickupScheduleSidebar slots={slots} onSchedule={onSchedule} onViewUnscheduled={onViewUnscheduled} />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:flex-1 lg:min-h-0">
+        <Panel title="Today's pickup schedule" meta={TODAY_LABEL} className="lg:col-span-8 min-h-[20rem] lg:min-h-0">
+          <ScrollTable
+            head={
+              <>
+                <th className={`${TH} w-40`}>Time</th>
+                <th className={`${TH} w-32`}>Appointments</th>
+                <th className={`${TH} w-28`}>Staff available</th>
+                <th className={TH}>Status</th>
+              </>
+            }
+          >
+            {scheduleRows.map((row) => (
+              <tr key={row.time} className="hover:bg-isko-blue/5 transition-colors">
+                <td className={`${TD} font-medium text-slate-700 whitespace-nowrap`}>{row.time}</td>
+                <td className={`${TD} whitespace-nowrap tabular-nums`}>
+                  <span className={`font-semibold ${row.appts >= row.capacity ? 'text-isko-orange-dark' : 'text-slate-900'}`}>{row.appts}</span>
+                  <span className="text-slate-400"> / {row.capacity}</span>
+                </td>
+                <td className={TD}>
+                  {row.staffOk === true && (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-isko-blue" aria-label="Enough staff"><polyline points="20 6 9 17 4 12" /></svg>
+                  )}
+                  {row.staffOk === false && (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-isko-orange" aria-label="Not enough staff"><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /><circle cx="12" cy="12" r="10" /></svg>
+                  )}
+                  {row.staffOk === null && <span className="text-[11px] text-slate-400">—</span>}
+                </td>
+                <td className={TD}>
+                  <SlotStatusBadge status={row.status} />
+                </td>
+              </tr>
+            ))}
+            {scheduleRows.length === 0 && <EmptyRow colSpan={4}>No slots available today.</EmptyRow>}
+          </ScrollTable>
+        </Panel>
+
+        <div className="lg:col-span-4 lg:min-h-0">
+          <PickupScheduleSidebar slots={slots} onSchedule={onSchedule} onViewUnscheduled={onViewUnscheduled} />
+        </div>
+      </div>
     </div>
   )
 }
 
 function UnscheduledTab({ orders, onSchedule, onHandover, onOpenOrder, busyId }) {
   return (
-    <div className="space-y-3">
-      {/* Info banner */}
-      <div className="flex items-start justify-between gap-3 bg-blue-50 border border-blue-200/60 rounded-lg px-4 py-3">
-        <div className="flex items-start gap-2.5">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-blue-600 shrink-0 mt-0.5">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="8" /><line x1="12" y1="12" x2="12" y2="16" />
-          </svg>
-          <p className="text-xs font-medium text-blue-800">
-            These orders are ready for pickup but don't have a pickup time yet.
-            Schedule a pickup time for these customers to confirm their orders.
-          </p>
-        </div>
-        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-[11px] font-bold border border-blue-200/60">
-          {orders.length} orders
-        </span>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/60 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Order #</th>
-                <th className="px-4 py-3">Items</th>
-                <th className="px-4 py-3">Ready Since</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {orders.map((order) => {
-                const items = itemsInfo(order)
-                return (
-                  <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar initials={initialsOf(order.customer)} />
-                        <div>
-                          <p className="font-bold text-slate-900 text-xs">{order.customer}</p>
-                          <p className="text-[10px] text-slate-400">{order.custPhone || '—'}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-extrabold text-slate-800">{order.id}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-700">{items.count}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{items.label}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 text-slate-600 font-medium">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-400">
-                          <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        {timeOfDay(order.createdAt)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => onSchedule(order)}
-                          className="h-8 px-3 bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold rounded-md transition-colors cursor-pointer"
-                        >
-                          Schedule Pickup
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === order.id}
-                          onClick={() => onHandover(order)}
-                          className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-                        >
-                          {busyId === order.id ? 'Handing over…' : 'Hand over'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onOpenOrder(order)}
-                          className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer"
-                        >
-                          View Order
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-              {orders.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                    No unscheduled pickups — every ready order has a slot.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <Panel
+      title="Ready without a pickup time"
+      meta={`${orders.length} ${orders.length === 1 ? 'order' : 'orders'} · schedule a slot to confirm them with the customer`}
+      className="lg:h-full min-h-[24rem] lg:min-h-0"
+    >
+      <ScrollTable
+        head={
+          <>
+            <th className={TH}>Customer</th>
+            <th className={TH}>Order #</th>
+            <th className={TH}>Items</th>
+            <th className={TH}>Ready since</th>
+            <th className={`${TH} text-right`}>Actions</th>
+          </>
+        }
+      >
+        {orders.map((order) => (
+          <tr key={order.id} className="hover:bg-isko-blue/5 transition-colors">
+            <td className={TD}><CustomerCell order={order} /></td>
+            <td className={`${TD} font-semibold text-slate-900 whitespace-nowrap`}>{order.id}</td>
+            <td className={TD}><ItemsCell order={order} /></td>
+            <td className={`${TD} text-slate-600 whitespace-nowrap`}>{timeOfDay(order.createdAt)}</td>
+            <td className={TD}>
+              <div className="flex items-center justify-end gap-2">
+                <button type="button" onClick={() => onSchedule(order)} className={BTN_PRIMARY_SM}>
+                  Schedule pickup
+                </button>
+                <button type="button" disabled={busyId === order.id} onClick={() => onHandover(order)} className={BTN_SECONDARY_SM}>
+                  {busyId === order.id ? 'Handing over…' : 'Hand over'}
+                </button>
+                <button type="button" onClick={() => onOpenOrder(order)} className={BTN_SECONDARY_SM}>
+                  View order
+                </button>
+              </div>
+            </td>
+          </tr>
+        ))}
+        {orders.length === 0 && <EmptyRow colSpan={5}>No unscheduled pickups — every ready order has a slot.</EmptyRow>}
+      </ScrollTable>
+    </Panel>
   )
 }
 
 function ScheduledTab({ groups, slots, onSchedule, onViewUnscheduled, onHandover, onOpenOrder, busyId }) {
+  const total = groups.reduce((sum, group) => sum + group.count, 0)
   return (
-    <div className="flex gap-4 min-h-0">
-      {/* Main area */}
-      <div className="flex-1 space-y-3 min-w-0">
-        {/* Date header */}
-        <div className="bg-white rounded-lg border border-slate-200 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-500 shrink-0">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            <div>
-              <p className="text-sm font-bold text-slate-900">Scheduled Pickups</p>
-              <p className="text-[10px] text-slate-400">Orders with confirmed pickup appointments.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" className="h-8 px-3 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 flex items-center gap-1.5 hover:bg-slate-50 cursor-pointer">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-              {TODAY_LABEL}
-            </button>
-            <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Date-grouped appointments */}
-        <div className="space-y-3">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:h-full lg:min-h-0">
+      <Panel
+        title="Scheduled pickups"
+        meta={`${total} ${total === 1 ? 'appointment' : 'appointments'} with a confirmed time`}
+        className="lg:col-span-8 min-h-[24rem] lg:min-h-0"
+      >
+        <div className={`h-full ${SCROLL_FADE} space-y-3`}>
           {groups.map((group) => (
-            <div key={group.key} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-              {/* Group header */}
-              <div className="px-4 py-2.5 bg-slate-50/60 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                  <span className="text-xs font-bold text-slate-800">{group.label}</span>
-                </div>
-                <span className="text-[10px] font-semibold text-slate-400">
+            <div key={group.key} className="rounded-md border border-slate-200 overflow-hidden">
+              <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-800">{group.label}</span>
+                <span className="text-[11px] font-medium text-slate-500">
                   {group.count} {group.count === 1 ? 'appointment' : 'appointments'}
                 </span>
               </div>
-
-              {/* Appointment cards */}
               <div className="divide-y divide-slate-100">
                 {group.appointments.map((appt) => (
-                  <div key={appt.apptId} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50/40 transition-colors">
+                  <div key={appt.apptId} className="flex items-center gap-3 px-3 py-2.5 hover:bg-isko-blue/5 transition-colors">
                     <Avatar initials={initialsOf(appt.customer)} size="md" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-xs font-bold text-slate-900">{appt.customer}</p>
-                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{appt.time}</span>
+                        <p className="text-xs font-semibold text-slate-900">{appt.customer}</p>
+                        <span className="text-[11px] font-semibold text-isko-blue-dark bg-isko-blue/10 px-1.5 py-0.5 rounded">{appt.time}</span>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-[10px] text-slate-400 font-medium">{appt.apptId}</span>
-                        <span className="w-1 h-1 rounded-full bg-slate-300" />
-                        <span className="text-[10px] font-semibold text-slate-600">{appt.orderId}</span>
-                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {appt.apptId} · <span className="font-medium text-slate-700">{appt.orderId}</span>
+                      </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-xs font-semibold text-slate-700">{appt.items}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5 max-w-[180px] truncate">{appt.itemLabel}</p>
+                      <p className="text-xs font-medium text-slate-700">{appt.items}</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 max-w-[180px] truncate">{appt.itemLabel}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {appt.order && (
-                        <button
-                          type="button"
-                          disabled={busyId === appt.order.id}
-                          onClick={() => onHandover(appt.order)}
-                          className="h-7 px-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 rounded-md cursor-pointer disabled:opacity-60"
-                        >
+                        <button type="button" disabled={busyId === appt.order.id} onClick={() => onHandover(appt.order)} className={BTN_SECONDARY_SM}>
                           Hand over
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => onOpenOrder(appt.order)}
-                        className="h-7 px-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 rounded-md cursor-pointer"
-                      >
-                        View Order
+                      <button type="button" onClick={() => onOpenOrder(appt.order)} className={BTN_SECONDARY_SM}>
+                        View order
                       </button>
                     </div>
                   </div>
@@ -616,209 +519,89 @@ function ScheduledTab({ groups, slots, onSchedule, onViewUnscheduled, onHandover
               </div>
             </div>
           ))}
-          {groups.length === 0 && (
-            <div className="bg-white rounded-lg border border-slate-200 px-4 py-8 text-center text-slate-400 text-xs">
-              No scheduled pickups yet.
-            </div>
-          )}
+          {groups.length === 0 && <p className="py-8 text-center text-slate-400 text-xs">No scheduled pickups yet.</p>}
         </div>
-      </div>
+      </Panel>
 
-      {/* Right sidebar */}
-      <PickupScheduleSidebar onSchedule={() => onSchedule(null)} onViewUnscheduled={onViewUnscheduled} slots={slots} />
+      <div className="lg:col-span-4 lg:min-h-0">
+        <PickupScheduleSidebar onSchedule={() => onSchedule(null)} onViewUnscheduled={onViewUnscheduled} slots={slots} />
+      </div>
     </div>
   )
 }
 
 function CompletedTab({ orders, total }) {
   return (
-    <div className="space-y-3">
-      {/* Header row */}
-      <div className="bg-white rounded-lg border border-slate-200 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-emerald-600">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-bold text-slate-900">Completed Pickups</p>
-            <p className="text-[10px] text-slate-400">Successfully claimed and handed over to customers.</p>
-          </div>
-        </div>
-        <button type="button" className="h-8 px-3 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 flex items-center gap-1.5 hover:bg-slate-50 cursor-pointer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          {TODAY_LABEL}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-400"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-      </div>
-
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/60 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                <th className="px-4 py-3">Date &amp; Time</th>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Order #</th>
-                <th className="px-4 py-3">Items</th>
-                <th className="px-4 py-3">Claimed By</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {orders.map((order) => {
-                const items = itemsInfo(order)
-                const when = parseDate(order.completedAt) || parseDate(order.createdAt)
-                return (
-                  <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 text-slate-600 font-medium whitespace-nowrap">
-                      {when
-                        ? `${when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar initials={initialsOf(order.customer)} />
-                        <div>
-                          <p className="font-bold text-slate-900">{order.customer}</p>
-                          <p className="text-[10px] text-slate-400">{order.custPhone || '—'}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-extrabold text-slate-800">{order.id}</td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-700">{items.count}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{items.label}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] font-semibold">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        In-store claim
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })}
-              {orders.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                    No completed pickups yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-4 py-2.5 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
-          Showing {orders.length} of {total} completed pickups
-        </div>
-      </div>
-    </div>
+    <Panel
+      title="Completed pickups"
+      meta={`Showing ${orders.length} of ${total} · claimed and handed over to customers`}
+      className="lg:h-full min-h-[24rem] lg:min-h-0"
+    >
+      <ScrollTable
+        head={
+          <>
+            <th className={TH}>Date &amp; time</th>
+            <th className={TH}>Customer</th>
+            <th className={TH}>Order #</th>
+            <th className={TH}>Items</th>
+            <th className={TH}>Claimed by</th>
+          </>
+        }
+      >
+        {orders.map((order) => (
+          <tr key={order.id} className="hover:bg-isko-blue/5 transition-colors">
+            <td className={`${TD} text-slate-600 whitespace-nowrap`}>{whenLabel(parseDate(order.completedAt) || parseDate(order.createdAt))}</td>
+            <td className={TD}><CustomerCell order={order} /></td>
+            <td className={`${TD} font-semibold text-slate-900 whitespace-nowrap`}>{order.id}</td>
+            <td className={TD}><ItemsCell order={order} /></td>
+            <td className={TD}><StatusPill status="In-store claim" variant="green" /></td>
+          </tr>
+        ))}
+        {orders.length === 0 && <EmptyRow colSpan={5}>No completed pickups yet.</EmptyRow>}
+      </ScrollTable>
+    </Panel>
   )
 }
 
 function NoshowTab({ orders, onReschedule, onOpenOrder, busyId }) {
   return (
-    <div className="space-y-3">
-      {/* Header row */}
-      <div className="bg-white rounded-lg border border-slate-200 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-rose-100 border border-rose-200 flex items-center justify-center">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-rose-600">
-              <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-bold text-slate-900">No-show Pickups</p>
-            <p className="text-[10px] text-slate-400">These appointments were not claimed within the pickup window.</p>
-          </div>
-        </div>
-        <button type="button" className="h-8 px-3 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 flex items-center gap-1.5 hover:bg-slate-50 cursor-pointer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          {TODAY_LABEL}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-400"><polyline points="6 9 12 15 18 9"/></svg>
-        </button>
-      </div>
-
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/60 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                <th className="px-4 py-3">Date &amp; Time</th>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Order #</th>
-                <th className="px-4 py-3">Items</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {orders.map((order) => {
-                const items = itemsInfo(order)
-                const when = parseDate(order.createdAt)
-                return (
-                  <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-4 py-3 text-slate-600 font-medium whitespace-nowrap">
-                      {when
-                        ? `${when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar initials={initialsOf(order.customer)} />
-                        <div>
-                          <p className="font-bold text-slate-900">{order.customer}</p>
-                          <p className="text-[10px] text-slate-400">{order.custPhone || '—'}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-extrabold text-slate-800">{order.id}</td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-700">{items.count}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{items.label}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          disabled={busyId === order.id}
-                          onClick={() => onReschedule(order)}
-                          className="h-8 px-3 bg-brand-orange hover:bg-orange-600 disabled:opacity-70 text-white text-xs font-bold rounded-md transition-colors cursor-pointer"
-                        >
-                          {busyId === order.id ? 'Rescheduling…' : 'Reschedule'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onOpenOrder(order)}
-                          className="h-8 px-3 border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-md cursor-pointer"
-                        >
-                          Contact
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-              {orders.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                    No no-show pickups.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <Panel
+      title="No-show pickups"
+      meta={`${orders.length} not claimed within the pickup window`}
+      className="lg:h-full min-h-[24rem] lg:min-h-0"
+    >
+      <ScrollTable
+        head={
+          <>
+            <th className={TH}>Date &amp; time</th>
+            <th className={TH}>Customer</th>
+            <th className={TH}>Order #</th>
+            <th className={TH}>Items</th>
+            <th className={`${TH} text-right`}>Actions</th>
+          </>
+        }
+      >
+        {orders.map((order) => (
+          <tr key={order.id} className="hover:bg-isko-blue/5 transition-colors">
+            <td className={`${TD} text-slate-600 whitespace-nowrap`}>{whenLabel(parseDate(order.createdAt))}</td>
+            <td className={TD}><CustomerCell order={order} /></td>
+            <td className={`${TD} font-semibold text-slate-900 whitespace-nowrap`}>{order.id}</td>
+            <td className={TD}><ItemsCell order={order} /></td>
+            <td className={TD}>
+              <div className="flex items-center justify-end gap-2">
+                <button type="button" disabled={busyId === order.id} onClick={() => onReschedule(order)} className={BTN_PRIMARY_SM}>
+                  {busyId === order.id ? 'Rescheduling…' : 'Reschedule'}
+                </button>
+                <button type="button" onClick={() => onOpenOrder(order)} className={BTN_SECONDARY_SM}>
+                  Contact
+                </button>
+              </div>
+            </td>
+          </tr>
+        ))}
+        {orders.length === 0 && <EmptyRow colSpan={5}>No no-show pickups.</EmptyRow>}
+      </ScrollTable>
+    </Panel>
   )
 }
 
@@ -1123,11 +906,11 @@ export default function AdminPickup() {
 
   return (
     <AdminLayout>
-      <div className="h-full flex flex-col space-y-0 animate-fade-in">
+      <div className={PAGE_ROOT}>
         {/* Toast */}
         {toast && (
           <div className="fixed top-16 right-6 z-50 bg-white text-slate-800 px-3.5 py-2 rounded-md border border-slate-200 flex items-center gap-2 text-xs font-semibold animate-slide-up shadow-md">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+            <span className="w-1.5 h-1.5 rounded-full bg-isko-blue shrink-0" />
             <span>{toast}</span>
           </div>
         )}
@@ -1143,160 +926,108 @@ export default function AdminPickup() {
           />
         )}
 
-        {/* ── Page Header ── */}
-        <div className="pb-4">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              {/* Breadcrumb — reflects the current section */}
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-2">
-                <Link to="/admin/dashboard" className="hover:text-slate-600 transition-colors">Fulfillment</Link>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-                <span className="text-slate-600 font-semibold">Pickup</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand-orange flex items-center justify-center text-white shrink-0">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-tight">Pickup</h1>
-                  <p className="text-xs text-slate-500 font-normal">
-                    Manage in-store pickups, schedule appointments, and track handovers.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* QR verification (REQ-APC-02) */}
-            <div className="w-full sm:w-80">
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
-                    <rect x="3" y="3" width="7" height="7" rx="1" />
-                    <rect x="14" y="3" width="7" height="7" rx="1" />
-                    <rect x="3" y="14" width="7" height="7" rx="1" />
-                    <line x1="14" y1="14" x2="14" y2="14.01" /><line x1="21" y1="14" x2="21" y2="21" /><line x1="14" y1="21" x2="17" y2="21" />
-                  </svg>
-                  <input
-                    type="text"
-                    ref={scanInputRef}
-                    value={scanCode}
-                    onChange={(e) => { setScanCode(e.target.value); setScanMsg(null) }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
-                    placeholder="Scan or enter QR code"
-                    className="w-full h-9 pl-8 pr-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:bg-white focus:ring-1 focus:ring-brand-orange"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleScan}
-                  className="h-9 px-3.5 rounded-md bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
-                >
-                  Scan QR
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScanModalOpen(true)}
-                  className="h-9 px-3 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer shrink-0"
-                  title="Open camera scanner"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <rect x="3" y="3" width="7" height="7" rx="1" />
-                    <rect x="14" y="3" width="7" height="7" rx="1" />
-                    <rect x="3" y="14" width="7" height="7" rx="1" />
-                    <line x1="14" y1="14" x2="14" y2="14.01" /><line x1="21" y1="14" x2="21" y2="21" /><line x1="14" y1="21" x2="17" y2="21" />
-                  </svg>
-                </button>
-              </div>
-              {scanMsg && (
-                <p className={`mt-1 text-[11px] font-semibold ${scanMsg.type === 'ok' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {scanMsg.text}
-                </p>
-              )}
-            </div>
-
-            {/* QR Camera Scanner Modal */}
-            {scanModalOpen && (
-              <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
-                <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">QR Code Scanner</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Point camera at customer's QR code</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setScanModalOpen(false)}
-                      className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="p-4">
-                    <QRScanner
-                      onScan={(code) => {
-                        setScanCode(code)
-                        handleScan(code)
-                        setScanModalOpen(false)
-                      }}
-                      onError={(error) => {
-                        setScanMsg({ type: 'error', text: error })
-                      }}
-                      className="w-full aspect-video"
-                    />
-                  </div>
-                  <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/40">
-                    <button
-                      type="button"
-                      onClick={() => setScanModalOpen(false)}
-                      className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+        {/* ── Header with QR verification (REQ-APC-02) ── */}
+        <AdminPageHeader title="Pickup" subtitle="Manage in-store pickups, schedule appointments, and track handovers.">
+          <div className="relative w-56">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <line x1="14" y1="14" x2="14" y2="14.01" /><line x1="21" y1="14" x2="21" y2="21" /><line x1="14" y1="21" x2="17" y2="21" />
+            </svg>
+            <input
+              type="text"
+              ref={scanInputRef}
+              value={scanCode}
+              onChange={(e) => { setScanCode(e.target.value); setScanMsg(null) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
+              placeholder="Scan or enter QR code"
+              aria-label="QR code"
+              className={`${INPUT} h-8 pl-8 text-xs`}
+            />
           </div>
-        </div>
+          <button type="button" onClick={handleScan} className={BTN_PRIMARY_SM}>
+            Scan QR
+          </button>
+          <button type="button" onClick={() => setScanModalOpen(true)} className={ICON_BTN} title="Open camera scanner" aria-label="Open camera scanner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          </button>
+        </AdminPageHeader>
+
+        {scanMsg && (
+          <p
+            role="status"
+            className={`shrink-0 -mt-1 text-xs font-medium px-3 py-2 rounded-md border ${
+              scanMsg.type === 'ok'
+                ? 'bg-isko-blue/10 text-isko-blue-dark border-isko-blue/25'
+                : 'bg-rose-50 text-rose-700 border-rose-200'
+            }`}
+          >
+            {scanMsg.text}
+          </p>
+        )}
+
+        {/* QR Camera Scanner Modal */}
+        {scanModalOpen && (
+          <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
+            <div className="bg-white rounded-lg border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">QR code scanner</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Point the camera at the customer&apos;s QR code</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScanModalOpen(false)}
+                  aria-label="Close scanner"
+                  className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="p-4">
+                <QRScanner
+                  onScan={(code) => {
+                    setScanCode(code)
+                    handleScan(code)
+                    setScanModalOpen(false)
+                  }}
+                  onError={(error) => {
+                    setScanMsg({ type: 'error', text: error })
+                  }}
+                  className="w-full aspect-video"
+                />
+              </div>
+              <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50">
+                <button type="button" onClick={() => setScanModalOpen(false)} className={BTN_SECONDARY_SM}>
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Tabs ── */}
-        <div className="flex items-center gap-0 border-b border-slate-200 mb-4">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-1.5 px-4 pb-2.5 text-xs font-semibold transition-colors relative cursor-pointer whitespace-nowrap
-                ${activeTab === tab
-                  ? 'text-brand-orange border-b-2 border-brand-orange font-bold'
-                  : 'text-slate-500 hover:text-slate-800'
-                }`}
-            >
-              {TAB_ICONS[tab]}
-              <span>{tab}</span>
-              {TAB_COUNTS[tab] !== null && (
-                <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold
-                  ${activeTab === tab
-                    ? 'bg-orange-100 text-brand-orange'
-                    : 'bg-slate-100 text-slate-500'
-                  }`}>
-                  {TAB_COUNTS[tab]}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Pickup sections"
+          className="self-start shrink-0"
+          value={activeTab}
+          onChange={setActiveTab}
+          options={TABS.map((tab) => ({
+            value: tab,
+            label: tab,
+            icon: TAB_ICONS[tab],
+            count: TAB_COUNTS[tab] !== null ? TAB_COUNTS[tab] : undefined,
+          }))}
+        />
 
-        {/* ── Tab Content ── */}
-        <div className="flex-1 overflow-y-auto pb-6 scrollbar-none">
+        {/* ── Tab content fills the rest; panels scroll inside ── */}
+        <div className="lg:flex-1 lg:min-h-0">
           {activeTab === 'Overview' && (
             <OverviewTab
               kpis={kpis}
@@ -1304,6 +1035,7 @@ export default function AdminPickup() {
               slots={claimSlots}
               onSchedule={() => openScheduleModal(null)}
               onViewUnscheduled={handleViewUnscheduled}
+              onOpenTab={setActiveTab}
             />
           )}
           {activeTab === 'Unscheduled' && (

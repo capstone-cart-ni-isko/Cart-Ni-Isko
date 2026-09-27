@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { SELECT_SM } from './kit/ui.js'
 
 export default function DataTable({
   columns = [],
@@ -47,7 +48,7 @@ export default function DataTable({
     paginatedData.every((d) => selectedIds.includes(d[keyField]))
 
   return (
-    <div className="space-y-3">
+    <div className="h-full min-h-0 flex flex-col gap-3">
       {/* Top filters / actions bar */}
       {(filtersSlot || actions) && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -57,18 +58,18 @@ export default function DataTable({
       )}
 
       {/* Table container */}
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="overflow-x-auto">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full text-left border-collapse min-w-[650px]">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 {selectable && (
                   <th className="py-2.5 px-3 w-10 text-center">
                     <input
                       type="checkbox"
                       checked={isAllSelected}
                       onChange={handleSelectAll}
-                      className="rounded border-slate-300 text-brand-orange focus:ring-brand-orange"
+                      className="w-4 h-4 rounded border-slate-300 accent-isko-blue cursor-pointer"
                     />
                   </th>
                 )}
@@ -101,7 +102,7 @@ export default function DataTable({
                     <tr
                       key={rowId}
                       className={`hover:bg-slate-50/60 transition-colors ${
-                        isSelected ? 'bg-orange-50/30' : ''
+                        isSelected ? 'bg-isko-blue/5' : ''
                       }`}
                     >
                       {selectable && (
@@ -110,7 +111,7 @@ export default function DataTable({
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => handleSelectOne(rowId)}
-                            className="rounded border-slate-300 text-brand-orange focus:ring-brand-orange"
+                            className="w-4 h-4 rounded border-slate-300 accent-isko-blue cursor-pointer"
                           />
                         </td>
                       )}
@@ -131,7 +132,7 @@ export default function DataTable({
         </div>
 
         {/* Pagination controls */}
-        <div className="px-3.5 py-2.5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-500 font-medium bg-white">
+        <div className="shrink-0 px-3 py-2 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-500 font-medium bg-white">
           <div className="flex items-center gap-2">
             <span>
               Showing{' '}
@@ -152,7 +153,7 @@ export default function DataTable({
                   setPageSize(Number(e.target.value))
                   setCurrentPage(1)
                 }}
-                className="ml-2 bg-slate-50 border border-slate-200 rounded-md px-2 py-0.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                className={`ml-2 ${SELECT_SM}`}
               >
                 {pageSizeOptions.map((opt) => (
                   <option key={opt} value={opt}>
@@ -168,7 +169,7 @@ export default function DataTable({
               type="button"
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-isko-blue/5 hover:text-isko-blue disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                 <polyline points="15 18 9 12 15 6" />
@@ -189,8 +190,8 @@ export default function DataTable({
                       onClick={() => setCurrentPage(page)}
                       className={`min-w-[26px] h-7 px-1.5 rounded-md text-xs font-semibold transition-all ${
                         currentPage === page
-                          ? 'bg-brand-orange text-white'
-                          : 'hover:bg-slate-100 text-slate-700'
+                          ? 'bg-isko-blue text-white'
+                          : 'hover:bg-isko-blue/10 text-slate-700 cursor-pointer'
                       }`}
                     >
                       {page}
@@ -203,7 +204,7 @@ export default function DataTable({
               type="button"
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-isko-blue/5 hover:text-isko-blue disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
                 <polyline points="9 18 15 12 9 6" />

@@ -3,8 +3,11 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import SalesBarChart from '../../components/admin/SalesBarChart.jsx'
-import DashCard from '../../components/admin/dashboard/DashCard.jsx'
-import KpiCard from '../../components/admin/dashboard/KpiCard.jsx'
+import Panel from '../../components/admin/kit/Panel.jsx'
+import KpiCard from '../../components/admin/kit/KpiCard.jsx'
+import AdminPageHeader from '../../components/admin/kit/AdminPageHeader.jsx'
+import Segmented from '../../components/admin/kit/Segmented.jsx'
+import { ICON_BTN, PAGE_ROOT } from '../../components/admin/kit/ui.js'
 import FulfillmentBars from '../../components/admin/dashboard/FulfillmentBars.jsx'
 import RecentOrdersTable from '../../components/admin/dashboard/RecentOrdersTable.jsx'
 import QuickActions from '../../components/admin/dashboard/QuickActions.jsx'
@@ -167,47 +170,25 @@ export default function AdminDashboard() {
 
   return (
     <AdminLayout>
-      <div className="flex flex-col gap-3 lg:h-full lg:min-h-0">
+      <div className={PAGE_ROOT}>
         {/* ── Header: title, freshness, range ── */}
-        <header className="flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold text-slate-900 tracking-tight leading-tight">Store performance</h1>
-            <p className="text-xs text-slate-500 flex items-center gap-1.5">
+        <AdminPageHeader
+          title="Store performance"
+          subtitle={
+            <>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
               {secondsAgo(snapshot?.fetchedAt, now)} · auto-refreshes every 30s
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => syncData()}
-              className="h-8 w-8 rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center cursor-pointer"
-              aria-label="Refresh now"
-              title="Refresh now"
-            >
-              <Icon>
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </Icon>
-            </button>
-            <div className="inline-flex h-8 p-0.5 bg-slate-100 rounded-md" role="radiogroup" aria-label="Time range">
-              {RANGES.map((range) => (
-                <button
-                  key={range}
-                  type="button"
-                  role="radio"
-                  aria-checked={timeRange === range}
-                  onClick={() => setTimeRange(range)}
-                  className={`h-7 px-3 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                    timeRange === range ? 'bg-isko-blue text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {range}
-                </button>
-              ))}
-            </div>
-          </div>
-        </header>
+            </>
+          }
+        >
+          <button type="button" onClick={() => syncData()} className={ICON_BTN} aria-label="Refresh now" title="Refresh now">
+            <Icon>
+              <polyline points="23 4 23 10 17 10" />
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            </Icon>
+          </button>
+          <Segmented label="Time range" options={RANGES} value={timeRange} onChange={setTimeRange} />
+        </AdminPageHeader>
 
         {/* ── KPI row (F-pattern: first thing scanned) ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
@@ -257,7 +238,7 @@ export default function AdminDashboard() {
             Left: pipeline + sales on top, recent orders below.
             Right: actions, bookings and the duty roster in one column. */}
         <div className="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] gap-3 lg:flex-1 lg:min-h-0">
-          <DashCard
+          <Panel
             title="Fulfillment"
             meta={`${rangeOrders.length} orders`}
             actionLabel="Pickup"
@@ -265,9 +246,9 @@ export default function AdminDashboard() {
             className="lg:col-span-4"
           >
             <FulfillmentBars stages={stages} activeKey={orderFilter?.key} onSelect={stageFilter} />
-          </DashCard>
+          </Panel>
 
-          <DashCard
+          <Panel
             title="Sales by category"
             meta={RANGE_META[timeRange]}
             actionLabel="Analytics"
@@ -275,13 +256,13 @@ export default function AdminDashboard() {
             className="lg:col-span-5 min-h-[16rem] lg:min-h-0"
           >
             <SalesBarChart data={categorySales} />
-          </DashCard>
+          </Panel>
 
           <div className="lg:col-span-3 lg:row-span-2 flex flex-col gap-3 lg:min-h-0">
-            <DashCard title="Quick actions" className="shrink-0">
+            <Panel title="Quick actions" className="shrink-0">
               <QuickActions isAdmin={isAdmin} onOpen={setDrawer} />
-            </DashCard>
-            <DashCard
+            </Panel>
+            <Panel
               title="Bookings"
               meta={`${bookings.total} in range`}
               actionLabel="Schedule"
@@ -292,8 +273,8 @@ export default function AdminDashboard() {
               {bookings.rows.map((row) => (
                 <BookingMeter key={row.type} row={row} />
               ))}
-            </DashCard>
-            <DashCard
+            </Panel>
+            <Panel
               title="On duty"
               meta={`${clockedInCount} in · ${onShiftCount}/${roster.length} on shift`}
               actionLabel="Schedule"
@@ -307,10 +288,10 @@ export default function AdminDashboard() {
                 pendingIds={Object.keys(clockOverrides).map(Number)}
                 onToggleClock={handleToggleClock}
               />
-            </DashCard>
+            </Panel>
           </div>
 
-          <DashCard
+          <Panel
             title="Recent orders"
             meta={
               orderFilter ? (
@@ -337,7 +318,7 @@ export default function AdminDashboard() {
               orders={recentOrders}
               emptyText={orderFilter ? `No ${orderFilter.label.toLowerCase()} orders in this range.` : 'No orders in this range yet.'}
             />
-          </DashCard>
+          </Panel>
         </div>
       </div>
 

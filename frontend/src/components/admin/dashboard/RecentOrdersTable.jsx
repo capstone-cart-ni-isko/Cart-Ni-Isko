@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import StatusBadge from './StatusBadge.jsx'
+import StatusBadge from '../kit/StatusBadge.jsx'
 
 const peso = (n) => `₱${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
 

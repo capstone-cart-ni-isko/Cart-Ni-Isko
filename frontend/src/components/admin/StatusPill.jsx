@@ -1,93 +1,47 @@
+import { TONE_CLASSES } from './kit/statusTone.js'
+
 /**
- * Semantic status pill used across all Admin tables and cards
- * Matches the status pill pattern (bg-100/text-700 pairs):
- * Blue = In-Progress / Pre-order / In Production / Preparing / Online
- * Green = Success / Ready / Completed / Claimed / Published
- * Amber = Pending / Warning / Awaiting Production / Packing
- * Red = Failed / Delayed / SLA Breach / Customer Support Alert / Cancelled
- * Purple / Gray = Other states / Draft / In Class / Courier
+ * Status pill for admin tables and cards, on the kit palette (kit/statusTone.js):
+ *   active  (brand blue)   in progress: to process / claim / receive, preparing, pre-order…
+ *   urgent  (brand orange) needs staff attention: requested, pending, unclaimed, low stock…
+ *   lost    (red)          cancelled, returned, refunded, failed, rejected…
+ *   done    (quiet, green dot) completed, claimed, ready, published, available, on duty…
+ *   neutral (grey)         draft, off duty, unavailable and anything unknown
+ * Legacy `variant` values still work: blue/purple/cyan → active, amber → urgent,
+ * red → lost, green → done.
  */
+const VARIANT_TONE = { blue: 'active', purple: 'active', cyan: 'active', amber: 'urgent', red: 'lost', green: 'done' }
+
+const DOT = {
+  neutral: 'bg-slate-400',
+  active: 'bg-isko-blue',
+  done: 'bg-emerald-500',
+  urgent: 'bg-isko-orange',
+  lost: 'bg-rose-500',
+}
+
+const has = (norm, words) => words.some((word) => norm.includes(word))
+
+function toneFor(norm) {
+  // Order matters: "unclaimed" before "claimed", "requested" before the
+  // statuses a request refers to, "unavailable" before "available".
+  if (has(norm, ['unavailable', 'off duty', 'draft', 'in class', 'busy'])) return 'neutral'
+  if (has(norm, ['unclaimed', 'requested', 'pending', 'awaiting', 'warning', 'low stock', 'up next', 'understaffed', 'short'])) return 'urgent'
+  if (has(norm, ['cancelled', 'returned', 'refunded', 'failed', 'delayed', 'rejected', 'conflict', 'alert', 'danger', 'no-show', 'no show', 'out of stock'])) return 'lost'
+  if (has(norm, ['completed', 'claimed', 'ready', 'published', 'approved', 'available', 'covered', 'received', 'delivered']) || norm === 'on duty') return 'done'
+  if (has(norm, ['to process', 'to claim', 'to receive', 'in production', 'preparing', 'in transit', 'pre-order', 'desk duty', 'online', 'pickup', 'assigned', 'dispatch', 'scheduled', 'on-call', 'active'])) return 'active'
+  return 'neutral'
+}
+
 export default function StatusPill({ status, variant, className = '' }) {
   if (!status) return null
-
-  const norm = String(status).toLowerCase().trim()
-
-  let style = 'bg-gray-100 text-gray-700 border-gray-200'
-
-  if (variant) {
-    if (variant === 'blue') style = 'bg-blue-50 text-blue-700 border-blue-200'
-    else if (variant === 'green') style = 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    else if (variant === 'amber') style = 'bg-amber-50 text-amber-700 border-amber-200'
-    else if (variant === 'red') style = 'bg-rose-50 text-rose-700 border-rose-200'
-    else if (variant === 'purple') style = 'bg-purple-50 text-purple-700 border-purple-200'
-    else if (variant === 'cyan') style = 'bg-cyan-50 text-cyan-700 border-cyan-200'
-  } else {
-    // SRS order-status vocabulary first:
-    //   Unclaimed must win over the generic "claimed" match, "requested" rows
-    //   (cancel/return requests) are pending staff action, and refunded
-    //   orders count as completed.
-    if (
-      norm.includes('completed') ||
-      (norm.includes('claimed') && !norm.includes('unclaimed')) ||
-      norm.includes('refunded') ||
-      norm.includes('ready') ||
-      norm.includes('published') ||
-      norm.includes('approved') ||
-      norm.includes('available') ||
-      norm === 'on duty'
-    ) {
-      style = 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    } else if (
-      norm.includes('in production') ||
-      norm.includes('preparing') ||
-      norm.includes('in transit') ||
-      norm.includes('to claim') ||
-      norm.includes('to receive') ||
-      norm.includes('desk duty') ||
-      norm.includes('online regular') ||
-      norm.includes('campus pickup')
-    ) {
-      style = 'bg-blue-50 text-blue-700 border-blue-200'
-    } else if (
-      norm.includes('to process') ||
-      norm.includes('requested') ||
-      norm.includes('pending') ||
-      norm.includes('awaiting') ||
-      norm.includes('packing') ||
-      norm.includes('pre-order') ||
-      norm.includes('warning') ||
-      norm.includes('up next') ||
-      norm.includes('low stock')
-    ) {
-      style = 'bg-amber-50 text-amber-700 border-amber-200'
-    } else if (
-      norm.includes('unclaimed') ||
-      norm.includes('returned') ||
-      norm.includes('failed') ||
-      norm.includes('delayed') ||
-      norm.includes('cancelled') ||
-      norm.includes('alert') ||
-      norm.includes('rejected') ||
-      norm.includes('conflict') ||
-      norm.includes('danger')
-    ) {
-      style = 'bg-rose-50 text-rose-700 border-rose-200'
-    } else if (
-      norm.includes('ready for dispatch') ||
-      norm.includes('on-call') ||
-      norm.includes('assigned')
-    ) {
-      style = 'bg-purple-50 text-purple-700 border-purple-200'
-    } else if (norm.includes('draft') || norm.includes('in class') || norm.includes('unavailable') || norm.includes('busy')) {
-      style = 'bg-gray-100 text-gray-600 border-gray-200'
-    }
-  }
+  const tone = (variant && VARIANT_TONE[variant]) || toneFor(String(status).toLowerCase().trim())
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold border ${style} ${className}`}
+      className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md border text-[11px] font-medium whitespace-nowrap ${TONE_CLASSES[tone]} ${className}`}
     >
-      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70 shrink-0" />
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[tone]}`} />
       <span className="capitalize">{status}</span>
     </span>
   )

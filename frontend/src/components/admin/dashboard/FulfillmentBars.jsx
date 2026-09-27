@@ -1,4 +1,4 @@
-import { TONE_FILL } from './statusTone.js'
+import { TONE_FILL } from '../kit/statusTone.js'
 
 // Stage tones: in-progress stages in brand blue, attention in brand orange
 const STAGE_TONE = {

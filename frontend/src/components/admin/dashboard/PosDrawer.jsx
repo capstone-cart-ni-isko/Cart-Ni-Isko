@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import DrawerPanel from '../DrawerPanel.jsx'
 import { useAdmin } from '../../../hooks/useAdmin.js'
 import { useToast } from '../../../hooks/useToast.js'
-import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, peso } from './ui.js'
+import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, peso } from '../kit/ui.js'
 
 /*
   Quick walk-in sale without leaving the dashboard. It drives the same shared
