@@ -274,21 +274,62 @@ export function buildTrendLabel(rows = [], range = 'Today', accessor = (row) => 
     else if (time >= from - duration && time < from) previous += value
   })
 
+  // tone: 'up' | 'down' | 'neutral'. A zero baseline has no meaningful
+  // percentage, so it reads neutral instead of a misleading green arrow.
   if (previous === 0) {
     return {
       label: current > 0 ? 'New activity this period' : 'No activity yet',
       positive: true,
+      tone: 'neutral',
       current,
       previous,
     }
   }
   const pct = ((current - previous) / previous) * 100
+  const rounded = Math.round(pct)
   return {
-    label: `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}% vs last period`,
+    label: rounded === 0 ? `No change ${rangeLabel(range)}` : `${rounded > 0 ? '+' : ''}${rounded}% ${rangeLabel(range)}`,
     positive: pct >= 0,
+    tone: rounded === 0 ? 'neutral' : rounded > 0 ? 'up' : 'down',
     current,
     previous,
   }
+}
+
+/** The comparison window a range is measured against, for KPI subtext. */
+export function rangeLabel(range = 'Today') {
+  if (range === 'Week') return 'vs previous 7 days'
+  if (range === 'Month') return 'vs previous 30 days'
+  return 'vs yesterday'
+}
+
+/**
+ * RFC 4180 CSV with a UTF-8 BOM, so Excel keeps the peso sign and fields that
+ * contain commas, quotes or line breaks stay in their own column.
+ * columns: [{ label, value: (row) => any }]
+ */
+export function toCsv(rows = [], columns = []) {
+  const cell = (value) => {
+    const text = value === null || value === undefined ? '' : String(value)
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  }
+  const lines = [
+    columns.map((col) => cell(col.label)).join(','),
+    ...rows.map((row) => columns.map((col) => cell(col.value(row))).join(',')),
+  ]
+  return '﻿' + lines.join('\r\n')
+}
+
+/** Saves text as a file through a temporary object URL. */
+export function downloadText(filename, text, type = 'text/csv;charset=utf-8') {
+  const url = URL.createObjectURL(new Blob([text], { type }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 /** { gross, count, avg } for a set of already-mapped orders. */
@@ -431,6 +472,7 @@ export function buildFulfillmentStages(rows = []) {
       key: def.key,
       label: def.label,
       count,
+      statuses,
       color: def.color,
       bgClass: '',
     }
@@ -466,6 +508,41 @@ export function buildOnDuty(accounts = {}, shifts = [], now = new Date()) {
         avatar: initials,
       }
     })
+}
+
+/**
+ * Everyone scheduled today, for the dashboard's duty widget: one row per
+ * employee with a shift today, whether a shift covers the current time, and
+ * whether they are clocked in (emp_instore). On-shift-now rows come first.
+ */
+export function buildDutyRoster(accounts = {}, shifts = [], now = new Date()) {
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const byEmp = new Map()
+  shifts.forEach((shift) => {
+    const key = String(shift.emp_id)
+    if (!byEmp.has(key)) byEmp.set(key, [])
+    byEmp.get(key).push(shift)
+  })
+
+  return (accounts.employees || [])
+    .filter((emp) => byEmp.has(String(emp.emp_id)))
+    .map((emp) => {
+      const own = byEmp.get(String(emp.emp_id)).sort((a, b) => a.shift_start.localeCompare(b.shift_start))
+      const current = own.find((s) => s.shift_start <= hhmm && s.shift_end > hhmm)
+      const next = current || own.find((s) => s.shift_start > hhmm) || own[own.length - 1]
+      const name = `${emp.emp_givname || ''} ${emp.emp_surname || ''}`.trim() || emp.emp_email || 'Staff'
+      return {
+        empId: Number(emp.emp_id),
+        name,
+        role: emp.emp_type || 'Staff',
+        avatar: name.split(' ').filter(Boolean).map((n) => n[0]).join('').substring(0, 2).toUpperCase() || 'ST',
+        timeSlot: `${timeLabel(next.shift_start)} – ${timeLabel(next.shift_end)}`,
+        onShiftNow: Boolean(current),
+        clockedIn: emp.emp_instore === true || Number(emp.emp_instore) === 1,
+        pendingReplacement: own.some((s) => s.pending_replacement),
+      }
+    })
+    .sort((a, b) => Number(b.onShiftNow) - Number(a.onShiftNow) || a.name.localeCompare(b.name))
 }
 
 /**

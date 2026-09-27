@@ -188,6 +188,8 @@ export default function AdminSidebar({
   onCloseMobile,
   isCollapsed: controlledIsCollapsed,
   onToggleCollapse: controlledToggleCollapse,
+  // True while the collapsed rail is temporarily expanded on hover
+  isOverlay = false,
 }) {
   const navigate = useNavigate()
   const { orders: rawOrders = [], products = [], currentAdminUser } = useAdmin()
@@ -326,8 +328,8 @@ export default function AdminSidebar({
                 <button
                   type="button"
                   onClick={onToggleCollapse}
-                  title="Collapse sidebar"
-                  aria-label="Collapse sidebar"
+                  title={isOverlay ? 'Keep sidebar open' : 'Collapse sidebar'}
+                  aria-label={isOverlay ? 'Keep sidebar open' : 'Collapse sidebar'}
                   className="hidden md:flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
                 >
                   <PanelIcon />

@@ -1,18 +1,41 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AdminSidebar from './AdminSidebar.jsx'
 import AdminTopBar from './AdminTopBar.jsx'
 
+// Delay before a hovered rail expands, so passing the cursor over it doesn't flash it open
+const HOVER_OPEN_MS = 150
+
 export default function AdminLayout({ children, className = '' }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  // Icon-only rail by default; only an explicit "pinned open" choice is remembered
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     try {
-      return localStorage.getItem('isko_admin_sidebar_collapsed') === 'true'
+      return localStorage.getItem('isko_admin_sidebar_collapsed') !== 'false'
     } catch {
-      return false
+      return true
     }
   })
+  // While collapsed, hovering or focusing the rail opens it as an overlay
+  // drawer on top of the page, so the content never reflows.
+  const [hoverOpen, setHoverOpen] = useState(false)
+  const hoverTimer = useRef(null)
+
+  useEffect(() => () => clearTimeout(hoverTimer.current), [])
+
+  const openHover = (immediate = false) => {
+    if (!isSidebarCollapsed) return
+    clearTimeout(hoverTimer.current)
+    if (immediate) setHoverOpen(true)
+    else hoverTimer.current = setTimeout(() => setHoverOpen(true), HOVER_OPEN_MS)
+  }
+
+  const closeHover = () => {
+    clearTimeout(hoverTimer.current)
+    setHoverOpen(false)
+  }
 
   const handleToggleCollapse = () => {
+    closeHover()
     setIsSidebarCollapsed((prev) => {
       const next = !prev
       try {
@@ -26,16 +49,30 @@ export default function AdminLayout({ children, className = '' }) {
 
   return (
     <div className="admin-portal min-h-screen bg-[#F8F9FA] flex flex-row w-full font-sans antialiased text-gray-900">
-      {/* Desktop Sidebar (Fixed Left) */}
+      {/* Desktop Sidebar (Fixed Left). The outer slot reserves the layout
+          width; the inner panel can grow past it as a hover overlay. */}
       <div
-        className={`hidden md:block shrink-0 h-screen sticky top-0 z-30 transition-[width] duration-300 ease-in-out [&>aside]:w-full ${
+        className={`hidden md:block shrink-0 h-screen sticky top-0 z-40 transition-[width] duration-300 ease-in-out ${
           isSidebarCollapsed ? 'w-16' : 'w-56'
         }`}
       >
-        <AdminSidebar
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={handleToggleCollapse}
-        />
+        <div
+          onMouseEnter={() => openHover()}
+          onMouseLeave={closeHover}
+          onFocus={() => openHover(true)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) closeHover()
+          }}
+          className={`absolute inset-y-0 left-0 transition-[width,box-shadow] duration-200 ease-out [&>aside]:w-full ${
+            !isSidebarCollapsed ? 'w-56' : hoverOpen ? 'w-56 shadow-xl' : 'w-16'
+          }`}
+        >
+          <AdminSidebar
+            isCollapsed={isSidebarCollapsed && !hoverOpen}
+            isOverlay={isSidebarCollapsed && hoverOpen}
+            onToggleCollapse={handleToggleCollapse}
+          />
+        </div>
       </div>
 
       {/* Mobile Drawer Backdrop & Sidebar */}

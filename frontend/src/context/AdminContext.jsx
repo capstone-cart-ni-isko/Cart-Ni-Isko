@@ -251,7 +251,11 @@ export function AdminProvider({ children }) {
         sku: productData.sku || `SKU-${Date.now().toString(36).toUpperCase()}`,
         category: productData.category || 'Shirts',
         price: Number(productData.price) || 300,
-        stock: Number(productData.stock) || 10,
+        // 0 is a valid opening stock (e.g. a pre-order); only a missing value defaults
+        stock:
+          productData.stock !== '' && Number.isFinite(Number(productData.stock))
+            ? Number(productData.stock)
+            : 10,
         desc: productData.desc || '',
         photo: productData.photo || '',
       })
@@ -343,15 +347,17 @@ export function AdminProvider({ children }) {
 
   const adjustStock = useCallback(async (productId, newStock) => {
     const numericId = toNumericProductId(productId)
-    if (numericId === null) return
+    if (numericId === null) return false
     try {
       patchProduct(numericId, { totalStock: Math.max(0, newStock) })
       await updateAdminProductAPI(numericId, { prod_qty: Math.max(0, newStock) })
       refreshProducts()
+      return true
     } catch (e) {
       console.error('Failed to adjust stock:', e)
       showToast(e.message || 'Failed to adjust stock.', 'error')
       refreshProducts()
+      return false
     }
   }, [refreshProducts, showToast, patchProduct])
 
