@@ -16,7 +16,6 @@ const BREADCRUMB_MAP = {
   '/admin/pos': ['Sales & Operations', 'Register'],
   '/admin/orders': ['Sales & Operations', 'Orders'],
   '/admin/schedule': ['Sales & Operations', 'Schedule'],
-  '/admin/appointments': ['Sales & Operations', 'Appointments'],
   '/admin/fulfillment': ['Fulfillment', 'Pickup & Delivery'],
   '/admin/pickup': ['Fulfillment', 'Pickup'],
   '/admin/delivery': ['Fulfillment', 'Delivery'],

@@ -8,10 +8,12 @@ import AppShell from '../components/layout/AppShell.jsx'
 import BottomNav from '../components/layout/BottomNav.jsx'
 import Button from '../components/ui/Button.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import { ApiErrorText } from '../components/ui/ApiErrorBoundary.jsx'
+import BackButton from '../components/ui/BackButton.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import { CheckIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
-import { getDispatch, payOrder } from '../services/checkout.js'
+import { getDispatch, payOrder, createPaymentIntent } from '../services/checkout.js'
 import { addToCart as addCartOrder, removeFromCart as removeCartOrder } from '../services/cart.js'
 import { removeProductFromOrder } from '../services/orders.js'
 import { createAppointment, closeAppointment } from '../services/appointments.js'
@@ -91,6 +93,27 @@ function formatWhen(value) {
   return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString()
 }
 
+/* The order being paid through PayMongo, kept across the redirect round trip. */
+const PENDING_PAYMONGO_KEY = 'cartniisko:pending_paymongo'
+
+function savePendingPayMongo(pending) {
+  try {
+    sessionStorage.setItem(PENDING_PAYMONGO_KEY, JSON.stringify(pending))
+  } catch {
+    // Blocked storage: the return handler then reports the payment as unfinished.
+  }
+}
+
+function readPendingPayMongo() {
+  try {
+    const pending = JSON.parse(sessionStorage.getItem(PENDING_PAYMONGO_KEY) || 'null')
+    sessionStorage.removeItem(PENDING_PAYMONGO_KEY)
+    return pending
+  } catch {
+    return null
+  }
+}
+
 function CheckoutPlaceholder() {
   const navigate = useNavigate()
   const {
@@ -160,6 +183,9 @@ function CheckoutPlaceholder() {
     serverPreview?.total_due ?? serverPreview?.total ?? serverPreview?.ord_total ?? null
   const totalDue = serverDue != null ? Number(serverDue) : orderSubtotal + clientFee
 
+  // Gateway selection: 'pay_ref' (existing) or 'paymongo'
+  const [gateway, setGateway] = useState('pay_ref')
+
   // The server derives every fee itself; it only needs the modality inputs.
   const dispatchOptions = (appointId = null) =>
     dispatchType === 'delivery'
@@ -190,6 +216,56 @@ function CheckoutPlaceholder() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directOrdId, dispatchType, tier, addressIdx])
+
+  /* Finalizes an order PayMongo reports as paid (see the return handler below). */
+  const completePayMongoOrder = async (pending, paymentIntentId) => {
+    setBusy(true)
+    try {
+      const payRes = await payOrder(pending.ordId, pending.dispatchType, pending.due, pending.options)
+      const payRef = payRes?.data?.payment?.pay_ref ?? ''
+      setReceipt(receiptFrom(payRes?.data, pending.ordId, pending.dispatchType, pending.slot))
+      clearSelectedItems()
+      refreshCart()
+      setPaidRef(payRef || `PM-${paymentIntentId.slice(-8)}`)
+      showToast('Payment successful! Your order is being processed.', 'success')
+      setStep('confirmed')
+      setCountdown(5)
+    } catch (err) {
+      // PayMongo took the money but the order could not be finalized here:
+      // say so plainly with the reference the store needs to reconcile it.
+      setError(
+        `PayMongo confirmed your payment (ref PM-${paymentIntentId.slice(-8)}), but your order could not be ` +
+          `finalized: ${err?.message || 'unknown error'}. Please contact the store with this reference.`
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /* PayMongo sends the customer back here with ?status=&payment_intent_id=.
+     The page reloads on the way back, so the order being paid (and its pickup
+     slot) come from the record saved just before the redirect. */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const paymentStatus = params.get('status') || params.get('payment_status')
+    const paymentIntentId = params.get('payment_intent_id')
+    if (!paymentStatus || !paymentIntentId) return
+
+    window.history.replaceState({}, document.title, window.location.pathname)
+    const pending = readPendingPayMongo()
+
+    if (paymentStatus === 'paid' && pending?.ordId) {
+      completePayMongoOrder(pending, paymentIntentId)
+    } else {
+      // Unpaid or abandoned: release the claim slot like any failed payment.
+      if (pending?.appointId) {
+        closeAppointment(pending.appointId, 'Checkout payment failed').catch(() => {})
+      }
+      showToast('Payment was not completed. Please try again.', 'error')
+      setError('Payment was not completed. Please try again.')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
 
   // Never leave the checkout empty-handed.
@@ -293,8 +369,29 @@ function CheckoutPlaceholder() {
         // Preview unavailable: pay the amount computed from the fee table.
       }
 
-      // 4. Settle the payment; the server mints the gateway reference
-      //    (REQ-OC-02) and returns it on the payment record.
+      // 4a. PayMongo: hand off to the hosted checkout. The order and its claim
+      //     slot are kept while the customer pays; the return handler above
+      //     finalizes them, or releases the slot when payment fails.
+      if (gateway === 'paymongo') {
+        const intentRes = await createPaymentIntent(ordId, 'paymongo', dispatchOptions(appointId))
+        const checkoutUrl = intentRes?.data?.checkout_url
+        if (!checkoutUrl) {
+          throw new Error('Failed to create payment session. Please try again.')
+        }
+        savePendingPayMongo({
+          ordId,
+          dispatchType,
+          due,
+          options: dispatchOptions(appointId),
+          appointId,
+          slot,
+        })
+        window.location.href = checkoutUrl
+        return
+      }
+
+      // 4b. Settle the payment; the server mints the gateway reference
+      //     (REQ-OC-02) and returns it on the payment record.
       const payRes = await payOrder(ordId, dispatchType, due, dispatchOptions(appointId))
       const payRef = payRes?.data?.payment?.pay_ref ?? ''
       setReceipt(receiptFrom(payRes?.data, ordId, dispatchType, slot))
@@ -503,6 +600,9 @@ function CheckoutPlaceholder() {
     <AppShell showNav={false}>
       <div className="min-h-dvh flex flex-col items-center justify-center p-4 pb-28 md:p-8 animate-fade-in bg-slate-50/60">
         <div className="w-full max-w-xl bg-white rounded-xl p-6 md:p-8 border border-slate-100 space-y-6">
+          {/* Back to the previous view of this step-by-step process */}
+          <BackButton to="/cart" label="Back to Bag" />
+
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div className="flex items-center gap-3">
@@ -739,11 +839,52 @@ function CheckoutPlaceholder() {
             </div>
           </div>
 
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">
-              {error}
+          {/* Payment Gateway Selector */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Payment Method</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setGateway('pay_ref')}
+                className={`py-2.5 rounded-lg font-semibold text-sm border transition-colors cursor-pointer ${
+                  gateway === 'pay_ref'
+                    ? 'bg-brand-orange text-white border-brand-orange'
+                    : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
+                }`}
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                    <line x1="1" y1="10" x2="23" y2="10" />
+                  </svg>
+                  Pay at Store / Manual
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGateway('paymongo')}
+                className={`py-2.5 rounded-lg font-semibold text-sm border transition-colors cursor-pointer ${
+                  gateway === 'paymongo'
+                    ? 'bg-brand-orange text-white border-brand-orange'
+                    : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
+                }`}
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <path d="M21 12V7H5V7M21 17V7M3 17H21M5 17V12M19 17V12" />
+                  </svg>
+                  PayMongo (Online)
+                </span>
+              </button>
             </div>
-          )}
+            <p className="text-xs text-gray-500">
+              {gateway === 'paymongo'
+                ? 'You will be redirected to PayMongo to complete payment securely.'
+                : 'Pay in person at the store or via manual payment reference.'}
+            </p>
+          </div>
+
+          {error && <ApiErrorText error={{ message: error }} />}
 
           {/* Confirmation Decision Buttons */}
           <div className="space-y-2 pt-2">
@@ -758,6 +899,8 @@ function CheckoutPlaceholder() {
             >
               {busy
                   ? <><LoadingSpinner size={18} /> Processing…</>
+                  : gateway === 'paymongo'
+                  ? `Proceed to PayMongo • ₱${totalDue.toFixed(2)}`
                   : `Pay Now • ₱${totalDue.toFixed(2)}`}
             </Button>
             <button

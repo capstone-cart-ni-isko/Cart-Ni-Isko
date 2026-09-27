@@ -2,15 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\CustNotif;
+use App\Models\DutyShift;
 use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Setting;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 abstract class Controller
 {
+    // The single phone value every walk-in customer record carries
+    const WALK_IN_PHONE = '0000000000';
+
     // ==========================================
     // AUTHORIZATION HELPERS
     // ==========================================
@@ -71,6 +77,114 @@ abstract class Controller
     }
 
     // ==========================================
+    // ACCOUNT PROTECTION HELPERS
+    // ==========================================
+
+    // REQ-APC-01: returns a 409 response when the account's most recent
+    // credential change happened within the last thirty days. A null stamp
+    // means the credentials were never changed, so the change is allowed.
+    protected function credentialChangeBlocked($stamp)
+    {
+        if ($stamp && $stamp->copy()->addDays(30)->isFuture()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sensitive credentials cannot be changed within thirty days of the most recent change'
+            ], 409);
+        }
+
+        return null;
+    }
+
+    // REQ-APC-01: true only when the payload really rewrites one of the given
+    // login identifiers, so an ordinary profile save is never blocked.
+    protected function sensitiveFieldsTouched($user, array $payload, array $fields): bool
+    {
+        foreach ($fields as $field) {
+            if (! array_key_exists($field, $payload)) {
+                continue;
+            }
+            if (trim((string) $payload[$field]) !== trim((string) $user->{$field})) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ==========================================
+    // AVAILABILITY DEADLINE (REQ-SS-02)
+    // ==========================================
+
+    // REQ-SS-02: availability stays editable until the exact minute the
+    // employee’s duty block starts, and is locked from that minute on.
+    // Only non-super-admins are restricted, so a super admin passes this gate
+    // for every block and may override the deadline at any time.
+    protected function availabilityDeadlineBlocked(Request $json, int $empId)
+    {
+        if ($this->isSuperAdmin($json->user('sanctum'))) {
+            return null;
+        }
+
+        $block = $this->currentBlock($empId);
+        if ($block === null || $block->startsAt()->isFuture()) {
+            return null;
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Availability is locked: shift block #' . $block->shift_id
+                . ' started at ' . $block->startsAt()->toDateTimeString()
+                . '. A super admin must override this change.',
+            'code'    => 'ALR_AVAIL_AFTER_BLOCK_START',
+        ], 403);
+    }
+
+    // REQ-SS-02: the employee’s next duty block (the one whose start decides
+    // the deadline), or null when they have none today or later. Only today
+    // and later can qualify, and the window is joined in PHP because
+    // shift_date and shift_start are two columns in two different formats.
+    protected function currentBlock(int $empId): ?DutyShift
+    {
+        return DutyShift::where('emp_id', $empId)
+            ->where('shift_date', '>=', now()->format('Y-m-d'))
+            ->orderBy('shift_date')
+            ->orderBy('shift_start')
+            ->first();
+    }
+
+    // ==========================================
+    // WALK-IN GUARD (REQ-POS-02 / REQ-ALR-03)
+    // ==========================================
+
+    // A walk-in customer (cust_phone 0000000000) has no account to return to,
+    // so REQ-POS-02 only lets them cancel or return an order while an open
+    // VISIT appointment backs the request. Returns the REQ-ALR-03 error detail
+    // for a rejection, or null when the walk-in may proceed.
+    protected function walkInVisitRequired(Customer $customer, string $action): ?array
+    {
+        if ($customer === null || $customer->cust_phone !== self::WALK_IN_PHONE) {
+            return null;
+        }
+
+        $hasOpenVisit = Appointment::where('cust_id', $customer->cust_id)
+            ->where('appoint_type', 'VISIT')
+            ->whereNull('appoint_closed')
+            ->where('appoint_date', '>=', now())
+            ->exists();
+
+        if ($hasOpenVisit) {
+            return null;
+        }
+
+        return [
+            'code'        => 'ALR_WALK_IN_NO_VISIT',
+            'description' => 'Walk-in customers must hold an open VISIT appointment to request an order '
+                . $action . '. Please book a visit appointment first.',
+            'timestamp'   => now()->toDateTimeString(),
+        ];
+    }
+
+    // ==========================================
     // NOTIFICATION HELPERS
     // ==========================================
 
@@ -83,6 +197,80 @@ abstract class Controller
             'custnotif_read'    => null,
             'custnotif_msg'     => $message,
         ]);
+    }
+
+    /*
+        REQ-AB-03 / REQ-SS-03: a block whose on-duty headcount falls below the
+        minimum (2 for VISIT, 1 for CLAIM) makes every still-open booking in
+        that block unworkable, so those customers are told to reschedule once.
+        The headcount comes from the duty shifts covering the block, and a
+        customer already told about a booking is never told twice.
+    */
+    protected function notifyStaffShortage(): void
+    {
+        foreach ($this->understaffedAppointments() as $appointment) {
+            $start = Carbon::parse($appointment->appoint_date);
+
+            $message = '[PRIORITY] Your appointment #' . $appointment->appoint_id
+                . ' on ' . $start->format('Y-m-d H:i')
+                . ' is unavailable. Reason: staff shortage. '
+                . 'Please reschedule at your earliest convenience.';
+
+            // One notice per booking, no matter how often the roster changes
+            if (CustNotif::where('cust_id', $appointment->cust_id)
+                ->where('custnotif_msg', 'like', '%appointment #' . $appointment->appoint_id . '%')
+                ->where('custnotif_msg', 'like', '%staff shortage%')
+                ->exists()) {
+                continue;
+            }
+
+            $this->notifyCustomer((int) $appointment->cust_id, $message);
+        }
+    }
+
+    /*
+        REQ-SS-03: a shift that loses its assignee (removed, or the employee was
+        disabled/deleted) is PENDING REPLACEMENT when open bookings inside its
+        window are now understaffed. Super admins get one alert naming the
+        shift, and the affected customers get the shortage notice above.
+    */
+    protected function alertPendingReplacement(DutyShift $shift, string $why): void
+    {
+        $from = $shift->startsAt();
+        $to = $shift->endsAt();
+        $affected = $this->understaffedAppointments()->filter(function ($appointment) use ($from, $to) {
+            $at = Carbon::parse($appointment->appoint_date);
+            return $at->gte($from) && $at->lt($to);
+        });
+
+        if ($affected->isNotEmpty()) {
+            $this->notifyEmployeesByType(
+                ['SUPER ADMIN', 'SUPER_ADMIN'],
+                '[PRIORITY] ' . ucwords(strtolower((string) $shift->shift_type)) . ' shift #' . $shift->shift_id
+                    . ' (' . $from->format('M j, Y g:i A') . ' - ' . $to->format('g:i A') . ') is now PENDING REPLACEMENT: '
+                    . $why . '. ' . $affected->count() . ' open booking(s) in that window are understaffed.'
+            );
+        }
+
+        $this->notifyStaffShortage();
+    }
+
+    // Open, upcoming appointments whose block no longer has the minimum on duty
+    protected function understaffedAppointments()
+    {
+        return Appointment::whereNull('appoint_closed')
+            ->where('appoint_date', '>=', now())
+            ->get()
+            ->filter(function ($appointment) {
+                $type = (string) $appointment->appoint_type;
+                $minimum = $type === 'CLAIM' ? 1 : 2;
+                // The model carries no datetime cast, so parse rather than trust
+                $start = Carbon::parse($appointment->appoint_date);
+                $end = $start->copy()->addMinutes($type === 'CLAIM' ? 30 : 10);
+
+                return DutyShift::staffCovering($start, $end) < $minimum;
+            })
+            ->values();
     }
 
     // Inserts a notification for a single employee

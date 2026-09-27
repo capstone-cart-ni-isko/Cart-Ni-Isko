@@ -1,14 +1,31 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
+import { useApiWarmup } from '../hooks/useApi.js'
 import { useToast } from '../hooks/useToast.js'
-import closeIcon from '../assets/icons/common/close.svg'
 import AppShell from '../components/layout/AppShell.jsx'
+import BackButton from '../components/ui/BackButton.jsx'
+
+/**
+ * Shown the instant Login is clicked, before the response lands. Keeps the
+ * button's own space so the layout never jumps while the request is in flight.
+ */
+function AuthenticatingSkeleton() {
+  return (
+    <span className="flex items-center justify-center gap-2" role="status" aria-live="polite">
+      <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+      Authenticating…
+    </span>
+  )
+}
 
 function SignIn() {
   const navigate = useNavigate()
   const { login } = useAuth()
   const { showToast } = useToast()
+  // Fires on the first field focus: DNS + TCP + TLS to the API and the public
+  // catalog read are done before the customer can possibly submit.
+  const warmApi = useApiWarmup()
 
   const [form, setForm] = useState({
     phone: '',
@@ -18,12 +35,6 @@ function SignIn() {
   const [errors, setErrors] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-
-  // Back to whichever page sent the guest here; '/' when this is the entry page.
-  const handleBack = () => {
-    if (window.history.length > 1) navigate(-1)
-    else navigate('/')
-  }
 
   function handleChange(e) {
     const { name, value } = e.target
@@ -65,19 +76,13 @@ function SignIn() {
   }
 
   return (
-    <AppShell showNav={false}>
+    <AppShell showNav={false} showHeader={false} showBottomNav={false}>
       {/* MOBILE LOGIN LAYOUT */}
       <div className="flex flex-col justify-between min-h-[580px] p-8 md:hidden animate-fade-in">
         <div>
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Sign In</h1>
-            <button
-              type="button"
-              onClick={handleBack}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <img src={closeIcon} alt="Close" className="w-5 h-5 opacity-70" />
-            </button>
+            <BackButton to="/home" label="Back to Homepage" />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -92,7 +97,8 @@ function SignIn() {
                   placeholder="Enter phone number"
                   value={form.phone}
                   onChange={handleChange}
-                  className={`w-full h-12 px-4 pr-12 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-all ${
+                  onFocus={warmApi}
+                  className={`w-full h-12 px-4 pr-12 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-all ${
                     errors.phone ? 'border-red-400' : 'border-gray-200'
                   }`}
                 />
@@ -116,7 +122,8 @@ function SignIn() {
                   placeholder="Enter password"
                   value={form.password}
                   onChange={handleChange}
-                  className={`w-full h-12 px-4 pr-12 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all ${
+                  onFocus={warmApi}
+                  className={`w-full h-12 px-4 pr-12 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all ${
                     form.password.length > 0 && !passwordValid
                       ? 'border-red-400 focus:ring-red-250 focus:border-red-500'
                       : 'border-gray-200 focus:ring-brand-orange/40 focus:border-brand-orange'
@@ -153,7 +160,7 @@ function SignIn() {
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
               }`}
             >
-              {isSubmitting ? 'Signing in...' : 'Sign In'}
+              {isSubmitting ? <AuthenticatingSkeleton /> : 'Sign In'}
             </button>
           </form>
         </div>
@@ -176,14 +183,7 @@ function SignIn() {
                 Access your tasks, notes, and projects anytime, anywhere.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleBack}
-              aria-label="Go back"
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors shrink-0"
-            >
-              <img src={closeIcon} alt="" className="w-5 h-5 opacity-70" />
-            </button>
+            <BackButton to="/home" label="Back to Homepage" className="shrink-0 mt-1" />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -197,7 +197,8 @@ function SignIn() {
                 placeholder="0912345678"
                 value={form.phone}
                 onChange={handleChange}
-                className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
+                onFocus={warmApi}
+                className="w-full h-12 px-4 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
               />
               <p className="text-xs text-gray-400 mt-2 font-medium">
                 We'll send a verification code to this number.
@@ -215,7 +216,8 @@ function SignIn() {
                   placeholder="Enter your password"
                   value={form.password}
                   onChange={handleChange}
-                  className="w-full h-12 px-4 pr-12 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
+                  onFocus={warmApi}
+                  className="w-full h-12 px-4 pr-12 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
                 />
                 <button
                   type="button"
@@ -232,13 +234,13 @@ function SignIn() {
             <button
               type="submit"
               disabled={!formValid || isSubmitting}
-              className={`w-full h-12 text-white font-bold rounded-xl transition-all shadow-md active:scale-98 mt-6 cursor-pointer ${
+              className={`w-full h-12 text-white font-bold rounded-lg transition-all shadow-md active:scale-98 mt-6 cursor-pointer ${
                 formValid
                   ? 'bg-brand-orange hover:bg-brand-orange-dark'
                   : 'bg-brand-orange opacity-90'
               }`}
             >
-              {isSubmitting ? 'Logging in...' : 'Log In'}
+              {isSubmitting ? <AuthenticatingSkeleton /> : 'Log In'}
             </button>
           </form>
         </div>

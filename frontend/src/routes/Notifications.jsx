@@ -4,12 +4,21 @@ import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
-import { fetchNotifications, markRead } from '../services/notifications.js'
+import { fetchNotifications, markRead, readNotificationsCache } from '../services/notifications.js'
+import BackButton from '../components/ui/BackButton.jsx'
 
 /** REQ-OT-01: "to claim"/"to receive" notifications are handled by QR scanning, not regular notifications. */
 function isExemptNotification(message) {
   const msg = String(message || '').toLowerCase()
   return msg.includes('to claim') || msg.includes('to receive')
+}
+
+/** REQ-AB-04 / REQ-SC-04: a closed-slot notice opens the updated calendar. */
+function calendarTarget(message) {
+  const text = String(message || '').toLowerCase()
+  return text.includes('appointment') && /clos|cancel|unavailable/.test(text)
+    ? '/appointments'
+    : null
 }
 
 // SVG Icons tailored for notification types
@@ -173,19 +182,21 @@ function mapNotification(row, index) {
 
   const style = CATEGORY_STYLES[category] || CATEGORY_STYLES.system
   const created = row.custnotif_created ?? row.empnotif_created ?? row.created_at
+  // REQ-AN-02: priority notices stand out from the rest of the inbox.
+  const priority = /^\s*\[priority\]/i.test(String(message))
 
   return {
     id: row.custnotif_id ?? row.empnotif_id ?? row.id ?? `notif-${index}`,
     category,
     icon: style.icon,
     iconBg: style.iconBg,
-    tag: style.tag,
-    tagColor: style.tagColor,
+    tag: priority ? 'Priority' : style.tag,
+    tagColor: priority ? 'bg-amber-100 text-amber-700' : style.tagColor,
     title: style.title,
     message,
     time: created ? timeAgo(new Date(created)) : 'Just now',
     unread: !(row.custnotif_read || row.empnotif_read),
-    targetUrl: row.notif_link || null,
+    targetUrl: row.notif_link || calendarTarget(message),
     isExempt: isExemptNotification(message),
   }
 }
@@ -206,6 +217,14 @@ export default function Notifications() {
       setLoading(false)
       return
     }
+    // Paint the 60-second mirror first, then let the request refresh it. An
+    // already-populated inbox is left alone so a refresh never flickers back.
+    const cached = readNotificationsCache('customer', custId)
+    if (cached) {
+      setItems((prev) => (prev.length ? prev : cached.map(mapNotification)))
+      setLoading(false)
+    }
+
     try {
       const rows = await fetchNotifications('customer', custId)
       setItems((rows || []).map(mapNotification))
@@ -225,7 +244,9 @@ export default function Notifications() {
     const target = items.find((n) => n.id === id)
     if (target?.unread) {
       setItems((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)))
-      markRead(id, 'customer').catch(() => {})
+      markRead(id, 'customer')
+        .catch(() => {})
+        .finally(() => window.dispatchEvent(new Event('notifications-changed')))
     }
     if (targetUrl) {
       navigate(targetUrl)
@@ -261,7 +282,8 @@ export default function Notifications() {
 
         {/* Header (Matching Photo 5 on desktop & Photo 2 on mobile) */}
         <div className="flex items-start gap-4 mb-8">
-          <div>
+          <div className="flex-1">
+            <BackButton to="/home" label="Back to Home" className="lg:hidden mb-4" />
             <h1 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">Notifications</h1>
             <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
               Stay updated with your orders, production, and important announcements.

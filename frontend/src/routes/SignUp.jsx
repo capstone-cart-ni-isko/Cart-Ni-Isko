@@ -3,11 +3,11 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import collegesData from '../data/colleges.json'
-import backIcon from '../assets/icons/common/back.svg'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import OtpInput from '../components/ui/OtpInput.jsx'
 import Button from '../components/ui/Button.jsx'
 import AppShell from '../components/layout/AppShell.jsx'
+import BackButton from '../components/ui/BackButton.jsx'
 
 const selectStyle = {
   backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
@@ -41,8 +41,9 @@ function SignUp() {
   const step = getStepIndex(location.pathname)
 
   // Initial State from localStorage
+  // Guarded like every other storage read in the app: this initializer runs
+  // during render, so one unparsable value would blank the whole page.
   const [form, setForm] = useState(() => {
-    const saved = localStorage.getItem('isko_signup_progress')
     const defaults = {
       role: 'Student',
       firstName: '',
@@ -56,9 +57,11 @@ function SignUp() {
       yearLevel: '',
       block: '',
     }
-    return saved
-      ? { ...defaults, ...JSON.parse(saved) }
-      : defaults
+    try {
+      return { ...defaults, ...JSON.parse(localStorage.getItem('isko_signup_progress')) }
+    } catch {
+      return defaults
+    }
   })
 
   const [password, setPassword] = useState('')
@@ -297,13 +300,7 @@ function SignUp() {
         <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-100 shadow-xl p-8 flex flex-col justify-between min-h-[580px] z-10 animate-fade-in relative">
           <div>
             <div className="flex items-center justify-between mb-8">
-              <button
-                type="button"
-                onClick={handleBack}
-                className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                <img src={backIcon} alt="Back" className="w-5 h-5" />
-              </button>
+              <BackButton onClick={handleBack} label="Back" className="w-10 justify-center" />
               <div className="flex gap-1.5 w-32 justify-end">
                 {steps.map((_, i) => (
                   <div
@@ -661,6 +658,7 @@ function SignUp() {
           {(step === 1 || step === 2 || (!location.pathname.includes('/signup/') && step !== 0 && step !== 3 && step !== 5)) && (
             <div className="p-10 animate-fade-in bg-white min-h-[540px] flex flex-col justify-between">
               <div>
+                <BackButton onClick={handleBack} label="Back to Role Selection" className="mb-6" />
                 <div className="mb-8">
                   <h1 className="text-3xl font-black text-gray-900 leading-tight">Sign Up</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
@@ -804,6 +802,7 @@ function SignUp() {
           {step === 3 && (
             <div className="p-10 animate-fade-in bg-white min-h-[500px] flex flex-col justify-between">
               <div>
+                <BackButton onClick={handleBack} label="Back to Credentials" className="mb-6" />
                 <div className="mb-8">
                   <h1 className="text-3xl font-black text-gray-900 leading-tight">Verify Phone</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2">
@@ -847,6 +846,7 @@ function SignUp() {
           {step === 5 && form.role === 'Student' && (
             <div className="p-10 animate-fade-in bg-white min-h-[520px] flex flex-col justify-between">
               <div>
+                <BackButton onClick={handleBack} label="Back to Phone Verification" className="mb-6" />
                 <div className="mb-6">
                   <h1 className="page-title text-gray-900">Academic Details</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2">

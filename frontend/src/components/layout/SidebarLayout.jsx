@@ -7,7 +7,7 @@ import React from 'react'
  *   - On Desktop (md+): Full browser width with Header at top, max-w-7xl content area, Footer at bottom.
  *   - On Mobile (<md): Single column with floating bottomNav.
  */
-function SidebarLayout({ bottomNav, children, className = '' }) {
+function SidebarLayout({ sidebar, bottomNav, children, className = '' }) {
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex flex-col w-full customer-desktop-scale">
       {/* Desktop Header - visible on md+ */}
@@ -18,7 +18,14 @@ function SidebarLayout({ bottomNav, children, className = '' }) {
         <div
           className={`app-container relative flex-1 w-full bg-[#F8F9FA] max-w-7xl mx-auto px-4 md:px-8 lg:px-10 md:py-6 ${className}`}
         >
-          {children}
+          <div className="mx-auto flex w-full max-w-6xl items-start gap-6">
+            {sidebar && (
+              <aside className="sticky top-24 hidden w-52 shrink-0 lg:block">
+                {sidebar}
+              </aside>
+            )}
+            <div className="min-w-0 flex-1">{children}</div>
+          </div>
         </div>
       </main>
 

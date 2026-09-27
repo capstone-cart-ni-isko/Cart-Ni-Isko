@@ -9,15 +9,20 @@ use App\Http\Controllers\AuthAPI;
 use App\Http\Controllers\CartAPI;
 use App\Http\Controllers\CheckoutAPI;
 use App\Http\Controllers\DutyAPI;
+use App\Http\Controllers\HealthAPI;
 use App\Http\Controllers\OrdersAPI;
 use App\Http\Controllers\PosAPI;
 use App\Http\Controllers\NotifAPI;
+use App\Http\Controllers\ReportsAPI;
 use App\Http\Controllers\TrackingAPI;
 use App\Http\Controllers\ProductsAPI;
 use App\Http\Controllers\ReviewsAPI;
 use App\Http\Controllers\SettingsAPI;
 use App\Http\Controllers\WishlistAPI;
 use App\Http\Controllers\UploadAPI;
+
+// Public Scheduler Health Route (REQ-AN-03 watchdog, no token required)
+Route::get('/health/scheduler', [HealthAPI::class, 'schedulerHealth']);
 
 // Public Auth API Routes (no token required, login/signup issue the Sanctum token)
 Route::post('/auth/cust_signup', [AuthAPI::class, 'customerSignup']);
@@ -52,6 +57,17 @@ Route::middleware('auth:sanctum')->group(function () {
     // Checkout API Routes
     Route::post('/checkout/dispatch', [CheckoutAPI::class, 'determineDispatchDetails']);
     Route::post('/checkout/payment', [CheckoutAPI::class, 'integratePayment']);
+    Route::post('/checkout/payment/intent', [CheckoutAPI::class, 'createPaymentIntent']);
+    Route::post('/checkout/payment/webhook', [CheckoutAPI::class, 'paymentWebhook']);
+
+    // Reports API Routes
+    Route::middleware('role:staff')->group(function () {
+        Route::get('/reports', [ReportsAPI::class, 'index']);
+        Route::post('/reports', [ReportsAPI::class, 'store']);
+        Route::get('/reports/{id}', [ReportsAPI::class, 'show']);
+        Route::put('/reports/{id}', [ReportsAPI::class, 'update']);
+        Route::delete('/reports/{id}', [ReportsAPI::class, 'destroy']);
+    });
 
     // Orders API Routes
     Route::post('/orders/add', [OrdersAPI::class, 'addProductToOrder']);

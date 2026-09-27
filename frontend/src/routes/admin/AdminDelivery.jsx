@@ -109,7 +109,7 @@ function enrichDelivery(order, track) {
     readyAt: timeOfDay(order.createdAt),
     createdAt: order.createdAt,
     completedAt: order.completedAt,
-    ref: delivery?.delvier_ref || '—',
+    ref: delivery?.delivery_ref || '—',
     eta: delivery?.deliver_date || null,
     trackStatus,
     statusLabel: trackStatus === 'TRANSIT' ? 'On the way' : 'Ready',
@@ -761,7 +761,7 @@ export default function AdminDelivery() {
         throw new Error('No delivery/parcel record found for this order')
       }
       await updateTrack(delivery.deliver_id, 'delivery', 'TRANSIT')
-      showToast(`${order.id} dispatched — courier ref ${delivery.delvier_ref || '—'}`)
+      showToast(`${order.id} dispatched — courier ref ${delivery.delivery_ref || '—'}`)
       refreshOrders()
     } catch (e) {
       showToast(e?.message || `Could not dispatch ${order.id}.`)

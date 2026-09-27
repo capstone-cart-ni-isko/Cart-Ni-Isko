@@ -5,7 +5,6 @@
     use App\Models\Appointment;
     use App\Models\Customer;
     use App\Models\DutyShift;
-    use App\Models\Employee;
     use Illuminate\Http\Request;
     use Illuminate\Support\Carbon;
     use Illuminate\Support\Facades\DB;
@@ -39,6 +38,15 @@
                     return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
                 }
 
+                // A done or cancelled appointment is final: it can never be
+                // closed again, moved or removed.
+                if ($appointment->appoint_closed) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Closed appointments cannot be closed again.'
+                    ], 409);
+                }
+
                 $appointment->update([
                     'appoint_closed' => now()
                 ]);
@@ -51,6 +59,27 @@
                     $message .= ' Reason: ' . $reason;
                 }
                 $this->notifyCustomer((int) $appointment->cust_id, $message);
+
+                // REQ-AB-04 / REQ-SC-04: cancelling one booking also cancels the
+                // block it sits in, so every other open booking that overlaps the
+                // same block is told to reschedule.
+                $blockMinutes = $appointment->appoint_type === 'CLAIM' ? 30 : 10;
+                $blockEnd = Carbon::parse($appointment->appoint_date)->addMinutes($blockMinutes);
+                $others = Appointment::whereNull('appoint_closed')
+                    ->where('appoint_type', $appointment->appoint_type)
+                    ->where('appoint_id', '!=', $appointment->appoint_id)
+                    ->where('appoint_date', '>=', $appointment->appoint_date)
+                    ->where('appoint_date', '<', $blockEnd)
+                    ->get();
+
+                foreach ($others as $other) {
+                    $this->notifyCustomer((int) $other->cust_id,
+                        '[PRIORITY] Your appointment #' . $other->appoint_id .
+                        ' on ' . $other->appoint_date .
+                        ' is unavailable. Please reschedule at your earliest convenience. ' .
+                        ($reason !== '' ? 'Reason: ' . $reason : 'Reason: slot cancelled.')
+                    );
+                }
 
                 return response()->json([
                     'success' => true,
@@ -101,10 +130,13 @@
                 // the remote database times out over an 80-slot grid).
                 $open = $base->format('Y-m-d H:i:s');
                 $close = $base->copy()->addDay()->format('Y-m-d H:i:s');
+                // REQ-SC-01: customers get a restricted view - they only see
+                // their own bookings, everyone else's stays anonymous.
+                $custId = $this->customerId($json);
                 $bookedRows = Appointment::whereNull('appoint_closed')
                     ->where('appoint_date', '>=', $open)
                     ->where('appoint_date', '<', $close)
-                    ->get(['appoint_type', 'appoint_date']);
+                    ->get(['appoint_type', 'appoint_date', 'cust_id']);
                 // Staffing comes from the day's duty shifts: an employee counts
                 // for a slot only when their shift covers the whole block
                 $shifts = DutyShift::activeOn($date);
@@ -113,20 +145,26 @@
                     'VISIT' => (int) $this->settingValue('max_visit_slots', 1),
                 ];
                 $minStaff = ['CLAIM' => 1, 'VISIT' => 2]; // REQ-AB-03 / REQ-SC-03
+                // REQ-SS-03: counted once for the whole grid, never per slot.
+                $pendingReplacements = DutyShift::pendingReplacements();
 
                 $slots = [];
                 foreach (['CLAIM' => 30, 'VISIT' => 10] as $type => $duration) {
                     for ($minutes = self::OPEN_MINUTES; $minutes + $duration <= self::CLOSE_MINUTES; $minutes += $duration) {
                         $start = $base->copy()->addMinutes($minutes);
                         $end = $start->copy()->addMinutes($duration);
-                        $booked = $bookedRows->filter(function ($a) use ($type, $start, $end) {
+                        $rows = $bookedRows->filter(function ($a) use ($type, $start, $end) {
                             if ($a->appoint_type !== $type) return false;
                             $at = $a->appoint_date instanceof \DateTimeInterface
                                 ? Carbon::instance($a->appoint_date)
                                 : Carbon::parse($a->appoint_date);
                             return $at->gte($start) && $at->lt($end);
-                        })->count();
+                        });
+                        $booked = $rows->count();
+                        $mine = $custId !== null && $rows->contains('cust_id', $custId);
 
+                        // REQ-AB-03 / REQ-SS-03: only the employees whose duty
+                        // shift spans this slot count towards its headcount.
                         $inStore = DutyShift::staffCovering($start, $end, $shifts);
 
                         $reason = null;
@@ -140,11 +178,17 @@
                             'start'     => $start->format('Y-m-d H:i'),
                             'end'       => $end->format('Y-m-d H:i'),
                             'type'      => $type,
-                            'booked'    => $booked,
+                            // Customers receive only status and their own marker;
+                            // other users' booking counts remain private.
+                            'booked'    => $custId !== null && ! $mine ? 0 : $booked,
                             'capacity'  => $capacities[$type],
                             'staff'     => $inStore,
+                            'in_store'  => $inStore,
                             'available' => $reason === null,
                             'reason'    => $reason,
+                            'mine'      => $mine,
+                            // REQ-SS-03: blocks whose assignee is unavailable.
+                            'pending_replacements' => $pendingReplacements,
                         ];
                     }
                 }
@@ -182,12 +226,13 @@
             if ($validator) return $validator;
 
             try {
-                $type = strtoupper((string) $json->input('appoint_type', 'VISIT'));
+                // SRS stores the kind verbatim: CLAIM or VISIT, uppercase only.
+                $type = (string) $json->input('appoint_type', 'VISIT');
                 if (!in_array($type, ['CLAIM', 'VISIT'], true)) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Appointment type must be CLAIM or VISIT'
-                    ], 400);
+                    ], 422);
                 }
 
                 // Align the requested time to the slot grid (REQ-SC-02):
@@ -208,6 +253,13 @@
                 } else {
                     $slotStart->minute(intdiv($slotStart->minute, 10) * 10);
                     $duration = 10;
+                }
+
+                if ($slotStart->isPast()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Appointments must be booked for a future time.'
+                    ], 422);
                 }
 
                 // Booking outside operating hours is unavailable
@@ -291,17 +343,18 @@
             scope - string (opt: master for employees - REQ-SC-01)
             cust_id - integer (opt, employees only)
             type - string (opt)
+            status - string (opt: today | upcoming | done | cancelled)
         */
         public function displayAppointments(Request $json)
         {
             try {
                 $query = Appointment::query();
                 $user = $json->user();
-                $isMaster = $json->input('scope') === 'master';
+                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($user);
 
                 if ($this->isEmployee($user)) {
-                    // REQ-SC-01: the master calendar shows every appointment;
-                    // without the master scope employees filter by cust_id
+                    // REQ-SC-01: administrators receive the master calendar;
+                    // ordinary staff must provide a customer filter.
                     if ($isMaster) {
                         // No cust_id filter - full master view
                     } elseif ($json->filled('cust_id')) {
@@ -319,12 +372,34 @@
                     $query->where('appoint_type', $json->input('type'));
                 }
 
+                $this->filterByStatus($query, strtolower(trim((string) $json->input('status', ''))));
+
                 $appointments = $query->orderBy('appoint_date', 'asc')->get();
+
+                // SRS: APPOINTMENT has no order column - the link to the order a
+                // claim is for lives in PICKUP (appoint_id -> ord_id), written by
+                // POST /checkout/payment. Surfacing it here lets the ribbon's
+                // Appointments list open the matching order without any schema
+                // change. One extra query for the whole page, never per row.
+                $orders = $this->ordersFor($appointments->pluck('appoint_id')->all());
+
+                $rows = $appointments->map(function (Appointment $appointment) use ($orders) {
+                    $link = $orders[(int) $appointment->appoint_id] ?? null;
+                    if ($link === null) {
+                        return $appointment;
+                    }
+
+                    return array_merge($appointment->toArray(), [
+                        'ord_id'     => $link['ord_id'],
+                        'ord_tag'    => $link['ord_tag'],
+                        'ord_status' => $link['ord_status'],
+                    ]);
+                });
 
                 return response()->json([
                     'success' => true,
                     'message' => 'Appointments retrieved successfully',
-                    'data' => $appointments
+                    'data' => $rows
                 ], 200);
 
             } catch (\Exception $e) {
@@ -350,10 +425,15 @@
                 $q = $json->input('q', '');
                 $query = Appointment::query();
                 $customerId = $this->customerId($json);
+                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('sanctum'));
                 if ($customerId !== null) {
                     $query->where('cust_id', $customerId);
-                } elseif ($json->has('cust_id')) {
+                } elseif ($isMaster) {
+                    // Only administrators may search the complete appointment book.
+                } elseif ($json->filled('cust_id')) {
                     $query->where('cust_id', $json->input('cust_id'));
+                } else {
+                    $query->whereRaw('1 = 0');
                 }
 
                 if (!empty($q)) {
@@ -397,8 +477,15 @@
                 $col = $sortBy === 'created' ? 'appoint_created' : ($sortBy === 'type' ? 'appoint_type' : 'appoint_date');
                 $query = Appointment::query();
                 $customerId = $this->customerId($json);
+                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('sanctum'));
                 if ($customerId !== null) {
                     $query->where('cust_id', $customerId);
+                } elseif ($isMaster) {
+                    // Only administrators may sort the complete appointment book.
+                } elseif ($json->filled('cust_id')) {
+                    $query->where('cust_id', $json->input('cust_id'));
+                } else {
+                    $query->whereRaw('1 = 0');
                 }
 
                 $appointments = $query->orderBy($col, $order)->get();
@@ -450,9 +537,16 @@
                     return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
                 }
 
+                if ($appointment->appoint_closed) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Closed appointments cannot be modified.'
+                    ], 409);
+                }
+
                 $updates = $json->only(['appoint_date', 'appoint_type', 'appoint_desc']);
                 if (isset($updates['appoint_date']) || isset($updates['appoint_type'])) {
-                    $type = strtoupper((string) ($updates['appoint_type'] ?? $appointment->appoint_type));
+                    $type = (string) ($updates['appoint_type'] ?? $appointment->appoint_type);
                     if (! in_array($type, ['CLAIM', 'VISIT'], true)) {
                         return response()->json(['success' => false, 'message' => 'Appointment type must be CLAIM or VISIT.'], 422);
                     }
@@ -461,6 +555,12 @@
                     $duration = $type === 'CLAIM' ? 30 : 10;
                     $start->minute($type === 'CLAIM' ? ($start->minute >= 30 ? 30 : 0) : intdiv($start->minute, 10) * 10);
                     $end = $start->copy()->addMinutes($duration);
+                    if ($start->isPast()) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Appointments cannot be rescheduled to a past time.'
+                        ], 422);
+                    }
                     $minutes = $start->hour * 60 + $start->minute;
                     if ($minutes < self::OPEN_MINUTES || $minutes + $duration > self::CLOSE_MINUTES) {
                         return response()->json(['success' => false, 'message' => 'Selected time is outside operating hours.'], 422);
@@ -493,6 +593,70 @@
         // ==========================================
         // SLOT AVAILABILITY RULES (REQ-AB-01 / REQ-AB-02 / REQ-AB-03 / REQ-SC-03)
         // ==========================================
+
+        /*
+            Applies one of the ribbon's four filter pills - today, upcoming,
+            done, cancelled - to an appointment query. SRS keeps the status
+            implicit, so it is derived exactly like the customer list does it:
+            a closed appointment is done, a still-open one whose slot has
+            already elapsed is cancelled, "today" is today's open bookings and
+            everything else is upcoming. Unknown values are ignored, so the
+            endpoint stays usable without a status at all.
+        */
+        protected function filterByStatus($query, string $status): void
+        {
+            if (!in_array($status, ['today', 'upcoming', 'done', 'cancelled'], true)) {
+                return;
+            }
+
+            // A slot runs 30 minutes for a CLAIM, 10 minutes for a VISIT.
+            $ends = "(appoint_date + case when appoint_type = 'CLAIM'
+                then interval '30 minutes' else interval '10 minutes' end)";
+
+            if ($status === 'done') {
+                $query->whereNotNull('appoint_closed');
+                return;
+            }
+
+            $query->whereNull('appoint_closed');
+            if ($status === 'cancelled') {
+                $query->whereRaw("$ends < ?", [now()]);
+            } elseif ($status === 'today') {
+                $query->whereBetween('appoint_date', [now()->startOfDay(), now()->endOfDay()]);
+            } else {
+                $query->whereRaw("$ends >= ?", [now()]);
+            }
+        }
+
+        /*
+            Resolves the order behind each appointment, keyed by appoint_id.
+            Reads the SRS PICKUP -> ORDERS pair in a single indexed query; an
+            appointment that was never claimed through checkout (a plain store
+            visit) simply has no entry.
+        */
+        protected function ordersFor(array $appointIds): array
+        {
+            $appointIds = array_values(array_filter(array_map('intval', $appointIds)));
+            if ($appointIds === []) {
+                return [];
+            }
+
+            $rows = DB::table('pickup')
+                ->join('orders', 'orders.ord_id', '=', 'pickup.ord_id')
+                ->whereIn('pickup.appoint_id', $appointIds)
+                ->get(['pickup.appoint_id', 'orders.ord_id', 'orders.ord_tag', 'orders.ord_status']);
+
+            $links = [];
+            foreach ($rows as $row) {
+                $links[(int) $row->appoint_id] = [
+                    'ord_id'     => $row->ord_id,
+                    'ord_tag'    => $row->ord_tag,
+                    'ord_status' => $row->ord_status,
+                ];
+            }
+
+            return $links;
+        }
 
         /*
             Computes capacity, staffing and the resulting availability for a
@@ -533,8 +697,15 @@
             return [
                 'booked'    => $booked,
                 'capacity'  => $capacity,
+                'staff'     => $inStore,
+                'in_store'  => $inStore,
                 'available' => $reason === null,
                 'reason'    => $reason,
+                // REQ-SS-03: blocks whose assignee is unavailable. They are
+                // counted separately from the in-store minimum above because
+                // the minimum only asks whether enough staff exist, not
+                // whether this block still has its own person.
+                'pending_replacements' => DutyShift::pendingReplacements(),
             ];
         }
     }

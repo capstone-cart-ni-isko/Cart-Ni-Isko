@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from './api.js'
+import { apiGet, apiPost, apiPut, cacheRead, cacheWrite } from './api.js'
 
 /** Timeslot geometry from the SRS (REQ-AB-01/02, REQ-SC-02). */
 export const SLOT_RULES = {
@@ -6,10 +6,29 @@ export const SLOT_RULES = {
   VISIT: { minutes: 10, capacity: 1 },
 }
 
+/**
+ * Appointment kinds. The customer never picks one: the Appointments page books
+ * a VISIT, Checkout's "In-Store Pickup" books a CLAIM.
+ */
+export const APPOINT_TYPE = { VISIT: 'VISIT', CLAIM: 'CLAIM' }
+
 /** GET /appoint/display - own appointments, or all for staff (REQ-SC-01). */
 export async function fetchAppointments(params = {}) {
   const data = await apiGet('/appoint/display', params)
   return data.data || []
+}
+
+/* The ribbon opens the list often, so the last answer for each
+   (customer, filter) is mirrored in localStorage: the page paints instantly
+   and the request that follows only refreshes what is on screen. */
+const CACHE_KEY = (custId, status) => `cartniisko:appointments:${custId}:${status}`
+
+export function readAppointmentsCache(custId, status) {
+  return cacheRead(CACHE_KEY(custId, status))
+}
+
+export function writeAppointmentsCache(custId, status, rows) {
+  cacheWrite(CACHE_KEY(custId, status), rows)
 }
 
 /** GET /appoint/slots?date= - bookable slots with availability + reasons. */

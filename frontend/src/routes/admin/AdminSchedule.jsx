@@ -486,6 +486,11 @@ export default function AdminSchedule() {
                             <span className="min-w-0">
                               <span className="block text-xs font-bold text-slate-900">
                                 {timeLabel(s.shift_start)} – {timeLabel(s.shift_end)}
+                                {s.pending_replacement && (
+                                  <span className="ml-1.5 text-[9px] font-bold uppercase text-rose-600 bg-rose-50 px-1 py-0.5 rounded">
+                                    Pending replacement
+                                  </span>
+                                )}
                               </span>
                               <span className="block text-[10px] text-slate-500 truncate">
                                 {titleCase(s.shift_type)}

@@ -6,8 +6,9 @@ import { mapEmployee } from './auth.js'
  * Returns { success, user } on success or { success, error } on failure.
  *
  * POST /auth/emp_login answers `{ success, message, data: { ...employee, token } }`.
- * The Sanctum bearer token is persisted with the shared `isko_session` slot
- * (services/session.js), so the staff session survives reloads and updates.
+ * The Sanctum bearer token is held in the shared in-memory slot
+ * (services/session.js), so the staff session lasts for the open tab and a
+ * reload asks for credentials again (REQ-ALR-01).
  */
 export async function adminLogin(email, password) {
   try {

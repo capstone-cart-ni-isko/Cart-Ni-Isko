@@ -3,8 +3,11 @@ import { ToastProvider } from './context/ToastContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { useAuth } from './hooks/useAuth.js'
 import LoginPromptModal from './components/ui/LoginPromptModal.jsx'
+import GlobalApiLoader from './components/ui/GlobalApiLoader.jsx'
+import { ApiErrorBoundary } from './components/ui/ApiErrorBoundary.jsx'
 import { CartProvider } from './context/CartContext.jsx'
 import { WishlistProvider } from './context/WishlistContext.jsx'
+import { ThemeProvider } from './context/ThemeContext.jsx'
 
 import { AdminProvider } from './context/AdminContext.jsx'
 
@@ -46,7 +49,6 @@ import AdminStoreCustomization from './routes/admin/AdminStoreCustomization.jsx'
 import AdminSchedule from './routes/admin/AdminSchedule.jsx'
 import AdminReviews from './routes/admin/AdminReviews.jsx'
 import AdminUsers from './routes/admin/AdminUsers.jsx'
-import AdminAppointments from './routes/admin/AdminAppointments.jsx'
 import AdminAccount from './routes/admin/AdminAccount.jsx'
 import AdminSettings from './routes/admin/AdminSettings.jsx'
 import ScrollToTop from './components/layout/ScrollToTop.jsx'
@@ -68,12 +70,15 @@ function RequireAuth() {
 function App() {
   return (
     <ToastProvider>
-      <AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
         <AdminProvider>
           <CartProvider>
             <WishlistProvider>
               <ScrollToTop />
-              <Routes>
+              <GlobalApiLoader />
+              <ApiErrorBoundary>
+                <Routes>
                 {/* ── Customer Routes ── */}
                 <Route path="/" element={<Home />} />
                 <Route path="/home" element={<Home />} />
@@ -118,7 +123,8 @@ function App() {
                   <Route path="/admin/analytics" element={<AdminAnalytics />} />
                   <Route path="/admin/customization" element={<AdminStoreCustomization />} />
                   <Route path="/admin/schedule" element={<AdminSchedule />} />
-                  <Route path="/admin/appointments" element={<AdminAppointments />} />
+                  {/* Appointments are managed from the Schedule module */}
+                  <Route path="/admin/appointments" element={<Navigate to="/admin/schedule" replace />} />
                   <Route path="/admin/reviews" element={<AdminReviews />} />
                   <Route path="/admin/users" element={<AdminUsers />} />
                   <Route path="/admin/account" element={<AdminAccount />} />
@@ -132,11 +138,13 @@ function App() {
                 </Route>
 
                 <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+                </Routes>
+              </ApiErrorBoundary>
             </WishlistProvider>
           </CartProvider>
         </AdminProvider>
-      </AuthProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </ToastProvider>
   )
 }

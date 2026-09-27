@@ -58,4 +58,40 @@
                 ->unique()
                 ->count();
         }
+
+        /** The moment this shift begins (shift_date + shift_start). */
+        public function startsAt(): Carbon
+        {
+            return Carbon::parse($this->shift_date->format('Y-m-d') . ' ' . $this->shift_start);
+        }
+
+        /** The moment this shift ends (shift_date + shift_end). */
+        public function endsAt(): Carbon
+        {
+            return Carbon::parse($this->shift_date->format('Y-m-d') . ' ' . $this->shift_end);
+        }
+
+        /**
+         * REQ-SS-03: a shift is PENDING REPLACEMENT once its assignee can no
+         * longer work it (account disabled or deleted). activeOn() already
+         * leaves such shifts out of the slot headcount.
+         */
+        public function isPendingReplacement(): bool
+        {
+            $employee = $this->employee;
+
+            return $employee === null
+                || $employee->emp_disabled !== null
+                || $employee->emp_deleted !== null;
+        }
+
+        /** Upcoming shifts (today onward) that are PENDING REPLACEMENT. */
+        public static function pendingReplacements(): int
+        {
+            return static::whereDate('shift_date', '>=', now()->format('Y-m-d'))
+                ->where(fn ($q) => $q
+                    ->whereDoesntHave('employee')
+                    ->orWhereHas('employee', fn ($e) => $e->whereNotNull('emp_disabled')->orWhereNotNull('emp_deleted')))
+                ->count();
+        }
     }

@@ -4,7 +4,39 @@ const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1
 
 export const API_BASE_URL = configuredBaseUrl.replace(/\/$/, '')
 
+// Safety net for every frontend <-> backend hop. The target budget is 1
+// second, but a request that overruns it is never cut off: it keeps running
+// and its answer is painted as soon as it lands.
+export const REQUEST_TIMEOUT_MS = 30000
+
 let authToken = null
+let preconnected = false
+
+/* ── 60-second localStorage mirror for non-sensitive lists (appointments,
+   products, notifications). The screen paints from the mirror right away and
+   the request that follows only refreshes what is already on it. ── */
+export const STORAGE_TTL = 60 * 1000
+
+export function cacheRead(key) {
+  try {
+    const hit = JSON.parse(localStorage.getItem(key) || 'null')
+    return hit && Date.now() - hit.at < STORAGE_TTL ? hit.value : null
+  } catch {
+    return null
+  }
+}
+
+export function cacheWrite(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ at: Date.now(), value }))
+  } catch {
+    // A full or blocked storage must never break the screen.
+  }
+}
+
+/* ── Centralized loading state: one counter drives every spinner/skeleton ── */
+const loadingListeners = new Set()
+let inFlight = 0
 
 export function setApiToken(token) {
   authToken = token || null
@@ -12,6 +44,19 @@ export function setApiToken(token) {
 
 export function getApiToken() {
   return authToken
+}
+
+/** Subscribe to "is any API request running right now". Returns an unsubscribe. */
+export function onLoadingChange(listener) {
+  loadingListeners.add(listener)
+  listener(inFlight > 0)
+  return () => loadingListeners.delete(listener)
+}
+
+function setLoading(delta) {
+  inFlight = Math.max(0, inFlight + delta)
+  const busy = inFlight > 0
+  loadingListeners.forEach((listener) => listener(busy))
 }
 
 export class ApiError extends Error {
@@ -23,38 +68,52 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest(path, { method = 'GET', body, headers } = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      Accept: 'application/json',
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...headers,
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+export async function apiRequest(path, { method = 'GET', body, headers, silent = false } = {}) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  if (!silent) setLoading(1)
 
-  let data = null
   try {
-    data = await response.json()
-  } catch {
-    // Keep non-JSON failures available to the status-based error below.
-  }
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...headers,
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    })
+    // Non-JSON failures stay available to the status-based error below.
+    const data = await response.json().catch(() => null)
 
-  if (!response.ok || data?.success === false) {
-    // A 401 on an authenticated call means the stored token is no longer
-    // valid: drop it and tell both contexts so the UI shows the guest state.
-    // /auth/* is skipped so a mistyped re-login never wipes a live session.
-    if (response.status === 401 && authToken && !path.startsWith('/auth/')) {
-      setApiToken(null)
-      clearSession()
-      window.dispatchEvent(new Event('auth-expired'))
+    if (!response.ok || data?.success === false) {
+      // A 401 on an authenticated call means the stored token is no longer
+      // valid: drop it and tell both contexts so the UI shows the guest state.
+      // /auth/* is skipped so a mistyped re-login never wipes a live session.
+      if (response.status === 401 && authToken && !path.startsWith('/auth/')) {
+        setApiToken(null)
+        clearSession()
+        window.dispatchEvent(new Event('auth-expired'))
+      }
+      throw new ApiError(data?.message || 'Request failed', response.status, data)
     }
-    throw new ApiError(data?.message || 'Request failed', response.status, data)
-  }
 
-  return data
+    return data
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    const timedOut = error.name === 'AbortError'
+    throw new ApiError(
+      timedOut
+        ? 'The server took too long to respond. Please try again.'
+        : 'Cannot reach the server. Please check your connection.',
+      timedOut ? 408 : 0
+    )
+  } finally {
+    clearTimeout(timeout)
+    if (!silent) setLoading(-1)
+  }
 }
 
 function withQuery(path, params) {
@@ -68,8 +127,8 @@ function withQuery(path, params) {
 
 // Reads always go to the server: the API's own read cache (CacheReads) is
 // invalidated on every write, so a browser-side copy would only go stale.
-export function apiGet(path, params = {}) {
-  return apiRequest(withQuery(path, params))
+export function apiGet(path, params = {}, options = {}) {
+  return apiRequest(withQuery(path, params), options)
 }
 
 export function apiPost(path, body) {
@@ -86,3 +145,48 @@ export function apiDelete(path, body) {
 
 /** Kept for callers that still invalidate after writes; nothing is cached client-side. */
 export function invalidateCache() {}
+
+/**
+ * Opens DNS + TCP + TLS to the API host ahead of the first real request.
+ *
+ * The first screenful of data is expected within the one-second budget, and on
+ * a cold connection a large part of it goes to name resolution and the TLS
+ * handshake rather than to the request itself. Called the moment a login field
+ * takes focus so that cost is already paid by the time the customer submits.
+ */
+export function preconnectApi() {
+  if (preconnected) return
+  preconnected = true
+
+  let origin = API_BASE_URL
+  let host = API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+  try {
+    const url = new URL(API_BASE_URL, window.location.href)
+    origin = url.origin
+    host = url.port ? `${url.hostname}:${url.port}` : url.hostname
+  } catch {
+    /* keep the stripped values; the links below are still valid hints */
+  }
+
+  const preconnect = document.createElement('link')
+  preconnect.rel = 'preconnect'
+  preconnect.href = origin
+  // fetch() is a CORS request, so the socket it reuses is the CORS one;
+  // without this the browser opens a second, useless connection.
+  preconnect.crossOrigin = 'anonymous'
+  document.head.appendChild(preconnect)
+
+  const dns = document.createElement('link')
+  dns.rel = 'dns-prefetch'
+  dns.href = `//${host}`
+  document.head.appendChild(dns)
+}
+
+/**
+ * Warms the API's own read cache (CacheReads) with public, non-sensitive data
+ * the app needs right after sign-in (the catalog). Runs silently: a background
+ * warm-up must never raise the global progress bar.
+ */
+export function prefetch(path, params = {}) {
+  return apiGet(path, params, { silent: true }).catch(() => null)
+}

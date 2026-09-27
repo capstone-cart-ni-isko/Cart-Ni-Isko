@@ -19,6 +19,10 @@
 
         private const TYPES = ['DESK DUTY', 'EVENT PREP', 'INVENTORY', 'POS CASHIER'];
 
+        // Employee columns every shift response needs (name, role, and the
+        // disabled/deleted stamps behind the PENDING REPLACEMENT flag)
+        private const EMPLOYEE_COLUMNS = 'employee:emp_id,emp_givname,emp_surname,emp_type,emp_disabled,emp_deleted';
+
         /*
             Displaying the duty shifts of one day
             ----------
@@ -33,7 +37,7 @@
                 return response()->json(['success' => false, 'message' => 'A valid date (YYYY-MM-DD) is required'], 400);
             }
 
-            $shifts = DutyShift::with('employee:emp_id,emp_givname,emp_surname,emp_type')
+            $shifts = DutyShift::with(self::EMPLOYEE_COLUMNS)
                 ->whereDate('shift_date', $date)
                 ->orderBy('shift_start')
                 ->get()
@@ -128,7 +132,7 @@
             return response()->json([
                 'success' => true,
                 'message' => 'Duty shift assigned successfully',
-                'data'    => $this->present($shift->load('employee:emp_id,emp_givname,emp_surname,emp_type')),
+                'data'    => $this->present($shift->load(self::EMPLOYEE_COLUMNS)),
             ], 201);
         }
 
@@ -159,6 +163,9 @@
             if ((int) $actor->getKey() !== (int) $shift->emp_id) {
                 $this->notifyEmployee((int) $shift->emp_id, 'Your ' . $label . ' was removed from the schedule.');
             }
+
+            // REQ-SS-03: bookings inside the removed window may now be understaffed
+            $this->alertPendingReplacement($shift, 'removed by ' . $this->nameOf($actor instanceof Employee ? $actor : null));
 
             return response()->json([
                 'success' => true,
@@ -232,6 +239,8 @@
                 'shift_end'      => $shift->shift_end,
                 'shift_type'     => $shift->shift_type,
                 'shift_location' => $shift->shift_location,
+                // REQ-SS-03: the assignee can no longer work this shift
+                'pending_replacement' => $shift->isPendingReplacement(),
             ];
         }
 

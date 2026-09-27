@@ -4,15 +4,41 @@
 
     use App\Models\CustLog;
     use App\Models\Customer;
+    use App\Models\DutyShift;
     use App\Models\EmpLog;
     use App\Models\Employee;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\DB;
     use Illuminate\Support\Facades\Log;
     use Illuminate\Support\Facades\Schema;
+    use Illuminate\Support\Facades\Validator;
 
     class AccountsAPI extends Controller
     {
+        // Profile columns api_accounts accepts (REQ-APC-02 profile form).
+        private const CUSTOMER_FIELDS = [
+            'cust_nickname', 'cust_pronoun', 'cust_birthday',
+            'cust_brgy', 'cust_city', 'cust_province', 'cust_country',
+            'cust_callcode', 'cust_phone', 'cust_email', 'cust_college',
+            'cust_username', 'cust_campus', 'cust_course', 'cust_year',
+            'cust_photo', 'cust_backupcallcode', 'cust_backupphone', 'cust_backupemail',
+        ];
+
+        private const EMPLOYEE_FIELDS = [
+            'emp_surname', 'emp_givname', 'emp_midname', 'emp_suffix',
+            'emp_studnum', 'emp_college', 'emp_program', 'emp_year', 'emp_bloc',
+            'emp_pronoun', 'emp_birthday', 'emp_brgy', 'emp_city',
+            'emp_province', 'emp_country', 'emp_callcode', 'emp_phone',
+            'emp_email', 'emp_instore', 'emp_photo',
+            'emp_backupcallcode', 'emp_backupphone', 'emp_backupemail',
+        ];
+
+        // Login identifiers covered by REQ-APC-01's thirty-day lock.
+        private const SENSITIVE_FIELDS = [
+            'customer' => ['cust_phone', 'cust_email', 'cust_username'],
+            'employee' => ['emp_phone', 'emp_email'],
+        ];
+
         /*
             Changing account type
             ----------
@@ -128,6 +154,10 @@
                     $user = Employee::where('emp_id', $userId)->first();
                     if (!$user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
 
+                    // REQ-SS-03: loaded before the delete, since a hard delete
+                    // cascades the employee's duty_shift rows away with it
+                    $upcomingShifts = $this->upcomingShifts((int) $userId);
+
                     if ($hardDelete) {
                         Log::warning('Employee account permanently deleted', [
                             'employee_id' => $userId,
@@ -143,6 +173,10 @@
                             'emplog_action' => 'DELETE',
                             'emplog_desc' => 'Account soft-deleted by super admin #' . $adminId . '.',
                         ]);
+                    }
+
+                    foreach ($upcomingShifts as $shift) {
+                        $this->alertPendingReplacement($shift, 'assignee account deleted');
                     }
                 }
 
@@ -218,6 +252,9 @@
 
                     // Notify the banned account of the action
                     $this->notifyEmployee($userId, 'Your account has been disabled. Reason: ' . $reason);
+
+                    // REQ-SS-03: the employee's upcoming shifts lose their assignee
+                    $this->alertUpcomingShifts((int) $userId, 'assignee account disabled');
                 }
 
                 // REQ-UM-02: terminate every active session of the banned account
@@ -492,36 +529,81 @@
             try {
                 $userId = (int) $json->input('user_id');
                 $accountType = strtolower($json->input('account_type'));
+                $isCustomer = $accountType === 'customer';
                 $actor = $json->user('sanctum');
 
-                if ($accountType === 'customer') {
+                if ($isCustomer) {
                     $customerId = $this->customerId($json);
                     if ($customerId === null || $customerId !== $userId) {
                         return response()->json(['success' => false, 'message' => 'Customer account mismatch.'], 403);
                     }
                     $user = Customer::findOrFail($userId);
-                    // Only accept columns that actually exist so a save never
-                    // 500s on a connection that has not run the migration yet.
-                    $columns = Schema::getColumnListing('customer');
-                    $user->update(array_intersect_key($json->only([
-                        'cust_nickname', 'cust_pronoun', 'cust_birthday',
-                        'cust_brgy', 'cust_city', 'cust_province', 'cust_country',
-                        'cust_callcode', 'cust_phone', 'cust_email', 'cust_college',
-                        'cust_username', 'cust_campus', 'cust_course', 'cust_year',
-                        'cust_photo',
-                    ]), array_flip($columns)));
                 } else {
                     if ((int) $actor->getKey() !== $userId && ! $this->isSuperAdmin($actor)) {
                         return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
                     }
                     $user = Employee::findOrFail($userId);
-                    $user->update($json->only([
-                        'emp_surname', 'emp_givname', 'emp_midname', 'emp_suffix',
-                        'emp_studnum', 'emp_college', 'emp_program', 'emp_year', 'emp_bloc',
-                        'emp_pronoun', 'emp_birthday', 'emp_brgy', 'emp_city',
-                        'emp_province', 'emp_country', 'emp_callcode', 'emp_phone',
-                        'emp_email', 'emp_instore', 'emp_photo',
-                    ]));
+                }
+
+                // Only keep columns that actually exist so a save never 500s
+                // on a connection that has not run the migration yet.
+                $fields = $isCustomer ? self::CUSTOMER_FIELDS : self::EMPLOYEE_FIELDS;
+                $stampField = $isCustomer ? 'cust_cred_changed' : 'emp_cred_changed';
+                $sensitive = $isCustomer ? self::SENSITIVE_FIELDS['customer'] : self::SENSITIVE_FIELDS['employee'];
+                $columns = Schema::getColumnListing($isCustomer ? 'customer' : 'employee');
+                $payload = array_intersect_key($json->only($fields), array_flip($columns));
+                $prefix = $isCustomer ? 'cust' : 'emp';
+                $rules = [
+                    "{$prefix}_pronoun" => 'sometimes|string|max:50',
+                    "{$prefix}_birthday" => 'sometimes|date|before:today',
+                    "{$prefix}_brgy" => 'sometimes|string|max:100',
+                    "{$prefix}_city" => 'sometimes|string|max:100',
+                    "{$prefix}_province" => 'sometimes|string|max:100',
+                    "{$prefix}_country" => 'sometimes|string|max:100',
+                    "{$prefix}_phone" => 'sometimes|nullable|regex:/^[0-9]{10,11}$/',
+                    "{$prefix}_email" => 'sometimes|nullable|email:rfc',
+                    "{$prefix}_callcode" => 'sometimes|regex:/^\+?[0-9]{1,4}$/',
+                    "{$prefix}_backupphone" => 'sometimes|nullable|regex:/^[0-9]{10,11}$/',
+                    "{$prefix}_backupemail" => 'sometimes|nullable|email:rfc',
+                    "{$prefix}_backupcallcode" => 'sometimes|nullable|regex:/^\+?[0-9]{1,4}$/',
+                ];
+                if ($isCustomer) {
+                    $rules['cust_nickname'] = 'sometimes|string|min:2|max:100';
+                    $rules['cust_username'] = 'sometimes|string|min:3|max:50';
+                }
+                $validator = Validator::make($payload, $rules);
+                if ($validator->fails()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $validator->errors()->first(),
+                        'errors' => $validator->errors(),
+                    ], 422);
+                }
+
+                // REQ-APC-01: login identifiers stay locked for thirty days
+                // after the most recent change; a real change re-stamps them.
+                if (in_array($stampField, $columns, true)
+                    && $this->sensitiveFieldsTouched($user, $payload, $sensitive)) {
+                    $blocked = $this->credentialChangeBlocked($user->{$stampField});
+                    if ($blocked) return $blocked;
+                    $payload[$stampField] = now();
+                }
+
+                // REQ-SS-02: availability locks at the exact start of the
+                // employee's duty block, so the change is checked before it is
+                // written. Super admins may override at any time.
+                if (! $isCustomer && array_key_exists('emp_instore', $payload)) {
+                    $blocked = $this->availabilityDeadlineBlocked($json, (int) $user->emp_id);
+                    if ($blocked) return $blocked;
+                }
+
+                $user->update($payload);
+
+                // REQ-SS-03 / REQ-AB-03: an availability change is cross-checked
+                // against open bookings, and customers still holding one are told
+                // to reschedule when the in-store minimum is no longer met.
+                if (! $isCustomer && array_key_exists('emp_instore', $payload)) {
+                    $this->notifyStaffShortage();
                 }
 
                 return response()->json([
@@ -536,6 +618,22 @@
                     'message' => 'Failed to update account details',
                     'error' => $e->getMessage()
                 ], 500);
+            }
+        }
+
+        // The employee's shifts from today onward
+        private function upcomingShifts(int $empId)
+        {
+            return DutyShift::where('emp_id', $empId)
+                ->whereDate('shift_date', '>=', now()->format('Y-m-d'))
+                ->get();
+        }
+
+        // REQ-SS-03: raises the PENDING REPLACEMENT alert for each upcoming shift
+        private function alertUpcomingShifts(int $empId, string $why): void
+        {
+            foreach ($this->upcomingShifts($empId) as $shift) {
+                $this->alertPendingReplacement($shift, $why);
             }
         }
     }

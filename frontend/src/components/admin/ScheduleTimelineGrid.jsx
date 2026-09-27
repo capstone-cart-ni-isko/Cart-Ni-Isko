@@ -25,6 +25,9 @@ const TYPE_STYLES = {
   'POS CASHIER': 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
 }
 
+// REQ-SS-03: the assignee can no longer work this shift (disabled/deleted)
+const PENDING_STYLE = 'bg-rose-50 text-rose-700 border-rose-300 border-dashed hover:bg-rose-100'
+
 const titleCase = (value) =>
   String(value || '')
     .toLowerCase()
@@ -116,13 +119,17 @@ export default function ScheduleTimelineGrid({
                             onClick={() => onShiftClick?.(shift)}
                             style={{ gridColumn: `${col} / span ${span}`, gridRow: 1 }}
                             className={`pointer-events-auto rounded-md px-1.5 py-1 text-left border transition-colors cursor-pointer overflow-hidden ${
-                              TYPE_STYLES[shift.shift_type] || TYPE_STYLES['DESK DUTY']
+                              shift.pending_replacement
+                                ? PENDING_STYLE
+                                : TYPE_STYLES[shift.shift_type] || TYPE_STYLES['DESK DUTY']
                             }`}
                             title={`${titleCase(shift.shift_type)} · ${timeLabel(shift.shift_start)} – ${timeLabel(shift.shift_end)}${
                               shift.shift_location ? ` · ${shift.shift_location}` : ''
-                            }`}
+                            }${shift.pending_replacement ? ' · PENDING REPLACEMENT' : ''}`}
                           >
-                            <p className="font-bold text-[11px] truncate">{titleCase(shift.shift_type)}</p>
+                            <p className="font-bold text-[11px] truncate">
+                              {shift.pending_replacement ? 'Needs replacement' : titleCase(shift.shift_type)}
+                            </p>
                             <p className="text-[10px] font-normal truncate">
                               {timeLabel(shift.shift_start)} – {timeLabel(shift.shift_end)}
                             </p>

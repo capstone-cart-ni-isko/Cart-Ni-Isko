@@ -209,11 +209,53 @@ function rowTime(row) {
  * Rows without a parseable date are dropped from ranged views.
  */
 export function filterOrdersByRange(rows = [], range = 'Today') {
+  return filterByRange(rows, range, (row) => rowTime(row))
+}
+
+/**
+ * REQ-SD-03: keep only the rows whose timestamp falls inside the selected
+ * window. Used for every dashboard panel, so sales, bookings, attendance and
+ * fulfillment all answer to the same date range.
+ */
+export function filterByRange(rows = [], range = 'Today', getTime = rowTime) {
   const { from, duration } = rangeBounds(range)
   return rows.filter((row) => {
-    const time = rowTime(row)
-    return time !== null && time >= from && time < from + duration
+    const time = getTime(row)
+    return time !== null && time !== undefined && time >= from && time < from + duration
   })
+}
+
+/**
+ * REQ-SD-03: bookings and appointments for the selected window, split into the
+ * two SRS types with their occupied and remaining counts.
+ */
+export function buildBookingSummary(appointments = [], range = 'Today', slots = []) {
+  const inRange = filterByRange(
+    appointments,
+    range,
+    (row) => {
+      const date = parseDate(row?.appoint_date ?? row?.date ?? row?.createdAt)
+      return date ? date.getTime() : null
+    }
+  )
+
+  const closed = inRange.filter((row) => row.closed || row.appoint_closed)
+  const open = inRange.filter((row) => !(row.closed || row.appoint_closed))
+
+  const countOf = (type) => open.filter((row) => (row.type ?? row.appoint_type) === type).length
+  const capacityOf = (type) =>
+    slots
+      .filter((slot) => slot.type === type)
+      .reduce((total, slot) => total + Number(slot.capacity || 0), 0)
+
+  return {
+    total: inRange.length,
+    closed: closed.length,
+    rows: [
+      { type: 'CLAIM', label: 'Order claiming', occupied: countOf('CLAIM'), capacity: capacityOf('CLAIM') },
+      { type: 'VISIT', label: 'Store visit', occupied: countOf('VISIT'), capacity: capacityOf('VISIT') },
+    ],
+  }
 }
 
 /**

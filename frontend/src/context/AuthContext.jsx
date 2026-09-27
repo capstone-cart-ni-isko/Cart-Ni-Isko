@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getApiToken, setApiToken } from '../services/api.js'
 import { clearSession, loadSession, saveSession } from '../services/session.js'
 import { logoutSession, signInUser, signUpUser } from '../services/auth.js'
@@ -27,22 +28,33 @@ const DEFAULT_USER = {
 const DEFAULT_ADDRESSES = []
 
 /**
- * Customer session. The last signed-in account (user + bearer token) is kept
- * in the shared `isko_session` slot (services/session.js), so a refresh or a
- * code reload restores it - REQ-ALR-01's "relogin on refresh" is intentionally
- * overridden here; a 401 from the API still ends the session immediately.
+ * Customer session. The signed-in account (user + bearer token) is held in the
+ * shared in-memory slot (services/session.js), so it survives client-side
+ * navigation but never a reload — REQ-ALR-01 requires a fresh login after a
+ * logout, a refresh, a browser reopen, or a device restart. A 401 from the API
+ * still ends the session immediately.
  */
 export function AuthProvider({ children }) {
-  // Lazy restore so the token is back in place before the first API call.
+  const navigate = useNavigate()
+
+  // Restores nothing on a cold start, which is exactly what REQ-ALR-01 wants.
+  // The token is still in place for the rest of the tab after a login.
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = loadSession('customer')
     if (saved) setApiToken(saved.token)
     return saved?.user ?? null
   })
 
+  // Guarded like every other storage read in the app: this initializer runs
+  // inside AuthProvider, which sits ABOVE the error boundary, so a single
+  // unparsable value would throw during render and blank the whole page.
   const [addresses, setAddresses] = useState(() => {
-    const saved = localStorage.getItem('isko_addresses')
-    return saved ? JSON.parse(saved) : DEFAULT_ADDRESSES
+    try {
+      const saved = JSON.parse(localStorage.getItem('isko_addresses'))
+      return Array.isArray(saved) ? saved : DEFAULT_ADDRESSES
+    } catch {
+      return DEFAULT_ADDRESSES
+    }
   })
 
   // Mirror every user change (login, edit, logout) into the shared slot.
@@ -153,12 +165,19 @@ export function AuthProvider({ children }) {
     })
   }
 
+  /**
+   * Ends the session and always lands on the login form (REQ-ALR-01). The
+   * redirect lives here so every logout entry point - the menu drawer, the
+   * account pages, the profile menu, the password change - behaves the same.
+   * `replace` keeps Back from re-entering an authenticated page.
+   */
   const logout = async () => {
     const revocation = logoutSession().catch(() => null)
     clearSession('customer')
     setApiToken(null)
     setCurrentUser(null)
     await revocation
+    navigate('/signin', { replace: true })
   }
 
   const addAddress = (address) => {

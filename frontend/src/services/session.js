@@ -1,43 +1,33 @@
 /**
- * One shared storage slot for the last signed-in account.
+ * The signed-in account, held in memory only.
  *
- * Both the customer context and the staff context write to it, tagged with a
- * `kind`, so the most recent login survives reloads and code updates while
- * the other role's sign-in is simply replaced (last login wins).
+ * REQ-ALR-01: login is required every time after a logout, a refresh, a
+ * browser reopen, or a device restart. Nothing is written to localStorage or
+ * sessionStorage, so a reload always starts from the signed-out state.
+ *
+ * Within one open tab the slot lives in a module variable, which is enough for
+ * the token to survive client-side navigation. Both the customer context and
+ * the staff context write to it, tagged with a `kind`, so signing in as one
+ * role never disturbs the other (last login wins).
  */
 
-const KEY = 'isko_session'
+let session = null
 
-/** Persist a session: `{ kind: 'customer'|'staff', token, user }`. */
+/** Persist a session for this tab: `{ kind: 'customer'|'staff', token, user }`. */
 export function saveSession(kind, token, user) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify({ kind, token, user }))
-  } catch {
-    /* storage unavailable - the session then only lives in memory */
-  }
+  session = { kind, token, user }
 }
 
 /** Restore a session only when it was written by the same `kind`. */
 export function loadSession(kind) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY))
-    return saved && saved.kind === kind && saved.token && saved.user ? saved : null
-  } catch {
-    return null
-  }
+  return session && session.kind === kind && session.token && session.user ? session : null
 }
 
-/** Drop the slot - only when it belongs to `kind`, so logging out one role
- *  never wipes the other's session. */
+/**
+ * Drop the slot. Passing a `kind` only drops it when it belongs to that role,
+ * so signing out one role never wipes the other. Passing nothing drops it
+ * either way, which is what an expired token needs.
+ */
 export function clearSession(kind) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY))
-    if (!saved || saved.kind === kind) localStorage.removeItem(KEY)
-  } catch {
-    try {
-      localStorage.removeItem(KEY)
-    } catch {
-      /* ignore */
-    }
-  }
+  if (!kind || !session || session.kind === kind) session = null
 }

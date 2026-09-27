@@ -9,7 +9,6 @@
     use App\Models\Wishlist;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\DB;
-    use Illuminate\Support\Str;
 
     class WishlistAPI extends Controller
     {
@@ -143,30 +142,48 @@
                     return response()->json(['success' => false, 'message' => 'Wishlist item not found.'], 404);
                 }
 
-                $created = DB::transaction(function () use ($custId, $resolvedProdId, $product, $qty, $wishlistItem) {
-                    $order = Order::create([
-                        'cust_id' => $custId,
-                        'ord_created' => now(),
-                        'ord_completed' => null,
-                        'ord_tag' => 'CART-' . strtoupper(Str::random(8)),
-                        'ord_status' => 'TO PROCESS',
-                        'ord_rating' => 0,
-                        'ord_review' => null,
-                    ]);
-                    $item = Item::create([
-                        'ord_id' => $order->ord_id,
-                        'prod_id' => $resolvedProdId,
-                        'item_qty' => $qty,
-                        'item_amount' => round((float) $product->prod_price * $qty, 2),
-                    ]);
-                    $wishlistItem->delete();
-
+                $created = DB::transaction(function () use ($custId, $resolvedProdId, $product, $qty) {
                     $customer = Customer::lockForUpdate()->findOrFail($custId);
-                    if ($customer->cust_wishlist > 0) {
-                        $customer->decrement('cust_wishlist');
+                    $order = Order::where('cust_id', $custId)
+                        ->where('ord_tag', 'like', 'CART-%')
+                        ->lockForUpdate()
+                        ->first();
+                    $createdOrder = $order === null;
+                    if (! $order) {
+                        $order = Order::create([
+                            'cust_id' => $custId,
+                            'ord_created' => now(),
+                            'ord_completed' => null,
+                            'ord_tag' => 'CART-' . strtoupper(\Illuminate\Support\Str::random(8)),
+                            'ord_status' => 'TO PROCESS',
+                            'ord_rating' => 0,
+                            'ord_review' => null,
+                        ]);
                     }
-                    $customer->increment('cust_cart');
 
+                    $item = Item::where('ord_id', $order->ord_id)
+                        ->where('prod_id', $resolvedProdId)
+                        ->lockForUpdate()
+                        ->first();
+                    if ($item) {
+                        $item->update([
+                            'item_qty' => $item->item_qty + $qty,
+                            'item_amount' => round((float) $item->item_amount + (float) $product->prod_price * $qty, 2),
+                        ]);
+                    } else {
+                        $item = Item::create([
+                            'ord_id' => $order->ord_id,
+                            'prod_id' => $resolvedProdId,
+                            'item_qty' => $qty,
+                            'item_amount' => round((float) $product->prod_price * $qty, 2),
+                        ]);
+                    }
+
+                    if ($createdOrder) {
+                        $customer->increment('cust_cart');
+                    }
+
+                    // Wishlist and cart membership are intentionally independent.
                     return [$order, $item];
                 });
 

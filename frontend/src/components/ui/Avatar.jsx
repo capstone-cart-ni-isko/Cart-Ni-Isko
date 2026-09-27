@@ -1,16 +1,26 @@
+import { useState } from 'react'
+
 /**
  * Default avatar.
  *
  * Odd cust_id  → aqua-blue background with a white head silhouette.
  * Even cust_id → dark-grey background with a fiery red-orange head silhouette.
  * No userId   → brand-blue/orange fallback.
+ *
+ * A missing photo and a photo that fails to load both fall back to the SVG, so
+ * a broken upload URL can never leave a blank circle in the menu.
  */
 export default function Avatar({ name = '', src, size = 40, className = '', userId }) {
-  if (src && !src.includes('avatar.png') && !src.includes('placeholder') && !src.includes('icons')) {
+  // The URL that failed to load, so swapping photos retries the real image.
+  const [failed, setFailed] = useState(null)
+  const broken = Boolean(src) && failed === src
+
+  if (src && !broken && !src.includes('avatar.png') && !src.includes('placeholder') && !src.includes('icons')) {
     return (
       <img
         src={src}
         alt={name || 'Avatar'}
+        onError={() => setFailed(src)}
         className={`rounded-full object-cover ${className}`}
         style={{ width: size, height: size }}
       />

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import Button from '../components/ui/Button.jsx'
 import OtpInput from '../components/ui/OtpInput.jsx'
-import backIcon from '../assets/icons/common/back.svg'
+import BackButton from '../components/ui/BackButton.jsx'
 import { recoverCredentials, updateCredentials } from '../services/auth.js'
 
 function ForgotPassword() {
@@ -100,13 +100,7 @@ function ForgotPassword() {
         <div>
           {/* Header Row */}
           <div className="flex items-center mb-8">
-            <button
-              type="button"
-              onClick={prevStep}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <img src={backIcon} alt="Back" className="w-5 h-5" />
-            </button>
+            <BackButton onClick={prevStep} label="Back" />
           </div>
 
           {step === 0 && (
