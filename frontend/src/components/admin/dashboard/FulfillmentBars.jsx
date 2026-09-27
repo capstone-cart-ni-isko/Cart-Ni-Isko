@@ -1,10 +1,10 @@
 import { TONE_FILL } from './statusTone.js'
 
-// Stage tones: routine stages neutral, only the actionable ones in colour
+// Stage tones: in-progress stages in brand blue, attention in brand orange
 const STAGE_TONE = {
-  to_process: 'neutral',
-  to_claim: 'neutral',
-  to_receive: 'neutral',
+  to_process: 'active',
+  to_claim: 'active',
+  to_receive: 'active',
   claimed: 'done',
   unclaimed: 'urgent',
   closed: 'lost',
@@ -50,8 +50,8 @@ export default function FulfillmentBars({ stages = [], activeKey = null, onSelec
               onClick={() => onSelect?.(stage)}
               aria-pressed={active}
               title={`Show ${stage.label} orders`}
-              className={`w-full flex-1 min-h-7 [@media(max-height:760px)]:min-h-6 grid grid-cols-[9rem_1fr] items-center gap-2 px-1.5 rounded-md text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                active ? 'bg-slate-100' : 'hover:bg-slate-50'
+              className={`w-full flex-1 min-h-7 [@media(max-height:760px)]:min-h-6 grid grid-cols-[9rem_1fr] items-center gap-2 px-1.5 rounded-md text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-isko-orange ${
+                active ? 'bg-isko-blue/10' : 'hover:bg-isko-blue/5'
               }`}
             >
               <span className={`text-xs truncate ${active ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}`}>

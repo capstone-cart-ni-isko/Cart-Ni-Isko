@@ -38,7 +38,7 @@ export default function OnDutyWidget({ roster = [], currentEmpId, canManageAll =
                 {staff.onShiftNow ? ' · on shift now' : ''}
               </p>
               {staff.pendingReplacement && (
-                <p className="text-[10px] font-semibold text-orange-600">Pending replacement</p>
+                <p className="text-[10px] font-semibold text-isko-orange-dark">Pending replacement</p>
               )}
             </div>
             {canToggle ? (
@@ -50,7 +50,7 @@ export default function OnDutyWidget({ roster = [], currentEmpId, canManageAll =
                 className={`h-8 px-2.5 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer disabled:opacity-50 shrink-0 ${
                   staff.clockedIn
                     ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                    : 'bg-slate-900 border-slate-900 text-white hover:bg-slate-700'
+                    : 'bg-isko-blue border-isko-blue text-white hover:bg-isko-blue-dark'
                 }`}
               >
                 {pending ? '…' : staff.clockedIn ? 'Clock out' : 'Clock in'}

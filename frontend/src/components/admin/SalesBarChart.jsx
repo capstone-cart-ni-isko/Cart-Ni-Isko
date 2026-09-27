@@ -49,7 +49,7 @@ export default function SalesBarChart({ data = [] }) {
             aria-checked={metric === key}
             onClick={() => setMetric(key)}
             className={`h-6 px-2.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
-              metric === key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              metric === key ? 'bg-isko-blue text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             {label}
@@ -102,7 +102,7 @@ export default function SalesBarChart({ data = [] }) {
                         {metric === 'sales' ? `₱${val.toLocaleString()}` : `${val} units`}
                       </div>
                       <div
-                        className="w-full max-w-[32px] bg-slate-700 group-hover:bg-slate-900 rounded-t transition-all duration-500 ease-out"
+                        className="w-full max-w-[32px] bg-isko-blue group-hover:bg-isko-blue-dark rounded-t transition-all duration-500 ease-out"
                         style={{ height: `${heightPercent}%` }}
                       />
                     </div>

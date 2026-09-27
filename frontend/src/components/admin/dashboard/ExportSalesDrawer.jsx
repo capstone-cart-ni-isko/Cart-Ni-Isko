@@ -69,7 +69,7 @@ export default function ExportSalesDrawer({ isOpen, onClose, orders = [], initia
               role="radio"
               aria-checked={range === r}
               onClick={() => setRange(r)}
-              className={`h-8 rounded text-sm font-medium cursor-pointer ${range === r ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+              className={`h-8 rounded text-sm font-medium cursor-pointer ${range === r ? 'bg-isko-blue text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               {r}
             </button>

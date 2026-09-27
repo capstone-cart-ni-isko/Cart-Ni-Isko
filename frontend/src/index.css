@@ -11,6 +11,12 @@
   --color-brand-blue: #2563EB;
   --color-brand-blue-light: #38BDF8;
   --color-brand-cyan: #4FD1C5;
+  /* Official Cart ni Isko scheme (admin dashboard): orange = primary action
+     and emphasis, blue = data, selection and in-progress states. */
+  --color-isko-orange: #FF7704;
+  --color-isko-orange-dark: #E06600;
+  --color-isko-blue: #1887C7;
+  --color-isko-blue-dark: #126C9F;
   --color-surface-gray: #F5F5F5;
   --color-text-muted: #757575;
   --color-gray-150: #E5E7EB;

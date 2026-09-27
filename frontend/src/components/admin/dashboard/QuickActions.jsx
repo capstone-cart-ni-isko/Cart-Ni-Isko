@@ -55,13 +55,22 @@ export default function QuickActions({ isAdmin = false, onOpen }) {
           key={action.key}
           type="button"
           onClick={() => onOpen(action.key)}
-          className={`h-14 rounded-md flex flex-col items-center justify-center gap-1 text-xs font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+          className={`h-14 rounded-md flex flex-col items-center justify-center gap-1 text-xs font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-isko-orange ${
             action.primary
-              ? 'bg-[#FF6B00] hover:bg-[#E05E00] text-white'
-              : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-700'
+              ? 'bg-isko-orange hover:bg-isko-orange-dark text-white'
+              : 'bg-white hover:bg-isko-blue/5 hover:border-isko-blue/40 border border-slate-200 text-slate-700'
           }`}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`w-4 h-4 ${action.primary ? '' : 'text-isko-blue'}`}
+            aria-hidden="true"
+          >
             {action.icon}
           </svg>
           {action.label}

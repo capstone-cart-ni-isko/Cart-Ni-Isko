@@ -67,7 +67,7 @@ export default function RestockDrawer({ isOpen, onClose, onCompleted }) {
             <li key={p.id} className="flex items-center gap-2 px-2.5 py-2">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
-                <p className={`text-[11px] ${p.totalStock === 0 ? 'text-rose-600 font-semibold' : low ? 'text-orange-600 font-medium' : 'text-slate-500'}`}>
+                <p className={`text-[11px] ${p.totalStock === 0 ? 'text-rose-600 font-semibold' : low ? 'text-isko-orange-dark font-medium' : 'text-slate-500'}`}>
                   {p.totalStock === 0 ? 'Out of stock' : `${p.totalStock} in stock`}
                 </p>
               </div>
@@ -75,7 +75,7 @@ export default function RestockDrawer({ isOpen, onClose, onCompleted }) {
                 type="number"
                 min="1"
                 aria-label={`Units to add to ${p.name}`}
-                className="w-16 h-8 px-2 rounded-md border border-slate-200 text-sm text-right tabular-nums focus:outline-none focus:border-orange-500"
+                className="w-16 h-8 px-2 rounded-md border border-slate-200 text-sm text-right tabular-nums focus:outline-none focus:border-isko-blue"
                 placeholder="10"
                 value={amounts[p.id] ?? ''}
                 onChange={(e) => setAmounts((prev) => ({ ...prev, [p.id]: e.target.value }))}

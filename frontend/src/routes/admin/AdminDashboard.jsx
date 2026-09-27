@@ -64,7 +64,7 @@ function BookingMeter({ row }) {
         </span>
       </div>
       <div className="h-2 rounded bg-slate-100 overflow-hidden">
-        {pct > 0 && <div className={`h-full rounded ${full ? 'bg-orange-500' : 'bg-slate-500'}`} style={{ width: `${pct}%` }} />}
+        {pct > 0 && <div className={`h-full rounded ${full ? 'bg-isko-orange' : 'bg-isko-blue'}`} style={{ width: `${pct}%` }} />}
       </div>
     </div>
   )
@@ -199,7 +199,7 @@ export default function AdminDashboard() {
                   aria-checked={timeRange === range}
                   onClick={() => setTimeRange(range)}
                   className={`h-7 px-3 rounded text-xs font-semibold transition-colors cursor-pointer ${
-                    timeRange === range ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    timeRange === range ? 'bg-isko-blue text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {range}
@@ -213,6 +213,7 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
           <KpiCard
             label="Gross sales"
+            accent="orange"
             value={peso(sales.gross)}
             subtext={salesTrend.label}
             tone={salesTrend.tone}
@@ -241,6 +242,7 @@ export default function AdminDashboard() {
           />
           <KpiCard
             label="Ready for pickup"
+            accent="orange"
             value={readyForPickup}
             subtext={readyForPickup > 0 ? 'Awaiting customer claim' : 'Nothing waiting'}
             tone="neutral"
@@ -293,7 +295,7 @@ export default function AdminDashboard() {
             </DashCard>
             <DashCard
               title="On duty"
-              meta={`${clockedInCount} in store · ${onShiftCount}/${roster.length} on shift`}
+              meta={`${clockedInCount} in · ${onShiftCount}/${roster.length} on shift`}
               actionLabel="Schedule"
               onAction={() => setDrawer('schedule')}
               className="flex-1 min-h-[14rem] lg:min-h-0"
@@ -312,7 +314,7 @@ export default function AdminDashboard() {
             title="Recent orders"
             meta={
               orderFilter ? (
-                <span className="inline-flex items-center gap-1 h-5 pl-2 pr-1 rounded-full bg-slate-900 text-white text-[11px] font-medium">
+                <span className="inline-flex items-center gap-1 h-5 pl-2 pr-1 rounded-full bg-isko-blue text-white text-[11px] font-medium">
                   {orderFilter.label}
                   <button
                     type="button"

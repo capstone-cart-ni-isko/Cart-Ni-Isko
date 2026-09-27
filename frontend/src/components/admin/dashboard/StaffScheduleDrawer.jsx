@@ -62,7 +62,7 @@ export default function StaffScheduleDrawer({ isOpen, onClose }) {
                 {shift.shift_location ? ` · ${shift.shift_location}` : ''}
               </span>
               {shift.pending_replacement && (
-                <span className="inline-block mt-1 text-[10px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5">
+                <span className="inline-block mt-1 text-[10px] font-semibold text-isko-orange-dark bg-isko-orange/10 border border-isko-orange/30 rounded px-1.5 py-0.5">
                   Pending replacement
                 </span>
               )}
