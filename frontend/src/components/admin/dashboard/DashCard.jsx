@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
   its own, which is what keeps the page itself from scrolling.
 */
 export const ACTION_CLASS =
-  'inline-flex items-center gap-1 h-7 px-2 -mr-2 rounded-md text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer'
+  'inline-flex items-center gap-1 h-7 px-2 shrink-0 rounded-md text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer'
 
 export function Chevron({ className = 'w-3.5 h-3.5' }) {
   return (
@@ -21,8 +21,8 @@ export default function DashCard({ title, meta, actionLabel, actionTo, onAction,
     <section className={`bg-white border border-slate-200 rounded-lg p-3 flex flex-col min-h-0 ${className}`}>
       <header className="h-8 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-baseline gap-2 min-w-0">
-          <h2 className="text-sm font-semibold text-slate-900 truncate">{title}</h2>
-          {meta && <span className="text-[11px] text-slate-500 truncate">{meta}</span>}
+          <h2 className="text-sm font-semibold text-slate-900 whitespace-nowrap shrink-0">{title}</h2>
+          {meta && <span className="text-[11px] text-slate-500 truncate min-w-0" title={typeof meta === 'string' ? meta : undefined}>{meta}</span>}
         </div>
         {actionLabel && actionTo && (
           <Link to={actionTo} className={ACTION_CLASS}>

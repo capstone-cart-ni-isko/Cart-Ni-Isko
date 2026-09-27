@@ -11,7 +11,7 @@ export default function RecentOrdersTable({ orders = [], emptyText = 'No orders 
   const navigate = useNavigate()
 
   return (
-    <div className="h-full overflow-auto -mx-3 px-3">
+    <div className="h-full overflow-auto [mask-image:linear-gradient(to_bottom,black_calc(100%-20px),transparent)] pb-4">
       <table className="w-full text-left border-collapse min-w-[560px]">
         <thead className="sticky top-0 bg-white z-10">
           <tr className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-100">

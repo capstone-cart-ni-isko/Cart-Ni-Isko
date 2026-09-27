@@ -36,7 +36,9 @@ export default function FulfillmentBars({ stages = [], activeKey = null, onSelec
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 min-h-0 flex flex-col justify-between gap-1">
+      {/* Rows share the card height evenly; bars are sized relative to their
+          row, so the chart keeps the same proportions at any resolution. */}
+      <div className="flex-1 min-h-0 flex flex-col">
         {stages.map((stage) => {
           const pct = scale > 0 ? (stage.count / scale) * 100 : 0
           const tone = STAGE_TONE[stage.key] || 'neutral'
@@ -48,14 +50,14 @@ export default function FulfillmentBars({ stages = [], activeKey = null, onSelec
               onClick={() => onSelect?.(stage)}
               aria-pressed={active}
               title={`Show ${stage.label} orders`}
-              className={`w-full min-h-10 grid grid-cols-[7.5rem_1fr] items-center gap-2 px-1.5 rounded-md text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+              className={`w-full flex-1 min-h-7 [@media(max-height:760px)]:min-h-6 grid grid-cols-[9rem_1fr] items-center gap-2 px-1.5 rounded-md text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
                 active ? 'bg-slate-100' : 'hover:bg-slate-50'
               }`}
             >
               <span className={`text-xs truncate ${active ? 'font-semibold text-slate-900' : 'font-medium text-slate-700'}`}>
                 {stage.label}
               </span>
-              <span className="relative h-5 rounded bg-slate-100">
+              <span className="relative h-[60%] min-h-4 max-h-7 rounded bg-slate-100">
                 {/* Quarter gridlines */}
                 {ticks.slice(1, -1).map((t) => (
                   <span key={t} className="absolute inset-y-0 w-px bg-white" style={{ left: `${t * 100}%` }} />
@@ -82,7 +84,7 @@ export default function FulfillmentBars({ stages = [], activeKey = null, onSelec
       </div>
 
       {/* Scale aligned to the bar column */}
-      <div className="grid grid-cols-[7.5rem_1fr] gap-2 px-1.5 pt-1.5 mt-1 border-t border-slate-100 shrink-0">
+      <div className="grid grid-cols-[9rem_1fr] gap-2 px-1.5 pt-1.5 mt-1 border-t border-slate-100 shrink-0">
         <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Orders</span>
         <span className="relative h-3 text-[10px] font-medium text-slate-400 tabular-nums">
           {ticks.map((t) => (

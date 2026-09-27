@@ -60,7 +60,7 @@ function BookingMeter({ row }) {
         <span className="font-medium text-slate-700">{row.label}</span>
         <span className="tabular-nums text-slate-900 font-semibold">
           {row.occupied}
-          <span className="text-slate-400 font-normal">/{row.capacity || '—'}</span>
+          <span className="text-slate-400 font-normal">{row.capacity > 0 ? `/${row.capacity}` : ' · no slots open'}</span>
         </span>
       </div>
       <div className="h-2 rounded bg-slate-100 overflow-hidden">
@@ -226,7 +226,6 @@ export default function AdminDashboard() {
             subtext={ordersTrend.label}
             tone={ordersTrend.tone}
             onClick={() => setOrderFilter(null)}
-            active={orderFilter === null}
             hint="Show all orders in this range"
             icon={<Icon><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /></Icon>}
           />
@@ -252,11 +251,13 @@ export default function AdminDashboard() {
           />
         </div>
 
-        {/* ── Row A: pipeline · sales · actions ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:flex-[1.15] lg:min-h-0">
+        {/* ── Body: one grid with the same row proportions at every desktop size ──
+            Left: pipeline + sales on top, recent orders below.
+            Right: actions, bookings and the duty roster in one column. */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] gap-3 lg:flex-1 lg:min-h-0">
           <DashCard
             title="Fulfillment"
-            meta={`${rangeOrders.length} orders · click a stage to filter`}
+            meta={`${rangeOrders.length} orders`}
             actionLabel="Pickup"
             actionTo="/admin/pickup"
             className="lg:col-span-4"
@@ -269,13 +270,12 @@ export default function AdminDashboard() {
             meta={RANGE_META[timeRange]}
             actionLabel="Analytics"
             actionTo="/admin/analytics"
-            className="lg:col-span-5"
-            bodyClassName="overflow-hidden"
+            className="lg:col-span-5 min-h-[16rem] lg:min-h-0"
           >
             <SalesBarChart data={categorySales} />
           </DashCard>
 
-          <div className="lg:col-span-3 flex flex-col gap-3 lg:min-h-0">
+          <div className="lg:col-span-3 lg:row-span-2 flex flex-col gap-3 lg:min-h-0">
             <DashCard title="Quick actions" className="shrink-0">
               <QuickActions isAdmin={isAdmin} onOpen={setDrawer} />
             </DashCard>
@@ -284,18 +284,30 @@ export default function AdminDashboard() {
               meta={`${bookings.total} in range`}
               actionLabel="Schedule"
               actionTo="/admin/schedule"
-              className="lg:flex-1"
+              className="shrink-0"
               bodyClassName="space-y-2.5"
             >
               {bookings.rows.map((row) => (
                 <BookingMeter key={row.type} row={row} />
               ))}
             </DashCard>
+            <DashCard
+              title="On duty"
+              meta={`${clockedInCount} in store · ${onShiftCount}/${roster.length} on shift`}
+              actionLabel="Schedule"
+              onAction={() => setDrawer('schedule')}
+              className="flex-1 min-h-[14rem] lg:min-h-0"
+            >
+              <OnDutyWidget
+                roster={roster}
+                currentEmpId={currentAdminUser?.id}
+                canManageAll={isSuperAdmin}
+                pendingIds={Object.keys(clockOverrides).map(Number)}
+                onToggleClock={handleToggleClock}
+              />
+            </DashCard>
           </div>
-        </div>
 
-        {/* ── Row B: activity · people ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:flex-1 lg:min-h-0">
           <DashCard
             title="Recent orders"
             meta={
@@ -322,22 +334,6 @@ export default function AdminDashboard() {
             <RecentOrdersTable
               orders={recentOrders}
               emptyText={orderFilter ? `No ${orderFilter.label.toLowerCase()} orders in this range.` : 'No orders in this range yet.'}
-            />
-          </DashCard>
-
-          <DashCard
-            title="On duty"
-            meta={`${clockedInCount} in store · ${onShiftCount}/${roster.length} on shift`}
-            actionLabel="Schedule"
-            onAction={() => setDrawer('schedule')}
-            className="lg:col-span-3 min-h-[14rem] lg:min-h-0"
-          >
-            <OnDutyWidget
-              roster={roster}
-              currentEmpId={currentAdminUser?.id}
-              canManageAll={isSuperAdmin}
-              pendingIds={Object.keys(clockOverrides).map(Number)}
-              onToggleClock={handleToggleClock}
             />
           </DashCard>
         </div>

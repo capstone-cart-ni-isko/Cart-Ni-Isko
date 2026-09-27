@@ -14,7 +14,7 @@ export default function OnDutyWidget({ roster = [], currentEmpId, canManageAll =
   }
 
   return (
-    <ul className="h-full overflow-auto -mx-1 px-1 space-y-1.5">
+    <ul className="h-full overflow-auto space-y-1.5 pb-4 [mask-image:linear-gradient(to_bottom,black_calc(100%-20px),transparent)]">
       {roster.map((staff) => {
         const isSelf = Number(currentEmpId) === staff.empId
         const canToggle = isSelf || canManageAll
