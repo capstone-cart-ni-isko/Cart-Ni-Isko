@@ -4,7 +4,7 @@ import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { fetchAdminProducts } from '../../services/adminProducts.js'
-import { fetchProductReviews, moderateReview, deleteReview } from '../../services/reviews.js'
+import { fetchProductReviews, fetchAllReviews, moderateReview, deleteReview } from '../../services/reviews.js'
 
 const REPLY_TEMPLATES = [
   { label: 'Thank you', text: 'Thank you for your feedback! We are glad you enjoyed your purchase.' },
@@ -76,12 +76,12 @@ function getStatusMeta(review) {
   return { dot: 'bg-slate-400', label: 'Rejected' }
 }
 
-/**
- * The reviews service strips the backend's [PENDING]/[APPROVED]/CENSORED
- * markers from ord_review, so status is derived from what survives:
- * empty body → pending, censored marker → rejected, otherwise approved.
- */
-function deriveStatus(comment) {
+function normalizeStatus(status, comment) {
+  if (status) {
+    const s = String(status).toLowerCase()
+    if (s === 'censored') return 'rejected'
+    if (s === 'pending' || s === 'approved' || s === 'rejected') return s
+  }
   if (!comment) return 'pending'
   if (comment === '[REVIEW CENSORED]') return 'rejected'
   return 'approved'
@@ -103,8 +103,7 @@ export default function AdminReviews() {
   const [reloadKey, setReloadKey] = useState(0)
   const [isModerating, setIsModerating] = useState(false)
 
-  // Show the whole queue by default — pending rows may not be visible yet
-  // through the service (see contract notes), so 'pending' would look empty.
+  // Show the whole queue by default
   const [statusFilter, setStatusFilter] = useState('all')
   const [ratingFilter, setRatingFilter] = useState('all')
   const [mediaFilter, setMediaFilter] = useState('all')
@@ -122,21 +121,30 @@ export default function AdminReviews() {
   const [escalateNote, setEscalateNote] = useState('')
 
   const mapItem = useCallback((item, product) => {
-    const ordId = Number(String(item.id || '').split('-')[1]) || 0
+    const ordId = item.ordId || Number(String(item.id || '').split('-')[1]) || 0
     const comment = item.comment || ''
+    const reviewer = item.author || 'Verified Student'
+    const initials = reviewer
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((s) => s[0])
+      .join('')
+      .toUpperCase() || 'VS'
+
     return {
-      id: item.id,
+      id: item.id || `ord-${ordId}`,
       ordId,
-      productName: product?.name || 'Unnamed Product',
+      productName: item.productName || product?.name || 'Unnamed Product',
       rating: Number(item.rating) || 0,
       comment,
       title: '',
-      status: deriveStatus(comment),
+      status: normalizeStatus(item.status, comment),
       timeAgo: item.date || 'Recently',
       postedAt: item.date || '',
       orderId: ordId ? `ORD-${ordId}` : '',
-      reviewer: item.author || 'Verified Student',
-      reviewerInitials: 'VS',
+      reviewer,
+      reviewerInitials: initials,
       verifiedPurchase: item.verified !== false,
       photos: [],
       deliveryStatus: null,
@@ -149,18 +157,34 @@ export default function AdminReviews() {
     setIsLoading(true)
     setLoadError('')
     try {
+      // 1. First attempt: fetch the unified moderation queue directly
+      const allRes = await fetchAllReviews('all')
+      if (allRes?.success && Array.isArray(allRes.items)) {
+        // Dedupe by ordId in case of multiple items per order
+        const seen = new Set()
+        const merged = []
+        allRes.items.forEach((item) => {
+          const key = item.ordId || item.id
+          if (seen.has(key)) return
+          seen.add(key)
+          merged.push(mapItem(item))
+        })
+        setReviews(merged)
+        return
+      }
+
+      // 2. Fallback: query per-product with status='all'
       const products = await fetchAdminProducts()
       const perProduct = await Promise.all(
         products.map(async (product) => {
           const prodId = String(product.id || '').replace('prod-', '')
-          const res = await fetchProductReviews(prodId)
+          const res = await fetchProductReviews(prodId, 'all')
           if (!res?.success) {
             return { items: [], error: res?.error || 'Unable to load reviews.' }
           }
           return { items: (res.items || []).map((item) => mapItem(item, product)), error: null }
         })
       )
-      // One order row can appear under several products it contains — dedupe by order.
       const seen = new Set()
       const merged = []
       let firstError = null
@@ -174,7 +198,6 @@ export default function AdminReviews() {
         })
       })
       setReviews(merged)
-      // Partial failures still show data, with the reason surfaced inline.
       setLoadError(firstError && merged.length === 0 ? firstError : '')
       if (firstError && merged.length > 0) {
         showToast(`Some reviews could not be loaded: ${firstError}`, 'info')

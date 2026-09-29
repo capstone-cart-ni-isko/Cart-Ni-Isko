@@ -111,6 +111,7 @@ function mapAppointment(row, order) {
     status,
     isToday: Boolean(iso) && iso === todayISO(),
     dateISO: iso,
+    rawStamp: stamp,       // full "YYYY-MM-DD HH:MM" for SlotPicker's currentSlot
     date,
     dayOfWeek,
     time: timeRange(row.appoint_start ?? row.slot_start ?? stamp, type),

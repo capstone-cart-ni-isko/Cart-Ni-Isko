@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useToast } from '../../hooks/useToast.js'
 import {
   APPOINT_TYPE,
   createAppointment,
-  fetchSlots,
   SLOT_RULES,
   updateAppointment,
 } from '../../services/appointments.js'
+import SlotPicker, { slotTimeLabel } from '../ui/SlotPicker.jsx'
 
 /**
  * SRS slot geometry (REQ-AB-01 / REQ-AB-02), mirrored from SLOT_RULES for the
@@ -16,34 +16,24 @@ import {
  */
 const TYPE_LABEL = { VISIT: 'Store Visit', CLAIM: 'Order Claiming' }
 
-function formatClock(value) {
-  const match = String(value || '').match(/(\d{1,2}):(\d{2})/)
-  if (!match) return String(value || '')
-  const hour = Number(match[1])
-  return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? 'PM' : 'AM'}`
-}
-
-function slotStart(slot) {
-  return slot.slot_start ?? slot.start_time ?? slot.start ?? slot.time ?? slot.slot_time ?? ''
-}
-
-/** A slot is bookable unless the backend (or the capacity rule) says otherwise. */
-function slotOpen(slot) {
-  if (slot.available === false || slot.is_available === false) return false
-  if (slot.open === false || slot.full === true) return false
-  const booked = Number(slot.booked ?? slot.taken ?? slot.reserved ?? slot.used ?? 0)
-  const capacity = Number(slot.capacity ?? slot.limit ?? 0)
-  return !(capacity > 0 && booked >= capacity)
-}
-
-function slotReason(slot) {
-  return slot.reason || slot.disabled_reason || 'Fully booked'
-}
-
 function todayISO() {
   const now = new Date()
   const pad = (n) => String(n).padStart(2, '0')
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/** Format a full datetime stamp or bare HH:MM for the confirm button label. */
+function slotWhen(slot) {
+  // Try SlotPicker's ISO-with-space format: "2026-09-29 10:30"
+  if (/^\d{4}-\d{2}-\d{2} /.test(slot)) {
+    return slotTimeLabel(slot)
+  }
+  // Bare HH:MM fallback
+  const [h, m] = String(slot).split(':').map(Number)
+  if (isNaN(h)) return slot
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${String(m || 0).padStart(2, '0')} ${suffix}`
 }
 
 /**
@@ -59,7 +49,8 @@ function todayISO() {
  * never silently turn an order claim into a 10-minute visit.
  *
  * Props:
- *   type      - 'VISIT' (Appointments page) | 'CLAIM' (Checkout pickup) *   custId    - owning customer (required)
+ *   type      - 'VISIT' (Appointments page) | 'CLAIM' (Checkout pickup)
+ *   custId    - owning customer (required)
  *   reschedule- existing appointment to edit instead of create
  *   title     - heading override
  *   required  - checkout mode: the form is the slot gate
@@ -76,44 +67,27 @@ export default function AppointmentForm({
   onCancel,
 }) {
   const { showToast } = useToast()
-  const [date, setDate] = useState(reschedule?.dateISO || '')
-  const [details, setDetails] = useState(reschedule?.desc || '')
-  const [slots, setSlots] = useState([])
-  const [slot, setSlot] = useState('')
-  const [slotsError, setSlotsError] = useState('')
-  const [booking, setBooking] = useState(false)
 
   const appointType = reschedule?.type || type
   const rules = SLOT_RULES[appointType] || SLOT_RULES.VISIT
 
-  /** GET /appoint/slots for the picked day. */
-  const loadSlots = useCallback(async () => {
-    if (!date) {
-      setSlots([])
-      return
-    }
-    try {
-      const rows = await fetchSlots(date)
-      setSlots(Array.isArray(rows) ? rows : [])
-      setSlotsError('')
-    } catch (err) {
-      setSlots([])
-      setSlotsError(err?.message || 'Unable to load time slots right now.')
-    }
-  }, [date])
+  // Seed date/slot from the existing booking when rescheduling
+  const [date, setDate] = useState(() => {
+    if (!reschedule?.dateISO) return ''
+    return reschedule.dateISO
+  })
+  const [slot, setSlot] = useState('')
+  const [details, setDetails] = useState(reschedule?.desc || '')
+  const [booking, setBooking] = useState(false)
 
-  // Picking a day resets the selection; while the grid is open it re-polls so a
-  // slot flips to "unavailable" the moment it fills up (REQ-SC-04).
-  useEffect(() => {
+  // Reset slot when date changes
+  const handleDateChange = (e) => {
+    setDate(e.target.value)
     setSlot('')
-    loadSlots()
-    if (!date) return undefined
-    const timer = setInterval(loadSlots, 5000)
-    return () => clearInterval(timer)
-  }, [date, loadSlots])
+  }
 
   // Slots arrive as "YYYY-MM-DD HH:MM"; a bare "HH:MM" gets the picked date.
-  const slotStamp = /^\d{4}-\d{2}-\d{2} /.test(slot) ? slot : `${date} ${slot}`
+  const slotStamp = /^\d{4}-\d{2}-\d{2} /.test(slot) ? slot : date && slot ? `${date} ${slot}` : ''
 
   const handleBook = async () => {
     if (booking) return
@@ -150,7 +124,6 @@ export default function AppointmentForm({
       }
       showToast(reschedule ? 'Appointment updated successfully.' : 'Appointment created successfully.', 'success')
       setSlot('')
-      await loadSlots()
       onSuccess?.(saved)
     } catch (err) {
       showToast(
@@ -166,7 +139,8 @@ export default function AppointmentForm({
   }
 
   return (
-    <div className="bg-white rounded-xl p-4 border border-slate-200 space-y-3">
+    <div className="bg-white rounded-xl p-4 border border-slate-200 space-y-4">
+      {/* ── Header ── */}
       <div>
         <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
           {title || (reschedule ? `Reschedule ${TYPE_LABEL[appointType]}` : `Book a ${TYPE_LABEL[appointType]}`)}
@@ -186,67 +160,40 @@ export default function AppointmentForm({
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-xs text-slate-500">
-        <span>Date</span>
-        <input
-          type="date"
-          value={date}
-          min={todayISO()}
-          onChange={(e) => setDate(e.target.value)}
-          className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-gray-700 focus:border-brand-orange"
-        />
-      </label>
-
-      {slotsError && (
-        <p className="text-xs text-red-500 bg-red-50 rounded-lg p-2">{slotsError}</p>
-      )}
-      {!date && (
-        <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2.5">
-          Pick a date to see the available time slots.
-        </p>
-      )}
-      {date && !slotsError && slots.length === 0 && (
-        <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2.5">
-          No slots are open for this date yet. Try another date.
-        </p>
-      )}
-
-      {slots.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {slots.map((s, index) => {
-            const time = slotStart(s)
-            const mine = s.mine === true
-            const open = !mine && (!s.type || s.type === appointType) && slotOpen(s)
-            const active = open && slot === time
-            return (
-              <button
-                key={time || `slot-${index}`}
-                type="button"
-                disabled={!open}
-                title={mine ? 'Your booking' : open ? formatClock(time) : slotReason(s)}
-                onClick={() => open && setSlot(time)}
-                className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                  active
-                    ? 'bg-brand-orange text-white border-brand-orange'
-                    : mine
-                    ? 'bg-orange-50 text-brand-orange border-orange-200 cursor-not-allowed'
-                    : open
-                    ? 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange cursor-pointer'
-                    : 'bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed line-through'
-                }`}
-              >
-                {formatClock(time) || `Slot ${index + 1}`}
-                {mine ? (
-                  <span className="block text-[10px] font-normal no-underline">Your booking</span>
-                ) : !open ? (
-                  <span className="block text-[10px] font-normal no-underline">{slotReason(s)}</span>
-                ) : null}
-              </button>
-            )
-          })}
+      {/* ── Pickup Schedule header + date picker (mirrors Checkout layout) ── */}
+      <div className="space-y-3 text-sm">
+        <div className="flex items-center justify-between">
+          <p className="font-bold text-gray-900">Pick a Schedule</p>
+          <label className="flex items-center gap-2 text-xs text-gray-500">
+            <span>Date</span>
+            <input
+              type="date"
+              value={date}
+              min={todayISO()}
+              onChange={handleDateChange}
+              className="px-2 py-1.5 rounded-md border border-slate-200 text-xs text-gray-700 focus:border-brand-orange focus:ring-brand-orange/30"
+            />
+          </label>
         </div>
-      )}
 
+        {/* SlotPicker — same component used in Checkout Store Pickup */}
+        <SlotPicker
+          date={date}
+          type={appointType}
+          value={slot}
+          onChange={setSlot}
+          currentSlot={reschedule?.rawStamp || ''}
+        />
+
+        {/* Confirm chip: show once a slot is selected */}
+        {slot && (
+          <p className="text-xs font-semibold text-brand-orange bg-orange-50 rounded-lg p-2.5">
+            {reschedule ? 'New' : 'Selected'} time: {slotWhen(slot)}
+          </p>
+        )}
+      </div>
+
+      {/* ── Appointment details textarea ── */}
       <label className="block">
         <span className="text-xs font-semibold text-slate-600">Appointment details</span>
         <textarea
@@ -263,6 +210,7 @@ export default function AppointmentForm({
         />
       </label>
 
+      {/* ── Book / Reschedule CTA ── */}
       <button
         type="button"
         disabled={booking || !slot}
@@ -272,7 +220,7 @@ export default function AppointmentForm({
         {booking
           ? 'Saving…'
           : slot
-          ? `${reschedule ? 'Reschedule' : 'Book'} • ${slotStamp}`
+          ? `${reschedule ? 'Reschedule' : 'Book'} • ${slotWhen(slot)}`
           : 'Select a time slot to book'}
       </button>
 

@@ -47,7 +47,7 @@
         // The customer account behind the bearer token, or a 403 response
         protected function requireCustomer(Request $json)
         {
-            $user = $json->user();
+            $user = $json->user('sanctum') ?? $json->user();
             if (!$user instanceof Customer) {
                 return response()->json([
                     'success' => false,
@@ -279,6 +279,8 @@
 
                 $query = DB::table('orders')
                     ->join('items', 'orders.ord_id', '=', 'items.ord_id')
+                    ->leftJoin('customer', 'orders.cust_id', '=', 'customer.cust_id')
+                    ->leftJoin('product', 'items.prod_id', '=', 'product.prod_id')
                     ->where('orders.ord_rating', '>', 0)
                     ->whereNotNull('orders.ord_review');
 
@@ -286,33 +288,54 @@
                     $query->where('items.prod_id', $prodId);
                 }
 
+                // Include the product name so the admin panel can display it
+                // without a separate catalog lookup for every review row.
                 $rows = $query->select(
                     'orders.ord_id',
                     'orders.cust_id',
                     'orders.ord_rating',
                     'orders.ord_review',
                     'orders.ord_completed',
-                    'items.prod_id'
+                    'orders.ord_created',
+                    'items.prod_id',
+                    DB::raw("COALESCE(product.prod_name, 'Product') as prod_name"),
+                    DB::raw("COALESCE(customer.cust_nickname, 'Student') as cust_name")
                 )->distinct()->get();
 
                 // Staff may ask for the moderation queue; guests only ever
-                // see reviews an employee already approved (REQ-APC-1)
+                // see reviews an employee already approved (REQ-APC-1).
+                // status=all returns every moderation state (employee only).
                 $statusFilter = strtolower((string) $json->input('status', ''));
-                $wantsQueue = in_array($statusFilter, ['pending', 'approved'], true)
-                    && $this->isEmployee($json->user());
+                $user = $json->user('sanctum') ?? $json->user();
+                $isStaff = $this->isEmployee($user);
+                $wantsAll = ($statusFilter === 'all' || ($statusFilter === '' && $json->boolean('admin'))) && $isStaff;
+                $wantsQueue = in_array($statusFilter, ['pending', 'approved', 'censored'], true) && $isStaff;
 
-                $reviews = $rows->map(function ($row) use ($wantsQueue, $statusFilter) {
+                $callerCustId = $user instanceof Customer ? (int) $user->getKey() : null;
+                $wantsOwn = $statusFilter === 'own';
+
+                $reviews = $rows->map(function ($row) use ($wantsAll, $wantsQueue, $statusFilter, $wantsOwn, $callerCustId) {
                     $split = $this->splitReview($row->ord_review);
+                    $isOwn = $callerCustId && ((int) $row->cust_id === $callerCustId);
 
-                    if (!$wantsQueue && $split['status'] !== 'APPROVED') {
-                        return null;
-                    }
-                    if ($wantsQueue && strtolower($split['status']) !== $statusFilter) {
-                        return null;
+                    if ($wantsAll) {
+                        // Employee: return everything
+                    } elseif ($wantsQueue) {
+                        if (strtolower($split['status']) !== $statusFilter) return null;
+                    } elseif ($wantsOwn) {
+                        if (!$isOwn) {
+                            if ($split['status'] !== 'APPROVED') return null;
+                        }
+                    } else {
+                        // Default: approved reviews, plus customer's own review if logged in
+                        if ($split['status'] !== 'APPROVED' && !$isOwn) {
+                            return null;
+                        }
                     }
 
                     $row->ord_review = $split['body'];
                     $row->status = $split['status'];
+                    $row->is_own = $isOwn;
 
                     return $row;
                 })->filter()->values();

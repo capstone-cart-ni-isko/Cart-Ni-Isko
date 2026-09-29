@@ -474,12 +474,21 @@ function Orders() {
                     )}
 
                     {['CLAIMED', 'COMPLETED'].includes(order.status) && order.productId != null && (
-                      <Link
-                        to={`/product/${order.productId}`}
-                        className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
-                      >
-                        Buy Again
-                      </Link>
+                      <>
+                        <Link
+                          to={`/product/${order.productId}#product-reviews`}
+                          className="px-3.5 py-2 rounded-xl border border-orange-200 bg-orange-50 text-brand-orange text-xs font-bold hover:bg-orange-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span className="text-amber-500">★</span>
+                          <span>Write Review</span>
+                        </Link>
+                        <Link
+                          to={`/product/${order.productId}`}
+                          className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+                        >
+                          Buy Again
+                        </Link>
+                      </>
                     )}
 
                     {/* Primary Action */}

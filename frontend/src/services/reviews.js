@@ -22,16 +22,57 @@ export async function fetchProductReviews(prodId, status = null) {
         id: `ord-${row.ord_id}-${index}`,
         ordId: row.ord_id,
         prodId: row.prod_id,
+        productName: row.prod_name || 'Product',
         custId: row.cust_id,
-        status: row.status || 'APPROVED',
-        author: 'Verified Student',
+        status: (row.status || 'APPROVED').toLowerCase(),
+        author: row.cust_name || 'Verified Student',
         rating: Number(row.ord_rating) || 0,
         date: row.ord_completed
           ? new Date(row.ord_completed).toLocaleDateString()
-          : 'Recently',
+          : row.ord_created
+            ? new Date(row.ord_created).toLocaleDateString()
+            : 'Recently',
         variant: 'Verified Purchase',
         comment: row.ord_review || '',
         verified: true,
+        isOwn: Boolean(row.is_own),
+      })),
+    }
+  } catch (e) {
+    return { success: false, items: [], error: e?.message }
+  }
+}
+
+/**
+ * Moderation queue: retrieves all reviews across products for employees.
+ * `status` can be 'all', 'pending', 'approved', or 'censored'.
+ */
+export async function fetchAllReviews(status = 'all') {
+  try {
+    const params = { admin: 1 }
+    if (status) params.status = status
+    const data = await apiGet('/reviews/display', params)
+    const rows = Array.isArray(data.data) ? data.data : []
+    return {
+      success: true,
+      items: rows.map((row, index) => ({
+        id: `ord-${row.ord_id}-${index}`,
+        ordId: row.ord_id,
+        prodId: row.prod_id,
+        productName: row.prod_name || 'Product',
+        custId: row.cust_id,
+        status: (row.status || 'APPROVED').toLowerCase(),
+        author: row.cust_name || 'Verified Student',
+        rating: Number(row.ord_rating) || 0,
+        date: row.ord_completed
+          ? new Date(row.ord_completed).toLocaleDateString()
+          : row.ord_created
+            ? new Date(row.ord_created).toLocaleDateString()
+            : 'Recently',
+        variant: 'Verified Purchase',
+        comment: row.ord_review || '',
+        verified: true,
+        isOwn: Boolean(row.is_own),
       })),
     }
   } catch (e) {
