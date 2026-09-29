@@ -24,6 +24,7 @@ import { fetchOrder,
   dispatchModeOf,
 } from '../services/orders.js'
 import { getTrack, scanQr } from '../services/tracking.js'
+import { parseDate } from '../services/dashboard.js'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 
@@ -445,7 +446,7 @@ function OrderDetail() {
                         </p>
                         {step.time && (
                           <p className="text-gray-500 text-[11px]">
-                            {new Date(step.time).toLocaleString()}
+                            {parseDate(step.time)?.toLocaleString() ?? String(step.time)}
                           </p>
                         )}
                         {step.note && <p className="text-gray-500">{step.note}</p>}

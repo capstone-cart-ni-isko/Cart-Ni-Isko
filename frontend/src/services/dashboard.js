@@ -45,16 +45,26 @@ export function titleCaseStatus(raw) {
 }
 
 /**
- * Backend timestamps arrive as `YYYY-MM-DD HH:MM:SS`; parsing that string
- * directly is implementation-defined, so normalise to a local ISO datetime.
+ * Backend timestamps arrive as `YYYY-MM-DD HH:MM:SS` (store-local wall time,
+ * Asia/Manila) or, from timestamptz columns, with a Postgres offset such as
+ * `+08`. Parsing either directly is implementation-defined, so normalise to
+ * ISO: zone-less values stay local, offsets become `+HH:MM`.
  */
 export function parseDate(value) {
   if (!value) return null
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
   const text = String(value).trim()
-  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(text)
-    ? text.replace(' ', 'T')
-    : text
+  const match = text.match(
+    /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)\s*(Z|[+-]\d{2}(?::?\d{2})?)?$/
+  )
+  let iso = text
+  if (match) {
+    const [, day, time, zone] = match
+    let offset = zone || ''
+    if (/^[+-]\d{2}$/.test(offset)) offset += ':00'
+    else if (/^[+-]\d{4}$/.test(offset)) offset = `${offset.slice(0, 3)}:${offset.slice(3)}`
+    iso = `${day}T${time}${offset}`
+  }
   const date = new Date(iso)
   return Number.isNaN(date.getTime()) ? null : date
 }

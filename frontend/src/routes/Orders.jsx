@@ -13,6 +13,7 @@ import { getImageUrl } from '../utils/imageUtils.js'
 import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon } from '../components/ui/Icons.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { fetchOrders, requestCancel, requestReturn, dispatchModeOf } from '../services/orders.js'
+import { parseDate } from '../services/dashboard.js'
 
 const tabs = [
   { key: 'all', label: 'All' },
@@ -41,9 +42,15 @@ const HISTORY = ['CLAIMED', 'UNCLAIMED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'C
 
 function formatDate(value) {
   if (!value) return '—'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return String(value)
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  const d = parseDate(value)
+  if (!d) return String(value)
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }
 
 function dispatchOf(row) {

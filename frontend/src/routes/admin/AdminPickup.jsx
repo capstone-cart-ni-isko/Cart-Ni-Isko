@@ -18,6 +18,7 @@ import {
 } from '../../services/appointments.js'
 import { fetchAccounts } from '../../services/accounts.js'
 import { getTrack, scanQr } from '../../services/tracking.js'
+import LiveDate from '../../components/ui/LiveDate.jsx'
 import {
   mapOrderRows,
   parseDate,
@@ -36,11 +37,6 @@ const todayISO = () => {
   const d = new Date()
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
-const TODAY_LABEL = new Date().toLocaleDateString('en-US', {
-  month: 'long',
-  day: 'numeric',
-  year: 'numeric',
-})
 
 /** '2026-05-22 09:12:00' -> '9:12 AM' */
 function timeOfDay(value) {
@@ -122,7 +118,7 @@ function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
             <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          <span className="text-xs font-semibold text-slate-700">{TODAY_LABEL}</span>
+          <span className="text-xs font-semibold text-slate-700"><LiveDate /></span>
           <span className="ml-auto text-[10px] text-slate-400">Showing available slots</span>
         </div>
 
@@ -380,7 +376,7 @@ function OverviewTab({ kpis, scheduleRows, slots, onSchedule, onViewUnscheduled,
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:flex-1 lg:min-h-0">
-        <Panel title="Today's pickup schedule" meta={TODAY_LABEL} className="lg:col-span-8 min-h-[20rem] lg:min-h-0">
+        <Panel title="Today's pickup schedule" meta={<LiveDate withTime />} className="lg:col-span-8 min-h-[20rem] lg:min-h-0">
           <ScrollTable
             head={
               <>

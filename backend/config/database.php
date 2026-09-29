@@ -101,6 +101,11 @@ return [
             // Tokyo pooler. The Supabase role already defaults to
             // "$user", public, extensions, so unqualified names resolve to the
             // exact same `public` schema as before.
+            // Session time zone for timestamptz columns; must match
+            // app.timezone. Left unset by default because it costs a
+            // `set time zone` round trip per request - prefer running
+            // `alter database postgres set timezone to 'Asia/Manila'` once.
+            'timezone' => env('DB_TIMEZONE'),
             'sslmode' => env('DB_SSLMODE', 'require'), // Supabase requires 'require'
             // Supabase sits behind a TLS endpoint, so a fresh TCP+TLS handshake
             // costs ~0.8 s on the Tokyo link. A persistent handle keeps that out
