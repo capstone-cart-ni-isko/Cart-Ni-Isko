@@ -745,6 +745,8 @@ class InputValidatorAPI extends Controller
             'gateway' => 'required|in:paymongo',
             'dispatch_type' => 'nullable|in:pickup,delivery',
             'speed' => 'nullable|in:priority,standard,saver',
+            'deliver_address' => 'nullable|string|max:500',
+            'appoint_id' => 'nullable|integer',
         ], [
             'ord_id.required' => 'Order ID is required.',
             'gateway.required' => 'Payment gateway is required.',

@@ -62,7 +62,9 @@ function RequireAuth() {
   const { currentUser } = useAuth()
   const navigate = useNavigate()
   if (!currentUser) {
-    return <LoginPromptModal isOpen onClose={() => navigate(-1)} />
+    // Not navigate(-1): after an external redirect (e.g. PayMongo) the previous
+    // history entry is another site, so closing the prompt must stay in-app.
+    return <LoginPromptModal isOpen onClose={() => navigate('/home', { replace: true })} />
   }
   return <Outlet />
 }

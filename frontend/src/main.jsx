@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { prefetch } from './services/api.js'
+import { restoreRedirectSession } from './services/session.js'
 import { ApiErrorBoundary } from './components/ui/ApiErrorBoundary.jsx'
 import './index.css'
 import App from './App.jsx'
@@ -10,6 +11,12 @@ import App from './App.jsx'
 // Apply the stored light/dark preference before the first paint.
 if (localStorage.getItem('isko_theme') === 'dark') {
   document.documentElement.classList.add('dark')
+}
+
+// Returning from PayMongo's hosted checkout: bring back the session parked
+// just before the redirect (see services/session.js), before AuthProvider reads it.
+if (new URLSearchParams(window.location.search).has('paymongo')) {
+  restoreRedirectSession()
 }
 
 // Warm the API socket and cache public catalog data immediately on boot.

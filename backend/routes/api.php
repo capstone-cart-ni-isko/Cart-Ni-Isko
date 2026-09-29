@@ -40,6 +40,9 @@ Route::get('/products/view', [ProductsAPI::class, 'viewProductDetails']);
 Route::get('/reviews/display', [ReviewsAPI::class, 'displayReviews']);
 Route::get('/reviews/score', [ReviewsAPI::class, 'scoreRating']);
 
+// Public PayMongo webhook (authenticated by its Paymongo-Signature header)
+Route::post('/checkout/payment/webhook', [CheckoutAPI::class, 'paymentWebhook']);
+
 // Everything else requires a Sanctum bearer token
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthAPI::class, 'logout']);
@@ -58,7 +61,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/checkout/dispatch', [CheckoutAPI::class, 'determineDispatchDetails']);
     Route::post('/checkout/payment', [CheckoutAPI::class, 'integratePayment']);
     Route::post('/checkout/payment/intent', [CheckoutAPI::class, 'createPaymentIntent']);
-    Route::post('/checkout/payment/webhook', [CheckoutAPI::class, 'paymentWebhook']);
 
     // Reports API Routes
     Route::middleware('role:staff')->group(function () {

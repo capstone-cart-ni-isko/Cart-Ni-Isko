@@ -215,176 +215,12 @@
                 // REQ-OC-02: the whole checkout runs in a single transaction,
                 // so any failure below rolls the cart back to its original
                 // pre-checkout state
-                $result = DB::transaction(function () use ($json, $order, $dispatchType, $speed, $payGiven, $payChange, $payRef, $totalDue) {
-                    $order = Order::with(['items.product', 'customer'])
-                        ->where('ord_id', $order->ord_id)
-                        ->lockForUpdate()
-                        ->first();
-                    if (! $order) {
-                        throw new \RuntimeException('Order not found.');
-                    }
-                    if ($order->ord_status !== 'TO PROCESS' || ! str_starts_with((string) $order->ord_tag, 'CART-')) {
-                        $pickup = Pickup::where('ord_id', $order->ord_id)->first();
-                        $parcel = Parcel::where('ord_id', $order->ord_id)->first();
-                        $paymentId = $pickup?->pay_id ?? $parcel?->pay_id;
-                        if (! $paymentId) {
-                            throw new \RuntimeException('Order checkout is no longer available.');
-                        }
-                        return [
-                            'already_completed' => true,
-                            'payment' => Payment::find($paymentId),
-                            'dispatch' => ['modality' => $pickup ? 'PICKUP' : 'DELIVERY'],
-                            'order' => $order,
-                        ];
-                    }
-
-                    $checkoutSubtotal = 0.0;
-                    foreach ($order->items as $item) {
-                        $product = Product::where('prod_id', $item->prod_id)->lockForUpdate()->first();
-                        if (! $product || $product->prod_disabled || $product->prod_deleted) {
-                            throw new InsufficientStockException('A product in the cart is no longer available.');
-                        }
-                        $lineTotal = round((float) $product->prod_price * (int) $item->item_qty, 2);
-                        $checkoutSubtotal += $lineTotal;
-                        $item->update(['item_amount' => $lineTotal]);
-                    }
-                    $checkoutFeeMap = ['priority' => 100.0, 'standard' => 50.0, 'saver' => 30.0];
-                    $checkoutFee = $dispatchType === 'pickup' ? 0.0 : ($checkoutFeeMap[$speed] ?? 50.0);
-                    $totalDue = round($checkoutSubtotal + $checkoutFee, 2);
-                    if ($payGiven < $totalDue) {
-                        throw new \RuntimeException('Payment amount is below the server-calculated total.');
-                    }
-                    $payChange = round($payGiven - $totalDue, 2);
-
-                    // 1. Create Payment Record
-                    $payment = Payment::create([
-                        'pay_created' => now(),
-                        'pay_ref'     => $payRef,
-                        'pay_given'   => $payGiven,
-                        'pay_due'     => $totalDue,
-                        'pay_change'  => $payChange,
-                    ]);
-
-                    $dispatchResult = [];
-
-                    // 2. Process Dispatch Modality (drives the status change)
-                    if ($dispatchType === 'pickup') {
-                        $appointId = $json->input('appoint_id');
-                        $pickup = Pickup::create([
-                            'ord_id'           => $order->ord_id,
-                            'appoint_id'       => $appointId,
-                            'pay_id'           => $payment->pay_id,
-                            'pickup_created'   => now(),
-                            'pickup_completed' => null,
-                        ]);
-
-                        $order->ord_status = 'TO CLAIM';
-
-                        $dispatchResult = [
-                            'modality'   => 'PICKUP',
-                            'pickup_id'  => $pickup->pickup_id,
-                            'appoint_id' => $appointId,
-                        ];
-                    } else {
-                        $deliverAddress = $json->input('deliver_address');
-                        if (!$deliverAddress && $order->customer) {
-                            $c = $order->customer;
-                            $deliverAddress = trim(($c->cust_brgy ?? '') . ', ' . ($c->cust_city ?? '') . ', ' . ($c->cust_province ?? ''), ', ');
-                        }
-                        if (empty($deliverAddress)) {
-                            throw new \RuntimeException('A delivery address is required.');
-                        }
-
-                        $estDate = ($speed === 'priority')
-                            ? now()->addHours(24)
-                            : (($speed === 'saver') ? now()->addDays(5) : now()->addDays(2));
-
-                        $delivery = Delivery::create([
-                            'deliver_created' => now(),
-                            'deliver_deleted' => null,
-                            'delivery_ref'    => 'DEL-' . strtoupper(Str::random(8)),
-                            'deliver_date'    => $estDate,
-                            'deliver_address' => $deliverAddress,
-                            'deliver_status'  => 'PENDING',
-                            'deliver_qr'      => 'QR-DEL-' . strtoupper(Str::random(10)),
-                        ]);
-
-                        $parcel = Parcel::create([
-                            'ord_id'           => $order->ord_id,
-                            'deliver_id'       => $delivery->deliver_id,
-                            'pay_id'           => $payment->pay_id,
-                            'parcel_created'   => now(),
-                            'parcel_completed' => null,
-                        ]);
-
-                        $order->ord_status = 'TO RECEIVE';
-
-                        $dispatchResult = [
-                            'modality'        => 'DELIVERY',
-                            'delivery_id'     => $delivery->deliver_id,
-                            'parcel_id'       => $parcel->parcel_id,
-                            'delivery_ref'    => $delivery->delivery_ref,
-                            'deliver_address' => $delivery->deliver_address,
-                            'deliver_date'    => $delivery->deliver_date,
-                            'deliver_qr'      => $delivery->deliver_qr,
-                        ];
-                    }
-
-                    // 3. Verify stock before touching inventory, then update
-                    //    stocks & peak sales (REQ-IM-02 / REQ-IM-03)
-                    $lowStockThreshold = (int) $this->settingValue('low_stock_threshold', 5);
-                    $lowStockProducts = [];
-
-                    foreach ($order->items as $item) {
-                        $product = Product::where('prod_id', $item->prod_id)->lockForUpdate()->first();
-                        if (!$product) continue;
-
-                        if ($product->prod_qty < $item->item_qty) {
-                            // Rolls the whole checkout back (REQ-OC-02)
-                            throw new InsufficientStockException('Insufficient stock for ' . $product->prod_name);
-                        }
-
-                        $newQty = $product->prod_qty - $item->item_qty;
-                        $product->update([
-                            'prod_qty'       => $newQty,
-                            'prod_peaksold'  => (float)$product->prod_peaksold + (float)$item->item_amount,
-                            'prod_todaysold' => (float)$product->prod_todaysold + (float)$item->item_amount,
-                        ]);
-
-                        if ($newQty <= $lowStockThreshold) {
-                            $lowStockProducts[] = ['name' => $product->prod_name, 'qty' => $newQty];
-                        }
-                    }
-
-                    // 4. Decrement Customer Cart Counter
-                    $customer = $order->customer;
-                    if ($customer) {
-                        if ($customer->cust_cart > 0) {
-                            $customer->decrement('cust_cart');
-                        }
-                        $customer->increment('cust_orders');
-                    }
-
-                    // 5. Cart orders get their final order tag after checkout
-                    if (str_starts_with(strtoupper((string) $order->ord_tag), 'CART-')) {
-                        $order->ord_tag = 'ORD-' . strtoupper(Str::random(8));
-                    }
-                    $order->save();
-
-                    // 6. Priority low-stock alerts for admins (REQ-IM-03)
-                    foreach ($lowStockProducts as $low) {
-                        $this->notifyEmployeesByType(
-                            ['ADMIN', 'SUPER ADMIN'],
-                            '[PRIORITY] Low stock: "' . $low['name'] . '" is now down to ' . $low['qty'] . ' unit(s).'
-                        );
-                    }
-
-                    return [
-                        'payment' => $payment,
-                        'dispatch' => $dispatchResult,
-                        'order' => $order->fresh(),
-                    ];
-                });
+                $result = $this->finalizeCheckout((int) $order->ord_id, [
+                    'dispatch_type'   => $dispatchType,
+                    'speed'           => $speed,
+                    'appoint_id'      => $json->input('appoint_id'),
+                    'deliver_address' => $json->input('deliver_address'),
+                ], $payGiven, $payRef);
 
                 return response()->json([
                     'success' => true,
@@ -419,12 +255,16 @@
         }
 
         /*
-            Create PayMongo Payment Intent
+            Create PayMongo Checkout Session
             ----------
             JSON REQUEST
 
             ord_id - integer (req)
             gateway - string (req: paymongo)
+            dispatch_type - string (opt: pickup | delivery, default: pickup)
+            speed - string (opt: priority | standard | saver)
+            deliver_address - string (opt)
+            appoint_id - integer (req for pickup)
         */
         public function createPaymentIntent(Request $json)
         {
@@ -462,15 +302,81 @@
                 $totalDue = round($subtotal + $dispatchFee, 2);
 
                 if ($gateway === 'paymongo') {
+                    // Validate the dispatch choice now: once the customer pays,
+                    // the webhook has to be able to finish the order unattended
+                    $appointId = $json->input('appoint_id');
+                    $deliverAddress = $json->input('deliver_address');
+                    if ($dispatchType === 'pickup') {
+                        $appointment = Appointment::where('appoint_id', $appointId)
+                            ->where('cust_id', $customerId)
+                            ->whereNull('appoint_closed')
+                            ->first();
+                        if (! $appointment || $appointment->appoint_type !== 'CLAIM') {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'A valid order-claiming appointment is required.',
+                            ], 422);
+                        }
+                    } else {
+                        if (! $deliverAddress && $order->customer) {
+                            $c = $order->customer;
+                            $deliverAddress = trim(($c->cust_brgy ?? '') . ', ' . ($c->cust_city ?? '') . ', ' . ($c->cust_province ?? ''), ', ');
+                        }
+                        if (empty($deliverAddress)) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'A delivery address is required.',
+                            ], 422);
+                        }
+                    }
+
+                    // PayMongo rejects checkouts below PHP 20.00
+                    if ($totalDue < 20) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Online payments require a total of at least PHP 20.00.',
+                        ], 422);
+                    }
+
+                    // Line items in centavos, priced server-side
+                    $lineItems = $order->items->map(fn ($item) => [
+                        'name'     => $item->product->prod_name,
+                        'amount'   => (int) round((float) $item->product->prod_price * 100),
+                        'currency' => 'PHP',
+                        'quantity' => (int) $item->item_qty,
+                    ])->values()->all();
+                    if ($dispatchFee > 0) {
+                        $lineItems[] = [
+                            'name'     => 'Delivery fee (' . ucfirst($speed) . ')',
+                            'amount'   => (int) round($dispatchFee * 100),
+                            'currency' => 'PHP',
+                            'quantity' => 1,
+                        ];
+                    }
+
+                    $frontend = rtrim((string) config('app.frontend_url'), '/');
                     $paymongo = new PayMongoService();
-                    $result = $paymongo->createPaymentIntent($totalDue, (string) $ordId, "Order {$order->ord_tag}");
+                    $result = $paymongo->createCheckoutSession(
+                        $lineItems,
+                        (string) $ordId,
+                        "{$frontend}/checkout?paymongo=success&ord_id={$ordId}",
+                        "{$frontend}/checkout?paymongo=cancel&ord_id={$ordId}",
+                        "Order {$order->ord_tag}",
+                        [
+                            'ord_id'          => (string) $ordId,
+                            'dispatch_type'   => $dispatchType,
+                            'speed'           => $speed,
+                            'appoint_id'      => $appointId !== null ? (string) $appointId : '',
+                            'deliver_address' => (string) $deliverAddress,
+                        ]
+                    );
+
                     return response()->json([
                         'success' => true,
-                        'message' => 'Payment intent created successfully',
+                        'message' => 'Checkout session created successfully',
                         'data' => [
                             'checkout_url' => $result['checkout_url'],
-                            'payment_intent_id' => $result['payment_intent_id'],
-                            'client_key' => $result['client_key'],
+                            'checkout_session_id' => $result['checkout_session_id'],
                             'total_due' => $totalDue,
                         ],
                     ], 200);
@@ -494,69 +400,244 @@
         /*
             PayMongo Webhook Handler
             ----------
-            Receives payment confirmation webhooks from PayMongo
+            Public endpoint. Receives checkout_session.payment.paid from
+            PayMongo and completes the cart-to-order checkout.
         */
         public function paymentWebhook(Request $json)
         {
-            $signature = $json->header('Paymongo-Signature');
+            // Verify against the raw body; re-encoded JSON would not match
             $payload = $json->getContent();
+            $signature = (string) $json->header('Paymongo-Signature', '');
 
-            if (! $signature) {
-                Log::warning('PayMongo webhook missing signature');
-                return response()->json(['success' => false, 'message' => 'Missing signature'], 403);
+            $paymongo = new PayMongoService();
+            if (! $paymongo->webhookVerify($payload, $signature)) {
+                Log::warning('PayMongo webhook signature verification failed');
+                return response()->json(['success' => false, 'message' => 'Invalid signature'], 400);
+            }
+
+            $event = json_decode($payload, true) ?? [];
+            $eventType = $event['data']['attributes']['type'] ?? '';
+            if ($eventType !== 'checkout_session.payment.paid') {
+                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+            }
+
+            $session = $event['data']['attributes']['data'] ?? [];
+            $attributes = $session['attributes'] ?? [];
+            $metadata = $attributes['metadata'] ?? [];
+            $ordId = (int) ($attributes['reference_number'] ?? ($metadata['ord_id'] ?? 0));
+            $paid = $attributes['payments'][0] ?? [];
+            $payRef = $paid['id'] ?? ($session['id'] ?? 'PM-' . strtoupper(Str::random(16)));
+            $amount = isset($paid['attributes']['amount'])
+                ? (float) $paid['attributes']['amount'] / 100
+                : (float) collect($attributes['line_items'] ?? [])->sum(fn ($i) => ($i['amount'] ?? 0) * ($i['quantity'] ?? 1)) / 100;
+
+            if (! $ordId) {
+                Log::warning('PayMongo webhook: missing order reference', ['session' => $session['id'] ?? null]);
+                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
             }
 
             try {
-                $paymongo = new PayMongoService();
-                if (! $paymongo->webhookVerify($payload, $signature)) {
-                    Log::warning('PayMongo webhook signature verification failed');
-                    return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
+                $result = $this->finalizeCheckout($ordId, $metadata, $amount, $payRef);
+                if (empty($result['already_completed'])) {
+                    $this->generateReceiptAndNotify($result['order']);
                 }
-
-                $event = json_decode($payload, true);
-                $eventType = $event['data']['attributes']['type'] ?? '';
-                $paymentIntent = $event['data']['attributes']['data']['attributes'] ?? [];
-                $metadata = $paymentIntent['metadata'] ?? [];
-                $orderId = $metadata['order_id'] ?? null;
-                $paymentStatus = $paymentIntent['status'] ?? '';
-
-                if (! $orderId || $paymentStatus !== 'succeeded') {
-                    return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
-                }
-
-                $order = Order::where('ord_id', $orderId)->first();
-                if (! $order) {
-                    Log::warning('PayMongo webhook: order not found', ['order_id' => $orderId]);
-                    return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
-                }
-
-                // Update order status to PAID when payment confirmed via webhook
-                // Create Payment record with PayMongo payment_intent_id
-                $paymentIntentId = $paymentIntent['id'] ?? null;
-                $amount = isset($paymentIntent['amount']) ? (float) $paymentIntent['amount'] / 100 : 0;
-
-                $payment = Payment::create([
-                    'pay_created' => now(),
-                    'pay_ref'     => $paymentIntentId ?? 'PM-' . strtoupper(Str::random(16)),
-                    'pay_given'   => $amount,
-                    'pay_due'     => $amount,
-                    'pay_change'  => 0.00,
-                ]);
-
-                $order->update([
-                    'ord_status' => 'PAID',
-                ]);
-
-                // Generate receipt and trigger notification
-                $this->generateReceiptAndNotify($order);
-
                 return response()->json(['success' => true, 'message' => 'Payment confirmed'], 200);
-
             } catch (\Exception $e) {
-                Log::error('PayMongo webhook error', ['error' => $e->getMessage()]);
-                // Return 200 to prevent PayMongo retry loops
+                // The customer has paid but the order could not be finalized
+                // (e.g. stock ran out), so flag it for a manual refund/follow-up
+                Log::error('PayMongo webhook: checkout finalization failed', [
+                    'ord_id' => $ordId,
+                    'pay_ref' => $payRef,
+                    'error' => $e->getMessage(),
+                ]);
+                $this->notifyEmployeesByType(
+                    ['ADMIN', 'SUPER ADMIN'],
+                    '[PRIORITY] PayMongo payment ' . $payRef . ' for order #' . $ordId . ' could not be completed: ' . $e->getMessage()
+                );
+                // 200 so PayMongo does not retry a failure that needs a human
                 return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
             }
+        }
+
+        /*
+            Shared cart-to-order transition used by the manual payment flow
+            and the PayMongo webhook. Must run with the payment already received.
+        */
+        private function finalizeCheckout(int $ordId, array $dispatch, float $payGiven, string $payRef): array
+        {
+            $dispatchType = strtolower((string) ($dispatch['dispatch_type'] ?? 'pickup'));
+            $speed = strtolower((string) ($dispatch['speed'] ?? 'standard'));
+
+            return DB::transaction(function () use ($ordId, $dispatch, $dispatchType, $speed, $payGiven, $payRef) {
+                $order = Order::with(['items.product', 'customer'])
+                    ->where('ord_id', $ordId)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $order) {
+                    throw new \RuntimeException('Order not found.');
+                }
+                if ($order->ord_status !== 'TO PROCESS' || ! str_starts_with((string) $order->ord_tag, 'CART-')) {
+                    $pickup = Pickup::where('ord_id', $order->ord_id)->first();
+                    $parcel = Parcel::where('ord_id', $order->ord_id)->first();
+                    $paymentId = $pickup?->pay_id ?? $parcel?->pay_id;
+                    if (! $paymentId) {
+                        throw new \RuntimeException('Order checkout is no longer available.');
+                    }
+                    return [
+                        'already_completed' => true,
+                        'payment' => Payment::find($paymentId),
+                        'dispatch' => ['modality' => $pickup ? 'PICKUP' : 'DELIVERY'],
+                        'order' => $order,
+                    ];
+                }
+
+                $checkoutSubtotal = 0.0;
+                foreach ($order->items as $item) {
+                    $product = Product::where('prod_id', $item->prod_id)->lockForUpdate()->first();
+                    if (! $product || $product->prod_disabled || $product->prod_deleted) {
+                        throw new InsufficientStockException('A product in the cart is no longer available.');
+                    }
+                    $lineTotal = round((float) $product->prod_price * (int) $item->item_qty, 2);
+                    $checkoutSubtotal += $lineTotal;
+                    $item->update(['item_amount' => $lineTotal]);
+                }
+                $checkoutFeeMap = ['priority' => 100.0, 'standard' => 50.0, 'saver' => 30.0];
+                $checkoutFee = $dispatchType === 'pickup' ? 0.0 : ($checkoutFeeMap[$speed] ?? 50.0);
+                $totalDue = round($checkoutSubtotal + $checkoutFee, 2);
+                if ($payGiven < $totalDue) {
+                    throw new \RuntimeException('Payment amount is below the server-calculated total.');
+                }
+                $payChange = round($payGiven - $totalDue, 2);
+
+                // 1. Create Payment Record
+                $payment = Payment::create([
+                    'pay_created' => now(),
+                    'pay_ref'     => $payRef,
+                    'pay_given'   => $payGiven,
+                    'pay_due'     => $totalDue,
+                    'pay_change'  => $payChange,
+                ]);
+
+                $dispatchResult = [];
+
+                // 2. Process Dispatch Modality (drives the status change)
+                if ($dispatchType === 'pickup') {
+                    $appointId = ($dispatch['appoint_id'] ?? null);
+                    $pickup = Pickup::create([
+                        'ord_id'           => $order->ord_id,
+                        'appoint_id'       => $appointId,
+                        'pay_id'           => $payment->pay_id,
+                        'pickup_created'   => now(),
+                        'pickup_completed' => null,
+                    ]);
+
+                    $order->ord_status = 'TO CLAIM';
+
+                    $dispatchResult = [
+                        'modality'   => 'PICKUP',
+                        'pickup_id'  => $pickup->pickup_id,
+                        'appoint_id' => $appointId,
+                    ];
+                } else {
+                    $deliverAddress = ($dispatch['deliver_address'] ?? null);
+                    if (!$deliverAddress && $order->customer) {
+                        $c = $order->customer;
+                        $deliverAddress = trim(($c->cust_brgy ?? '') . ', ' . ($c->cust_city ?? '') . ', ' . ($c->cust_province ?? ''), ', ');
+                    }
+                    if (empty($deliverAddress)) {
+                        throw new \RuntimeException('A delivery address is required.');
+                    }
+
+                    $estDate = ($speed === 'priority')
+                        ? now()->addHours(24)
+                        : (($speed === 'saver') ? now()->addDays(5) : now()->addDays(2));
+
+                    $delivery = Delivery::create([
+                        'deliver_created' => now(),
+                        'deliver_deleted' => null,
+                        'delivery_ref'    => 'DEL-' . strtoupper(Str::random(8)),
+                        'deliver_date'    => $estDate,
+                        'deliver_address' => $deliverAddress,
+                        'deliver_status'  => 'PENDING',
+                        'deliver_qr'      => 'QR-DEL-' . strtoupper(Str::random(10)),
+                    ]);
+
+                    $parcel = Parcel::create([
+                        'ord_id'           => $order->ord_id,
+                        'deliver_id'       => $delivery->deliver_id,
+                        'pay_id'           => $payment->pay_id,
+                        'parcel_created'   => now(),
+                        'parcel_completed' => null,
+                    ]);
+
+                    $order->ord_status = 'TO RECEIVE';
+
+                    $dispatchResult = [
+                        'modality'        => 'DELIVERY',
+                        'delivery_id'     => $delivery->deliver_id,
+                        'parcel_id'       => $parcel->parcel_id,
+                        'delivery_ref'    => $delivery->delivery_ref,
+                        'deliver_address' => $delivery->deliver_address,
+                        'deliver_date'    => $delivery->deliver_date,
+                        'deliver_qr'      => $delivery->deliver_qr,
+                    ];
+                }
+
+                // 3. Verify stock before touching inventory, then update
+                //    stocks & peak sales (REQ-IM-02 / REQ-IM-03)
+                $lowStockThreshold = (int) $this->settingValue('low_stock_threshold', 5);
+                $lowStockProducts = [];
+
+                foreach ($order->items as $item) {
+                    $product = Product::where('prod_id', $item->prod_id)->lockForUpdate()->first();
+                    if (!$product) continue;
+
+                    if ($product->prod_qty < $item->item_qty) {
+                        // Rolls the whole checkout back (REQ-OC-02)
+                        throw new InsufficientStockException('Insufficient stock for ' . $product->prod_name);
+                    }
+
+                    $newQty = $product->prod_qty - $item->item_qty;
+                    $product->update([
+                        'prod_qty'       => $newQty,
+                        'prod_peaksold'  => (float)$product->prod_peaksold + (float)$item->item_amount,
+                        'prod_todaysold' => (float)$product->prod_todaysold + (float)$item->item_amount,
+                    ]);
+
+                    if ($newQty <= $lowStockThreshold) {
+                        $lowStockProducts[] = ['name' => $product->prod_name, 'qty' => $newQty];
+                    }
+                }
+
+                // 4. Decrement Customer Cart Counter
+                $customer = $order->customer;
+                if ($customer) {
+                    if ($customer->cust_cart > 0) {
+                        $customer->decrement('cust_cart');
+                    }
+                    $customer->increment('cust_orders');
+                }
+
+                // 5. Cart orders get their final order tag after checkout
+                if (str_starts_with(strtoupper((string) $order->ord_tag), 'CART-')) {
+                    $order->ord_tag = 'ORD-' . strtoupper(Str::random(8));
+                }
+                $order->save();
+
+                // 6. Priority low-stock alerts for admins (REQ-IM-03)
+                foreach ($lowStockProducts as $low) {
+                    $this->notifyEmployeesByType(
+                        ['ADMIN', 'SUPER ADMIN'],
+                        '[PRIORITY] Low stock: "' . $low['name'] . '" is now down to ' . $low['qty'] . ' unit(s).'
+                    );
+                }
+
+                return [
+                    'payment' => $payment,
+                    'dispatch' => $dispatchResult,
+                    'order' => $order->fresh(),
+                ];
+            });
         }
 
         private function generateReceiptAndNotify(Order $order): void

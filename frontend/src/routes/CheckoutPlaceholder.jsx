@@ -15,9 +15,10 @@ import { CheckIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { getDispatch, payOrder, createPaymentIntent } from '../services/checkout.js'
 import { addToCart as addCartOrder, removeFromCart as removeCartOrder } from '../services/cart.js'
-import { removeProductFromOrder } from '../services/orders.js'
+import { fetchOrder, removeProductFromOrder } from '../services/orders.js'
 import { createAppointment, closeAppointment } from '../services/appointments.js'
 import SlotPicker from '../components/ui/SlotPicker.jsx'
+import { stashSessionForRedirect } from '../services/session.js'
 
 /* Delivery tiers previewed through POST /checkout/dispatch (SRS shipping fees).
    ETAs match the server's estimate: +24 hours / +2 days / +5 days. */
@@ -217,45 +218,45 @@ function CheckoutPlaceholder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [directOrdId, dispatchType, tier, addressIdx])
 
-  /* Finalizes an order PayMongo reports as paid (see the return handler below). */
-  const completePayMongoOrder = async (pending, paymentIntentId) => {
+  /* The PayMongo webhook finalizes the order on the server; landing on the
+     success URL proves nothing, so wait until the order leaves the cart. */
+  const awaitPayMongoOrder = async (ordId) => {
     setBusy(true)
     try {
-      const payRes = await payOrder(pending.ordId, pending.dispatchType, pending.due, pending.options)
-      const payRef = payRes?.data?.payment?.pay_ref ?? ''
-      setReceipt(receiptFrom(payRes?.data, pending.ordId, pending.dispatchType, pending.slot))
-      clearSelectedItems()
-      refreshCart()
-      setPaidRef(payRef || `PM-${paymentIntentId.slice(-8)}`)
-      showToast('Payment successful! Your order is being processed.', 'success')
-      setStep('confirmed')
-      setCountdown(5)
-    } catch (err) {
-      // PayMongo took the money but the order could not be finalized here:
-      // say so plainly with the reference the store needs to reconcile it.
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const order = await fetchOrder(ordId).catch(() => null)
+        if (order) {
+          clearSelectedItems()
+          refreshCart()
+          showToast('Payment successful! Your order is being processed.', 'success')
+          navigate(`/orders/${ordId}`, { replace: true })
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
       setError(
-        `PayMongo confirmed your payment (ref PM-${paymentIntentId.slice(-8)}), but your order could not be ` +
-          `finalized: ${err?.message || 'unknown error'}. Please contact the store with this reference.`
+        'PayMongo received your payment, but your order is still being confirmed. ' +
+          'Check My Orders in a few minutes, or contact the store if it does not appear.'
       )
     } finally {
       setBusy(false)
     }
   }
 
-  /* PayMongo sends the customer back here with ?status=&payment_intent_id=.
-     The page reloads on the way back, so the order being paid (and its pickup
-     slot) come from the record saved just before the redirect. */
+  /* PayMongo sends the customer back here with ?paymongo=success|cancel&ord_id=.
+     The page reloads on the way back, so the claim slot to release on a
+     cancelled payment comes from the record saved just before the redirect. */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const paymentStatus = params.get('status') || params.get('payment_status')
-    const paymentIntentId = params.get('payment_intent_id')
-    if (!paymentStatus || !paymentIntentId) return
+    const outcome = params.get('paymongo')
+    const ordId = params.get('ord_id')
+    if (!outcome) return
 
     window.history.replaceState({}, document.title, window.location.pathname)
     const pending = readPendingPayMongo()
 
-    if (paymentStatus === 'paid' && pending?.ordId) {
-      completePayMongoOrder(pending, paymentIntentId)
+    if (outcome === 'success' && ordId) {
+      awaitPayMongoOrder(ordId)
     } else {
       // Unpaid or abandoned: release the claim slot like any failed payment.
       if (pending?.appointId) {
@@ -370,22 +371,19 @@ function CheckoutPlaceholder() {
       }
 
       // 4a. PayMongo: hand off to the hosted checkout. The order and its claim
-      //     slot are kept while the customer pays; the return handler above
-      //     finalizes them, or releases the slot when payment fails.
+      //     slot are kept while the customer pays; the webhook finalizes them,
+      //     and the return handler above releases the slot when payment fails.
       if (gateway === 'paymongo') {
-        const intentRes = await createPaymentIntent(ordId, 'paymongo', dispatchOptions(appointId))
+        const intentRes = await createPaymentIntent(ordId, 'paymongo', {
+          dispatch_type: dispatchType,
+          ...dispatchOptions(appointId),
+        })
         const checkoutUrl = intentRes?.data?.checkout_url
         if (!checkoutUrl) {
           throw new Error('Failed to create payment session. Please try again.')
         }
-        savePendingPayMongo({
-          ordId,
-          dispatchType,
-          due,
-          options: dispatchOptions(appointId),
-          appointId,
-          slot,
-        })
+        savePendingPayMongo({ ordId, appointId })
+        stashSessionForRedirect()
         window.location.href = checkoutUrl
         return
       }

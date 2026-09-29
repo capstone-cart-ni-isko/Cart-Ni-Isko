@@ -31,3 +31,34 @@ export function loadSession(kind) {
 export function clearSession(kind) {
   if (!kind || !session || session.kind === kind) session = null
 }
+
+/*
+ * The one exception to REQ-ALR-01: PayMongo's hosted checkout is a full page
+ * redirect, so the in-memory session would be lost on the way back. Just
+ * before leaving, the session is parked in this tab's sessionStorage; on the
+ * return it is read once, deleted immediately, and dropped if stale. Any other
+ * reload still starts signed out.
+ */
+const REDIRECT_KEY = 'cartniisko:paymongo_session'
+const REDIRECT_TTL_MS = 30 * 60 * 1000
+
+export function stashSessionForRedirect() {
+  if (!session) return
+  try {
+    sessionStorage.setItem(REDIRECT_KEY, JSON.stringify({ ...session, at: Date.now() }))
+  } catch {
+    // Blocked storage: the customer simply signs in again on return.
+  }
+}
+
+export function restoreRedirectSession() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(REDIRECT_KEY) || 'null')
+    sessionStorage.removeItem(REDIRECT_KEY)
+    if (saved?.token && saved?.user && Date.now() - (saved.at || 0) < REDIRECT_TTL_MS) {
+      saveSession(saved.kind, saved.token, saved.user)
+    }
+  } catch {
+    // Unreadable or blocked storage: fall back to the signed-out state.
+  }
+}
