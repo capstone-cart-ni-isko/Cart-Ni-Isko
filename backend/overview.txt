@@ -1,0 +1,1190 @@
+================================================================================
+CART NI ISKO — COMPREHENSIVE USER-FLOW OVERVIEW (CUSTOMER SIDE + ADMIN SIDE)
+File: /backend/overview.txt
+================================================================================
+
+0. HOW TO READ THIS DOCUMENT
+--------------------------------------------------------------------------------
+Sources used (all read in full before writing):
+  A) "new_incomplete_cartniisko.docx"  -> GOVERNING business rules (RULES section)
+                                         and GOVERNING schema (SCHEMA section).
+  B) "original_cartniisko.docx"        -> SRS: functional requirements (REQ-*),
+                                         descriptions, stimulus/response sequences,
+                                         definitions, user roles, API list.
+  C) The live system (frontend/src, backend/app + routes, migrations, Supabase
+     Postgres connection) -> CURRENT STATE (what actually runs today).
+
+Precedence rule applied everywhere in this file:
+  1. Business rules and schema of (A) always win.
+  2. (B) supplies the requirement-level detail wherever (A) is silent, and is
+     followed "almost exactly" as instructed.
+  3. (C) describes how the flow behaves today. Where (C) differs from (A)/(B),
+     the line is marked  [DELTA: ...]  so nothing is claimed as compliant that
+     is not. No code was edited while producing this overview.
+
+Legend:
+  [RULE-A]  business rule from new_incomplete docx
+  [SRS-B]   requirement/flow from original SRS docx
+  [NOW-C]   current implemented behavior
+  [DELTA]   current behavior does not (yet) match A/B
+
+================================================================================
+1. SYSTEM SNAPSHOT
+================================================================================
+- Product: Cart ni Isko — web-based, mobile-accessible e-commerce + point-of-sale
+  system for "Tindahan ni Isko", official merchandise of the Bicol University
+  University Student Council (BU USC), Legazpi City, Albay.
+- Two strictly separate portals [RULE-A]:
+    * Customer portal  -> React SPA at "/" (Vite + React Router), bottom nav on
+      mobile, header + side nav on desktop.
+    * Employee portal  -> same SPA under "/admin/*" (AdminLayout, sidebar rail).
+- Backend: Laravel 12 JSON API under "/api/*" (Sanctum bearer tokens),
+  controllers: AuthAPI, CartAPI, CheckoutAPI, OrdersAPI, PosAPI, ProductsAPI,
+  AppointAPI, TrackingAPI, NotifAPI, AccountsAPI, ReviewsAPI, WishlistAPI,
+  ShiftAPI, SettingsAPI, ReportsAPI, AccessAPI, UploadAPI, HealthAPI,
+  InputValidatorAPI.
+- Database: Supabase Postgres (Tokyo PgBouncer pooler, sslmode=require) reached
+  by Laravel over PDO. One Postgres RPC exists: api_auth_cust_login(phone,
+  password). No Supabase client/SDK and no Supabase REST is used by the app;
+  tables are additionally REVOKE'd from anon/authenticated/service_role, so all
+  data access goes through the Laravel API. Tests run on sqlite :memory:.
+- Caching: GET reads cached ~30s (CacheReads middleware), catalog cached
+  ~5 min in the frontend, invalidated by an "api:version" bump on mutations.
+- Scheduler (php artisan schedule:work): priority-notification follow-up every
+  15 min, heartbeat every minute (exposed at GET /api/health/scheduler),
+  academic-period roster refresh hourly.
+
+1.1 SCHEMA MAP (governing schema of (A) -> entities in the running system)
+  (A) SCHEMA table        -> current table / notes
+  --------------------------------------------------------------------------------
+  CUSTOMER                -> customer (cust_id PK, cust_givname, cust_surname,
+                             cust_pronoun default 'they/them', cust_bday,
+                             cust_callcode '+63', cust_phone UNIQUE,
+                             cust_email UNIQUE, cust_backup_phone/email,
+                             cust_address, cust_college, cust_dept, cust_categ
+                             default 'student', cust_type default 'guest',
+                             cust_avatar, cust_password, cust_bag ~
+                             cust_cart, cust_orders, cust_appoint ~
+                             cust_appoints, cust_wishlist, cust_unread,
+                             cust_created, cust_last_logout, cust_deleted,
+                             cust_suspended) + current-only extras
+                             (cust_username, cust_campus, cust_course, cust_year,
+                             cust_photo, cust_cred_changed, cust_disabled).
+                             Note: (A) bag/appointment counter names are
+                             cust_bag/cust_appoint; the running columns are
+                             cust_cart/cust_appoints.
+  EMPLOYEE                 -> employee (emp_id PK, emp_givname, emp_surname,
+                             emp_callcode '+63', emp_phone UNIQUE,
+                             emp_email UNIQUE, emp_backup_phone/email,
+                             emp_categ default 'staff', emp_password, emp_avatar,
+                             emp_present bool default true, emp_unread,
+                             emp_created, emp_last_logout, emp_deleted,
+                             emp_suspended) + current extras (emp_midname,
+                             emp_suffix, emp_studnum, emp_college, emp_program,
+                             emp_year, emp_bloc, emp_type 'STAFF'/'ADMIN'/
+                             'SUPER ADMIN', emp_instore, emp_photo,
+                             emp_cred_changed, emp_disabled).
+                             Note: (A) column emp_categ == current emp_type.
+  APPOINTMENTS             -> appointment (cust_id, emp_id, appoint_start,
+                             appoint_end, appoint_created, appoint_closed,
+                             appoint_qr UNIQUE, appoint_type default 'visit';
+                             current code uses appoint_date + appoint_type
+                             'CLAIM'/'VISIT' and appoint_closed = NULL open).
+  BAG                      -> orders rows tagged 'CART-<8>' + items
+                             (current model keeps bag rows inside the orders
+                             table with ord_tag prefix instead of a separate
+                             BAG table; bag_id ~ items.item_id).
+  ORDERS                   -> orders (cust_id, ord_amount ~ derived,
+                             ord_claiming, ord_created, ord_id, ord_status
+                             default 'processing'/'TO PROCESS',
+                             pay_change, pay_received, pay_reference ~ payment
+                             table columns pay_given/pay_due/pay_change/pay_ref).
+  ITEMS                    -> items (bag_id~prod_id, ord_id, item_created,
+                             item_id; current: ord_id, prod_id, item_qty,
+                             item_amount).
+  PRODUCT                  -> product (prod_id, prod_name UNIQUE (case-insens.),
+                             prod_tag UNIQUE, prod_categ default 'others'/
+                             'OTHERS', prod_price, prod_desc, prod_rating,
+                             prod_reviews, prod_total_var ~ current prod_qty /
+                             prod_sizes / prod_colors, prod_created,
+                             prod_deleted, prod_disabled).
+  PRODVAR                  -> current product JSON columns prod_sizes,
+                             prod_colors, prod_stock_matrix, prod_preorder,
+                             prod_status, prod_details, prod_images (a separate
+                             PRODVAR table is NOT yet materialized — [DELTA]).
+  PRODSALES                -> current product columns prod_peakqty,
+                             prod_peaksold, prod_peakdate, prod_todayqty,
+                             prod_todaysold (per-product rollups; a separate
+                             PRODSALES table is NOT yet materialized — [DELTA]).
+  WISHLIST                 -> wishlist composite PK (cust_id, prod_id),
+                             wish_created, wish_hidden (nullable timestamptz
+                             hide flag). Current table keeps the composite PK
+                             and wish_created, drops wish_hidden and adds
+                             item_qty / item_amount [DELTA].
+  DELIVERY                 -> delivery (deliver_id, cust_id, ord_id,
+                             deliver_address, deliver_phone, deliver_created,
+                             deliver_expect, deliver_end, deliver_qr,
+                             deliver_status default 'TRANSIT'; current code
+                             writes 'PENDING' -> 'TRANSIT' -> 'DELIVERED'/
+                             'RETURNED', delivery_ref 'DEL-<8>').
+  PICKUP                   -> pickup (pickup_id, appoint_id, ord_id,
+                             pickup_created, pickup_completed; current adds
+                             pay_id).
+  CUSTLOG / EMPLOG         -> custlog (custlog_id PK, cust_id,
+                             custlog_created, custlog_action, custlog_desc) /
+                             emplog (emplog_id PK, emp_id, emplog_created,
+                             emplog_action, emplog_desc). [DELTA: (A) also lists
+                             *_endpoint / *_access columns, which do not exist.]
+  Tables in (A) not present as separate tables today: none ignored silently —
+  PAYMENT/PARCEL/REPORTS/SETTINGS/DUTY_SHIFT exist additionally in the current
+  system (payment, parcel, reports, settings, duty_shift), plus framework tables.
+
+1.2 ROLE MODEL  [RULE-A]
+  - Employees: exactly one of "super admin" | "admin" | "staff"; must currently
+    be a BU student; store must have >=1 super admin; >=1 employee overall.
+  - Login identity: employee = BU email + password (unique BU email);
+    customer = phone number + password (unique phone).
+  - Only super admin may create employee accounts.
+  - Customers: exactly one of "BUeño" | "guest"; a BUeño additionally provides
+    BU e-mail (unique, one BUeño only), college, department and a role of
+    student|faculty|staff|alumni. An employee may also be a customer, but the
+    two accounts stay separate. [NOW-C: signup collects role/college/program/
+    year but cust_type is written as the submitted role, defaulting to 'Student'
+    (DB default 'STUDENT'; POS walk-ins get 'WALK-IN'), never 'BUeño'/'guest';
+    BU-domain and BUeño/guest enforcement is not yet validated server-side
+    — [DELTA D06]].
+  - Customers are NEVER given employee endpoints: EnsureRole returns 403
+    "Employee authentication is required."
+
+1.3 ACCESS MATRIX (from (A) EMPLOYEE rules; used throughout the flows below)
+  staff       : VIEW  -> employee schedule, active+inactive appointments,
+                         inventory, product details, past walk-in orders,
+                         active+inactive pre-orders, personal notifications
+               EDIT   -> personal profile details, personal settings
+  admin       : VIEW  -> employee schedule, system notifications,
+                         personal notifications
+               EDIT   -> active/inactive appointments, inventory, add/modify
+                         product details, add/modify/complete walk-in orders,
+                         active/inactive pre-orders, personal profile/settings
+  super admin : VIEW  -> personal notifications
+               EDIT   -> managing customer accounts, enroll/manage employee
+                         accounts, employee schedules, appointments, inventory,
+                         product details, walk-in orders, pre-orders, system
+                         settings, system notifications, personal profile and
+                         settings.
+  [NOW-C] route-level enforcement: role:staff = any employee, role:admin =
+  ADMIN or SUPER ADMIN, role:super_admin = SUPER ADMIN only; frontend additionally
+  hides Register (POS) and Settings from staff. [DELTA: the (A) rule "staff has
+  view-only on schedule/appointments/inventory/orders and no dashboard/walk-in/
+  reviews/sales entries (REQ-EMP_HOME-01)" is not fully enforced in the UI today;
+  see section 9.]
+
+================================================================================
+2. BUSINESS-RULE BASELINE CARRIED INTO EVERY FLOW  [RULE-A]
+================================================================================
+  R01 Store has >=1 employee; may sell >=0 products; may have >=0 customers.
+  R02 An employee may also be a customer, accounts separate.
+  R03 A system page has >=1 tabs; customer and employee portals are separate.
+  R04 Appointments: customer books >=0; type only "visit" or "pickup";
+      every appointment slot is exactly 10 minutes;
+      >=1 employee must be available in store on a date/period for a slot to be
+      bookable; a slot holds max 5 "pickup" appointments and max 1 "visit";
+      an appointment is completed by exactly one employee by scanning the
+      customer's appointment QR code.
+  R05 Customer: type only "BUeño" or "guest"; BUeño gives BU email + college +
+      department + role (student|faculty|staff|alumni); BU email unique to one
+      BUeño; login uses own phone + password; phone unique to one customer.
+  R06 Delivery: a delivery belongs to only one order; customer has >=1 delivery
+      address; the profile address is automatically a delivery address;
+      delivery is completed by the CUSTOMER scanning the delivery QR on the
+      parcel.
+  R07 Employee categories/roles and access matrix as in 1.2/1.3; own BU email +
+      password login; BU email unique to one employee.
+  R08 Employee scheduling: >=180 minutes availability per employee per week,
+      regardless of dates; in-store availability dates/periods are preset.
+  R09 Orders: customer checks out >=0; order belongs to exactly 1 customer;
+      >=1 product; >=1 product variation per product; >=1 piece per variation;
+      type only "pre-order" or "walk-in"; a pre-order is claimed only by
+      delivery or by booking a "pickup" appointment; pre-orders are paid online
+      only; a payment transaction belongs to exactly 1 pre-order; list of
+      products + claiming modality + online payment must ALL be complete to
+      activate a pre-order; a walk-in order is facilitated by exactly 1
+      employee.
+  R10 Products: a category has >=1 product; product name (case-insensitive)
+      unique to one product; a product has >=1 "size" variation and >=1
+      "color" variation.
+  R11 Page/chrome rules from the flow sections (nav ribbons, icons) as quoted.
+
+Requirement baseline carried from (B) [SRS-B]:
+  REQ-ALR-01..03, REQ-APC-01..02, REQ-AN-01..03, REQ-AB-01..04, REQ-CW-01..03,
+  REQ-IM-01..03, REQ-OC-01..02, REQ-OT-01, REQ-POS-01..02, REQ-PC-01,
+  REQ-SC-01..04, REQ-SS-01..03, REQ-SD-01..04, REQ-UM-01..04, REQ-EMP_LOGIN-01..10,
+  REQ-EMP_HOME-01, review rules (purchase-gated, one rating + one feedback per
+  product, editable while unapproved), QR rules (unique per order, reusable only
+  until claimed/cancelled/returned; staff/admin/super-admin scan in store,
+  customer scans parcel QR).
+
+NOTE ON SLOT LENGTH/CAPACITY CONFLICT: (A) says every slot is exactly 10 minutes
+with max 5 pickup + 1 visit; (B) said 30 minutes for "order claiming" with max 10
+customers and 10 minutes/max 1 for "visit". Per the precedence rule the flows
+below state (A)'s 10-minute/5+1 rule as the rule to follow, and section 9 flags
+the current implementation (30/10 minutes, capacity 10/1) as [DELTA].
+
+================================================================================
+3. CUSTOMER SIDE — COMPLETE USER FLOWS
+================================================================================
+
+C1. CUSTOMER SIGNUP
+  Entry: Welcome "/" -> "Create an account" -> /signup (7 steps, progress kept
+  in localStorage "isko_signup_progress" so a reload never loses the form
+  [SRS-B REQ-ALR-02]).
+  Steps:
+   1 role       -> choose account role from ['Student','Alumni','Faculty',
+                    'Guest'] (the intended BUeño/guest split of [RULE-A R05]
+                    is approximated by these four values — see 1.2 [DELTA]).
+   2 details    -> first name, last name, phone (09XXXXXXXXX), university e-mail
+                   (placeholder student@bicol-u.edu.ph), username, address
+                   (barangay/street block; profile address becomes the default
+                   delivery address [RULE-A R06]).
+   3 password   -> >=8 chars + confirm + agreement to Terms of Use; inline/
+                   toast errors: "Password must be at least 8 characters",
+                   "Passwords do not match", "You must agree to the Terms of
+                   Use" (form never refreshes/empties on error [SRS-B REQ-ALR-02/03]).
+   4 otp        -> 6-digit OTP screen (UI complete; see [DELTA] in C2b).
+   5 success    -> confirmation screen.
+   6 college    -> academic details (college/institute, program, year, bloc) —
+                   required for a BUeño [RULE-A R05] -> "Please select your
+                   academic details".
+   7 complete   -> POST /api/auth/cust_signup -> server validates uniqueness of
+                   phone (409 "Phone already exists") and e-mail, hashes the
+                   password, inserts the customer, returns a Sanctum token ->
+                   toast "Registration complete! Please sign in." -> /signin.
+  Post-condition: customer lands on the product catalog after first login
+  [SRS-B Account Login and Registration].
+
+C2. CUSTOMER LOGIN
+  Screen: /signin — phone + password only [RULE-A R05: "own phone number and
+  password to log in"].
+  Flow: validate (>=10 digits) -> POST /api/auth/cust_login -> on Supabase
+  Postgres the lookup+hash check runs in one round trip via RPC
+  api_auth_cust_login(phone, password); PHP Hash::check fallback otherwise.
+  Outcomes:
+   - unknown phone -> 401 "Invalid credentials" (message shown without clearing
+     either field [SRS-B REQ-ALR-02]).
+   - wrong password -> same generic 401, password retained [REQ-ALR-02].
+   - cust_disabled/cust_deleted set -> 403 "Account disabled" (banned account
+     cannot log in [SRS-B REQ-UM-02]).
+   - success -> token + profile in memory, redirect to catalog.
+  Password masking: input masked; a show/hide control exists on the auth and
+  settings forms [SRS-B REQ-EMP_LOGIN-01..02]. [DELTA: auto re-mask after 3
+  seconds (REQ-EMP_LOGIN-03) and the "last previously logged-in" 6-digit e-mail
+  OTP gate (REQ-EMP_LOGIN-09/10) are not enforced server-side.]
+  [DELTA-C2b: the OTP steps in signup, /verify-otp and /forgot-password accept
+  any code client-side; no verification endpoint exists yet.]
+
+C3. PRODUCT CATALOG (home / shop)
+  Chrome [RULE-A / SRS-B FLOW-CUST_HOME-01..03]: top ribbon with "Tindahan ni
+  Isko" logo leftmost, search bar centermost, and rightmost horizontal array:
+  "home" icon (home tab), "bag" icon (bag tab), "appointments" icon
+  (appointments tab), "notification" icon (notification tab), "menu" icon
+  (opens the right-hand sidebar). The menu sidebar holds, top-to-bottom:
+  "profile", "dark mode", "wishlist", "orders", "settings", "logout"
+  [RULE-A FLOW-CUST_HOME-03].
+  [NOW-C]: the drawer renders profile, dark mode, wishlist, orders, logout —
+  the "settings" entry is missing there (Settings is still reachable from the
+  Profile page, the account sidebar and the /home drawer) [DELTA].
+  Flow: GET /api/products/filter {status:active} -> grid of catalog cards
+  showing product name, category and base price [SRS-B REQ-PC-01]; guest and
+  customer see only active (not disabled/deleted) products.
+  - Search: GET /api/products/search (ilike on Postgres) from the ribbon.
+  - Filter: pill chips of product categories -> re-filter the grid.
+  - Sort: GET /api/products/sort (name/price/qty/created/popularity).
+  - Card click -> product details (C4). Catalog data is cached (~5 min TTL) and
+    prefetched on app start for a 1-second UI budget.
+
+C4. PRODUCT DETAILS
+  GET /api/products/view {prod_id | prod_tag}.
+  Content: photo gallery, description, category, base price, rating average and
+  review breakdown, variation pickers — size and color (>=1 size and >=1 color
+  per product [RULE-A R10]) — stock/pre-order availability, quantity stepper,
+  size-guide modal.
+  Actions:
+   - Add to bag -> POST /api/cart/add (creates/extends a CART-<8> order,
+     recomputes item_amount = price x qty, cust_cart counter++).
+     Out-of-stock variation -> toast "Sorry, this variant is currently out of
+     stock." (the rule that an unavailable item stays in the bag but cannot be
+     checked out is REQ-CW-02).
+   - Wishlist toggle -> POST /api/wishlist/add or /api/wishlist/remove.
+   - Rate -> five-star scale; Review -> text box; both submit
+     POST /api/reviews/create with the product and the customer's own order.
+   - Reviews list <- GET /api/reviews/display (guests see APPROVED only).
+
+C5. WISHLIST
+  Entry: menu sidebar "wishlist" -> /wishlist (RequireAuth: signed-out users get
+  the LoginPromptModal "You need to sign in to access this feature.").
+  Flow: GET /api/wishlist/display {cust_id}; add (upsert, cust_wishlist++),
+  remove (cust_wishlist++ reversed), quantity update, and "move to bag"
+  POST /api/wishlist/to_order which upserts the item into the customer's CART-
+  order without removing the wishlist row.
+  Rules honored: a wished product stays even when no longer offered but cannot
+  be added to the bag [SRS-B REQ-CW-01]; wishlist and bag membership are fully
+  independent [REQ-CW-03].
+
+C6. BAG (cart)
+  Entry: ribbon "bag" icon -> /cart.
+  Flow: GET /api/cart/display {cust_id, tag_prefix:'CART-'} -> grouped items
+  with variation, quantity steppers and line amounts.
+  - Modify quantity -> POST /api/orders/add (merge) / item update.
+  - Remove -> DELETE /api/cart/remove (only CART- orders; toast
+    'Removed "X" from bag' with an Undo action that restores it).
+  - Selection: the customer may select a subset of items or all items
+    [SRS-B REQ-OC-01]; the checkout button blocks an empty selection
+    ("Please select at least one item to checkout.") and blocks a mixed
+    pre-order + regular selection.
+  - Out-of-stock items remain visible but cannot be checked out [REQ-CW-02].
+
+C7. ORDER CHECKOUT (pre-order activation)
+  Entry: Bag -> "Checkout" -> /checkout.
+  1 Order overview: variations, quantities, line amounts, subtotal, total due.
+  2 Modality selection [SRS-B Order Overview + RULE-A R09]:
+     - PICKUP  -> requires an open "pickup"/CLAIM appointment. If none exists
+       the customer is taken to the schedule calendar (AppointmentForm) to book
+       a slot, then returns to checkout with the appointment details shown in
+       the overview. Server check: POST /api/checkout/dispatch returns 422
+       "A valid order-claiming appointment is required." when missing.
+     - DELIVERY -> address step. The profile address is automatically offered
+       as the default delivery address [RULE-A R06]; the customer can type a
+       different one; then a delivery speed tier: priority (higher fee, arrives
+       within 24h), standard (normal fee/time), saver (lower fee, slower)
+       [SRS-B Modality Selection]. Current fee table [NOW-C]:
+       priority = +PHP100, ETA now()+1 day (UI label "Same-day", <=24h),
+       standard = +PHP50, ETA +2 days (UI label "1-2 days"),
+       saver = +PHP30, ETA +5 days (UI label "3-5 days"),
+       pickup fee = 0. The server derives the fee itself; the client table is
+       only a preview.
+     POST /api/checkout/dispatch {ord_id, dispatch_type,...} -> subtotal,
+     dispatch_fee, total_due, dispatch_details.
+  3 Online payment [RULE-A R09: pre-orders are paid online only; a payment
+     transaction belongs to exactly one pre-order]:
+     - Direct reference flow -> POST /api/checkout/payment
+     - Gateway flow -> POST /api/checkout/payment/intent {gateway:'paymongo'}
+       -> PayMongo PaymentIntent -> checkout_url (card, gcash, grab_pay,
+       paymaya) -> webhook POST /api/checkout/payment/webhook (HMAC-SHA256
+       Paymongo-Signature) marks the order PAID and notifies customer + admins.
+  4 Commit (single DB transaction, locks order + products) [REQ-OC-02: a failed
+     checkout restores the original bag state]:
+     a recompute line totals server-side, b create payment row (pay_ref
+     'PAY-<16>'), c pickup -> create pickup row, order status 'TO CLAIM';
+       delivery -> create delivery ('PENDING', delivery_ref 'DEL-<8>',
+       deliver_qr 'QR-DEL-<10>') + parcel, order status 'TO RECEIVE',
+     d stock check -> InsufficientStockException rolls everything back if short;
+       otherwise prod_qty decrements and peak/today sales counters increase,
+     e cust_cart-- , cust_orders++ , ord_tag rewritten CART- -> ORD-<8>,
+     f low-stock priority notifications to ADMIN + SUPER ADMIN when
+       prod_qty <= low_stock_threshold (default 5) [SRS-B REQ-IM-03].
+  5 Result: the order leaves the bag and becomes an active order; a unique QR
+     code is generated for it [SRS-B QR-code Verification]; customer is routed
+     back to the updated bag/orders view.
+
+C8. ORDER TRACKING
+  Entry: menu "orders" -> /orders (list) -> /orders/:id (detail).
+  List: GET /api/cart/display|search|sort (orders and bag rows share the orders
+  table; bag rows are excluded by tag prefix), status tabs, search, sort,
+  copy-order-id action.
+  Status vocabulary [NOW-C, matches SRS-B pipeline]:
+    TO PROCESS -> TO CLAIM (pickup) | TO RECEIVE (delivery)
+              -> CLAIMED | UNCLAIMED
+              -> CANCEL REQUESTED -> CANCELLED
+              -> RETURN REQUESTED -> RETURNED -> REFUNDED
+    (+ PAID set by the payment webhook, COMPLETED shown in history).
+  Detail: itemized products, amounts, modality, appointment/delivery info,
+  QR code rendering, and a tracking timeline from POST /api/tracking/create
+  (fetches pickup/parcel track + qr_code). Employees and customers both track
+  in real time [SRS-B Order Tracking]; order status changes push a regular
+  notification except TO CLAIM / TO RECEIVE (QR-driven) and, in today's code,
+  also CANCEL REQUESTED / RETURN REQUESTED [REQ-OT-01 silent set + [DELTA]].
+  [DELTA: real-time is polling + short cache, not push; Reverb is installed but
+  no event is broadcast.]
+
+C9. ORDER CLAIMING
+  C9a Pickup (pre-order claimed by booking a pickup appointment [RULE-A R09]):
+    customer arrives at the store -> any staff/admin/super-admin scans the
+    customer's order QR (scanner page, C/E14) -> POST /api/tracking/scan ->
+    validation: code must match, order must be TO CLAIM, and a valid open CLAIM
+    appointment must exist -> order becomes CLAIMED, pickup_completed stamped,
+    the appointment is closed, customer receives "[PRIORITY] Order ORD-xxxx has
+    been claimed." and all employees are notified; a non-matching/invalid scan
+    keeps the status, notifies all employees "[PRIORITY] Failed QR scan ..." and
+    writes an emplog QR_SCAN row [SRS-B REQ-APC-03].
+  C9b Delivery (RULE-A R06: completed by the CUSTOMER scanning the delivery QR
+    on the parcel): customer opens the order detail -> scanner
+    (html5-qrcode camera, "Position QR code within the frame") ->
+    POST /api/tracking/scan -> employee scans are REJECTED on delivery orders ->
+    TO RECEIVE becomes CLAIMED, parcel_completed stamped, deliver_status
+    becomes DELIVERED, both sides notified.
+  A QR is unique per order and cannot be reused after CLAIMED/CANCELLED/
+  RETURNED/REFUNDED [SRS-B REQ-APC-01]; scanning those states returns 409 with
+  a fixed message.
+
+C10. ORDER CANCELLATION
+  Customer side: while the order is in TO PROCESS, TO CLAIM or TO RECEIVE,
+  press "Cancel order" -> PUT /api/orders/update with status 'CANCEL REQUESTED'
+  -> toast "Cancellation requested. The store will review it shortly."
+  (a customer may also set RETURN REQUESTED, but only from CLAIMED — see C11;
+  any other customer status change is refused 403 "This order change requires
+  staff review.").
+  Guard for walk-in accounts: an order owned by the shared walk-in customer
+  (phone 0000000000, SRS-B REQ-POS-01) may only request cancel/return while it
+  holds an OPEN VISIT appointment (the physical store is where the request must
+  happen); otherwise 403 code 'ALR_WALK_IN_NO_VISIT' and the attempt is written
+  to custlog.
+  Employee side: admin/super-admin approves -> 'CANCELLED' (terminal:
+  ord_completed stamped) [SRS-B: only admin/super admin approve cancels].
+  Notification to the customer on every status change except the QR-driven
+  and request-created ones (TO CLAIM, TO RECEIVE, CANCEL REQUESTED, RETURN
+  REQUESTED) [REQ-OT-01 + [DELTA]].
+
+C11. ORDER RETURN AND REFUND
+  Customer: an order already CLAIMED -> "Return request" ->
+  PUT /api/orders/update 'RETURN REQUESTED' -> toast "Return requested. The
+  store will review it shortly." [SRS-B: returns are requested online in the
+  same two-modality process; a walk-in customer must book a visit appointment
+  first — REQ-POS-02].
+  Employee (admin/super admin): receives the returned parcel/order ->
+  sets 'RETURNED'; if a refund is granted instead of a replacement -> sets
+  'REFUNDED' after the money is returned; otherwise the order stays RETURNED
+  or goes back to CLAIMED [SRS-B Order Return].
+  Terminal states stamp ord_completed; customer is notified.
+  [DELTA: REFUNDED/CANCELLED/RETURNED are status changes only today —
+  PayMongoService::refundPayment() exists but is not called, stock is not
+  restored and no payment row is marked refunded.]
+
+C12. EDIT CUSTOMER PROFILE
+  Entries: menu "profile" -> /profile; "account info" -> /account (AccountLayout).
+  Flow: edit display name, pronoun, birthday, address, username, contact
+  fields, avatar -> POST /api/uploads {file, type:'avatar'} (image <=10MB,
+  png/jpg/jpeg/gif/webp) then PUT /api/accounts/update with an allow-listed set
+  of customer columns.
+  Rules: the form never refreshes and never empties incorrect input
+  [REQ-APC-02]; sensitive login credentials (phone/e-mail/username) cannot be
+  changed within 30 days of the most recent change -> 409 "Sensitive
+  credentials cannot be changed within thirty days of the most recent change"
+  [REQ-APC-01].
+
+C13. CREATE APPOINTMENT (booking)
+  Entry: menu "appointments" -> /appointments; also embedded in checkout for a
+  pickup (CLAIM) pre-order.
+  Flow:
+   1 GET /api/appoint/slots {date} -> slot grid for 08:00-18:00 [NOW-C]. A
+     customer sees only "available/unavailable" for other people's slots and
+     their own bookings flagged as mine [SRS-B REQ-SC-01].
+   2 Choose type: pickup/CLAIM (order claiming) or visit/VISIT [RULE-A R04:
+      only these two categories]. The appointments page itself books a VISIT
+      ("Reserve a 10-minute store visit or a 30-minute order claiming slot");
+      a CLAIM booking is made from the checkout screen, where the same
+      AppointmentForm is embedded. Slot length is exactly 10 minutes and a slot
+      holds max 5 pickup + max 1 visit appointment [RULE-A R04].
+      [DELTA: current server uses 30-minute CLAIM / 10-minute VISIT slots with
+      capacity 10 CLAIM / 1 VISIT and min in-store staff 1 CLAIM / 2 VISIT.]
+   3 Fill the appointment form (purpose/details) -> POST /api/appoint/create.
+   4 Server validation, in one transaction with a Postgres advisory lock:
+      - type must be CLAIM or VISIT,
+      - time snapped to the grid, not in the past, inside operating hours
+        (409 "Selected time is outside operating hours (08:00 - 18:00)"),
+      - capacity: "Slot fully booked",
+      - staffing: "Not enough in-store employees available (minimum N
+        required)" — a slot is only bookable while >=1 employee is available in
+        store for that date/period [RULE-A R04] and visit slots additionally
+        need enough in-store staff [SRS-B REQ-AB-03],
+      - the customer can only book for herself ("Customer account mismatch.").
+   5 On success: appointment row created with a unique appoint_qr
+     ('APPT-<16>'), customer is returned to the
+     updated schedule calendar [SRS-B Timeslot Selection].
+     [DELTA: the cust_appoints counter column exists but is never incremented
+     (it stays 0 after booking).]
+
+C14. MODIFY AN APPOINTMENT (reschedule)
+  Flow: open appointment card -> details modal -> change date/time/type ->
+  PUT /api/appoint/update {appoint_id, ...} with the same snapping, capacity,
+  staffing and operating-hour checks (the appointment excludes itself when
+  re-checking capacity). A closed appointment cannot be modified (409).
+  Rescheduling is mandatory whenever a booked slot becomes unavailable: admin
+  closes the slot, staff shortage, or capacity/staffing loss -> the customer
+  receives a PRIORITY notification with the reason [SRS-B REQ-AB-04] and is
+  redirected to the updated calendar from the notification.
+
+C15. CANCEL AN APPOINTMENT
+  Employee-driven close (the only close path today): POST /api/appoint/close
+  {appoint_id, reason} (role:admin; reason required, max 500 chars):
+   - 409 if already closed;
+   - notifies the owner "[PRIORITY] Your appointment #id scheduled on ...
+     was closed. Reason: ...";
+   - then notifies every other open booking of the same type whose start falls
+     inside the same slot block (30 min for CLAIM / 10 min for VISIT today;
+     10 min for both under [RULE-A R04]) so those customers reschedule.
+  Customer side today: the appointments screen offers View and Edit
+  (reschedule) only — there is no customer "cancel appointment" button, so a
+  customer who cannot attend reschedules the booking (C14) or waits for the
+  employee to close the slot with a reason.
+  [DELTA: no customer-initiated cancellation endpoint/UI exists yet, although
+  [SRS-B] expects customers to reschedule whenever a slot is cancelled or
+  unavailable.]
+
+C16. RECEIVE CUSTOMER NOTIFICATIONS
+  Triggers (automated) [SRS-B Account Notification]:
+   - every order status change -> customer, except the silent set the code
+     never notifies for: TO CLAIM, TO RECEIVE, CANCEL REQUESTED, RETURN
+     REQUESTED ([SRS-B] only exempts TO CLAIM/TO RECEIVE — [DELTA]);
+   - appointment CLOSED / made unavailable (reason included) -> PRIORITY to
+     the owner and to every other open booking in the same block; staff
+     shortage -> PRIORITY with reason; [DELTA: booking or rescheduling an
+     appointment sends NO notification — only the on-screen toast/updated
+     calendar.]
+   - low stock -> ADMIN/SUPER ADMIN (PRIORITY);
+   - payment webhook receipt -> customer + admins (PRIORITY);
+   - QR scan success/failure -> customer + all employees (PRIORITY);
+   - ban/recover of an account -> affected user;
+   - review moderation result -> customer;
+   - manual/bulk notifications: POST /api/notif/create and
+     /api/notif/distribute (employee side, role:staff).
+  Storage: custnotif rows (custnotif_id, cust_id, custnotif_created,
+  custnotif_read NULL = unread, custnotif_msg). [RULE-A schema keeps
+  notifications as rows exactly like this.] [DELTA: the customer.cust_unread /
+  employee.emp_unread counter columns exist but are never written; the badge
+  counts are computed in the UI from unread rows.]
+
+C17. READ CUSTOMER NOTIFICATIONS
+  Entry: ribbon "notification" icon -> /notifications tab.
+  Flow: GET /api/notif/display {recipient_type:'customer', recipient_id} ->
+  list rendered unread-first; clicking one marks it read
+  PUT /api/notif/update {notif_id, recipient_type} -> custnotif_read stamped and
+  the UI badge recomputed from unread rows.
+  Rules: a notification stays unread until that specific notification is clicked
+  [REQ-AN-01]; unread styling differs from read and the notification icon
+  changes when >=1 unread exists [REQ-AN-02]; an unread PRIORITY notification
+  generates an automated follow-up — a scheduled job every 15 minutes creates
+  "[FOLLOW-UP] [PRIORITY] ..." rows for PRIORITY items unread for 24h
+  [REQ-AN-03]; the scheduler's health is publicly watchdogged at
+  GET /api/health/scheduler (RUNNING/STALLED).
+  Clicking a closed/unavailable-appointment notification navigates to the
+  updated schedule calendar (/appointments); other rows are read-only
+  (backend stores no notif_link column, so no order deep-link exists today).
+
+C18. EDIT CUSTOMER SETTINGS
+  Entry: menu "settings" -> /settings (AccountLayout).
+  Sub-pages:
+   - /settings/change-password -> current + new + confirm (>=8, must match) ->
+     PUT /api/auth/update_credentials {current_password, new_password}; on
+     success all sessions are revoked -> "Password updated. Please sign in
+     again." -> /signin (30-day lock applies [REQ-APC-01]).
+   - /settings/address (also /address) -> delivery address book: add, edit,
+     set default, delete (confirmation modal). The profile address is the
+     automatic default [RULE-A R06].
+   - /settings/notifications -> notification preferences screen.
+     [DELTA: currently informational ("All notifications are always on"); no
+     per-category toggle is persisted.]
+   - /account -> account information edit (C12).
+   - Dark mode: the "dark mode" icon in the menu sidebar toggles the theme
+     persistently for the whole customer portal (ThemeContext).
+   - Sign out entry also lives here (C19).
+
+C19. CUSTOMER LOGOUT
+  Flow: menu sidebar "logout" icon -> (immediately) POST /api/auth/logout
+  (Sanctum token deleted) -> auth, cart and wishlist state cleared -> the
+  screen navigates to /signin.
+  [NOW-C]: a logout CONFIRMATION modal ("Are you sure you want to sign out…")
+  exists on the Profile page, the Settings page and the desktop account
+  sidebar, and those toast "Signed out successfully"; the menu-drawer Logout
+  entry itself performs no confirmation and no toast [DELTA vs the required
+  logout confirmation popup].
+  After logout, refresh, browser reopen or device wake a fresh login is always
+  required [SRS-B REQ-ALR-01].
+
+C20. PRODUCT REVIEWS (customer flow, part of C4)
+  - Only a customer who has ordered the product may rate/review; otherwise the
+    options are disabled ("You can only review products you have ordered from
+    this store.") [SRS-B review rules].
+  - One rating + one feedback per product per customer; a second attempt gets
+    409 "You have already review this product..." — the existing entry can be
+    edited instead, but only while it is still PENDING.
+  - Submissions are stored "[PENDING] ..." and appear publicly only after an
+    employee approves them ("[APPROVED] ..."); rejection stores
+    "[REVIEW CENSORED]".
+  - Ratings feed the product average (only APPROVED entries are averaged) and
+    the catalog card / details page display.
+
+C21. CUSTOMER ACCESS LOG (exists, mostly system-written) [RULE-A DOMAIN 32]
+  custlog rows record customer-side security/state events, e.g. rejected
+  cancel/return attempts (action = the requested status, desc = code + order
+  tag + timestamp). Customer-visible in this release: none (internal audit).
+
+C22. OTHER CUSTOMER-FACING CAPABILITIES THAT CURRENTLY EXIST
+  - Welcome/landing pages "/", "/welcome", "/home" with the storefront hero.
+  - Global search from any ribbon; category pills; product sorting.
+  - LoginPromptModal for every protected page when signed out (mobile routes to
+    /signin immediately).
+  - Order-id copy, undo-remove on the bag, size guide, quantity steppers,
+    status pills with consistent colors, image upload for avatars.
+  - Guest browsing of catalog, product details and APPROVED reviews without an
+    account.
+
+================================================================================
+4. EMPLOYEE / ADMIN SIDE — COMPLETE USER FLOWS
+================================================================================
+
+E1. EMPLOYEE ENROLLMENT (account creation)
+  Actor: SUPER ADMIN only [RULE-A R07; SRS-B REQ-UM-01].
+  Flow: /admin/users -> "Add Staff Account" (disabled for staff/admin) ->
+  fill photo, surname, given name (middle/suffix/pronoun optional), BU e-mail,
+  phone, student number, college/institute, program, year, bloc, role
+  (Super Admin/Admin/Staff), permission module checkboxes, in-store flag ->
+  POST /api/auth/emp_signup {type:'STAFF'|'ADMIN'|'SUPER ADMIN'}.
+  Server: generates a 16-character temporary password, inserts the employee
+  (unique BU e-mail enforced), writes an emplog REGISTER entry with the
+  responsible super admin, returns temporary_password.
+  UX: the temporary password is shown once in a callout with "must change it at
+  first sign-in"; the new employee must log in and change it — if
+  emp_cred_changed is still false 24h after registration, login is refused with
+  403 "The temporary password has expired. Contact a super admin."
+  [SRS-B Registration sequence].
+
+E2. EMPLOYEE LOGIN
+  Screen: /admin/login ("Staff & Admin Portal", "Staff ID / University Email",
+  "Security Password").
+  Flow: POST /api/auth/emp_login {email, password} -> validate, hash-compare,
+  then:
+   Required by [RULE-A FLOW-EMP_LOGIN-02..08]: unknown e-mail -> "User not
+     found" under the e-mail field; password typed without a valid e-mail ->
+     "Provide a valid email" under the password field; known e-mail but wrong
+     password -> "Wrong password" under the password field; each message must
+     disappear as soon as the input becomes correct.
+     [DELTA: today the server answers a single 401 "Invalid credentials" and
+     the screen falls back to "Invalid staff credentials. Access denied."; the
+     three field-level messages are not rendered yet.]
+   - inputs are never cleared or lost, including when switching browser tabs
+     [RULE-A REQ-EMP_LOGIN-04..08].
+   - password masked; show/hide toggles; [DELTA: auto re-mask after 3 seconds
+     REQ-EMP_LOGIN-03 and the 6-digit e-mail OTP required when the user is not
+     the last previously logged-in employee (REQ-EMP_LOGIN-09/10) are not yet
+     server-enforced];
+   - banned/deleted -> 403 (banned loses access immediately [REQ-UM-02]);
+   - success -> redirect to the dashboard; response carries
+     must_change_password so the UI prompts a first password change; role
+     allow-list STAFF/ADMIN/SUPER ADMIN, otherwise "Your account does not have
+     access to the admin panel."
+  Session state persists in localStorage (survives tab switches) and
+  logout/login is required after password change.
+
+E3. EMPLOYEE HOME CHROME (navigation)
+  Required by [RULE-A FLOW-EMP_HOME-01..04]: top ribbon with logo leftmost,
+  search bar centermost, and rightmost array "home", "QR", "notifications",
+  "dark mode", "settings" icons (FLOW-EMP_HOME-06..13: each opens the home
+  page, the QR-scanner page, the notification tab, toggles the dark/light
+  theme and swaps its own icon, and opens settings).
+  Required left rail [FLOW-EMP_HOME-05..22]: "Dashboard", "Walk-in Orders",
+  "Appointments", "Orders", "Products", "Reviews", "Sales", "Staff", "Logout",
+  each with its icon + label, Logout opening the confirmation popup.
+  [NOW-C] implemented chrome:
+   - top bar (AdminTopBar): breadcrumb trail left; right side only a
+     notification-bell dropdown (session alerts + "View alert center") and the
+     profile avatar dropdown ("Account profile", "Sign out").
+   - logo lives on top of the LEFT sidebar, not in the top bar; the search bar
+     is the sidebar's Search button opening a Ctrl/Cmd+K command palette
+     (live orders/products, routes to /admin/orders or /admin/inventory).
+   - left rail is grouped, not flat: Overview (Dashboard); Sales & Operations
+     (Register/POS, Orders, Schedule, Appointments); Fulfillment (Pickup,
+     Delivery); Store & Catalog (Inventory & Products, Reviews, Storefront);
+     Management (Analytics, User Management, Settings).
+   - scanning is NOT a ribbon icon: it is the modal/manual entry on the Pickup
+     screen (E14), plus the customer-side scanner in the order detail page.
+   - logout lives only in the top-bar profile menu.
+  [DELTA E3-a: no "home", "QR", "dark mode" or "settings" icon exists in the
+   top ribbon, so FLOW-EMP_HOME-04/07/09-13 are unmet.]
+  [DELTA E3-b: the employee portal has NO dark-mode toggle at all — the theme
+   context is only wired to the customer menu drawer; the theme follows
+   localStorage 'isko_theme' set there.]
+  [DELTA E3-c: staff DO see every sidebar entry except Register and Settings;
+   REQ-EMP_HOME-01 (hide Dashboard/Walk-in/Reviews/Sales from staff) is not
+   applied — see section 9 D07.]
+
+E4. DASHBOARD (status dashboard)  [SRS-B Status Dashboard]
+  /admin/dashboard: KPI stat cards, sales overview, order-stage bar chart,
+  sales/units toggle, recent activity; auto-refresh every 30 seconds
+  [REQ-SD-02]; data is real time and traceable to transaction records
+  [REQ-SD-04]; customer accounts have no access to any dashboard data
+  [REQ-SD-01]. Metrics: daily sales, bookings, employee attendance/headcount,
+  order fulfillment by status [SRS-B description].
+
+E5. WALK-IN (POINT-OF-SALE) ORDER — create and check out  [RULE-A R09 walk-in]
+  Actor: ADMIN or SUPER ADMIN (route /admin/pos is additionally gated
+  RequireRole ADMIN/SUPER ADMIN; staff cannot open the register).
+  Steps:
+   1 Browse the POS catalog and add product variations to the POS cart ->
+     POST /api/pos/add {ord_id?, prod_id/variant, qty}. With no order id the
+     server creates a POS-<8> order owned by the shared walk-in customer
+     (cust_phone '0000000000', nickname "Walk-in", type WALK-IN) — all walk-in
+     customers are listed under "Walk-in" with that phone number
+     [SRS-B REQ-POS-01].
+   2 Modify quantities / remove lines -> PUT /api/pos/update,
+     DELETE /api/pos/remove (only while the POS order is still TO PROCESS and
+     tagged POS-).
+   3 Review overview and total amount due (the employee sees the summary once
+     no more lines are added/modified/removed [SRS-B POS sequence]) ->
+     enter amount received -> POST /api/pos/checkout {ord_id, pay_given}.
+      - validates pay_given >= total;
+      - one transaction: payment row (POS-PAY-<8>), auto-creates a closed VISIT
+        appointment with QR 'QR-POS-<10>' when none was supplied, creates the
+        pickup row, sets ord_status 'TO CLAIM', stamps ord_completed (the
+        walk-in order is completed on the spot), decrements stock, updates
+        peak/today sales, fires low-stock priority alerts;
+      - exactly ONE employee facilitates the walk-in order [RULE-A R09] — the
+        authenticated token of the facilitating employee is the record;
+      - receipt screen "Sale Complete!".
+   4 Walk-in customers can only request a return online by booking a VISIT
+     appointment and doing so in person [SRS-B REQ-POS-02] (enforced in C10).
+
+E6. MANAGE BOOKED APPOINTMENTS
+  /admin/appointments (admin edit right per RULE-A matrix; staff view-only).
+   - Master calendar/day view of ALL previous, current and active appointments
+     in both types (REQ-SC-01 master view); customers only ever see their own.
+   - Tabs/pills: today / upcoming / done / cancelled (active vs inactive).
+   - Day bookings list with appointment details (customer, type, order tag).
+   - Cancel/close a booking: reason is mandatory ("A reason is required to
+     cancel an appointment."), POST /api/appoint/close -> owner notified with
+     the reason and every overlapping open booking in the same block is told to
+     reschedule [SRS-B REQ-SC-04].
+   - Reschedule on behalf of the customer -> PUT /api/appoint/update with the
+     same capacity/staffing rules.
+   - Completing an appointment: exactly one employee scans the customer's
+     appointment QR from the scanner page -> appointment is closed/completed
+     [RULE-A R04].
+   - Slot grid endpoint GET /api/appoint/slots also powers the schedule screen.
+
+E7. MANAGE ACTIVE ORDERS (pre-orders and online orders)
+  /admin/orders (admin edit per matrix; staff view-only on the queue).
+   - Columns: id, customer, date, type, fulfillment, status, total, actions;
+     filter chips Type / Fulfillment / Status / Item with reset; search and
+     sort; date-range views on analytics.
+   - Status transitions allowed to employees (enforced server-side, 409 on
+     anything else):
+       TO PROCESS   -> TO CLAIM | TO RECEIVE | CANCEL REQUESTED |
+                       RETURN REQUESTED | CANCELLED
+       TO CLAIM     -> CLAIMED | UNCLAIMED | CANCEL REQUESTED |
+                       RETURN REQUESTED | CANCELLED
+       TO RECEIVE   -> CLAIMED | UNCLAIMED | CANCEL REQUESTED |
+                       RETURN REQUESTED | CANCELLED
+       CANCEL REQUESTED -> CANCELLED      (approve the customer's cancel)
+       RETURN REQUESTED -> RETURNED       (approve/complete the return)
+       CLAIMED      -> RETURN REQUESTED | RETURNED | REFUNDED
+       RETURNED     -> REFUNDED | CLAIMED (refund, or restore after replacement)
+     non-admin employees are refused ("Administrator access is required.");
+   - Approving a cancellation/return notifies the customer; terminal states
+     stamp ord_completed; notifications follow REQ-OT-01 with the code's
+     larger silent set (TO CLAIM, TO RECEIVE, CANCEL REQUESTED, RETURN
+     REQUESTED - see C16 [DELTA]).
+   - Activation rule [RULE-A R09]: a pre-order becomes active only when the
+     product list, the claiming modality and the online payment are all
+     complete (this is exactly what checkout enforces, section C7).
+   - QR verification at claim time is performed from the pickup screen/scanner
+     (E8), never by the customer.
+
+E8. PICKUP FULFILLMENT SCREEN
+  /admin/pickup: tabs Overview / Unscheduled / Scheduled / Completed /
+  No-show.
+   - Unscheduled pre-orders -> "Schedule" opens a slot picker
+     (SchedulePickupModal) -> confirm books the CLAIM slot for the customer
+     (POST /api/appoint/create on their behalf / update), or "Handover" when
+     ready.
+   - Scheduled -> awaiting arrival; scanning the customer's QR (scanner page
+     via the top-bar QR icon, POST /api/tracking/scan) moves TO CLAIM ->
+     CLAIMED and closes the appointment; a failed scan notifies all employees.
+   - Completed -> claimed history; No-show -> Reschedule action.
+   - Pickup cannot be closed manually: PUT /api/tracking/close refuses unless
+     the QR scan already completed it ("A valid QR scan is required before
+     closing fulfillment.").
+
+E9. DELIVERY FULFILLMENT SCREEN
+  /admin/delivery: tabs Overview / Queue / In Transit / Completed / Issues.
+   - Queue -> "Dispatch": confirm hand-off to the courier ->
+     PUT /api/tracking/update moves delivery PENDING -> TRANSIT (and the order
+     stays TO RECEIVE) [SRS-B: order only reaches TO RECEIVE after being handed
+     to the forwarder].
+   - In Transit -> ETA/fee labels per tier; Completed -> DELIVERED after the
+     customer scans the parcel QR (C9b); Issues -> Retry Booking / Contact
+     (UI-only stubs [DELTA: no third-party courier API is connected]).
+   - PUT /api/tracking/close finalizes the fulfillment track, only after QR
+     completion.
+
+E10. ADD / MODIFY / DISABLE PRODUCTS (inventory management)
+  /admin/inventory (admin edit per matrix; staff view-only).
+   - ADD: "Add product" modal -> name, description, base price, category,
+     photos (POST /api/uploads), variations: sizes and colors (>=1 each
+     [RULE-A R10]), per-variation markup, photo, stock, pre-order flag ->
+     POST /api/products/add (role:admin). Validation: product name unique
+     regardless of capitalization [RULE-A R10]; category must be a real
+     category; product/category forms never refresh or self-clear on error
+     [REQ-IM-01/02]; success -> back to the product list.
+   - MODIFY: open the product -> edit fields/variations/stock ->
+     PUT /api/products/update -> validated and saved.
+   - DISABLE: "unlist" removes the product from the customer-facing catalog ->
+     POST /api/products/unlist sets prod_disabled = now();
+     "sell"/enable brings it back -> POST /api/products/sell clears
+     prod_disabled/prod_deleted; "remove" soft-deletes -> prod_deleted = now()
+     (a deleted product never disappears from existing bags/wishlists but
+     cannot be added or checked out [REQ-CW-01/02]).
+   - STOCK: automated decrement on every checkout (online and walk-in) and
+     manual stock adjustment; when a variation falls to/below the preconfigured
+     low-stock threshold (settings.low_stock_threshold, default 5) admin and
+     super admin get a PRIORITY notification [SRS-B REQ-IM-03].
+   - Staff VIEW on inventory and product details only [RULE-A matrix].
+
+E11. MANAGE REVIEWS
+  /admin/reviews (admin moderation right; staff view-only).
+   - Queue of pending/approved reviews across products; select one or many.
+   - Approve -> stores "[APPROVED] ..." (optionally a censored replacement),
+     the review becomes public and the rating is averaged into prod_rating;
+     Reject/Censor -> "[REVIEW CENSORED]"; Delete -> removed. Customer is
+     notified of the outcome.
+   - One rating and one feedback per product per customer; customers may edit
+     until approved [SRS-B review rules].
+   - [DELTA: "Reply" and "Escalate" buttons are session-only stubs — no API
+     endpoint exists yet.]
+
+E12. MANAGE EMPLOYEE AND CUSTOMER ACCOUNTS (banning included)
+  /admin/users (SUPER ADMIN only for writes; staff/admin see the list read-only,
+  row menu "View only — Super Admin required").
+   - List/search/sort accounts: GET /api/accounts/display|search|sort
+     (customers + employees, soft-deleted excluded) with role/status filters.
+   - Enroll: see E1 (POST /api/auth/emp_signup, temporary password).
+   - Edit details: PUT /api/accounts/update (allow-listed columns).
+   - Change role: PUT /api/accounts/type -> STAFF | ADMIN | SUPER ADMIN
+     (customer and employee accounts can never be converted into each other);
+     logged as ROLE_CHANGE.
+   - BAN: choose "Ban Account" -> a reason is REQUIRED
+     ("A reason is required to ban an account (REQ-UM-04).") ->
+     POST /api/accounts/disable -> emp/cust_disabled = now(), the reason is
+     logged, the account is notified, and ALL its access tokens are revoked so
+     any active session dies immediately [REQ-UM-02]; login afterwards returns
+     403 "Account disabled".
+   - RECOVER: POST /api/accounts/recover -> clears disabled/deleted, logs
+     RECOVER, notifies the account through its registered contact
+     [SRS-B User Management].
+   - DELETE: two-step confirmation ("Type DELETE to confirm") -> DELETE
+     /api/accounts/delete -> soft delete (timestamp) or hard delete (tokens and
+     row purged); irreversible [REQ-UM-03]; self-delete blocked.
+   - AUDIT: every action is written to emplog (REGISTER, ROLE_CHANGE, DISABLE,
+     RECOVER, DELETE, FLAG, QR_SCAN) and to /api/access/log with the
+     responsible super admin, timestamp and reason [REQ-UM-04].
+
+E13. EMPLOYEE SCHEDULE MANAGEMENT
+  /admin/schedule ("Student Officer Duty & Shift Scheduler").
+   - Presetting [RULE-A R08]: availability dates/periods are preset — an
+     hourly academic-period job auto-marks every active employee available
+     (emp_instore = true) and generates 14 days of DESK DUTY blocks across the
+     store operating hours once per academic period [REQ-SS-01].
+   - Each employee is guaranteed >=180 minutes of availability per week
+     [RULE-A R08]; the roster grid surfaces the per-block headcount.
+   - Assign duty: ScheduleAssignModal (officer, duty type, start/end, location)
+     -> POST /api/shifts; amend -> PUT /api/shifts/{id}; cancel ->
+     DELETE /api/shifts/{id} (admin+; staff blocked 403).
+   - Roster: "Mark On Duty / Mark Off Duty" -> PUT /api/accounts/update
+     {emp_instore}; employees may set their own unavailability on or before the
+     actual date/time (same-day emergencies included) [SRS-B Staff Scheduling].
+   - Lock [REQ-SS-02]: once a block has started only a super admin may change
+     availability ("Availability is locked: shift block #n started at ...");
+     the UI additionally locks at 7:00 AM for the day.
+   - Threshold bar [REQ-SS-03]: shows "VISIT >=2" and "CLAIM >=1" headcount
+     with open/unverified counts and "Shortfall — super admins notified";
+     dropping below the threshold blocks further bookings for that block and
+     triggers staff-shortage PRIORITY notifications to booked customers and
+     PENDING REPLACEMENT alerts to SUPER ADMIN.
+   - Shift rows show derived statuses: SCHEDULED / ACTIVE / COMPLETED /
+     PENDING REPLACEMENT.
+   - Duty Requests drawer exists but is empty ([DELTA] no shift-swap endpoint).
+
+E14. QR SCANNER (shared verification tool)
+  Required by [RULE-A/SRS-B]: the "QR" icon in the employee top ribbon opens a
+  QR-scanner page; customers scan parcel QRs in the order detail page.
+  [NOW-C] actual entry points: the scanner modal / manual code field inside
+  /admin/pickup (button "QR Code Scanner"), plus the customer scanner in the
+  order detail page for delivery QRs. [DELTA: there is no top-ribbon "QR" icon
+  and no standalone scanner route.]
+  Behavior: camera scan (html5-qrcode, ~250px box, dedupe cooldown) or manual
+  code entry -> POST /api/tracking/scan {code, scanned_by}:
+   - resolves delivery QR, order tag, signed order payload
+     (CNI-ORDER-{ord_id}.{HMAC}), appointment QR, pickup;
+   - TO CLAIM path is employees-only and needs a valid open CLAIM appointment;
+   - TO RECEIVE path is customer-only;
+   - success updates status, completes pickup/parcel/appointment, notifies both
+     sides; failure returns a fixed 409 message, notifies ALL employees with a
+     PRIORITY "[PRIORITY] Failed QR scan ..." and writes emplog QR_SCAN
+     [SRS-B REQ-APC-02/03].
+
+E15. ANALYTICS (sales)  [SRS-B Status Dashboard/Business Insights]
+  /admin/analytics: timeframe pills Today / 7D / 30D (date-range filtering
+  [REQ-SD-03]); stat cards Total Sales, Total Orders, Active Customers, Avg.
+  Order Value vs 30-day baseline; stacked sales chart split Online vs POS
+  Walk-in; recent orders; top products (links into inventory); conversion
+  funnel (visitors -> added to cart -> completed checkouts -> rate); 30s
+  auto-refresh [REQ-SD-02].
+
+E16. STOREFRONT CUSTOMIZATION
+  /admin/customization: manage the storefront hero slideshow stored in
+  settings.store_slides (add/edit/reorder/delete slides with title, subtitle,
+  CTA label/link, banner image via POST /api/uploads), store status card,
+  last-edit attribution (banner_last_edit / banner_last_edit_by), save/discard
+  with an "Unsaved changes" sticky bar -> PUT /api/settings/update.
+
+E17. SYSTEM SETTINGS
+  /admin/settings (ADMIN + SUPER ADMIN; staff is redirected to the dashboard).
+   - Store Operations implemented: Store Open/Closed (writes
+     maintenance_mode), Accept Online Orders, Allow In-Store Pickup, Allow
+     Delivery -> PUT /api/settings/update -> "Settings saved successfully!".
+   - Read-mostly previews: max orders per time slot (max_claiming_slots=10),
+     low-stock threshold (<=5 units), order confirmation automatic,
+     cancellation policy, notification timing, permission scope per role.
+   - Server defaults: store_name "Tindahan ni Isko", operating_hours
+     "08:00 - 18:00", max_claiming_slots 10, max_visit_slots 1,
+     visit_slot_duration 10, claim_slot_duration 30, min_in_store_staff 2,
+     low_stock_threshold 5, maintenance_mode false, academic_period_start.
+     GET /api/settings/display (role:staff) / PUT /api/settings/update
+     (role:admin) [SRS-B: super admin manages system settings].
+   - [DELTA: the other settings sections (Pickup & Delivery, Order Preferences,
+     Checkout & Payments, Staff/Customer Notifications, Access & Permissions,
+     Security) render no content yet.]
+
+E18. REPORTS (exists in the API and a full screen exists)
+  API: GET/POST/GET/PUT/DELETE /api/reports (role:staff, body additionally
+  requires ADMIN/SUPER ADMIN) — report types sales, inventory, appointments,
+  staffing; filters persisted as JSON in report_text; built by ReportBuilder.
+  UI: /admin/reviews-adjacent screen AdminReports.jsx supports date ranges,
+  CSV/PDF export and saved templates but is currently NOT routed
+  [DELTA: reachable only by direct code path; no sidebar entry].
+
+E19. EDIT EMPLOYEE PROFILE / EMPLOYEE SETTINGS
+  /admin/account (also /admin/profile): loads own employee row, avatar upload
+  (<=10MB) / remove, first name, last name, e-mail behind an explicit
+  Edit/Lock toggle -> PUT /api/accounts/update {emp_givname, emp_surname,
+  emp_email, emp_photo} -> "Account profile updated successfully!"
+  [SRS-B Account Profile Control; form never refreshes on error REQ-APC-02].
+  Change Password modal -> PUT /api/auth/update_credentials (current password
+  required, >=8 chars, 30-day lock [REQ-APC-01]) -> all tokens revoked ->
+  "Password updated. Please sign in again." -> forced logout.
+  Personal settings (dark mode, notification preferences) are the employee's own
+  editable settings per the RULE-A matrix.
+
+E20. EMPLOYEE NOTIFICATIONS
+  Required by [RULE-A]: employees see their personal notifications (and the
+  system notifications for admin/super admin) with the same PRIORITY/
+  FOLLOW-UP/read-on-click rules as the customer inbox.
+  [NOW-C] the API exists (GET /api/notif/display {recipient_type:'employee'},
+  PUT /api/notif/update, POST /api/notif/create|/notif/distribute role:staff)
+  and empnotif rows are written by the backend for every event, but the
+  employee portal has NO screen that renders them: the top-bar bell only shows
+  a client-side alert feed (out-of-stock + pending cancel/return requests,
+  built from the loaded products/orders and dismissible, linked to
+  /admin/dashboard). Nothing marks empnotif rows read from the UI.
+  Events written to empnotif (server side): low-stock alerts (ADMIN/SUPER
+  ADMIN), failed QR scans (all employees), QR claim/receipt confirmations
+  (all), payment/webhook confirmation, PENDING REPLACEMENT shift alerts (SUPER
+  ADMIN), account ban/recover notices, review activity, plus manual/bulk sends.
+  [DELTA E20: no employee inbox screen and no emp_unread maintenance; the
+  "notifications" tab of FLOW-EMP_HOME-08 has no icon and no page.]
+
+E21. EMPLOYEE ACCESS LOG / FLAGGING
+  POST /api/access/log {action, ...} writes emplog rows from the UI (SET
+  IN-STORE, SET OFF-STORE, ASSIGN DUTY, CANCEL SHIFT, REGISTER/UPDATE/
+  CHANGE ACCOUNT TYPE/BAN/RECOVER/DELETE ACCOUNT); POST /api/access/flag logs
+  irregularities (emplog action FLAG) [RULE-A DOMAIN 32 Access Log; CUSTLOG/
+  EMPLOG schema].
+
+E22. EMPLOYEE LOGOUT
+  Flow: "Sign out" in the top-bar profile menu -> POST /api/auth/logout
+  (token deleted) -> admin state, order and product caches cleared ->
+  /admin/login.
+  [DELTA: FLOW-EMP_HOME-05/22 requires a "Logout" entry with an icon+label on
+  the left rail opening a confirmation popup; the rail has no logout item and
+  no confirmation dialog is shown.]
+
+================================================================================
+5. CROSS-CUTTING FLOWS AND GUARDS
+================================================================================
+  X1 Authentication: Sanctum bearer tokens; unauthenticated API calls return
+     401 JSON "Unauthenticated. Please sign in again."; the SPA's RequireAuth
+     shows LoginPromptModal instead of a redirect; RequireAdmin redirects
+     unknown sessions to /admin/login.
+  X2 Role enforcement: middleware role:staff|admin|super_admin (ranks 3/2/1)
+     plus per-controller checks (reports require ADMIN/SUPER ADMIN; POS and
+     settings endpoints are admin+; account writes are super-admin; customer
+     tokens are rejected by all role guards).
+  X3 Sessions: login required after logout, refresh, browser reopen, device
+     wake [REQ-ALR-01]; forms never self-clear/refresh on validation errors
+     [REQ-ALR-02/03, REQ-APC-02, REQ-IM-01/02]; specific, timely error messages
+     only [REQ-ALR-03].
+  X4 Caching/performance: server 30s read cache with version-bump invalidation;
+     frontend 5-min catalog cache and route prefetch; health probe
+     GET /api/health/scheduler.
+  X5 Theming: dark/light toggle on the customer portal (menu drawer, persisted
+     in localStorage 'isko_theme' and applied to <html class="dark">).
+     [DELTA: the employee portal exposes no theme toggle of its own, though it
+     honors the same stored preference — FLOW-EMP_HOME-09..12 unmet.]
+  X6 Uploads: POST /api/uploads (image, <=10MB, png/jpg/jpeg/gif/webp) for
+     avatars, product photos, banners -> /storage/uploads/...
+  X7 Notification semantics: PRIORITY markers, 24h unread follow-up job every
+     15 minutes, read-on-click, unread badges, deep links (REQ-AN-01..03).
+  X8 Audit: custlog for customer events, emplog for employee/system events,
+     reports for aggregated business insights.
+
+================================================================================
+6. ORDER STATE MACHINE (single source of truth)
+================================================================================
+  CART-<8>  (bag, editable/removable, never visible to other customers)
+      | checkout: modality + online payment complete, stock decremented
+      v
+  ORD-<8> TO PROCESS ----(staff: stock/courier ready)----> TO CLAIM (pickup)
+                                              \----------> TO RECEIVE (delivery)
+  TO CLAIM   --employee scans customer QR (valid CLAIM appt)--> CLAIMED
+           \--no valid scan/appointment--> UNCLAIMED
+           \--customer request--> CANCEL REQUESTED --> (admin) CANCELLED
+           \--customer request--> RETURN REQUESTED --> (admin) RETURNED
+  TO RECEIVE --customer scans parcel QR--> CLAIMED (delivery DELIVERED)
+           \--employee/customer request--> CANCEL REQUESTED / RETURN REQUESTED
+  CLAIMED    --> RETURN REQUESTED --> RETURNED --> REFUNDED (after money back)
+                                           \----> back to CLAIMED (replacement)
+  POS-<8>    walk-in order: created, paid and completed (TO CLAIM + ord_completed)
+             in one employee-facilitated transaction.
+  Rules: terminal states (CLAIMED/CANCELLED/RETURNED/REFUNDED) stamp
+  ord_completed; every non-QR status change notifies the customer [REQ-OT-01],
+  except today's silent set TO CLAIM / TO RECEIVE / CANCEL REQUESTED /
+  RETURN REQUESTED (see C16);
+  CANCELLED/RETURNED/REFUNDED invalidate the order QR [REQ-APC-01].
+
+================================================================================
+7. NOTIFICATION MATRIX (who gets what)
+================================================================================
+  Event                                             Recipient        Type
+  ------------------------------------------------  ---------------  ---------
+  Order status change                               customer         regular
+  TO CLAIM / TO RECEIVE / CANCEL REQ / RETURN REQ change  none (silent)  -
+  Appointment booked / rescheduled                  none (toast only) -
+  Appointment closed by staff / slot unavailable    owner + block    PRIORITY
+  Staff shortage affecting a booked slot            booked customer  PRIORITY
+  Low stock <= threshold                            ADMIN, SUPER ADM PRIORITY
+  Payment/webhook confirmation                      customer+admins  PRIORITY
+  QR scan success                                   customer+staff   PRIORITY
+  QR scan failure                                   all employees    PRIORITY
+  Account banned / recovered                        that account     regular
+  Review approved / censored                        customer         regular
+  Shift -> PENDING REPLACEMENT                      SUPER ADMIN      PRIORITY
+  Unread PRIORITY > 24h                             same recipient   FOLLOW-UP
+  Manual / bulk send                                chosen targets   any
+
+================================================================================
+8. RULES -> FLOW TRACEABILITY (governing rules of the new document)
+================================================================================
+  R01-R03 portal/role separation ......... sections 1.2, 3, 4 (separate routes,
+                                            separate guards)
+  R04 appointment rules .................. C13, C14, C15, E6, E14 (slots,
+                                            capacity, staff availability,
+                                            QR completion by one employee)
+  R05 customer categories/login .......... C1, C2, 1.2
+  R06 delivery rules ..................... C7, C9b, C12/C18 addresses, E9
+  R07 employee categories/access ......... 1.2, 1.3, E1-E22
+  R08 scheduling rules ................... E13 (preset roster, 180 min/week)
+  R09 order rules ....................... C6-C11, E5, E7, section 6
+  R10 product rules ..................... E10, C4
+  FLOW-EMP_LOGIN-01..08 .................. E2
+  FLOW-EMP_HOME-01..24 .................. E3 (+ deltas D15/D19)
+  REQ-EMP_HOME-01 ....................... [DELTA] flagged in 9 (D07)
+  FLOW-CUST_HOME-01..03 ................. C3 (delta D16)
+  FLOW-CUST_PROF-01/02 .................. C12
+  DOMAIN 32 access log .................. C21, E21
+
+================================================================================
+9. KNOWN DELTAS (current system vs the two documents) — for honesty/completeness
+================================================================================
+  D01 Slot geometry: implemented 30-min CLAIM / 10-min VISIT with capacity
+      10/1; governing rule (A) requires exactly 10-minute slots with max 5
+      pickup + 1 visit.
+  D02 No server-enforced OTP: signup/verify/forgot-password codes are accepted
+      client-side; REQ-EMP_LOGIN-09/10 (6-digit e-mail OTP when not the last
+      logged-in employee) is not implemented; REQ-EMP_LOGIN-03 (auto re-mask
+      after 3s) is not enforced.
+  D03 Recover-password endpoint is a stub (always a generic success message);
+      no mail is actually sent (MAIL_MAILER=log).
+  D04 REFUNDED/CANCELLED/RETURNED do not move money or restore stock;
+      PayMongoService::refundPayment is unused; PayMongo keys are empty in
+      .env and the webhook route sits inside the sanctum group.
+  D05 PRODVAR / PRODSALES of the new schema are not separate tables yet
+      (product JSON columns + per-product counters stand in for them), and the
+      bag/wishlist counters live in CUSTOMER as specified but bag rows live in
+      orders with a CART- prefix.
+  D06 BU-eño/guest categorization, BU e-mail domain and BU-email uniqueness are
+      not validated server-side at signup; cust_type currently stores
+      'Student'/'WALK-IN'.
+  D07 Staff visibility rule REQ-EMP_HOME-01 (hide Dashboard/Walk-in/Reviews/
+      Sales from staff) is only partially applied (only Register and Settings
+      are staff-hidden); staff can still open most screens read-only.
+  D08 Customer addresses are stored per-device (localStorage) and are not yet
+      synced as customer rows, though checkout uses the profile address path.
+  D09 Delivery address book is not persisted server-side; delivery uses profile
+      or typed address.
+  D10 Notification preferences screen is informational only; follow-up job uses
+      a 24h unread threshold (comments say 2h).
+  D11 AdminReports screen is unrouted; some inventory filters, POS buttons
+      (Hold/Discount/Recent Sales), delivery Retry/Contact, review Reply/
+      Escalate and settings sections are UI stubs.
+  D12 Real-time updates are polling/caching (Reverb installed but unused).
+  D13 Walk-in POS update endpoint lacks transition/ownership validation.
+  D14 ReportBuilder references a non-existent appoint_deleted column and an
+      undefined dutyShifts relation (appointments/staffing reports fragile).
+  D15 Employee top ribbon lacks the required "home", "QR", "dark mode" and
+      "settings" icons (FLOW-EMP_HOME-04/07/09-13) and the employee portal has
+      no theme toggle; the scanner lives only inside the Pickup screen.
+  D16 The customer menu drawer omits the required "settings" entry
+      (FLOW-CUST_HOME-03); Settings is still reachable from Profile, the
+      account sidebar and the /home drawer.
+  D17 Booking/rescheduling an appointment sends no notification, and
+      notification rows carry no link column - only closed/unavailable
+      appointment notices deep-link (to /appointments); REQ-OT-01's silent set
+      is wider in code (also CANCEL REQUESTED / RETURN REQUESTED).
+  D18 No employee notification inbox screen exists (empnotif rows are written
+      but never rendered/read; the top-bar bell shows a client-side alert feed
+      instead) and cust_unread/emp_unread counters are never maintained.
+  D19 The left rail has no "Logout" entry/confirmation (FLOW-EMP_HOME-05/22);
+      logout is only in the top-bar profile menu.
+
+================================================================================
+10. COVERAGE CHECKLIST (every item requested in the prompt)
+================================================================================
+  customer signup ......................... C1        customer login .......... C2
+  product catalog .......................... C3        product details ......... C4
+  wishlist .................................. C5        bag ...................... C6
+  order checkout (incl. overview step) .... C7       order tracking ........... C8
+  order claiming ............................ C9       order cancellation ...... C10
+  order refund / return .................... C11
+  editing customer profile ................ C12       creating an appointment . C13
+  modifying an appointment ................. C14       cancelling an appointment C15
+  receiving customer notifications ......... C16       reading notifications ... C17
+  editing customer settings ................ C18       customer logout ......... C19
+  reviews (customer) ....................... C20       access log (customer) ... C21
+  other existing customer features ......... C22       employee enrollment ..... E1
+  employee login ........................... E2       employee home chrome ..... E3
+  dashboard ............................... E4       walk-in create+checkout ... E5
+  managing booked appointments ............. E6       managing active orders ... E7
+  pickup fulfillment ....................... E8       delivery fulfillment ..... E9
+  adding/modifying/disabling products ..... E10       managing reviews ........ E11
+  banning/recovering/deleting accounts .... E12       employee scheduling ..... E13
+  QR scanner .............................. E14       analytics/sales ......... E15
+  storefront customization ................. E16       system settings ........ E17
+  reports .................................. E18       editing employee profile  E19
+  employee notifications .................. E20       access log (employee) ... E21
+  employee logout ......................... E22       cross-cutting .......... X1-X8
+  order state machine ....................... 6       notification matrix ..... 7
+  rule traceability ........................ 8       deltas ................... 9
+
+================================================================================
+END OF overview.txt — verified against: new_incomplete_cartniisko.docx (RULES +
+SCHEMA), original_cartniisko.docx (SRS flows/requirements), and the current
+frontend/backend/Supabase implementation. No source code was modified.
+================================================================================
