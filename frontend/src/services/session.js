@@ -31,3 +31,12 @@ export function loadSession(kind) {
 export function clearSession(kind) {
   if (!kind || !session || session.kind === kind) session = null
 }
+
+/**
+ * Read the shared slot without the `kind` filter (used by the sliding
+ * token renew in api.js: the renewed bearer must re-persist whichever
+ * role is signed in, without touching the user object).
+ */
+export function peekSession() {
+  return session
+}

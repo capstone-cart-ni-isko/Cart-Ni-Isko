@@ -1,9 +1,28 @@
-/** The three time columns the timeline shows. */
-const TIME_SLOTS = ['7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM']
+/**
+ * Hour columns the timeline shows (store day 7:00 AM – 8:00 PM).
+ * Blocks are placed by clamping their window into this range; the
+ * underlying granularity is 10 minutes (FLOW-EMP_SCHED-03).
+ */
+const TIME_SLOTS = [
+  '7:00 AM',
+  '8:00 AM',
+  '9:00 AM',
+  '10:00 AM',
+  '11:00 AM',
+  '12:00 PM',
+  '1:00 PM',
+  '2:00 PM',
+  '3:00 PM',
+  '4:00 PM',
+  '5:00 PM',
+  '6:00 PM',
+  '7:00 PM',
+  '8:00 PM',
+]
 
 /**
- * Day / Week / Month toggle plus the date navigator. Pure presentation: the
- * page owns the selected date and the view mode.
+ * Day / Week / Month toggle plus the date navigator. Pure
+ * presentation: the page owns the selected date and the view mode.
  */
 export default function ScheduleToolbar({ viewMode, dateLabel, isToday, onViewChange, onShiftDate }) {
   return (

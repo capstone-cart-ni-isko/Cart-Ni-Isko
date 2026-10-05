@@ -69,7 +69,7 @@ class CacheReads
         $scope = 'guest';
 
         if (!in_array($request->path(), self::SHARED, true)) {
-            $user = $request->user('sanctum');
+            $user = $request->user('api');
             if ($user !== null) {
                 $scope = get_class($user) . '#' . $user->getAuthIdentifier();
             }

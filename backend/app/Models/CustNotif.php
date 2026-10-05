@@ -1,26 +1,29 @@
 <?php
+namespace App\Models;
 
-    namespace App\Models;
+use Illuminate\Database\Eloquent\Model;
 
-    use Illuminate\Database\Eloquent\Model;
+class CustNotif extends Model
+{
+    protected $table = 'custnotif';
+    protected $primaryKey = 'custnotif_id';
+    public $timestamps = false;
 
-    class CustNotif extends Model
+    protected $fillable = [
+        'cust_id',
+        'custnotif_created',
+        'custnotif_read',
+        'custnotif_msg',
+        'custnotif_type',
+    ];
+
+    protected $casts = [
+        'custnotif_created' => 'datetime',
+        'custnotif_read' => 'datetime',
+    ];
+
+    public function customer()
     {
-        // Define the table name, primary key, and timestamps
-        protected $table = 'custnotif';
-        protected $primaryKey = 'custnotif_id';
-        public $timestamps = false;
-
-        // Define the fillable attributes for mass assignment
-        protected $fillable = [
-            'cust_id',
-            'custnotif_created',
-            'custnotif_read',
-            'custnotif_msg',
-        ];
-
-        public function customer()
-        {
-            return $this->belongsTo(Customer::class, 'cust_id', 'cust_id');
-        }
+        return $this->belongsTo(Customer::class, 'cust_id', 'cust_id');
     }
+}

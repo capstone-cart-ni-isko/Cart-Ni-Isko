@@ -7,8 +7,43 @@ import Button from '../../components/ui/Button.jsx'
 import Input from '../../components/ui/Input.jsx'
 import { DownloadIcon, FileTextIcon, CalendarIcon, UsersIcon, PackageIcon, Trash2Icon, SaveIcon } from '../../components/ui/Icons.jsx'
 import { apiPost, apiGet } from '../../services/api.js'
+import { empCateg, empIsActive, first, fmtDateTime, productStock, toNumber } from '../../components/admin/schema.js'
 import { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
+
+/*
+ * Reports are generated on the fly — the `reports` table is gone, so
+ * filter templates live in localStorage instead of the API.
+ */
+const TEMPLATE_KEY = 'cni_admin_report_templates'
+
+/** Older templates stored the legacy filter vocabularies. */
+const LEGACY_APPOINT_TYPE = { CLAIM: 'pickup', VISIT: 'visit' }
+const LEGACY_STATUS = { OPEN: 'upcoming', CLOSED: 'done' }
+
+const readTemplates = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TEMPLATE_KEY) || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch (e) {
+    return []
+  }
+}
+
+const writeTemplates = (templates) => {
+  try {
+    localStorage.setItem(TEMPLATE_KEY, JSON.stringify(templates))
+  } catch (e) {
+    console.warn('Failed to persist report templates:', e)
+  }
+}
+
+/** The generated report row may use the new or legacy column names. */
+const reportDate = (row) => first(row, 'appoint_start', 'appoint_date')
+const reportStatus = (row) => String(first(row, 'appoint_status', 'status') || '').toUpperCase()
+const reportEmpType = (row) => String(first(row, 'emp_categ', 'emp_type') || '').toUpperCase()
+const reportAvailability = (row) =>
+  String(first(row, 'availability') || (first(row, 'emp_present', 'emp_instore') ? 'In-Store' : 'Available'))
 
 const REPORT_TYPES = [
   { id: 'sales', label: 'Sales Report', icon: PackageIcon, desc: 'Revenue, transactions, top products by date' },
@@ -18,6 +53,17 @@ const REPORT_TYPES = [
 ]
 
 const DELIVERY_SPEEDS = ['priority', 'standard', 'saver']
+
+/** Human-readable value for a generated report summary cell. */
+const summaryDisplay = (value) => {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'number') return value.toLocaleString()
+  if (typeof value === 'object') {
+    if ('from' in value || 'to' in value) return `${value.from ?? 'All time'} – ${value.to ?? 'All time'}`
+    return JSON.stringify(value)
+  }
+  return String(value)
+}
 
 function AdminReports() {
   const { currentAdminUser, isSuperAdmin } = useAdmin()
@@ -41,7 +87,7 @@ function AdminReports() {
   const [templateName, setTemplateName] = useState('')
   const [showSaveModal, setShowSaveModal] = useState(false)
 
-  // Load saved reports on mount
+  // Load saved report templates (localStorage — reports are never persisted server-side)
   useEffect(() => {
     loadSavedReports()
   }, [])
@@ -51,15 +97,9 @@ function AdminReports() {
     loadFilterOptions()
   }, [])
 
-  const loadSavedReports = useCallback(async () => {
-    try {
-      const res = await apiGet('/reports')
-      if (res.success) setSavedReports(res.data || [])
-    } catch (e) {
-      console.warn('Failed to load saved reports:', e)
-    } finally {
-      setIsLoadingReports(false)
-    }
+  const loadSavedReports = useCallback(() => {
+    setSavedReports(readTemplates())
+    setIsLoadingReports(false)
   }, [])
 
   const handleLoadTemplate = useCallback((report) => {
@@ -71,9 +111,12 @@ function AdminReports() {
         if (meta.filters.date_to) setDateTo(meta.filters.date_to)
         if (meta.filters.prod_id) setProdId(String(meta.filters.prod_id))
         if (meta.filters.emp_id) setEmpId(String(meta.filters.emp_id))
-        if (meta.filters.appoint_type) setAppointType(meta.filters.appoint_type)
-        if (meta.filters.status) setStatusFilter(meta.filters.status)
-        if (meta.filters.emp_type) setEmpTypeFilter(meta.filters.emp_type)
+        if (meta.filters.appoint_type) setAppointType(LEGACY_APPOINT_TYPE[meta.filters.appoint_type] || meta.filters.appoint_type)
+        if (meta.filters.status || meta.filters.appoint_status) {
+          const rawStatus = meta.filters.status || meta.filters.appoint_status
+          setStatusFilter(LEGACY_STATUS[rawStatus] || rawStatus)
+        }
+        if (meta.filters.emp_categ || meta.filters.emp_type) setEmpTypeFilter(String(meta.filters.emp_categ || meta.filters.emp_type).toLowerCase())
       }
       setGeneratedData(null)
       showToast(`Loaded template: ${report.report_title}`, 'success')
@@ -90,7 +133,7 @@ function AdminReports() {
       ])
       if (prodData.success) setProducts(prodData.data?.products || prodData.data || [])
       if (empData.success) {
-        const emps = (empData.data?.employees || empData.data || []).filter(e => !e.emp_deleted && !e.emp_disabled)
+        const emps = (empData.data?.employees || empData.data || []).filter(e => empIsActive(e))
         setEmployees(emps)
       }
     } catch (e) {
@@ -100,22 +143,31 @@ function AdminReports() {
     }
   }, [])
 
+  const buildFilters = () => {
+    const filters = {}
+    if (dateFrom) filters.date_from = dateFrom
+    if (dateTo) filters.date_to = dateTo
+    if (prodId) filters.prod_id = Number(prodId)
+    if (empId) filters.emp_id = Number(empId)
+    if (appointType) filters.appoint_type = appointType
+    if (statusFilter) {
+      filters.status = statusFilter
+      filters.appoint_status = statusFilter
+    }
+    if (empTypeFilter) {
+      filters.emp_categ = empTypeFilter
+      filters.emp_type = String(empTypeFilter).toUpperCase()
+    }
+    return filters
+  }
+
   const handleGenerate = async () => {
     if (isGenerating) return
     setIsGenerating(true)
     try {
-      const filters = {}
-      if (dateFrom) filters.date_from = dateFrom
-      if (dateTo) filters.date_to = dateTo
-      if (prodId) filters.prod_id = Number(prodId)
-      if (empId) filters.emp_id = Number(empId)
-      if (appointType) filters.appoint_type = appointType
-      if (statusFilter) filters.status = statusFilter
-      if (empTypeFilter) filters.emp_type = empTypeFilter
-
       const res = await apiPost('/reports', {
         report_type: reportType,
-        filters,
+        filters: buildFilters(),
         save_template: false,
       })
 
@@ -132,38 +184,26 @@ function AdminReports() {
     }
   }
 
-  const handleSaveTemplate = async () => {
+  const handleSaveTemplate = () => {
     if (!templateName.trim()) return
-    setIsGenerating(true)
     try {
-      const filters = {}
-      if (dateFrom) filters.date_from = dateFrom
-      if (dateTo) filters.date_to = dateTo
-      if (prodId) filters.prod_id = Number(prodId)
-      if (empId) filters.emp_id = Number(empId)
-      if (appointType) filters.appoint_type = appointType
-      if (statusFilter) filters.status = statusFilter
-      if (empTypeFilter) filters.emp_type = empTypeFilter
-
-      const res = await apiPost('/reports', {
-        report_type: reportType,
-        filters,
-        save_template: true,
-        template_name: templateName.trim(),
+      const templates = readTemplates()
+      templates.unshift({
+        report_id: `local-${Date.now()}`,
+        report_title: templateName.trim(),
+        report_created: new Date().toISOString(),
+        report_text: JSON.stringify({
+          type: reportType,
+          filters: buildFilters(),
+        }),
       })
-
-      if (res.success) {
-        showToast('Report template saved', 'success')
-        setTemplateName('')
-        setShowSaveModal(false)
-        loadSavedReports()
-      } else {
-        showToast(res.message || 'Failed to save template', 'error')
-      }
+      writeTemplates(templates)
+      setSavedReports(templates)
+      showToast('Report template saved', 'success')
+      setTemplateName('')
+      setShowSaveModal(false)
     } catch (e) {
       showToast(e.message || 'Failed to save template', 'error')
-    } finally {
-      setIsGenerating(false)
     }
   }
 
@@ -213,7 +253,7 @@ function AdminReports() {
       y += 6
       doc.setFontSize(9)
       Object.entries(generatedData.summary || {}).forEach(([k, v]) => {
-        doc.text(`${k.replace(/_/g, ' ')}: ${v}`, 14, y)
+        doc.text(`${k.replace(/_/g, ' ')}: ${summaryDisplay(v)}`, 14, y)
         y += 5
       })
       y += 4
@@ -227,7 +267,7 @@ function AdminReports() {
             doc.autoTable({
               startY: y,
               head: [['Date', 'Transactions', 'Revenue']],
-              body: generatedData.by_date.map(d => [d.date, d.transactions, `₱${d.revenue.toLocaleString()}`]),
+              body: generatedData.by_date.map(d => [d.date, d.transactions, `₱${toNumber(d.revenue).toLocaleString()}`]),
               theme: 'striped',
               headStyles: { fillColor: [249, 115, 22] },
             })
@@ -239,7 +279,7 @@ function AdminReports() {
             doc.autoTable({
               startY: y,
               head: [['Product', 'Qty Sold', 'Revenue', 'Orders']],
-              body: generatedData.by_product.slice(0, 30).map(p => [p.prod_name, p.total_qty, `₱${p.total_revenue.toLocaleString()}`, p.orders_count]),
+              body: generatedData.by_product.slice(0, 30).map(p => [p.prod_name, p.total_qty, `₱${toNumber(p.total_revenue).toLocaleString()}`, p.orders_count]),
               theme: 'striped',
               headStyles: { fillColor: [249, 115, 22] },
             })
@@ -252,7 +292,7 @@ function AdminReports() {
             doc.autoTable({
               startY: y,
               head: [['Name', 'Category', 'Price', 'Qty', 'Stock Value', 'Low Stock']],
-              body: generatedData.items.slice(0, 50).map(i => [i.prod_name, i.prod_categ, `₱${i.prod_price}`, i.prod_qty, `₱${i.stock_value.toLocaleString()}`, i.is_low_stock ? 'Yes' : 'No']),
+              body: generatedData.items.slice(0, 50).map(i => [i.prod_name, i.prod_categ, `₱${i.prod_price}`, productStock(i), `₱${toNumber(i.stock_value).toLocaleString()}`, i.is_low_stock ? 'Yes' : 'No']),
               theme: 'striped',
               headStyles: { fillColor: [249, 115, 22] },
             })
@@ -265,7 +305,7 @@ function AdminReports() {
             doc.autoTable({
               startY: y,
               head: [['ID', 'Type', 'Date', 'Status', 'Customer']],
-              body: generatedData.items.slice(0, 50).map(a => [a.appoint_id, a.appoint_type, new Date(a.appoint_date).toLocaleString(), a.appoint_status, a.customer]),
+              body: generatedData.items.slice(0, 50).map(a => [a.appoint_id, a.appoint_type, fmtDateTime(reportDate(a)), reportStatus(a), a.customer]),
               theme: 'striped',
               headStyles: { fillColor: [249, 115, 22] },
             })
@@ -278,7 +318,7 @@ function AdminReports() {
             doc.autoTable({
               startY: y,
               head: [['Name', 'Type', 'Email', 'In-Store', 'Shifts', 'Hours']],
-              body: generatedData.staff.map(s => [s.name, s.emp_type, s.emp_email, s.availability, `${s.total_shifts} (${s.upcoming_shifts} upcoming)`, `${s.total_hours}h`]),
+              body: generatedData.staff.map(s => [s.name, reportEmpType(s), s.emp_email, reportAvailability(s), `${s.total_shifts} (${s.upcoming_shifts} upcoming)`, `${s.total_hours}h`]),
               theme: 'striped',
               headStyles: { fillColor: [249, 115, 22] },
             })
@@ -299,7 +339,7 @@ function AdminReports() {
     const rows = []
     // Summary
     rows.push(['Sales Report Summary'])
-    Object.entries(data.summary).forEach(([k, v]) => rows.push([k, v]))
+    Object.entries(data.summary || {}).forEach(([k, v]) => rows.push([k, summaryDisplay(v)]))
     rows.push([])
     // By Date
     rows.push(['By Date'])
@@ -321,39 +361,39 @@ function AdminReports() {
 
   const generateInventoryCSV = (data) => {
     const rows = [['Inventory Report Summary']]
-    Object.entries(data.summary).forEach(([k, v]) => rows.push([k, v]))
+    Object.entries(data.summary || {}).forEach(([k, v]) => rows.push([k, summaryDisplay(v)]))
     rows.push([])
     rows.push(['Items'])
     rows.push(['ID', 'Tag', 'Name', 'Category', 'Price', 'Qty', 'Stock Value', 'Low Stock'])
     data.items?.forEach(i => rows.push([
       i.prod_id, i.prod_tag, i.prod_name, i.prod_categ,
-      i.prod_price, i.prod_qty, i.stock_value, i.is_low_stock ? 'Yes' : 'No'
+      i.prod_price, productStock(i), i.stock_value, i.is_low_stock ? 'Yes' : 'No'
     ]))
     return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
   }
 
   const generateAppointmentsCSV = (data) => {
     const rows = [['Appointments Report Summary']]
-    Object.entries(data.summary).forEach(([k, v]) => rows.push([k, v]))
+    Object.entries(data.summary || {}).forEach(([k, v]) => rows.push([k, summaryDisplay(v)]))
     rows.push([])
     rows.push(['Appointments'])
     rows.push(['ID', 'QR', 'Type', 'Date', 'Status', 'Customer', 'Phone'])
     data.items?.forEach(a => rows.push([
-      a.appoint_id, a.appoint_qr, a.appoint_type, a.appoint_date,
-      a.appoint_status, a.customer, a.customer_phone
+      a.appoint_id, a.appoint_qr, a.appoint_type, reportDate(a),
+      reportStatus(a), a.customer, a.customer_phone
     ]))
     return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
   }
 
   const generateStaffingCSV = (data) => {
     const rows = [['Staffing Report Summary']]
-    Object.entries(data.summary).forEach(([k, v]) => rows.push([k, v]))
+    Object.entries(data.summary || {}).forEach(([k, v]) => rows.push([k, summaryDisplay(v)]))
     rows.push([])
     rows.push(['Staff'])
     rows.push(['ID', 'Name', 'Type', 'Email', 'Phone', 'In-Store', 'Total Shifts', 'Upcoming', 'Hours'])
     data.staff?.forEach(s => rows.push([
-      s.emp_id, s.name, s.emp_type, s.emp_email, s.emp_phone,
-      s.availability, s.total_shifts, s.upcoming_shifts, s.total_hours
+      s.emp_id, s.name, reportEmpType(s), s.emp_email, s.emp_phone,
+      reportAvailability(s), s.total_shifts, s.upcoming_shifts, s.total_hours
     ]))
     return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
   }
@@ -373,19 +413,19 @@ function AdminReports() {
         return `
           <h3>Items</h3>
           <table><thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Qty</th><th>Stock Value</th><th>Low Stock</th></tr></thead>
-          <tbody>${data.items?.map(i => `<tr><td>${i.prod_name}</td><td>${i.prod_categ}</td><td>₱${i.prod_price}</td><td>${i.prod_qty}</td><td>₱${i.stock_value}</td><td>${i.is_low_stock ? 'Yes' : 'No'}</td></tr>`).join('')}</tbody></table>
+          <tbody>${data.items?.map(i => `<tr><td>${i.prod_name}</td><td>${i.prod_categ}</td><td>₱${i.prod_price}</td><td>${productStock(i)}</td><td>₱${i.stock_value}</td><td>${i.is_low_stock ? 'Yes' : 'No'}</td></tr>`).join('')}</tbody></table>
         `
       case 'appointments':
         return `
           <h3>Appointments</h3>
           <table><thead><tr><th>ID</th><th>Type</th><th>Date</th><th>Status</th><th>Customer</th></tr></thead>
-          <tbody>${data.items?.map(a => `<tr><td>${a.appoint_id}</td><td>${a.appoint_type}</td><td>${a.appoint_date}</td><td>${a.appoint_status}</td><td>${a.customer}</td></tr>`).join('')}</tbody></table>
+          <tbody>${data.items?.map(a => `<tr><td>${a.appoint_id}</td><td>${a.appoint_type}</td><td>${fmtDateTime(reportDate(a))}</td><td>${reportStatus(a)}</td><td>${a.customer}</td></tr>`).join('')}</tbody></table>
         `
       case 'staffing':
         return `
           <h3>Staff</h3>
           <table><thead><tr><th>Name</th><th>Type</th><th>Email</th><th>In-Store</th><th>Shifts</th><th>Hours</th></tr></thead>
-          <tbody>${data.staff?.map(s => `<tr><td>${s.name}</td><td>${s.emp_type}</td><td>${s.emp_email}</td><td>${s.availability}</td><td>${s.total_shifts}</td><td>${s.total_hours}</td></tr>`).join('')}</tbody></table>
+          <tbody>${data.staff?.map(s => `<tr><td>${s.name}</td><td>${reportEmpType(s)}</td><td>${s.emp_email}</td><td>${reportAvailability(s)}</td><td>${s.total_shifts}</td><td>${s.total_hours}</td></tr>`).join('')}</tbody></table>
         `
       default:
         return ''
@@ -479,7 +519,7 @@ function AdminReports() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Employee</label>
                   <select value={empId} onChange={e => setEmpId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-orange focus:ring-1 focus:ring-brand-orange">
                     <option value="">All Employees</option>
-                    {employees.map(e => <option key={e.emp_id} value={e.emp_id}>{e.emp_givname} {e.emp_surname} ({e.emp_type})</option>)}
+                    {employees.map(e => <option key={e.emp_id} value={e.emp_id}>{e.emp_givname} {e.emp_surname} ({empCateg(e).toUpperCase()})</option>)}
                   </select>
                 </div>
               )}
@@ -488,8 +528,8 @@ function AdminReports() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Appointment Type</label>
                   <select value={appointType} onChange={e => setAppointType(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-orange focus:ring-1 focus:ring-brand-orange">
                     <option value="">All Types</option>
-                    <option value="CLAIM">Claim</option>
-                    <option value="VISIT">Visit</option>
+                    <option value="pickup">Pickup</option>
+                    <option value="visit">Visit</option>
                   </select>
                 </div>
               )}
@@ -498,8 +538,10 @@ function AdminReports() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
                   <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-orange focus:ring-1 focus:ring-brand-orange">
                     <option value="">All Statuses</option>
-                    <option value="OPEN">Open</option>
-                    <option value="CLOSED">Closed</option>
+                    <option value="upcoming">Upcoming</option>
+                    <option value="done">Done</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="absent">Absent</option>
                   </select>
                 </div>
               )}
@@ -508,9 +550,9 @@ function AdminReports() {
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Employee Type</label>
                   <select value={empTypeFilter} onChange={e => setEmpTypeFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-orange focus:ring-1 focus:ring-brand-orange">
                     <option value="">All Types</option>
-                    <option value="STAFF">Staff</option>
-                    <option value="ADMIN">Admin</option>
-                    <option value="SUPER ADMIN">Super Admin</option>
+                    <option value="staff">Staff</option>
+                    <option value="admin">Admin</option>
+                    <option value="super admin">Super Admin</option>
                   </select>
                 </div>
               )}
@@ -544,7 +586,7 @@ function AdminReports() {
                   {Object.entries(generatedData.summary).map(([key, value]) => (
                     <div key={key} className="bg-white rounded-lg p-3 border border-slate-200">
                       <p className="text-xs text-slate-400 uppercase tracking-wider">{key.replace(/_/g, ' ')}</p>
-                      <p className="text-xl font-bold text-slate-900">{typeof value === 'number' ? (key.includes('revenue') || key.includes('value') ? `₱${value.toLocaleString()}` : value.toLocaleString()) : value}</p>
+                      <p className="text-xl font-bold text-slate-900">{typeof value === 'number' && (key.includes('revenue') || key.includes('value')) ? `₱${value.toLocaleString()}` : summaryDisplay(value)}</p>
                     </div>
                   ))}
                 </div>
@@ -563,7 +605,7 @@ function AdminReports() {
                           <tr key={d.date} className="hover:bg-slate-50">
                             <td className="p-3">{d.date}</td>
                             <td className="p-3 text-right">{d.transactions}</td>
-                            <td className="p-3 text-right font-medium">₱{d.revenue.toLocaleString()}</td>
+                            <td className="p-3 text-right font-medium">₱{toNumber(d.revenue).toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -585,7 +627,7 @@ function AdminReports() {
                           <tr key={p.prod_id} className="hover:bg-slate-50">
                             <td className="p-3">{p.prod_name}</td>
                             <td className="p-3 text-right">{p.total_qty}</td>
-                            <td className="p-3 text-right font-medium">₱{p.total_revenue.toLocaleString()}</td>
+                            <td className="p-3 text-right font-medium">₱{toNumber(p.total_revenue).toLocaleString()}</td>
                             <td className="p-3 text-right">{p.orders_count}</td>
                           </tr>
                         ))}
@@ -615,9 +657,9 @@ function AdminReports() {
                           <tr key={i.prod_id} className={`hover:bg-slate-50 ${i.is_low_stock ? 'bg-rose-50/30' : ''}`}>
                             <td className="p-3 font-medium">{i.prod_name}</td>
                             <td className="p-3 text-slate-600">{i.prod_categ}</td>
-                            <td className="p-3 text-right">₱{i.prod_price.toFixed(2)}</td>
-                            <td className="p-3 text-right">{i.prod_qty}</td>
-                            <td className="p-3 text-right font-medium">₱{i.stock_value.toLocaleString()}</td>
+                            <td className="p-3 text-right">₱{toNumber(i.prod_price).toFixed(2)}</td>
+                            <td className="p-3 text-right">{productStock(i)}</td>
+                            <td className="p-3 text-right font-medium">₱{toNumber(i.stock_value).toLocaleString()}</td>
                             <td className="p-3 text-center">
                               {i.is_low_stock && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 text-xs font-semibold">⚠ Low</span>}
                             </td>
@@ -642,11 +684,11 @@ function AdminReports() {
                           <tr key={a.appoint_id} className="hover:bg-slate-50">
                             <td className="p-3 font-mono text-xs">{a.appoint_id}</td>
                             <td className="p-3">{a.appoint_type}</td>
-                            <td className="p-3">{new Date(a.appoint_date).toLocaleString()}</td>
+                            <td className="p-3">{fmtDateTime(reportDate(a))}</td>
                             <td className="p-3 text-center">
                               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${
-                                a.appoint_status === 'OPEN' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                              }`}>{a.appoint_status}</span>
+                                ['UPCOMING', 'DONE', 'OPEN', 'CLAIMED', 'RECEIVED'].includes(reportStatus(a)) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                              }`}>{reportStatus(a)}</span>
                             </td>
                             <td className="p-3">{a.customer}</td>
                           </tr>
@@ -669,9 +711,9 @@ function AdminReports() {
                         {generatedData.staff.map(s => (
                           <tr key={s.emp_id} className="hover:bg-slate-50">
                             <td className="p-3 font-medium">{s.name}</td>
-                            <td className="p-3">{s.emp_type}</td>
+                            <td className="p-3">{reportEmpType(s)}</td>
                             <td className="p-3 text-slate-600">{s.emp_email}</td>
-                            <td className="p-3 text-center">{s.availability}</td>
+                            <td className="p-3 text-center">{reportAvailability(s)}</td>
                             <td className="p-3 text-right">{s.total_shifts} ({s.upcoming_shifts} upcoming)</td>
                             <td className="p-3 text-right">{s.total_hours}h</td>
                           </tr>

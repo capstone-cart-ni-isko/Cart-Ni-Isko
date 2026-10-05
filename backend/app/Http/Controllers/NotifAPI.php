@@ -10,6 +10,31 @@
 
     class NotifAPI extends Controller
     {
+        /**
+         * DOMAIN 31 - custnotif_type / empnotif_type are always one of
+         * priority | regular (default priority, per DDL).
+         */
+        private function notifType(Request $json): string
+        {
+            $type = strtolower((string) $json->input('notif_type', $json->input('type', 'priority')));
+
+            return in_array($type, ['priority', 'regular'], true) ? $type : 'priority';
+        }
+
+        /**
+         * DOMAIN 32 - every auth/view/edit action taken through this controller
+         * leaves a custlog / emplog row for whoever performed it.
+         */
+        private function logActor(Request $json, string $access, string $endpoint): void
+        {
+            $user = $json->user('api');
+            if ($user instanceof Employee) {
+                $this->logEmployee((int) $user->getKey(), $access, $endpoint);
+            } elseif ($user instanceof Customer) {
+                $this->logCustomer((int) $user->getKey(), $access, $endpoint);
+            }
+        }
+
         /*
             Creating notifications
             ----------
@@ -18,6 +43,7 @@
             recipient_type - string (req: customer | employee)
             recipient_id - integer (req)
             notif_msg - string (req)
+            notif_type - string (opt: priority | regular, def priority)
         */
         public function createNotification(Request $json)
         {
@@ -28,6 +54,7 @@
                 $recipientType = strtolower($json->input('recipient_type'));
                 $recipientId   = $json->input('recipient_id');
                 $notifMsg      = $json->input('notif_msg');
+                $notifType     = $this->notifType($json);
 
                 if ($recipientType === 'customer') {
                     $recipient = Customer::where('cust_id', $recipientId)->first();
@@ -39,6 +66,7 @@
                         'cust_id'           => $recipientId,
                         'custnotif_created' => now(),
                         'custnotif_read'    => null,
+                        'custnotif_type'    => $notifType,
                         'custnotif_msg'     => $notifMsg,
                     ]);
                 } else {
@@ -51,9 +79,13 @@
                         'emp_id'           => $recipientId,
                         'empnotif_created' => now(),
                         'empnotif_read'    => null,
+                        'empnotif_type'    => $notifType,
                         'empnotif_msg'     => $notifMsg,
                     ]);
                 }
+
+                // D32 - the staff member who pushed it, not the recipient.
+                $this->logActor($json, 'edit', 'POST /api/notif/create');
 
                 return response()->json([
                     'success' => true,
@@ -78,6 +110,7 @@
             recipient_type - string (req: customer | employee)
             notif_msg - string (req)
             recipient_ids - array of integers (opt, if omitted sends to ALL of that type)
+            notif_type - string (opt: priority | regular, def priority)
         */
         public function distributeNotifications(Request $json)
         {
@@ -88,13 +121,14 @@
                 $recipientType = strtolower($json->input('recipient_type'));
                 $notifMsg      = $json->input('notif_msg');
                 $recipientIds  = $json->input('recipient_ids');
+                $notifType     = $this->notifType($json);
 
                 $sentCount = 0;
                 $now = now();
 
                 if ($recipientType === 'customer') {
-                    // Fetch target customers
-                    $query = Customer::whereNull('cust_deleted')->whereNull('cust_disabled');
+                    // Fetch target customers (soft-deleted / suspended are skipped)
+                    $query = Customer::whereNull('cust_deleted')->whereNull('cust_suspended');
                     if (!empty($recipientIds) && is_array($recipientIds)) {
                         $query->whereIn('cust_id', $recipientIds);
                     }
@@ -106,6 +140,7 @@
                             'cust_id'           => $customer->cust_id,
                             'custnotif_created' => $now,
                             'custnotif_read'    => null,
+                            'custnotif_type'    => $notifType,
                             'custnotif_msg'     => $notifMsg,
                         ];
                     }
@@ -114,8 +149,8 @@
                         $sentCount = count($inserts);
                     }
                 } else {
-                    // Fetch target employees
-                    $query = Employee::whereNull('emp_deleted')->whereNull('emp_disabled');
+                    // Fetch target employees (soft-deleted / suspended are skipped)
+                    $query = Employee::whereNull('emp_deleted')->whereNull('emp_suspended');
                     if (!empty($recipientIds) && is_array($recipientIds)) {
                         $query->whereIn('emp_id', $recipientIds);
                     }
@@ -127,6 +162,7 @@
                             'emp_id'           => $employee->emp_id,
                             'empnotif_created' => $now,
                             'empnotif_read'    => null,
+                            'empnotif_type'    => $notifType,
                             'empnotif_msg'     => $notifMsg,
                         ];
                     }
@@ -136,11 +172,15 @@
                     }
                 }
 
+                // D32 - one row for the actor; recipients are not actors here.
+                $this->logActor($json, 'edit', 'POST /api/notif/distribute');
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Notifications distributed successfully',
                     'data' => [
                         'recipient_type' => $recipientType,
+                        'notif_type'     => $notifType,
                         'sent_count'     => $sentCount,
                     ]
                 ], 201);
@@ -173,7 +213,7 @@
                 ], 400);
             }
 
-            $user = $json->user();
+            $user = $json->user('api');
             $recipientId = $json->input('recipient_id');
 
             try {
@@ -197,24 +237,23 @@
                     return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
                 }
 
+                // D31: unread first, then priority first, then *_created DESC.
                 if ($recipientType === 'customer') {
-                    // The sanctum token already resolved this customer row,
-                    // so a second existence check would only add a round trip
                     $notifications = CustNotif::where('cust_id', $recipientId)
+                        ->orderByRaw('CASE WHEN custnotif_read IS NULL THEN 0 ELSE 1 END')
+                        ->orderByRaw("CASE WHEN custnotif_type = 'priority' THEN 0 ELSE 1 END")
                         ->orderBy('custnotif_created', 'desc')
                         ->get();
                 } else {
-                    if (!$recipientId) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Recipient ID is required'
-                        ], 400);
-                    }
-
                     $notifications = EmpNotif::where('emp_id', $recipientId)
+                        ->orderByRaw('CASE WHEN empnotif_read IS NULL THEN 0 ELSE 1 END')
+                        ->orderByRaw("CASE WHEN empnotif_type = 'priority' THEN 0 ELSE 1 END")
                         ->orderBy('empnotif_created', 'desc')
                         ->get();
                 }
+
+                // D32 - reading your own inbox is a 'view' action.
+                $this->logActor($json, 'view', 'GET /api/notif/display');
 
                 return response()->json([
                     'success' => true,
@@ -262,7 +301,7 @@
                     $notif->update(['custnotif_read' => now()]);
                 } else {
                     $notif = EmpNotif::where('empnotif_id', $notifId)->first();
-                    $employee = $json->user('sanctum');
+                    $employee = $json->user('api');
                     if (! $notif || ! $employee instanceof Employee || (int) $notif->emp_id !== (int) $employee->getKey()) {
                         return response()->json(['success' => false, 'message' => 'Employee notification not found'], 404);
                     }
@@ -274,6 +313,9 @@
                     }
                     $notif->update(['empnotif_read' => now()]);
                 }
+
+                // D31 marking read sets *_read = now(); D32 logs it as an edit.
+                $this->logActor($json, 'edit', 'PUT /api/notif/update');
 
                 return response()->json([
                     'success' => true,

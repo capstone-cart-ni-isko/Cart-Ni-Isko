@@ -42,6 +42,19 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        /*
+        |----------------------------------------------------------------------
+        | Stateless API guard
+        |----------------------------------------------------------------------
+        | The live database carries no personal_access_tokens table, so API
+        | callers are authenticated by a signed bearer token instead of a
+        | stored one. Registered by AppServiceProvider::boot().
+        */
+        'api' => [
+            'driver' => 'cni_token',
+            'provider' => 'users',
+        ],
     ],
 
     /*

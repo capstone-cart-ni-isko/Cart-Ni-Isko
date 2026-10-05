@@ -39,6 +39,31 @@ export const STATUS_CONTEXT = {
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
 const HISTORY = ['CLAIMED', 'UNCLAIMED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'COMPLETED']
 
+/**
+ * The API now stores lowercase statuses (`processing`, `to claim`, …). Normalize
+ * them back to the uppercase display vocabulary this page (StatusBadge, tabs,
+ * STATUS_CONTEXT, action buttons) already understands. Values already in the
+ * display vocabulary pass through untouched.
+ */
+const STATUS_DISPLAY_MAP = {
+  processing: 'TO PROCESS',
+  'to cancel': 'CANCEL REQUESTED',
+  'to claim': 'TO CLAIM',
+  delivering: 'TO RECEIVE',
+  'to receive': 'TO RECEIVE',
+  claimed: 'CLAIMED',
+  received: 'COMPLETED',
+  unclaimed: 'UNCLAIMED',
+  cancelled: 'CANCELLED',
+  returned: 'RETURNED',
+  refunded: 'REFUNDED',
+}
+
+function toDisplayStatus(value) {
+  const raw = value == null ? '' : String(value)
+  return STATUS_DISPLAY_MAP[raw.trim().toLowerCase()] || raw.toUpperCase() || 'TO PROCESS'
+}
+
 function formatDate(value) {
   if (!value) return '—'
   const d = new Date(value)
@@ -47,6 +72,10 @@ function formatDate(value) {
 }
 
 function dispatchOf(row) {
+  // Explicit flag first: an order with neither a pickup nor a delivery row is
+  // a walk-in (POS) order, regardless of what ord_claiming defaults to.
+  if (row.is_preorder === false) return 'Walk-in'
+
   const raw = String(
     row.dispatch_type ?? row.ord_dispatch ?? row.deliver_type ?? row.ord_type ?? ''
   ).toLowerCase()
@@ -54,16 +83,24 @@ function dispatchOf(row) {
   if (raw.includes('pickup') || raw.includes('pick')) return 'Store Pickup'
   // Fallbacks until the display contract is confirmed.
   if (row.deliver_qr || row.deliver_addr) return 'Courier Delivery'
-  const status = String(row.ord_status || '').toUpperCase()
-  if (status === 'TO RECEIVE') return 'Courier Delivery'
+  const status = String(row.ord_status || '').toLowerCase()
+  if (status === 'to receive' || status === 'delivering' || status === 'TO RECEIVE') {
+    return 'Courier Delivery'
+  }
   return 'Store Pickup'
 }
 
 function isPreOrderRow(row) {
+  // Canonical signal: an order with a pickup or delivery row is a preorder.
+  if (typeof row.is_preorder === 'boolean') return row.is_preorder
   const tag = String(row.ord_tag || '')
   if (/PRE/i.test(tag)) return true
   return (row.items || []).some(
-    (i) => i.product?.preOrder || i.product?.pre_order || i.product?.ord_type === 'PRE-ORDER'
+    (i) =>
+      i.product?.preOrder ||
+      i.product?.pre_order ||
+      i.product?.prod_preorder ||
+      i.product?.ord_type === 'PRE-ORDER'
   )
 }
 
@@ -77,7 +114,7 @@ export function mapServerOrder(row) {
     (sum, i) => sum + Number(i.item_amount ?? 0) * Number(i.item_qty || 0),
     0
   )
-  const status = String(row.ord_status || 'TO PROCESS').toUpperCase()
+  const status = toDisplayStatus(row.ord_status ?? row.status ?? 'TO PROCESS')
   const method = dispatchOf(row)
 
   return {
@@ -95,6 +132,8 @@ export function mapServerOrder(row) {
       first?.color?.image ||
       product.image ||
       product.images?.[0] ||
+      first?.prodvar_pic ||
+      (Array.isArray(product.prod_images) ? product.prod_images[0] : product.prod_images) ||
       (Array.isArray(product.prod_img) ? product.prod_img[0] : product.prod_img) ||
       null,
     productId: product.prod_tag ?? product.id ?? product.prod_id ?? null,
@@ -281,7 +320,9 @@ function Orders() {
         ) : (
           filteredOrders.map((order) => {
             const productImage = order.image || null
-            const isDelivery = order.fulfillment?.method === 'Courier Delivery'
+            const method = order.fulfillment?.method || 'Store Pickup'
+            const isDelivery = method === 'Courier Delivery'
+            const isWalkIn = method === 'Walk-in'
             const orderTotal = order.subtotal
 
             return (

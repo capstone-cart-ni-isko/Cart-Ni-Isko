@@ -69,6 +69,7 @@ function MyAddress() {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [saving, setSaving] = useState(false)
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -103,7 +104,7 @@ function MyAddress() {
     setForm(EMPTY_FORM)
   }
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault()
     if (!isFormValid) return
 
@@ -113,31 +114,45 @@ function MyAddress() {
       phone: accountPhone,
     }
 
-    if (editingId) {
-      updateAddress(editingId, addressPayload)
-      showToast('Address updated successfully!')
-    } else {
-      addAddress({
-        ...addressPayload,
-        id: Date.now().toString(),
-      })
-      showToast('Address added successfully!')
+    setSaving(true)
+    try {
+      if (editingId) {
+        await updateAddress(editingId, addressPayload)
+        showToast('Address updated successfully!')
+      } else {
+        await addAddress({
+          ...addressPayload,
+          id: Date.now().toString(),
+        })
+        showToast('Address added successfully!')
+      }
+      setShowForm(false)
+      setEditingId(null)
+      setForm(EMPTY_FORM)
+    } catch (error) {
+      showToast(error.message || 'Unable to save that address.', 'error')
+    } finally {
+      setSaving(false)
     }
-
-    setShowForm(false)
-    setEditingId(null)
-    setForm(EMPTY_FORM)
   }
 
-  const handleDelete = (id) => {
-    deleteAddress(id)
-    showToast('Address removed')
+  const handleDelete = async (id) => {
+    try {
+      await deleteAddress(id)
+      showToast('Address removed')
+    } catch (error) {
+      showToast(error.message || 'Unable to remove that address.', 'error')
+    }
     setDeleteTarget(null)
   }
 
-  const handleSetDefault = (id) => {
-    updateAddress(id, { isDefault: true })
-    showToast('Default address updated!')
+  const handleSetDefault = async (id) => {
+    try {
+      await updateAddress(id, { isDefault: true })
+      showToast('Default address updated!')
+    } catch (error) {
+      showToast(error.message || 'Unable to set the default address.', 'error')
+    }
   }
 
   const isFormValid = form.addressLine?.trim() && form.city?.trim() && form.province?.trim()
@@ -237,7 +252,7 @@ function MyAddress() {
                   <Button type="button" variant="secondary" onClick={handleCancel} className="flex-1 h-11 rounded-xl font-bold">
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={!isFormValid} className="flex-1 h-11 rounded-xl font-bold shadow-md">
+                  <Button type="submit" disabled={!isFormValid || saving} loading={saving} className="flex-1 h-11 rounded-xl font-bold shadow-md">
                     Save
                   </Button>
                 </div>

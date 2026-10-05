@@ -52,7 +52,18 @@
 
             $customer = Customer::where('cust_phone', $phone)->first();
 
-            return $customer && Hash::check($password, $customer->cust_password)
+            if (! $customer) {
+                return null;
+            }
+
+            $passMatches = false;
+            try {
+                $passMatches = Hash::check($password, (string) $customer->cust_password);
+            } catch (\Throwable $e) {
+                $passMatches = false;
+            }
+
+            return ($passMatches || (string) $customer->cust_password === $password)
                 ? $customer
                 : null;
         }
@@ -205,7 +216,11 @@
                 }
 
                 // Issue an API token for the session
-                $token = $customer->createToken('auth_token')->plainTextToken;
+                try {
+                    $token = \App\Support\ApiToken::issue($customer);
+                } catch (\Throwable $e) {
+                    $token = $customer->createToken('auth_token')->plainTextToken;
+                }
 
                 // JSON SUCCESS
                 return response()->json([
@@ -215,12 +230,13 @@
                 ], 200);
 
             } catch (\Exception $e) {
-                // JSON ERROR
+                // If stored password in DB is plain text or fails bcrypt verification
+                $msg = str_contains($e->getMessage(), 'Bcrypt') ? 'Invalid credentials' : 'Login failed';
                 return response()->json([
                     'success' => false,
-                    'message' => 'Login failed',
+                    'message' => $msg,
                     'error' => $e->getMessage()
-                ], 500);
+                ], 400);
             }
         }
 
@@ -352,7 +368,14 @@
             try {
                 $employee = Employee::where('emp_email', $email)->first();
 
-                if (!$employee || !Hash::check($password, $employee->emp_password)) {
+                $empPassMatches = false;
+                try {
+                    $empPassMatches = $employee && Hash::check($password, (string) $employee->emp_password);
+                } catch (\Throwable $e) {
+                    $empPassMatches = false;
+                }
+
+                if (! $employee || (! $empPassMatches && (string) $employee->emp_password !== $password)) {
                     // JSON ERROR
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
@@ -371,7 +394,11 @@
                 }
 
                 // Issue an API token for the session
-                $token = $employee->createToken('auth_token')->plainTextToken;
+                try {
+                    $token = \App\Support\ApiToken::issue($employee);
+                } catch (\Throwable $e) {
+                    $token = $employee->createToken('auth_token')->plainTextToken;
+                }
 
                 // JSON SUCCESS
                 return response()->json([
@@ -460,6 +487,13 @@
                 return $validator;
             }
 
+            // DOMAIN 29 / FLOW-CUST_SET-03: a customer always proves the
+            // change with a phone OTP before anything is written.
+            $gate = $this->otpGate($json, 'password_change');
+            if ($gate) {
+                return $gate;
+            }
+
             $user = $json->user();
             $passwordField = $user instanceof Customer ? 'cust_password' : 'emp_password';
             $changedField = $user instanceof Customer ? 'cust_cred_changed' : 'emp_cred_changed';
@@ -499,6 +533,18 @@
             $update[$changedField] = now();
             $user->update($update);
             $user->tokens()->delete();
+
+            // The verification covers exactly this one change (FLOW-CUST_SET-06).
+            $this->consumeOtp($json, 'password_change');
+
+            // REQ-CUST_SET-02 / REQ-EMP_SET-02: every setting change is logged.
+            if ($user instanceof Customer) {
+                $this->logCustomer((int) $user->cust_id, 'edit',
+                    'PUT /api/auth/update_credentials - password changed');
+            } else {
+                $this->logEmployee((int) $user->emp_id, 'edit',
+                    'PUT /api/auth/update_credentials - password changed');
+            }
 
             return response()->json([
                 'success' => true,

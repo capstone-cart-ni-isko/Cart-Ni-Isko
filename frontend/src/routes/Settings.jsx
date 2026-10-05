@@ -12,12 +12,14 @@ import {
   MapPinIcon,
   BellIcon,
   PackageIcon,
+  HelpIcon,
   LogOutIcon,
 } from '../components/ui/Icons.jsx'
 
 const settingsAccountItems = [
-  { to: '/account', label: 'Edit Profile', icon: <UserIcon className="w-5 h-5 text-gray-450" />, description: 'Update name, email and photo' },
+  { to: '/account', label: 'Edit Profile', icon: <UserIcon className="w-5 h-5 text-gray-450" />, description: 'Update your name, photo and details' },
   { to: '/settings/change-password', label: 'Change Password', icon: <KeyIcon className="w-5 h-5 text-gray-450" />, description: 'Update your login password' },
+  { to: '/settings/backup', label: 'Backup Contacts', icon: <HelpIcon className="w-5 h-5 text-gray-450" />, description: 'Alternate numbers and emails we can reach' },
 ]
 
 const settingsBillingItems = [
@@ -25,11 +27,13 @@ const settingsBillingItems = [
 ]
 
 const settingsPrefsItems = [
-  { to: '/settings/notifications', label: 'Notification Preferences', icon: <BellIcon className="w-5 h-5 text-gray-450" />, description: 'Control alerts and updates' },
+  { to: '/settings/notifications', label: 'Notification Preferences', icon: <BellIcon className="w-5 h-5 text-gray-450" />, description: 'Reminders, email and product alerts' },
   { to: '/orders', label: 'Order History', icon: <PackageIcon className="w-5 h-5 text-gray-450" />, description: 'View past and active orders' },
 ]
 
-const settingsSupportItems = []
+const settingsSupportItems = [
+  { to: '/settings/about', label: 'About', icon: <HelpIcon className="w-5 h-5 text-gray-450" />, description: 'Store information, developers and versions' },
+]
 
 function SettingsSection({ title, items }) {
   return (

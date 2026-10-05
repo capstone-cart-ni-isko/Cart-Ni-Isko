@@ -180,7 +180,7 @@ function SignIn() {
             <div>
               <h1 className="text-3xl font-black text-gray-900 leading-tight">Log In</h1>
               <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
-                Access your tasks, notes, and projects anytime, anywhere.
+                Access your orders, cart, and favorite products anytime, anywhere.
               </p>
             </div>
             <BackButton to="/home" label="Back to Homepage" className="shrink-0 mt-1" />

@@ -51,8 +51,10 @@ return new class extends Migration
                 from customer c
                 where c.cust_phone = p_phone
                   and c.cust_password is not null
-                  and crypt(p_password, replace(c.cust_password, '$2y$', '$2a$'))
-                      = replace(c.cust_password, '$2y$', '$2a$')
+                  and (
+                      (c.cust_password like '$2%' and crypt(p_password, replace(c.cust_password, '$2y$', '$2a$')) = replace(c.cust_password, '$2y$', '$2a$'))
+                      or c.cust_password = p_password
+                  )
             $fn$;
         SQL);
     }

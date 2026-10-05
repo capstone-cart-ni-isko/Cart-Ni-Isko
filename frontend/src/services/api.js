@@ -1,4 +1,4 @@
-import { clearSession } from './session.js'
+import { clearSession, peekSession, saveSession } from './session.js'
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL
 
@@ -93,6 +93,19 @@ export async function apiRequest(path, { method = 'GET', body, headers, silent =
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     })
+    // The sliding bearer: the server may rotate the token on any
+    // authenticated response. The header must be read BEFORE the body
+    // is consumed, and the renewed value is persisted through the
+    // shared session slot so the in-memory copy and the session stay
+    // in sync (employee tokens slide on a 60-second window).
+    const renewedToken = response.headers.get('X-Renewed-Token')
+    if (renewedToken && renewedToken !== authToken) {
+      setApiToken(renewedToken)
+      const current = peekSession()
+      if (current && current.token !== renewedToken) {
+        saveSession(current.kind, renewedToken, current.user)
+      }
+    }
     // Non-JSON failures stay available to the status-based error below.
     const data = await response.json().catch(() => null)
 

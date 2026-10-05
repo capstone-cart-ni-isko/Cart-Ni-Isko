@@ -1,37 +1,41 @@
 <?php
+namespace App\Models;
+use Illuminate\Database\Eloquent\Model;
 
-    namespace App\Models;
+/** Rule 54: a preorder pickup is both an appointment and an order. */
+class Pickup extends Model
+{
+    protected $table = 'pickup';
+    protected $primaryKey = 'pickup_id';
+    public $timestamps = false;
 
-    use Illuminate\Database\Eloquent\Model;
+    // Live schema columns: pickup_id, ord_id, appoint_id, pay_id,
+    // pickup_created, pickup_completed
+    protected $fillable = [
+        'ord_id',
+        'appoint_id',
+        'pay_id',
+        'pickup_created',
+        'pickup_completed',
+    ];
 
-    class Pickup extends Model
+    protected $casts = [
+        'pickup_created'   => 'datetime',
+        'pickup_completed' => 'datetime',
+    ];
+
+    public function order()
     {
-        // Define the table name, primary key, and timestamps
-        protected $table = 'pickup';
-        protected $primaryKey = 'pickup_id';
-        public $timestamps = false;
-
-        // Define the fillable attributes for mass assignment
-        protected $fillable = [
-            'ord_id',
-            'appoint_id',
-            'pay_id',
-            'pickup_created',
-            'pickup_completed',
-        ];
-
-        public function order()
-        {
-            return $this->belongsTo(Order::class, 'ord_id', 'ord_id');
-        }
-
-        public function appointment()
-        {
-            return $this->belongsTo(Appointment::class, 'appoint_id', 'appoint_id');
-        }
-
-        public function payment()
-        {
-            return $this->belongsTo(Payment::class, 'pay_id', 'pay_id');
-        }
+        return $this->belongsTo(Order::class, 'ord_id', 'ord_id');
     }
+
+    public function appointment()
+    {
+        return $this->belongsTo(Appointment::class, 'appoint_id', 'appoint_id');
+    }
+
+    public function payment()
+    {
+        return $this->belongsTo(Payment::class, 'pay_id', 'pay_id');
+    }
+}

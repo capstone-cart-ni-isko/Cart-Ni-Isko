@@ -282,7 +282,7 @@
                     ], 409);
                 }
 
-                $user = $json->user('sanctum');
+                $user = $json->user('api');
                 $custId = $this->customerId($json);
                 if ($custId !== null) {
                     if ((int) $json->input('cust_id') !== $custId) {
@@ -426,7 +426,7 @@
                 $q = $json->input('q', '');
                 $query = Appointment::query();
                 $customerId = $this->customerId($json);
-                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('sanctum'));
+                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('api'));
                 if ($customerId !== null) {
                     $query->where('cust_id', $customerId);
                 } elseif ($isMaster) {
@@ -478,7 +478,7 @@
                 $col = $sortBy === 'created' ? 'appoint_created' : ($sortBy === 'type' ? 'appoint_type' : 'appoint_date');
                 $query = Appointment::query();
                 $customerId = $this->customerId($json);
-                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('sanctum'));
+                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('api'));
                 if ($customerId !== null) {
                     $query->where('cust_id', $customerId);
                 } elseif ($isMaster) {
@@ -534,7 +534,7 @@
                     if ((int) $appointment->cust_id !== $customerId) {
                         return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
                     }
-                } elseif (! $this->isAdmin($json->user('sanctum'))) {
+                } elseif (! $this->isAdmin($json->user('api'))) {
                     return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
                 }
 

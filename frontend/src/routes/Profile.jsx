@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import { fetchOrders } from '../services/orders.js'
+import { fetchMyAccount } from '../services/accounts.js'
 import { fetchNotifications, unreadCount } from '../services/notifications.js'
 import { WishlistContext } from '../context/WishlistContext.jsx'
 import Avatar from '../components/ui/Avatar.jsx'
@@ -84,23 +85,26 @@ function Profile() {
 
   const baseUser = currentUser || {}
 
-  const rawEmail = baseUser.email || ''
-  const rawPhone = baseUser.phone || ''
+  const rawEmail = baseUser.cust_email || baseUser.email || ''
+  const rawPhone = baseUser.cust_phone || baseUser.phone || ''
 
   const isRawPhoneActuallyEmail = rawPhone && rawPhone.includes('@')
   const email = isRawPhoneActuallyEmail ? rawPhone : (rawEmail || '')
 
-  const studentId = baseUser.studentId || ''
-  const yearLevel = baseUser.yearLevel || ''
-  const course = baseUser.course || ''
+  const givname = baseUser.cust_givname || baseUser.givname || ''
+  const surname = baseUser.cust_surname || baseUser.surname || ''
+  const yearLevel = baseUser.cust_categ || baseUser.yearLevel || ''
+  const course = baseUser.cust_dept || baseUser.course || ''
   const campus = baseUser.campus || ''
-  const college = baseUser.college || ''
-  const bio = baseUser.bio || ''
-  const fullName = baseUser.fullName || 'User'
+  const college = baseUser.cust_college || baseUser.college || ''
+  const fullName = givname || surname ? `${givname} ${surname}`.trim() : (baseUser.fullName || 'User')
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
   const [orders, setOrders] = useState([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  // Fresh copy of the signed-in row: phone, pronoun, birthday and the saved
+  // delivery addresses are not carried in the session slot (REQ-CUST_PROF-02).
+  const [account, setAccount] = useState(null)
   const { wishlistItems } = useContext(WishlistContext)
 
   const handleLogout = () => {
@@ -127,6 +131,28 @@ function Profile() {
       })
     return () => { cancelled = true }
   }, [custId])
+
+  useEffect(() => {
+    if (!custId) return undefined
+    let cancelled = false
+    fetchMyAccount()
+      .then((row) => { if (!cancelled && row) setAccount(row) })
+      .catch(() => { /* the session copy still paints the page */ })
+    return () => { cancelled = true }
+  }, [custId])
+
+  const profilePhone = account?.cust_phone || baseUser.cust_phone || baseUser.phone || ''
+  const pronoun = account?.cust_pronoun || baseUser.cust_pronoun || ''
+  const birthday = account?.cust_birthday || account?.cust_bday || baseUser.cust_bday || ''
+  const addresses = Array.isArray(account?.cust_addresses) ? account.cust_addresses : []
+
+  const formatBirthday = (value) => {
+    if (!value) return ''
+    const date = new Date(`${String(value).slice(0, 10)}T00:00:00`)
+    return Number.isNaN(date.getTime())
+      ? String(value)
+      : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  }
 
   const overview = useMemo(() => ({
     totalOrders: orders.length,
@@ -181,7 +207,7 @@ function Profile() {
                 <div className="min-w-0 text-white">
                   <h1 className="text-lg font-black tracking-tight leading-tight truncate">{fullName}</h1>
                   <p className="text-white/90 text-xs font-normal mt-0.5 truncate">{email}</p>
-                  <p className="text-white/80 text-[11px] font-normal mt-0.5">Student ID: {studentId}</p>
+                  <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
                 </div>
               </div>
 
@@ -263,7 +289,7 @@ function Profile() {
                 <PencilIcon className="w-3.5 h-3.5" />
               </Link>
             </div>
-            <p className="text-sm text-gray-600 leading-relaxed font-normal">{bio}</p>
+            <p className="text-sm text-gray-600 leading-relaxed font-normal">{college}{course ? ` – ${course}` : ''}</p>
             <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">Year Level</p>
@@ -346,9 +372,47 @@ function Profile() {
                 <PencilIcon className="w-3.5 h-3.5" />
               </Link>
             </div>
-            <div>
-              <p className="text-xs font-semibold text-gray-500">Email Address</p>
-              <p className="text-sm font-semibold text-gray-900 mt-0.5">{email}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-semibold text-gray-500">Email Address</p>
+                <p className="text-sm font-semibold text-gray-900 mt-0.5 break-all">{email}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500">Phone</p>
+                <p className="text-sm font-semibold text-gray-900 mt-0.5">{profilePhone || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500">Pronoun</p>
+                <p className="text-sm font-semibold text-gray-900 mt-0.5">{pronoun || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500">Birthday</p>
+                <p className="text-sm font-semibold text-gray-900 mt-0.5">
+                  {formatBirthday(birthday) || '—'}
+                </p>
+              </div>
+            </div>
+            <div className="pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-500">Delivery Addresses</p>
+                <Link to="/settings/address" className="text-xs font-bold text-brand-orange">
+                  Manage
+                </Link>
+              </div>
+              {addresses.length === 0 ? (
+                <p className="text-sm text-gray-400 mt-1">No saved addresses yet.</p>
+              ) : (
+                <ul className="mt-1.5 space-y-1.5">
+                  {addresses.map((entry) => (
+                    <li
+                      key={entry}
+                      className="text-sm font-medium text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2"
+                    >
+                      {entry}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 
@@ -406,7 +470,7 @@ function Profile() {
             <div className="text-white">
               <h1 className="text-xl md:text-2xl font-black tracking-tight leading-tight">{fullName}</h1>
               <p className="text-white/90 text-xs font-normal mt-0.5">{email}</p>
-              <p className="text-white/80 text-[11px] font-normal mt-0.5">Student ID: {studentId}</p>
+              <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
             </div>
           </div>
 
@@ -503,7 +567,7 @@ function Profile() {
               </div>
 
               <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-normal">
-                {bio}
+                {college} {course && `– ${course}`}
               </p>
 
               <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
@@ -523,6 +587,63 @@ function Profile() {
                   <p className="text-[10px] font-bold text-gray-400 uppercase">College</p>
                   <p className="font-bold text-gray-900 mt-0.5 truncate">{college}</p>
                 </div>
+              </div>
+            </div>
+
+            {/* 3. Contact Information Card */}
+            <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-black text-gray-900">Contact Information</h2>
+                  <p className="text-[10px] text-gray-400 font-medium">
+                    Phone, pronoun, birthday and delivery addresses
+                  </p>
+                </div>
+                <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
+                  <PencilIcon className="w-3 h-3" />
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-4 gap-3 text-xs">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Email</p>
+                  <p className="font-bold text-gray-900 mt-0.5 break-all">{email || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Phone</p>
+                  <p className="font-bold text-gray-900 mt-0.5">{profilePhone || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Pronoun</p>
+                  <p className="font-bold text-gray-900 mt-0.5">{pronoun || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Birthday</p>
+                  <p className="font-bold text-gray-900 mt-0.5">{formatBirthday(birthday) || '—'}</p>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-gray-100">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Delivery Addresses</p>
+                  <Link to="/settings/address" className="text-[11px] font-bold text-brand-orange">
+                    Manage
+                  </Link>
+                </div>
+                {addresses.length === 0 ? (
+                  <p className="text-xs text-gray-400 mt-1">No saved addresses yet.</p>
+                ) : (
+                  <ul className="mt-1.5 space-y-1.5">
+                    {addresses.map((entry) => (
+                      <li
+                        key={entry}
+                        className="text-xs font-medium text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2"
+                      >
+                        {entry}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
 

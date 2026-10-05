@@ -11,7 +11,7 @@ class EnsureRole
 {
     public function handle(Request $request, Closure $next, string $minimumRole = 'staff'): Response
     {
-        $employee = $request->user('sanctum');
+        $employee = $request->user('api');
 
         if (! $employee instanceof Employee) {
             return response()->json([
@@ -20,7 +20,7 @@ class EnsureRole
             ], 403);
         }
 
-        $rank = $this->rank($employee->emp_type);
+        $rank = $this->rank($employee->emp_categ);
         $required = $this->rank($minimumRole);
 
         if ($rank < $required) {

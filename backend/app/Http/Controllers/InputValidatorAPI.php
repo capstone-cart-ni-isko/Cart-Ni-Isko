@@ -636,6 +636,31 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
+    // DOMAIN 29 - REQ-CUST_SET-02: every sensitive customer change is
+    // preceded by a six-digit phone OTP.
+    public function issueOtp(Request $json)
+    {
+        return $this->validateFields($json, [
+            'purpose' => 'required|in:' . implode(',', Controller::OTP_PURPOSES),
+        ], [
+            'purpose.required' => 'A verification purpose is required.',
+            'purpose.in'       => 'Unknown verification purpose.',
+        ]);
+    }
+
+    public function verifyOtp(Request $json)
+    {
+        return $this->validateFields($json, [
+            'purpose' => 'required|in:' . implode(',', Controller::OTP_PURPOSES),
+            'code'    => 'required|string|digits:6',
+        ], [
+            'purpose.required' => 'A verification purpose is required.',
+            'purpose.in'       => 'Unknown verification purpose.',
+            'code.required'    => 'The verification code is required.',
+            'code.digits'      => 'The verification code must be 6 digits.',
+        ]);
+    }
+
     public function addWishlistItem(Request $json)
     {
         return $this->validateFields($json, [

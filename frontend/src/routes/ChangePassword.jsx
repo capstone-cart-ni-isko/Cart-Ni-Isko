@@ -6,6 +6,7 @@ import { updateCredentials } from '../services/auth.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Button from '../components/ui/Button.jsx'
+import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
 
 function PasswordField({ label, name, value, onChange, placeholder }) {
   const [show, setShow] = useState(false)
@@ -40,6 +41,7 @@ function ChangePassword() {
 
   const [form, setForm] = useState({ current: '', newPass: '', confirm: '' })
   const [saving, setSaving] = useState(false)
+  const [otpOpen, setOtpOpen] = useState(false)
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
@@ -52,6 +54,12 @@ function ChangePassword() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!canSubmit || saving) return
+    // FLOW-CUST_SET-03: a password change is a sensitive change, so the
+    // phone OTP comes first and the new password follows once verified.
+    setOtpOpen(true)
+  }
+
+  const savePassword = async () => {
     setSaving(true)
     const { error } = await updateCredentials({
       current_password: form.current,
@@ -122,10 +130,21 @@ function ChangePassword() {
               >
                 {saving ? 'Updating…' : 'Update Password'}
               </Button>
+              <p className="mt-3 text-xs text-center text-gray-400 font-medium leading-relaxed">
+                You will be asked for a one-time code sent to your phone before this change is saved.
+              </p>
             </div>
           </form>
         </div>
       </div>
+
+      <OtpVerifyModal
+        isOpen={otpOpen}
+        purpose="password_change"
+        title="Verify it is you"
+        onClose={() => setOtpOpen(false)}
+        onVerified={savePassword}
+      />
     </AccountLayout>
   )
 }

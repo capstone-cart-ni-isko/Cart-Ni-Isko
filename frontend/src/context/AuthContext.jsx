@@ -1,9 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useState, useEffect } from 'react'
+import { createContext, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getApiToken, setApiToken } from '../services/api.js'
 import { clearSession, loadSession, saveSession } from '../services/session.js'
 import { logoutSession, signInUser, signUpUser } from '../services/auth.js'
+import { fetchMyAccount, updateAccount } from '../services/accounts.js'
 
 export const AuthContext = createContext(null)
 
@@ -28,6 +29,61 @@ const DEFAULT_USER = {
 const DEFAULT_ADDRESSES = []
 
 /**
+ * REQ-CUST_PROF-03 - the account keeps several delivery addresses, but the
+ * schema holds them in the single `cust_address` column. One address is one
+ * line ("House 1, Brgy San Jose, Cabanatuan, Nueva Ecija 4500") and the list
+ * is stored through PUT /accounts/update, never in the browser.
+ *
+ * The first line of the list is the default address, so `isDefault` never
+ * has to be stored - only the order.
+ */
+function serializeAddress(address) {
+  return [
+    address.addressLine,
+    address.barangay,
+    address.city,
+    address.province,
+    address.postalCode,
+  ]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(', ')
+}
+
+/** Rebuilds one address object from its stored line. */
+function parseAddress(line) {
+  const text = String(line || '').trim()
+  if (!text) return null
+
+  const segments = text.split(',').map((part) => part.trim()).filter(Boolean)
+  let postalCode = ''
+  if (segments.length > 1 && /^\d{4}$/.test(segments[segments.length - 1])) {
+    postalCode = segments.pop()
+  }
+  const province = segments.pop() || ''
+  const city = segments.pop() || ''
+  const barangay = segments.pop() || ''
+  const addressLine = segments.join(', ')
+
+  return {
+    id: text,
+    addressLine,
+    barangay,
+    city,
+    province,
+    postalCode,
+    isDefault: false,
+  }
+}
+
+function linesToAddresses(lines) {
+  return lines
+    .map(parseAddress)
+    .filter(Boolean)
+    .map((address, index) => ({ ...address, isDefault: index === 0 }))
+}
+
+/**
  * Customer session. The signed-in account (user + bearer token) is held in the
  * shared in-memory slot (services/session.js), so it survives client-side
  * navigation but never a reload — REQ-ALR-01 requires a fresh login after a
@@ -45,17 +101,7 @@ export function AuthProvider({ children }) {
     return saved?.user ?? null
   })
 
-  // Guarded like every other storage read in the app: this initializer runs
-  // inside AuthProvider, which sits ABOVE the error boundary, so a single
-  // unparsable value would throw during render and blank the whole page.
-  const [addresses, setAddresses] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('isko_addresses'))
-      return Array.isArray(saved) ? saved : DEFAULT_ADDRESSES
-    } catch {
-      return DEFAULT_ADDRESSES
-    }
-  })
+  const [addresses, setAddresses] = useState(DEFAULT_ADDRESSES)
 
   // Mirror every user change (login, edit, logout) into the shared slot.
   useEffect(() => {
@@ -70,9 +116,67 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('auth-expired', handleExpired)
   }, [])
 
+  const custId = currentUser?.cust_id ?? currentUser?.id ?? null
+
+  /**
+   * Loads the saved addresses from the account row. Any list still sitting
+   * in the old localStorage slot is migrated once (and the slot retired), so
+   * nobody loses an address when the backend becomes the single source.
+   */
   useEffect(() => {
-    localStorage.setItem('isko_addresses', JSON.stringify(addresses))
-  }, [addresses])
+    if (!custId) {
+      setAddresses(DEFAULT_ADDRESSES)
+      return undefined
+    }
+    let cancelled = false
+
+    fetchMyAccount()
+      .then(async (row) => {
+        if (cancelled || !row) return
+        const stored = Array.isArray(row.cust_addresses) ? row.cust_addresses : []
+
+        if (stored.length > 0) {
+          setAddresses(linesToAddresses(stored))
+          return
+        }
+
+        let legacy = []
+        try {
+          const saved = JSON.parse(localStorage.getItem('isko_addresses'))
+          if (Array.isArray(saved)) legacy = saved
+        } catch {
+          legacy = []
+        }
+        if (legacy.length === 0) return
+
+        const lines = legacy.map(serializeAddress).filter(Boolean)
+        await updateAccount('customer', custId, { cust_addresses: lines })
+        localStorage.removeItem('isko_addresses')
+        if (!cancelled) setAddresses(linesToAddresses(lines))
+      })
+      .catch(() => {
+        // A failed read keeps whatever is already on screen.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [custId])
+
+  /** Writes the whole list back to the account row, then mirrors it here. */
+  const saveAddresses = useCallback(
+    async (next) => {
+      const ordered = next.map((address, index) => ({ ...address, isDefault: index === 0 }))
+      const lines = ordered.map(serializeAddress).filter(Boolean)
+
+      if (custId) {
+        await updateAccount('customer', custId, { cust_addresses: lines })
+      }
+      setAddresses(ordered)
+      return ordered
+    },
+    [custId]
+  )
 
   /** Shape the API account into the profile shape the UI consumes. */
   const buildUser = (account, extras = {}) => {
@@ -180,39 +284,34 @@ export function AuthProvider({ children }) {
     navigate('/signin', { replace: true })
   }
 
-  const addAddress = (address) => {
-    setAddresses((prev) => {
-      const newAddress = {
-        ...address,
-        id: Date.now(),
-        isDefault: prev.length === 0 ? true : address.isDefault,
-      }
-      let next = [...prev]
-      if (newAddress.isDefault) {
-        next = next.map((a) => ({ ...a, isDefault: false }))
-      }
-      return [...next, newAddress]
-    })
+  const addAddress = async (address) => {
+    const newAddress = {
+      ...address,
+      id: address.id || Date.now().toString(),
+    }
+    const next = [...addresses]
+    // The first slot is the default, so adding "default" swaps the head.
+    if (newAddress.isDefault) {
+      next.unshift({ ...newAddress, isDefault: true })
+    } else {
+      next.push({ ...newAddress, isDefault: next.length === 0 })
+    }
+    await saveAddresses(next)
   }
 
-  const updateAddress = (id, updatedFields) => {
-    setAddresses((prev) => {
-      let next = prev.map((a) => (a.id === id ? { ...a, ...updatedFields } : a))
-      if (updatedFields.isDefault) {
-        next = next.map((a) => (a.id === id ? a : { ...a, isDefault: false }))
-      }
-      return next
-    })
+  const updateAddress = async (id, updatedFields) => {
+    const next = addresses.map((a) => (a.id === id ? { ...a, ...updatedFields } : a))
+    const target = next.find((a) => a.id === id)
+    if (updatedFields.isDefault && target) {
+      await saveAddresses([target, ...next.filter((a) => a.id !== id)])
+      return
+    }
+    await saveAddresses(next)
   }
 
-  const deleteAddress = (id) => {
-    setAddresses((prev) => {
-      const filtered = prev.filter((a) => a.id !== id)
-      if (filtered.length > 0 && !filtered.some((a) => a.isDefault)) {
-        filtered[0].isDefault = true
-      }
-      return filtered
-    })
+  const deleteAddress = async (id) => {
+    const next = addresses.filter((a) => a.id !== id)
+    await saveAddresses(next)
   }
 
   return (
@@ -227,6 +326,7 @@ export function AuthProvider({ children }) {
         addAddress,
         updateAddress,
         deleteAddress,
+        saveAddresses,
         setCurrentUser,
       }}
     >

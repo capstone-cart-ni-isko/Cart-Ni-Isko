@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import React from 'react'
 import BottomNav from './BottomNav.jsx'
 import MenuSidebar, { MenuProvider } from './MenuSidebar.jsx'
-import SideNav from './SideNav.jsx'
 import SidebarLayout from './SidebarLayout.jsx'
 import DesktopHeader from './DesktopHeader.jsx'
 
@@ -16,7 +15,7 @@ import DesktopHeader from './DesktopHeader.jsx'
  * The drawer lives here, not inside the ribbon: `isMenuOpen` is owned by the
  * layout, so opening the menu never unmounts or re-renders BottomNav.
  */
-function AppShell({ children, showNav = true, showBottomNav = true, showHeader = true, showSideNav = true, className = '' }) {
+function AppShell({ children, showNav = true, showBottomNav = true, showHeader = true, className = '' }) {
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
 
   useEffect(() => {
@@ -65,7 +64,7 @@ function AppShell({ children, showNav = true, showBottomNav = true, showHeader =
   return (
     <MenuProvider>
       <SidebarLayout
-        sidebar={showSideNav ? <SideNav /> : null}
+        sidebar={null}
         bottomNav={showBottomNav ? <BottomNav /> : null}
         className={className}
       >

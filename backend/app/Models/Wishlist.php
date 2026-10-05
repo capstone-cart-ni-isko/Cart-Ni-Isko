@@ -1,20 +1,28 @@
 <?php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * DOMAIN 24 (WISHLIST). REQ-WISHLIST-02 wants a soft delete, so removal sets
+ * `wish_hidden` instead of dropping the row.
+ */
 class Wishlist extends Model
 {
     protected $table = 'wishlist';
+    protected $primaryKey = 'wish_id';
     public $timestamps = false;
-    public $incrementing = false;
 
     protected $fillable = [
         'cust_id',
         'prod_id',
-        'item_qty',
-        'item_amount',
+        'wish_created',
+        'wish_hidden',
+    ];
+
+    protected $casts = [
+        'wish_created' => 'datetime',
+        'wish_hidden' => 'datetime',
     ];
 
     public function customer()

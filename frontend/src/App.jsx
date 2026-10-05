@@ -31,8 +31,11 @@ import ChangePassword from './routes/ChangePassword.jsx'
 import MyAddress from './routes/MyAddress.jsx'
 import Notifications from './routes/Notifications.jsx'
 import NotificationPreferences from './routes/NotificationPreferences.jsx'
+import BackupContacts from './routes/BackupContacts.jsx'
+import AboutSettings from './routes/AboutSettings.jsx'
 import CheckoutPlaceholder from './routes/CheckoutPlaceholder.jsx'
 import Appointments from './routes/Appointments.jsx'
+import BookAppointment from './routes/BookAppointment.jsx'
 
 // Admin Screen Routes
 import AdminLogin from './routes/admin/AdminLogin.jsx'
@@ -86,11 +89,18 @@ function App() {
                 <Route path="/welcome" element={<Welcome />} />
                 <Route path="/signup/*" element={<SignUp />} />
                 <Route path="/signin" element={<SignIn />} />
+                {/* Alias kept for the new-schema spec ("redirects to /login") */}
+                <Route path="/login" element={<SignIn />} />
                 <Route path="/verify-otp" element={<VerifyOtp />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
+                {/* New-schema catalog URL: /catalog/[prod_categ]/[prod_tag] */}
+                <Route path="/catalog/:categ/:tag" element={<ProductDetail />} />
+
+                {/* Alias for the bag (ribbon destination is /bag; /cart kept) */}
+                <Route path="/bag" element={<Cart />} />
 
                 {/* ── Signed-in account routes ── */}
                 <Route element={<RequireAuth />}>
@@ -100,12 +110,15 @@ function App() {
                   <Route path="/orders" element={<Orders />} />
                   <Route path="/orders/:id" element={<OrderDetail />} />
                   <Route path="/appointments" element={<Appointments />} />
+                  <Route path="/book" element={<BookAppointment />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/account" element={<AccountInfo />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/settings/change-password" element={<ChangePassword />} />
                   <Route path="/settings/address" element={<MyAddress />} />
                   <Route path="/settings/notifications" element={<NotificationPreferences />} />
+                <Route path="/settings/backup" element={<BackupContacts />} />
+                <Route path="/settings/about" element={<AboutSettings />} />
                   <Route path="/address" element={<MyAddress />} />
                   <Route path="/notifications" element={<Notifications />} />
                 </Route>

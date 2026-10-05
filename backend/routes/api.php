@@ -12,6 +12,7 @@ use App\Http\Controllers\HealthAPI;
 use App\Http\Controllers\OrdersAPI;
 use App\Http\Controllers\PosAPI;
 use App\Http\Controllers\NotifAPI;
+use App\Http\Controllers\OtpAPI;
 use App\Http\Controllers\ReportsAPI;
 use App\Http\Controllers\ShiftAPI;
 use App\Http\Controllers\TrackingAPI;
@@ -41,11 +42,15 @@ Route::get('/reviews/display', [ReviewsAPI::class, 'displayReviews']);
 Route::get('/reviews/score', [ReviewsAPI::class, 'scoreRating']);
 
 // Everything else requires a Sanctum bearer token
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:api')->group(function () {
     Route::post('/auth/logout', [AuthAPI::class, 'logout']);
     Route::post('/auth/emp_signup', [AuthAPI::class, 'employeeSignup'])->middleware('role:super_admin');
     Route::post('/auth/backup_credentials', [AuthAPI::class, 'backupCredentials']);
     Route::put('/auth/update_credentials', [AuthAPI::class, 'updateCredentials']);
+
+    // DOMAIN 29 - REQ-CUST_SET-02: phone OTP before a sensitive change
+    Route::post('/otp/issue', [OtpAPI::class, 'issue']);
+    Route::post('/otp/verify', [OtpAPI::class, 'verify']);
 
     // Cart API Routes
     Route::post('/cart/add', [CartAPI::class, 'addOrder']);
@@ -95,8 +100,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Access API Routes
     Route::post('/access/flag', [AccessAPI::class, 'flagIrregularity'])->middleware('role:staff');
     Route::post('/access/log', [AccessAPI::class, 'logAction'])->middleware('role:staff');
+    // DOMAIN 32 - FLOW-ACCESS_LOG-07: the merged access log is super-admin only
+    Route::get('/access/logs', [AccessAPI::class, 'accessLog'])->middleware('role:super_admin');
 
     // Accounts API Routes
+    Route::get('/accounts/me', [AccountsAPI::class, 'displayMyAccount']);
     Route::put('/accounts/type', [AccountsAPI::class, 'changeAccountType'])->middleware('role:super_admin');
     Route::delete('/accounts/delete', [AccountsAPI::class, 'deleteAccount'])->middleware('role:super_admin');
     Route::post('/accounts/disable', [AccountsAPI::class, 'disableAccount'])->middleware('role:super_admin');
@@ -133,8 +141,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/reviews/update', [ReviewsAPI::class, 'updateReview']);
 
     // Settings API Routes
-    Route::get('/settings/display', [SettingsAPI::class, 'displaySettings'])->middleware('role:staff');
-    Route::put('/settings/update', [SettingsAPI::class, 'updateSettings'])->middleware('role:admin');
+    // DOMAIN 29 - customers read and write their OWN preference columns
+    // through these two routes; the controller still restricts system-wide
+    // keys to super admins (rule 40) and gates sensitive contacts with OTP.
+    Route::get('/settings/display', [SettingsAPI::class, 'displaySettings']);
+    Route::put('/settings/update', [SettingsAPI::class, 'updateSettings']);
 
     // Wishlist API Routes
     Route::post('/wishlist/add', [WishlistAPI::class, 'addWishlistItem']);

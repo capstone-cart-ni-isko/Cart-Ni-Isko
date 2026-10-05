@@ -14,6 +14,12 @@ export function sortAccounts(sortBy = 'date', order = 'desc', params = {}) {
   return apiGet('/accounts/sort', { sort_by: sortBy, order, ...params })
 }
 
+/** GET /accounts/me - the signed-in account's own row (aliases included). */
+export async function fetchMyAccount() {
+  const data = await apiGet('/accounts/me')
+  return data.data || null
+}
+
 /** PUT /accounts/type - STAFF | ADMIN | SUPER ADMIN (super admin only). */
 export function changeAccountType(accountType, userId, newType) {
   return apiPut('/accounts/type', { account_type: accountType, user_id: userId, new_type: newType })

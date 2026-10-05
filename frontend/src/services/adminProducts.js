@@ -29,12 +29,24 @@ function categoryImage(category) {
 
 /**
  * Map a backend Product model row to the admin inventory display shape.
+ * Stock, variants and imagery come from the `variations` array (prodvar
+ * rows); the legacy JSON columns are honoured as a fallback.
  */
 export function mapAdminProduct(row) {
   if (!row) return null
   const category = normalizeCategory(row.prod_categ)
-  const qty = Number(row.prod_qty ?? 0)
-  const image = (Array.isArray(row.prod_images) && row.prod_images[0]) || categoryImage(category)
+  const variations = Array.isArray(row.variations)
+    ? row.variations.filter((variant) => variant && variant.prodvar_id !== undefined)
+    : []
+  const hasVariations = variations.length > 0
+  const qty = hasVariations
+    ? variations.reduce((total, variant) => total + (Number(variant.prodvar_stock) || 0), 0)
+    : Number(row.prod_qty ?? 0)
+  const mainVariant = variations.find((variant) => variant.prodvar_main && variant.prodvar_pic)
+    || variations.find((variant) => variant.prodvar_pic)
+  const image = (hasVariations && mainVariant?.prodvar_pic)
+    || (Array.isArray(row.prod_images) && row.prod_images[0])
+    || categoryImage(category)
   // Normalize backend status vocabulary ('In Stock' / 'Out of Stock') into the
   // inventory UI's publication vocabulary ('Published' / 'Draft' / 'Out of Stock').
   const disabled = !!row.prod_disabled
@@ -47,15 +59,25 @@ export function mapAdminProduct(row) {
     ? 'Out of Stock'
     : rawStatus || (qty > 0 ? 'Published' : 'Out of Stock')
   const availability = qty > 0 ? 'Regular' : 'Out of Stock'
-  const variants = (row.prod_sizes || []).map((size, i) => ({
-    id: `var-${row.prod_id}-${i}`,
-    name: `${category === 'Accessories' ? 'Standard' : size}`,
-    sku: `${row.prod_tag}-${size}`,
-    stock: qty,
-    price: Number(row.prod_price) || 0,
-    status: qty > 0 ? 'In Stock' : 'Out of Stock',
-    lastUpdated: row.prod_created ? new Date(row.prod_created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now',
-  }))
+  const variants = hasVariations
+    ? variations.map((variant, i) => ({
+        id: `var-${variant.prodvar_id ?? `${row.prod_id}-${i}`}`,
+        name: String(variant.prodvar_name || 'Standard'),
+        sku: `${row.prod_tag}-${variant.prodvar_name || i}`,
+        stock: Number(variant.prodvar_stock ?? 0),
+        price: Number(row.prod_price) + Number(variant.prodvar_markup ?? 0),
+        status: (variant.prodvar_stock ?? 0) > 0 ? 'In Stock' : 'Out of Stock',
+        lastUpdated: row.prod_created ? new Date(row.prod_created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now',
+      }))
+    : (row.prod_sizes || []).map((size, i) => ({
+        id: `var-${row.prod_id}-${i}`,
+        name: `${category === 'Accessories' ? 'Standard' : size}`,
+        sku: `${row.prod_tag}-${size}`,
+        stock: qty,
+        price: Number(row.prod_price) || 0,
+        status: qty > 0 ? 'In Stock' : 'Out of Stock',
+        lastUpdated: row.prod_created ? new Date(row.prod_created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now',
+      }))
 
   return {
     id: `prod-${row.prod_id}`,
@@ -67,6 +89,8 @@ export function mapAdminProduct(row) {
     availability,
     totalStock: qty,
     price: Number(row.prod_price) || 0,
+    // prod_peaksold is gone (aggregate from prodsales server-side);
+    // the column no longer exists on the payload.
     orders: Number(row.prod_peaksold) || 0,
     status,
     image,
@@ -74,6 +98,10 @@ export function mapAdminProduct(row) {
     disabled,
     description: row.prod_desc || '',
     published: !disabled && status !== 'Draft',
+    variations: hasVariations ? variations : [],
+    total_var: Number(row.prod_total_var ?? variations.length),
+    rating: Number(row.prod_rating ?? 0),
+    reviewCount: Number(row.prod_reviews ?? row.prod_review_count ?? 0),
   }
 }
 

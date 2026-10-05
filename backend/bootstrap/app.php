@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->append(App\Http\Middleware\CacheReads::class);
+        $middleware->append(App\Http\Middleware\RenewApiToken::class);
 
         // API-only app: an unauthenticated request has no page to be sent to,
         // so guests stay put and the handler below answers 401 JSON.

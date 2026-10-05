@@ -1,19 +1,20 @@
 <?php
-    namespace App\Models;
-    use Illuminate\Database\Eloquent\Model;
+namespace App\Models;
+use Illuminate\Database\Eloquent\Model;
 
-    class CustLog extends Model
-    {
-        // Define the table name, primary key, and timestamps
-        protected $table = 'custlog';
-        protected $primaryKey = 'custlog_id';
-        public $timestamps = false;
+/** DOMAIN 32 / FLOW-ACCESS_LOG-01: immutable customer access log rows. */
+class CustLog extends Model
+{
+    protected $table = 'custlog';
+    protected $primaryKey = 'custlog_id';
+    public $timestamps = false;
 
-        // Define the fillable attributes for mass assignment
-        protected $fillable = [
-            'cust_id',
-            'custlog_created',
-            'custlog_action',
-            'custlog_desc',
-        ];
-    }
+    protected $fillable = [
+        'cust_id',
+        'custlog_access',
+        'custlog_endpoint',
+        'custlog_created',
+    ];
+
+    protected $casts = ['custlog_created' => 'datetime'];
+}

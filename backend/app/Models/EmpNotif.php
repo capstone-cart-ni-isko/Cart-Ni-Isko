@@ -1,26 +1,29 @@
 <?php
+namespace App\Models;
 
-    namespace App\Models;
+use Illuminate\Database\Eloquent\Model;
 
-    use Illuminate\Database\Eloquent\Model;
+class EmpNotif extends Model
+{
+    protected $table = 'empnotif';
+    protected $primaryKey = 'empnotif_id';
+    public $timestamps = false;
 
-    class EmpNotif extends Model
+    protected $fillable = [
+        'emp_id',
+        'empnotif_created',
+        'empnotif_read',
+        'empnotif_msg',
+        'empnotif_type',
+    ];
+
+    protected $casts = [
+        'empnotif_created' => 'datetime',
+        'empnotif_read' => 'datetime',
+    ];
+
+    public function employee()
     {
-        // Define the table name, primary key, and timestamps
-        protected $table = 'empnotif';
-        protected $primaryKey = 'empnotif_id';
-        public $timestamps = false;
-
-        // Define the fillable attributes for mass assignment
-        protected $fillable = [
-            'emp_id',
-            'empnotif_created',
-            'empnotif_read',
-            'empnotif_msg',
-        ];
-
-        public function employee()
-        {
-            return $this->belongsTo(Employee::class, 'emp_id', 'emp_id');
-        }
+        return $this->belongsTo(Employee::class, 'emp_id', 'emp_id');
     }
+}

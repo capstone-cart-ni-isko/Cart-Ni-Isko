@@ -61,7 +61,7 @@ class ShiftAPI extends Controller
                 'shift_type'     => $json->input('shift_type', 'DESK DUTY'),
                 'shift_location' => $json->input('shift_location'),
                 'shift_created'  => now(),
-                'created_by'     => optional($json->user('sanctum'))->getKey(),
+                'created_by'     => optional($json->user('api'))->getKey(),
             ]);
 
             return response()->json([
