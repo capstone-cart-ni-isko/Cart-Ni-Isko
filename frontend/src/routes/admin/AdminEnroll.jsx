@@ -4,7 +4,6 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { apiPost } from '../../services/api.js'
-import { logAction } from '../../services/access.js'
 import { empCateg } from '../../components/admin/schema.js'
 
 const BICOL_DOMAIN = '@bicol-u.edu.ph'
@@ -23,7 +22,6 @@ const CATEGORY_OPTIONS = [
  */
 function AdminEnrollForm() {
   const navigate = useNavigate()
-  const { currentAdminUser } = useAdmin()
   const { showToast } = useToast()
 
   const [surname, setSurname] = useState('')
@@ -73,12 +71,9 @@ function AdminEnrollForm() {
       const tempPassword =
         user.temporary_password || user.temp_password || user.password || null
 
-      logAction({
-        user_id: currentAdminUser?.id ?? 0,
-        user_type: 'employee',
-        action: 'auth',
-        desc: `Enrolled employee ${emailValue} as ${category} (by ${currentAdminUser?.name || 'Staff'})`,
-      }).catch(() => {})
+      // REQ-EMP_ENROLL-05: the enrollment - successes and failures alike - is
+      // written to the access log by the backend (FLOW-EMP_ENROLL-07), so the
+      // screen never posts a log row of its own.
 
       setResult({
         tempPassword,
@@ -88,9 +83,12 @@ function AdminEnrollForm() {
       })
       showToast(`Employee enrolled${tempPassword ? ' — temporary password generated' : ''}.`, 'success')
     } catch (err) {
-      // Duplicate email → a clear, specific error (409 from the API).
-      const message = String(err?.message || 'Enrollment failed')
-      if (/duplicate|already exists|already taken|exists/i.test(message) || err?.status === 409) {
+      // REQ-EMP_ENROLL-04: the duplicate answer from POST /auth/emp_signup
+      // (409) and every other backend message is surfaced verbatim instead of
+      // being replaced with a generic "enrollment failed".
+      const status = err?.status || err?.response?.status
+      const message = String(err?.payload?.message || err?.message || 'Enrollment failed')
+      if (status === 409 || /duplicate|already exists|already taken|exists/i.test(message)) {
         showToast(`The email ${emailValue} is already enrolled. Use a different Bicol University email.`, 'error')
       } else {
         showToast(message, 'error')
@@ -273,8 +271,11 @@ function AdminEnrollForm() {
               </p>
             )}
             <p className="text-[11px] text-emerald-700/80">
-              Share the temporary password securely. The employee will be
-              prompted to set their own password on first sign-in.
+              Share the temporary password securely — a copy has also been
+              emailed to the employee's Bicol University inbox
+              (FLOW-EMP_ENROLL-04). The employee will be prompted to set
+              their own password on first sign-in, and the temporary
+              password expires 24 hours after enrollment.
             </p>
             <div className="flex justify-end gap-2">
               <button

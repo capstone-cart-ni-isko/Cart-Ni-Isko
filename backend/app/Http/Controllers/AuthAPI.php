@@ -5,12 +5,15 @@
     use App\Models\Customer;
     use App\Models\Employee;
     use App\Models\EmpLog;
+    use App\Models\Schedule;
     use App\Support\ApiToken;
+    use App\Support\EmployeePassword;
     use Carbon\Carbon;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\DB;
     use Illuminate\Support\Facades\Hash;
     use Illuminate\Support\Facades\Cache;
+    use Illuminate\Support\Facades\Mail;
     use Illuminate\Support\Str;
     use Illuminate\Support\Facades\Schema;
 
@@ -482,37 +485,46 @@
         public function employeeSignup(Request $json)
         {
             /*
-                EMPLOYEE SIGNUP
+                EMPLOYEE ENROLLMENT (DOMAIN 6)
                 ----------
                 JSON REQUEST
 
-                password - string (req)
-                email - string (req)
+                email - string (req - must be a Bicol University address)
+                phone - string (req)
                 surname - string (req)
                 givname - string (req)
-                midname - string (opt)
-                suffix - string (opt)
-                studnum - string (req)
-                pronoun - string (opt)
-                birthday - string (opt)
-                brgy - string (opt)
-                city - string (opt)
-                province - string (opt)
-                callcode - string (opt)
-                phone - string (opt)
-                type - string (opt)
-                instore - boolean (opt)
+                categ / type - string (opt: staff | admin | super admin)
+                midname, suffix, studnum, pronoun, birthday, brgy, city,
+                province, country, callcode, instore - optional details
+
+                FLOW-EMP_ENROLL-02 collects exactly the five required values,
+                FLOW-EMP_ENROLL-03 validates the university domain,
+                FLOW-EMP_ENROLL-04 generates and emails the temporary
+                password, FLOW-EMP_ENROLL-05 opens the account as "active" and
+                preschedules it as "available", FLOW-EMP_ENROLL-06 confirms
+                back to the super admin and FLOW-EMP_ENROLL-07 writes the
+                enrollment - failures included (REQ-EMP_ENROLL-05) - to the
+                access log.
             */
-            
+
             // Validate signup input
             $validator = (new InputValidatorAPI())->employeeSignup($json);
-            if ($validator) return $validator;
+            if ($validator) {
+                // REQ-EMP_ENROLL-05: a rejected attempt is an attempt too.
+                $this->logEnrollment($json, 'FAILED', $validator->getData()['message'] ?? 'rejected');
 
-            $email = $json->input('email');
-            $temporaryPassword = Str::password(16);
-            $type = strtoupper($json->input('type', 'STAFF'));
+                return $validator;
+            }
+
+            $email = strtolower(trim((string) $json->input('email')));
+            $temporaryPassword = EmployeePassword::generateTemporary(20);
+            $type = $this->employeeCategory($json);
 
             if (Employee::where('emp_email', $email)->exists()) {
+                // REQ-EMP_ENROLL-04: duplicates are rejected with a clear error
+                // (and the attempt still lands in the log).
+                $this->logEnrollment($json, 'FAILED', 'duplicate email ' . $email);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Email already exists',
@@ -522,7 +534,7 @@
             try {
                 $attributes = [
                     'emp_created' => now(),
-                    'emp_password' => Hash::make($temporaryPassword),
+                    'emp_password' => EmployeePassword::makeTemporary($temporaryPassword),
                     'emp_surname' => $json->input('surname'),
                     'emp_givname' => $json->input('givname'),
                     'emp_midname' => $json->input('midname', ''),
@@ -541,9 +553,16 @@
                     'emp_callcode' => $json->input('callcode', '+63'),
                     'emp_phone' => $json->input('phone'),
                     'emp_email' => $email,
-                    'emp_type' => $type,
+                    // FLOW-EMP_ENROLL-02: the initial category. The live table
+                    // spells it `emp_categ` (lowercase, rule 32); the fixture
+                    // still carries the legacy `emp_type` alias.
+                    'emp_categ' => $type,
+                    'emp_type' => strtoupper($type),
                     'emp_instore' => (bool) $json->input('instore', false),
-                    'emp_cred_changed' => null,
+                    // FLOW-EMP_ENROLL-05: the account opens active, so both
+                    // blocking stamps stay empty until somebody suspends it.
+                    'emp_suspended' => null,
+                    'emp_deleted' => null,
                 ];
 
                 // The connected schema decides which of those columns exist:
@@ -558,9 +577,20 @@
                     $this->existingColumns('employee', $attributes)
                 );
 
-                // REQ-UM-04: registrations are logged with the responsible
-                // super admin and the timestamp, like every other user
-                // management action.
+                // FLOW-EMP_ENROLL-05 / REQ-EMP_ENROLL-06: the new account is
+                // prescheduled as available straight away (full availability
+                // for the next seven days clears the 180-minute weekly floor).
+                $this->prescheduleNewEmployee((int) $employee->emp_id);
+
+                // FLOW-EMP_ENROLL-04: the generated password goes to the
+                // employee's Bicol University mailbox as well as back to the
+                // super admin. MAIL_MAILER=log keeps this best-effort - a mail
+                // transport that is not configured must not fail the signup.
+                $this->mailTemporaryPassword($employee, $temporaryPassword);
+
+                // REQ-UM-04 / FLOW-EMP_ENROLL-07: registrations are logged
+                // with the responsible super admin and the timestamp, like
+                // every other user management action.
                 $by = $json->user('api');
                 EmpLog::forceCreate(
                     $this->existingColumns('emplog', [
@@ -579,14 +609,23 @@
                     ])
                 );
 
+                // FLOW-EMP_ENROLL-07: the same event, filed under the id of
+                // the super admin who performed it.
+                $this->logEnrollment($json, 'ENROLLED', $email . ' as ' . $type);
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Employee registered. Share the temporary password securely.',
+                    'message' => 'Employee enrolled. Share the temporary password securely.',
                     'data' => array_merge($employee->toArray(), [
                         'temporary_password' => $temporaryPassword,
+                        'must_change_password' => true,
+                        'emp_categ' => $type,
                     ]),
                 ], 201);
             } catch (\Exception $e) {
+                // REQ-EMP_ENROLL-05: failures are logged too.
+                $this->logEnrollment($json, 'FAILED', $email . ' - ' . $e->getMessage());
+
                 // JSON ERROR
                 return response()->json([
                     'success' => false,
@@ -596,15 +635,117 @@
             }
         }
 
+        /**
+         * FLOW-EMP_ENROLL-02 - the initial category posted by the enrolment
+         * form, folded onto rule 32's vocabulary ("staff", "admin", "super
+         * admin"). `categ` is the system-new spelling, `type` the legacy alias.
+         */
+        private function employeeCategory(Request $json): string
+        {
+            $raw = (string) ($json->input('categ') ?: $json->input('type') ?: 'STAFF');
+            $raw = strtolower(trim($raw));
+
+            return match (true) {
+                str_contains($raw, 'super') => 'super admin',
+                str_contains($raw, 'admin') => 'admin',
+                default => 'staff',
+            };
+        }
+
+        /**
+         * FLOW-EMP_ENROLL-05 / REQ-EMP_ENROLL-06 - a new employee is
+         * prescheduled as "available" the moment the account is opened, so
+         * their first week carries full availability (one unbroken block from
+         * now, well past the 180-minute weekly floor of rule 46).
+         *
+         * The live connection owns a `schedules` table; the pre-migration
+         * fixture does not, so the write is skipped there rather than failing
+         * the enrollment.
+         */
+        private function prescheduleNewEmployee(int $empId): void
+        {
+            try {
+                if (! Schema::hasTable('schedules')) {
+                    return;
+                }
+
+                $start = now();
+                Schedule::forceCreate([
+                    'sched_id'         => $this->nextId('schedules', 'sched_id'),
+                    'emp_id'           => $empId,
+                    'sched_time_start' => $start,
+                    'sched_time_end'   => $start->copy()->addDays(7),
+                    'sched_created'    => now(),
+                    // null = prescheduled / available (see the Schedule model).
+                    'sched_disabled'   => null,
+                ]);
+            } catch (\Throwable $e) {
+                // Availability bookkeeping must never undo an enrollment.
+            }
+        }
+
+        /**
+         * FLOW-EMP_ENROLL-04 - hands the generated password to the employee's
+         * Bicol University mailbox. Best-effort by design: with MAIL_MAILER=log
+         * (or an unreachable transport) the message is written to the mail log
+         * and the super admin still receives the password in the response.
+         */
+        private function mailTemporaryPassword(Employee $employee, string $temporaryPassword): void
+        {
+            try {
+                $body = "Hello {$employee->emp_givname},\n\n"
+                    . "Your staff account for Tindahan ni Isko has been enrolled "
+                    . "as {$employee->emp_email}.\n\n"
+                    . "Temporary password: {$temporaryPassword}\n\n"
+                    . "You must change this password the first time you sign in. "
+                    . "Contact a super admin if you did not expect this account.\n";
+
+                Mail::raw($body, function ($message) use ($employee) {
+                    $message->to($employee->emp_email)
+                        ->subject('Your Tindahan ni Isko staff account');
+                });
+            } catch (\Throwable $e) {
+                // Never fail enrollment because of a mail transport.
+            }
+        }
+
+        /**
+         * FLOW-EMP_ENROLL-07 / REQ-EMP_ENROLL-05 - one immutable emplog row for
+         * the enrollment itself, filed under the id of the super admin who
+         * performed it (successes and failures alike).
+         */
+        private function logEnrollment(Request $json, string $outcome, string $detail): void
+        {
+            $by = $json->user('api');
+
+            if (! $by instanceof Employee) {
+                return;
+            }
+
+            $this->logEmployee(
+                (int) $by->emp_id,
+                'edit',
+                'POST /api/auth/emp_signup - ' . $outcome . ': ' . $detail
+            );
+        }
+
         public function employeeLogin(Request $json)
         {
             /*
-                EMPLOYEE LOGIN
+                EMPLOYEE LOGIN (DOMAIN 2)
                 ----------
                 JSON REQUEST
 
                 password - string (req)
                 email - string (req)
+
+                FLOW-EMP_LOGIN-02/04/05/07 give the form its three realtime
+                messages ("User not found", "Provide a valid email", "Wrong
+                password"); they are produced by POST /auth/emp_login/check as
+                the employee types, and this endpoint answers the same
+                vocabulary on submit so the screen never has to invent an
+                error. Nothing typed into the form is ever cleared
+                (REQ-EMP_LOGIN-04/05).
             */
 
             // Validate login input
@@ -612,8 +753,8 @@
             if ($validator) return $validator;
             
             // Get user email and password
-            $email = $json->input('email');
-            $password = $json->input('password');
+            $email = trim((string) $json->input('email'));
+            $password = (string) $json->input('password');
 
             // One narrow indexed read: emp_email carries a unique index, so
             // this is a single round trip. Connection handling around it is
@@ -623,22 +764,43 @@
             try {
                 $employee = Employee::where('emp_email', $email)->first();
 
-                $empPassMatches = false;
-                try {
-                    $empPassMatches = $employee && Hash::check($password, (string) $employee->emp_password);
-                } catch (\Throwable $e) {
-                    $empPassMatches = false;
+                if (! $employee) {
+                    // FLOW-EMP_LOGIN-02: the account does not exist.
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'User not found',
+                        'code' => 'EMP_NOT_FOUND',
+                    ], 401);
                 }
 
-                if (! $employee || (! $empPassMatches && (string) $employee->emp_password !== $password)) {
-                    // JSON ERROR
-                    return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
+                // Every value in `employee.emp_password` is a bcrypt digest
+                // (Employee::saving + EmployeePassword), so this is a real
+                // digest comparison - never a plaintext fallback.
+                $check = EmployeePassword::verify($password, (string) $employee->emp_password);
+
+                if (! $check['valid']) {
+                    // FLOW-EMP_LOGIN-07 + DOMAIN 32: a wrong password is
+                    // stamped on the account and filed in the access log.
+                    $this->stampFailedEmployeeLogin($employee);
+                    $this->logEmployee((int) $employee->emp_id, 'auth',
+                        'POST /api/auth/emp_login - failed');
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Wrong password',
+                        'code' => 'WRONG_PASSWORD',
+                    ], 401);
                 }
 
-                if (! $employee->emp_cred_changed && $employee->emp_created?->addHours(24)->isPast()) {
+                // REQ-EMP_ENROLL-03: a system-generated password only lives for
+                // twenty-four hours after the account was enrolled, and it has
+                // to be replaced on first sign-in.
+                if ($check['temporary'] && $employee->emp_created
+                    && $employee->emp_created->copy()->addHours(24)->isPast()) {
                     return response()->json([
                         'success' => false,
                         'message' => 'The temporary password has expired. Contact a super admin.',
+                        'code' => 'TEMP_PASSWORD_EXPIRED',
                     ], 403);
                 }
 
@@ -657,13 +819,18 @@
                     $token = $employee->createToken('auth_token')->plainTextToken;
                 }
 
+                // FLOW-ACCESS_LOG-04: a successful employee login is logged.
+                $this->logEmployee((int) $employee->emp_id, 'auth', 'POST /api/auth/emp_login');
+
                 // JSON SUCCESS
                 return response()->json([
                     'success' => true,
                     'message' => 'Login successful',
                     'data' => array_merge($employee->toArray(), [
                         'token' => $token,
-                        'must_change_password' => ! $employee->emp_cred_changed,
+                        // REQ-EMP_ENROLL-03: the temporary password is marked
+                        // for a required change on first login.
+                        'must_change_password' => $check['temporary'],
                     ])
                 ], 200);
 
@@ -674,6 +841,71 @@
                     'message' => 'Login failed',
                     'error' => $e->getMessage()
                 ], 500);
+            }
+        }
+
+        /**
+         * DOMAIN 2 - the realtime check behind the inline messages of the
+         * staff login form.
+         *
+         * POST /api/auth/emp_login/check   { email, password? }
+         *
+         * FLOW-EMP_LOGIN-02/03 answer `email_exists` (the "User not found"
+         * line under the email field), FLOW-EMP_LOGIN-04..08 answer
+         * `password_correct` (the "Provide a valid email" / "Wrong password"
+         * lines under the password field). The form decides which message to
+         * show; this endpoint only reports what the database says.
+         *
+         * It is throttled and never mutates anything: no session is opened,
+         * no log row is written, so typing cannot fill the access log.
+         */
+        public function employeeLoginCheck(Request $json)
+        {
+            $email = trim((string) $json->input('email', ''));
+            $password = (string) $json->input('password', '');
+
+            $employee = $email !== ''
+                ? Employee::where('emp_email', $email)->first()
+                : null;
+
+            $passwordCorrect = false;
+
+            if ($employee && $password !== '') {
+                $passwordCorrect = EmployeePassword::verify(
+                    $password,
+                    (string) $employee->emp_password
+                )['valid'];
+            }
+
+            // JSON SUCCESS
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    // FLOW-EMP_LOGIN-02/03
+                    'email_exists' => $employee !== null,
+                    // FLOW-EMP_LOGIN-07/08
+                    'password_correct' => $passwordCorrect,
+                    // REQ-EMP_ENROLL-03: first sign-in must change the password
+                    'must_change_password' => (bool) ($passwordCorrect && $employee
+                        && EmployeePassword::verify($password, (string) $employee->emp_password)['temporary']),
+                    'account_disabled' => (bool) ($employee
+                        && ($employee->emp_suspended || $employee->emp_deleted || $employee->emp_disabled)),
+                ],
+            ], 200);
+        }
+
+        /**
+         * FLOW-ACCESS_LOG-04: a rejected login still leaves its mark on the
+         * account it was aimed at (`emp_login_failed`), exactly as the
+         * customer side stamps `cust_login_failed`.
+         */
+        private function stampFailedEmployeeLogin(Employee $employee): void
+        {
+            try {
+                $employee->emp_login_failed = now();
+                $employee->save();
+            } catch (\Throwable $e) {
+                // Bookkeeping must never change the login answer.
             }
         }
 

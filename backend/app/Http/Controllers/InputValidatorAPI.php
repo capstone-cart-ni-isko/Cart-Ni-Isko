@@ -222,33 +222,29 @@ class InputValidatorAPI extends Controller
 
     public function employeeSignup(Request $json)
     {
-        // Required Fields for Employee Signup
+        // DOMAIN 6 (EMPLOYEE ENROLLMENT) - FLOW-EMP_ENROLL-02: the enrolment
+        // form collects surname, given name, Bicol University email, phone
+        // number and the initial category. Nothing else is required to open an
+        // account, so the legacy academic fields (student number, college,
+        // program, year, bloc) are accepted but never demanded - the live
+        // system-new.docx EMPLOYEE schema does not even carry those columns.
         $requiredCheck = $this->validateFields($json, [
             'email' => 'required',
             'phone' => 'required',
             'surname' => 'required',
             'givname' => 'required',
-            'studnum' => 'required',
-            'college' => 'required',
-            'program' => 'required',
-            'year' => 'required',
-            'bloc' => 'required',
-            'type' => 'required|in:STAFF,ADMIN,SUPER ADMIN',
         ], [
             'email.required' => 'University email is required.',
             'phone.required' => 'Phone number is required.',
             'surname.required' => 'Surname is required.',
             'givname.required' => 'Given name is required.',
-            'studnum.required' => 'Student number is required.',
-            'college.required' => 'College or institute is required.',
-            'program.required' => 'Program is required.',
-            'year.required' => 'Year is required.',
-            'bloc.required' => 'Bloc is required.',
         ]);
         if ($requiredCheck) {
             return $requiredCheck;
         }
 
+        // FLOW-EMP_ENROLL-03 / REQ-EMP_ENROLL-02: the address has to be a
+        // Bicol University address before the account can be opened.
         $emailCheck = $this->validateFields($json, [
             'email' => 'required|email:rfc|ends_with:bicol-u.edu.ph',
         ], [
@@ -260,10 +256,24 @@ class InputValidatorAPI extends Controller
             return $emailCheck;
         }
 
+        // FLOW-EMP_ENROLL-02 - the initial category (rule 32: "staff", "admin"
+        // or "super admin"), posted as `categ` or as the legacy `type` alias.
+        $categoryCheck = $this->validateFields($json, [
+            'categ' => 'nullable|in:staff,admin,super admin,STAFF,ADMIN,SUPER ADMIN',
+            'type' => 'nullable|in:staff,admin,super admin,STAFF,ADMIN,SUPER ADMIN',
+        ], [
+            'categ.in' => 'Category must be staff, admin or super admin.',
+            'type.in' => 'Category must be staff, admin or super admin.',
+        ]);
+        if ($categoryCheck) {
+            return $categoryCheck;
+        }
+
         // Optional fields validation
         $optionalCheck = $this->validateFields($json, [
             'midname'   => 'nullable|string|max:100',
             'suffix'    => 'nullable|string|max:20',
+            'studnum'   => 'nullable|string|max:50',
             'pronoun'   => 'nullable|string|max:50',
             'birthday'  => 'nullable|date|before:today',
             'brgy'      => 'nullable|string|max:100',

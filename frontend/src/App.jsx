@@ -52,6 +52,7 @@ import AdminStoreCustomization from './routes/admin/AdminStoreCustomization.jsx'
 import AdminSchedule from './routes/admin/AdminSchedule.jsx'
 import AdminReviews from './routes/admin/AdminReviews.jsx'
 import AdminUsers from './routes/admin/AdminUsers.jsx'
+import AdminEnroll from './routes/admin/AdminEnroll.jsx'
 import AdminAppointments from './routes/admin/AdminAppointments.jsx'
 import AdminAccount from './routes/admin/AdminAccount.jsx'
 import AdminSettings from './routes/admin/AdminSettings.jsx'
@@ -151,6 +152,9 @@ function App() {
                   <Route path="/admin/appointments" element={<AdminAppointments />} />
                   <Route path="/admin/reviews" element={<AdminReviews />} />
                   <Route path="/admin/users" element={<AdminUsers />} />
+                  {/* The staff directory link the sidebar and the enrollment
+                      confirmation both point at. */}
+                  <Route path="/admin/staff" element={<AdminUsers />} />
                   <Route path="/admin/account" element={<AdminAccount />} />
                   <Route path="/admin/profile" element={<AdminAccount />} />
 
@@ -158,6 +162,13 @@ function App() {
                   <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
                     <Route path="/admin/pos" element={<AdminPos />} />
                     <Route path="/admin/settings" element={<AdminSettings />} />
+                  </Route>
+
+                  {/* DOMAIN 6 / REQ-EMP_ENROLL-01: enrollment is a super
+                      admin only screen, mirroring role:super_admin on
+                      POST /auth/emp_signup. */}
+                  <Route element={<RequireRole roles={['SUPER_ADMIN']} />}>
+                    <Route path="/admin/enroll" element={<AdminEnroll />} />
                   </Route>
                 </Route>
 

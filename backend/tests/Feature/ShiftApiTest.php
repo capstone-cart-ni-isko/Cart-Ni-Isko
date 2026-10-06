@@ -68,7 +68,10 @@ class ShiftApiTest extends TestCase
 
         $key = get_class($model) . ':' . $model->getKey();
         if (! isset($this->tokens[$key])) {
-            $this->tokens[$key] = $model->createToken('test')->plainTextToken;
+            // The api guard is the signed `cni_token` bearer (ApiToken), so the
+            // test mints one the same way login does instead of a Sanctum
+            // personal access token, which the guard no longer accepts.
+            $this->tokens[$key] = \App\Support\ApiToken::issue($model);
         }
 
         return ['Authorization' => 'Bearer ' . $this->tokens[$key]];
@@ -78,7 +81,10 @@ class ShiftApiTest extends TestCase
     {
         $this->seq++;
 
-        return Employee::create(array_merge([
+        // emp_type is a legacy fixture column and is deliberately absent from
+        // the model's fillable list (the live table spells it emp_categ), so
+        // the fixture writes it past mass assignment.
+        return Employee::forceCreate(array_merge([
             'emp_created'  => now(),
             'emp_password' => Hash::make('Password123!'),
             'emp_surname'  => 'Dela Cruz',

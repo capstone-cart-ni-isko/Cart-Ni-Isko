@@ -29,6 +29,10 @@ Route::get('/health/scheduler', [HealthAPI::class, 'schedulerHealth']);
 Route::post('/auth/cust_signup', [AuthAPI::class, 'customerSignup']);
 Route::post('/auth/cust_login', [AuthAPI::class, 'customerLogin']);
 Route::post('/auth/emp_login', [AuthAPI::class, 'employeeLogin']);
+// DOMAIN 2 - realtime field checks for the staff login form. Public because
+// nobody owns a session yet, throttled because it answers "does this account
+// exist" and "is this the right password" without opening a session.
+Route::post('/auth/emp_login/check', [AuthAPI::class, 'employeeLoginCheck'])->middleware('throttle:60,1');
 Route::post('/auth/recover_credentials', [AuthAPI::class, 'recoverCredentials']);
 
 // DOMAIN 17 / DOMAIN 18 - the phone OTP challenge that gates a signup

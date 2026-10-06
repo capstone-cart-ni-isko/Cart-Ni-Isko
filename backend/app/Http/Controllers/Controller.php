@@ -350,6 +350,21 @@ abstract class Controller
 
     // FLOW-ACCESS_LOG-01..06: every authentication / view / edit action of an
     // account lands in custlog or emplog. Rows are append-only (REQ-ACCESS_LOG-01).
+    //
+    // The access vocabulary is the one the access-log screen filters on
+    // (auth | view | edit, see AccessAPI::accessValue): an authentication
+    // action is written as `auth`, whatever the caller named it.
+    private function normalizeAccess(string $access): string
+    {
+        $access = strtolower(trim($access));
+
+        if (in_array($access, ['auth', 'view', 'edit'], true)) {
+            return $access;
+        }
+
+        return $access === 'authentication' ? 'auth' : 'view';
+    }
+
     protected function logCustomer(int $custId, string $access, string $endpoint): void
     {
         try {
@@ -357,7 +372,7 @@ abstract class Controller
                 // Legacy table: custlog_id is bigint NOT NULL with no sequence.
                 'custlog_id' => $this->nextId('custlog', 'custlog_id'),
                 'cust_id' => $custId,
-                'custlog_access' => $access,
+                'custlog_access' => $this->normalizeAccess($access),
                 'custlog_endpoint' => $endpoint,
                 'custlog_created' => now(),
             ]);
@@ -373,12 +388,31 @@ abstract class Controller
                 // Legacy table: emplog_id is bigint NOT NULL with no sequence.
                 'emplog_id' => $this->nextId('emplog', 'emplog_id'),
                 'emp_id' => $empId,
-                'emplog_access' => $access,
+                'emplog_access' => $this->normalizeAccess($access),
                 'emplog_endpoint' => $endpoint,
                 'emplog_created' => now(),
             ]);
         } catch (\Throwable $e) {
             // An audit write must never break the action it describes.
+        }
+    }
+
+    // FLOW-ACCESS_LOG-03: a customer reading a customer-facing resource is
+    // recorded on the account (best-effort). Guests are anonymous and not
+    // logged, and the CacheReads middleware already short-circuits cached
+    // GETs, so a repeat view inside the cache window is not logged twice.
+    protected function logView(Request $json, string $description = ''): void
+    {
+        try {
+            $user = $json->user('api');
+            $suffix = $description !== '' ? ' - ' . $description : '';
+            if ($user instanceof Customer) {
+                $this->logCustomer((int) $user->cust_id, 'view', 'GET ' . $json->path() . $suffix);
+            } elseif ($user instanceof Employee) {
+                $this->logEmployee((int) $user->emp_id, 'view', 'GET ' . $json->path() . $suffix);
+            }
+        } catch (\Throwable $e) {
+            // An audit write must never break the endpoint it describes.
         }
     }
 

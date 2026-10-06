@@ -1,5 +1,6 @@
 <?php
 namespace App\Models;
+use App\Support\EmployeePassword;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class Employee extends Authenticatable
@@ -8,6 +9,24 @@ class Employee extends Authenticatable
     protected $table = 'employee';
     protected $primaryKey = 'emp_id';
     public $timestamps = false;
+
+    /**
+     * DOMAIN 6 / REQ-EMP_ENROLL-03 - every password that reaches the
+     * `employee` table is bcrypt-digested first. The guard lives on the model
+     * so enrollment, seeding, console commands and any future writer all hash
+     * the same way, and an already-digested value (including a temporary
+     * password, which carries its own marker inside the digest) is left alone.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Employee $employee) {
+            $plain = (string) $employee->emp_password;
+
+            if ($plain !== '' && ! EmployeePassword::isHashed($plain)) {
+                $employee->emp_password = EmployeePassword::make($plain);
+            }
+        });
+    }
 
     // system-new.docx SCHEMA -> EMPLOYEE
     protected $fillable = [
@@ -56,17 +75,27 @@ class Employee extends Authenticatable
         'emp_unread' => 'integer',
     ];
 
-    /** Rule 32: employees are "staff", "admin" or "super admin". */
+    /**
+     * Rule 32: employees are "staff", "admin" or "super admin".
+     *
+     * The system-new SCHEMA names the category `emp_categ`; the pre-migration
+     * fixture (and older rows) still carry it as `emp_type`, so reading either
+     * keeps the rank identical wherever the account is judged - the same
+     * fallback EnsureRole already applies to every route guard.
+     */
+    public function category(): string
+    {
+        return strtolower((string) ($this->emp_categ ?: $this->emp_type));
+    }
+
     public function isSuperAdmin(): bool
     {
-        return str_contains(strtolower((string) $this->emp_categ), 'super');
+        return str_contains($this->category(), 'super');
     }
 
     public function isAdmin(): bool
     {
-        $categ = strtolower((string) $this->emp_categ);
-
-        return str_contains($categ, 'admin');
+        return str_contains($this->category(), 'admin');
     }
 
     public function isActive(): bool
