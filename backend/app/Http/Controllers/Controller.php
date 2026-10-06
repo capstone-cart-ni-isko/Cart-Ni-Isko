@@ -383,14 +383,53 @@ abstract class Controller
     }
 
     // ==========================================
+    // SIGNUP TYPE NORMALISATION (DOMAIN 17 / FLOW-CUST_SIGNUP-02)
+    // ==========================================
+
+    /**
+     * Folds a posted account type onto one of the two values the spec allows:
+     * `bueno` (the "BUeño" half of FLOW-CUST_SIGNUP-02) or `guest`.
+     *
+     * The signup form sends "Student" / "Alumni" / "Faculty" / "Guest" while
+     * the canonical vocabulary is "BUeño" | "guest", so the diacritics fold
+     * first ("BUeño" -> "bueno"), every non-letter then drops out, and the
+     * legacy academic roles land on BUeño.
+     *
+     * @param  mixed  $raw
+     */
+    protected function normalizeSignupType($raw): string
+    {
+        $kind = mb_strtolower(trim((string) $raw));
+
+        $kind = strtr($kind, [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u',
+            'ü' => 'u', 'ñ' => 'n',
+        ]);
+
+        $kind = preg_replace('/[^a-z]/', '', $kind);
+
+        if (in_array($kind, ['student', 'alumni', 'faculty'], true)) {
+            return 'bueno';
+        }
+
+        // Walk-in accounts are guests everywhere else in the system (POS).
+        if ($kind === 'walkin') {
+            return 'guest';
+        }
+
+        return (string) $kind;
+    }
+
+    // ==========================================
     // PHONE OTP VERIFICATION (DOMAIN 29 / REQ-CUST_SET-02)
     // ==========================================
 
     /**
      * The sensitive customer flows that must be OTP-verified first
-     * (FLOW-CUST_SET-03, FLOW-CUST_SET-06, REQ-CUST_SET-02).
+     * (FLOW-CUST_SET-03, FLOW-CUST_SET-06, REQ-CUST_SET-02,
+     * FLOW-CHECKOUT-08, FLOW-BOOK_APP-05).
      */
-    const OTP_PURPOSES = ['password_change', 'backup_contacts', 'checkout'];
+    const OTP_PURPOSES = ['password_change', 'backup_contacts', 'checkout', 'appointment'];
 
     // A code lives five minutes, may be tried five times, and may be
     // re-requested after a 45-second cooldown. No new table or column is

@@ -53,7 +53,8 @@ export async function signUpUser(details) {
   const guest = isGuestRole(details)
   const categ = guest ? null : resolveCateg(details)
   const role = guest ? 'Guest' : 'Student'
-  const custType = guest ? 'guest' : 'bueño'
+  // FLOW-CUST_SIGNUP-02: the canonical account type is "BUeño" | "guest".
+  const custType = guest ? 'guest' : 'BUeño'
 
   // The four legacy address parts fold into the single `address`
   // column; both spellings are sent so either backend generation
@@ -64,7 +65,11 @@ export async function signUpUser(details) {
         .filter((part) => part && part.toUpperCase() !== 'N/A')
         .join(', ')
 
-  const birthday = details.birthday || details.bday || details.cust_bday || '2000-01-01'
+  // No fabricated defaults: the system-new.docx schema keeps cust_bday and
+  // cust_address nullable, so a birthday or address the customer never gave
+  // stays NULL instead of being invented (the legacy table shape still gets
+  // its own fallback inside the backend).
+  const birthday = details.birthday || details.bday || details.cust_bday || ''
   const backupPhone = details.backup_phone || details.cust_backup_phone
     || [details.backupcallcode, details.backupphone]
         .map((part) => String(part || '').trim())
@@ -97,7 +102,7 @@ export async function signUpUser(details) {
       brgy: details.brgy || '',
       city: details.city || '',
       province: details.province || '',
-      country: details.country || 'PH',
+      country: details.country || '',
       backupcallcode: details.backupcallcode || '',
       backupphone: details.backupphone || '',
       backupemail: backupEmail,

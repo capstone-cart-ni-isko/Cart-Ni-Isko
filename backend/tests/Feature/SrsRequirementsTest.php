@@ -16,6 +16,7 @@ use App\Models\Pickup;
 use App\Models\Product;
 use App\Models\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -85,6 +86,41 @@ class SrsRequirementsTest extends TestCase
             'cust_orders'    => 0,
             'cust_appoints'  => 0,
         ], $attributes));
+    }
+
+    /**
+     * FLOW-BOOK_APP-05: POST /appoint/create only clears for a customer who
+     * has cleared the phone OTP, and each booking burns that verification.
+     * The booking fixtures therefore grant exactly what POST /api/otp/verify
+     * writes (the end-to-end path is asserted on its own test below).
+     */
+    private function grantAppointmentOtp(Customer $customer): void
+    {
+        Cache::put(
+            'otp:ok:' . (int) $customer->cust_id . ':appointment',
+            true,
+            now()->addMinutes(10)
+        );
+    }
+
+    /**
+     * REQ-CUST_SIGNUP-04: the six-digit code only travels through the
+     * account's own notification inbox, so the test reads it from where the
+     * customer would - the newest custnotif row of that account.
+     */
+    private function inboxCodeFor(int $custId): string
+    {
+        $message = CustNotif::where('cust_id', $custId)
+            ->orderByDesc('custnotif_created')
+            ->orderByDesc('custnotif_id')
+            ->value('custnotif_msg');
+
+        $this->assertNotNull($message, 'No verification code reached the account inbox.');
+        $this->assertMatchesRegularExpression('/\b\d{6}\b/', $message);
+
+        preg_match('/\b(\d{6})\b/', $message, $matches);
+
+        return $matches[1];
     }
 
     private function makeEmployee(array $attributes = []): Employee
@@ -300,6 +336,8 @@ class SrsRequirementsTest extends TestCase
             ->assertStatus(403)
             ->assertJson(['message' => 'Customer account mismatch.']);
 
+        // FLOW-BOOK_APP-05: the booking clears only with a phone OTP behind it
+        $this->grantAppointmentOtp($customer);
         $first = $this->json('POST', '/api/appoint/create', [
             'cust_id'      => $customer->cust_id,
             'appoint_date' => $date . ' 10:00',
@@ -310,6 +348,8 @@ class SrsRequirementsTest extends TestCase
 
         // Fill the 10:00 CLAIM slot up to its capacity of ten (REQ-AB-01)
         for ($i = 0; $i < 9; $i++) {
+            // Every booking burns the verification it was made with
+            $this->grantAppointmentOtp($customer);
             $this->json('POST', '/api/appoint/create', [
                 'cust_id'      => $customer->cust_id,
                 'appoint_date' => $date . ' 10:00',
@@ -354,6 +394,7 @@ class SrsRequirementsTest extends TestCase
         $this->assertStringContainsString('Store fully occupied for the university event', $priorityNote->custnotif_msg);
 
         // The freed slot is bookable again (closed bookings leave the count)
+        $this->grantAppointmentOtp($customer);
         $this->json('POST', '/api/appoint/create', [
             'cust_id'      => $customer->cust_id,
             'appoint_date' => $date . ' 10:00',
@@ -369,6 +410,55 @@ class SrsRequirementsTest extends TestCase
             ->assertStatus(200)
             ->json('data');
         $this->assertSame(Appointment::count(), count($master));
+    }
+
+    // ==========================================
+    // BOOKING OTP (FLOW-BOOK_APP-05)
+    // ==========================================
+
+    public function test_a_booking_is_refused_until_the_phone_otp_is_cleared()
+    {
+        $customer = $this->makeCustomer();
+        $date     = now()->addDays(5)->format('Y-m-d');
+
+        // One in-store employee unlocks CLAIM slots (REQ-AB-01)
+        $this->makeEmployee(['emp_instore' => 1]);
+
+        $first = [
+            'cust_id'      => $customer->cust_id,
+            'appoint_date' => $date . ' 10:00',
+            'appoint_type' => 'CLAIM',
+        ];
+        $second = [
+            'cust_id'      => $customer->cust_id,
+            'appoint_date' => $date . ' 10:30',
+            'appoint_type' => 'CLAIM',
+        ];
+
+        // Nothing verified yet: the save is refused outright, never half-made
+        $this->json('POST', '/api/appoint/create', $first, $this->headers($customer))
+            ->assertStatus(428)
+            ->assertJsonPath('code', 'OTP_REQUIRED')
+            ->assertJsonPath('data.purpose', 'appointment');
+        $this->assertSame(0, Appointment::count());
+
+        // The code reaches the account's own inbox (REQ-CUST_SIGNUP-04)
+        $this->postJson('/api/otp/issue', ['purpose' => 'appointment'], $this->headers($customer))
+            ->assertStatus(200);
+        $this->postJson('/api/otp/verify', [
+            'purpose' => 'appointment',
+            'code'    => $this->inboxCodeFor((int) $customer->cust_id),
+        ], $this->headers($customer))->assertStatus(200);
+
+        // The very same booking now saves (FLOW-BOOK_APP-05)
+        $this->json('POST', '/api/appoint/create', $first, $this->headers($customer))
+            ->assertStatus(201);
+        $this->assertSame(1, Appointment::count());
+
+        // The verification is burned with it: the next booking needs its own
+        $this->json('POST', '/api/appoint/create', $second, $this->headers($customer))
+            ->assertStatus(428);
+        $this->assertSame(1, Appointment::count());
     }
 
     // ==========================================

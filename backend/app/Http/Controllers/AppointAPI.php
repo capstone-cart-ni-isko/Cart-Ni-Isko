@@ -238,6 +238,11 @@
             emp_id - integer (opt, staff calendars may name the employee)
             appoint_desc - string (opt: accepted and ignored - the live
                 appointments table has no description column)
+
+            FLOW-BOOK_APP-05: a customer booking is answered 428
+            {code: "OTP_REQUIRED", data: {purpose: "appointment"}} until the
+            phone OTP is cleared, and the verification is burned with the
+            booking. Employees and administrators are never OTP-gated.
         */
         public function createAppointment(Request $json)
         {
@@ -328,6 +333,12 @@
                     $custId = (int) $json->input('cust_id');
                 }
 
+                // FLOW-BOOK_APP-05: the phone OTP comes before the booking is
+                // saved. The 428 answer carries the purpose, and the client
+                // then clears it through /otp/issue + /otp/verify and retries.
+                $gate = $this->otpGate($json, 'appointment');
+                if ($gate) return $gate;
+
                 $appointment = DB::transaction(function () use ($custId, $type, $slotStart, $slotEnd, $json) {
                     if (DB::getDriverName() === 'pgsql') {
                         $lockId = (int) ($slotStart->format('YmdHi') . ($type === 'CLAIM' ? '1' : '2'));
@@ -358,6 +369,10 @@
                         'appoint_qr' => 'APPT-' . strtoupper(Str::random(16)),
                     ]);
                 });
+
+                // The verification is burned only once the appointment exists,
+                // so the next booking needs its own code (FLOW-BOOK_APP-05).
+                $this->consumeOtp($json, 'appointment');
 
                 return response()->json([
                     'success' => true,

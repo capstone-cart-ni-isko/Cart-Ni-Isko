@@ -49,10 +49,7 @@ class InputValidatorAPI extends Controller
         // FLOW-CUST_SIGNUP-02: cust_type is either "BUeño" or "guest".
         // The legacy forms still post "Student" / "Alumni" / "Faculty",
         // which all describe a BUeño, so those spellings fold into it too.
-        $kind = preg_replace('/[^a-z]/', '', strtolower((string) $json->input('type')));
-        if (in_array($kind, ['student', 'alumni', 'faculty'], true)) {
-            $kind = 'bueno';
-        }
+        $kind = $this->normalizeSignupType($json->input('type'));
 
         if (! in_array($kind, ['bueno', 'guest'], true)) {
             return $this->fail('Account type must be either "BUeño" or "guest".', 422);
@@ -103,6 +100,9 @@ class InputValidatorAPI extends Controller
             'bday'         => ['birthday'],
             'backup_phone' => ['backupphone'],
             'backup_email' => ['backupemail', 'backup_email'],
+            // The canonical account type may travel alone under either
+            // spelling (FLOW-CUST_SIGNUP-02: "BUeño" | "guest").
+            'type'         => ['cust_type', 'role'],
         ];
 
         foreach ($pairs as $canonical => $aliases) {

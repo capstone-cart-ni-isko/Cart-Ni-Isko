@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../../hooks/useToast.js'
-import OtpInput from '../ui/OtpInput.jsx'
+import OtpVerifyModal from '../ui/OtpVerifyModal.jsx'
 import {
   createAppointment,
   fetchSlots,
@@ -75,7 +75,10 @@ function isSelectable(stamp) {
  *
  * Flow: choose type (visit|pickup) -> pick a date -> pick a 10-minute
  * slot (only where an employee is prescheduled, >= 30 minutes out) ->
- * phone OTP -> save (status upcoming + unique QR issued server-side).
+ * save (status upcoming + unique QR issued server-side). FLOW-BOOK_APP-05:
+ * the save itself is gated - the server answers 428 OTP_REQUIRED until the
+ * phone code is cleared, and the form then raises the shared OTP sheet and
+ * replays the booking once it verifies.
  * With `collectOnly` the last step is skipped: the slot is handed back to
  * the caller and saved by the backend together with the order instead.
  *
@@ -113,9 +116,10 @@ export default function AppointmentForm({
   const [slotsError, setSlotsError] = useState('')
   const [booking, setBooking] = useState(false)
 
-  // Phone OTP step (the backend issues the code on the customer's phone).
-  const [otp, setOtp] = useState('')
-  const [otpDone, setOtpDone] = useState(false)
+  // FLOW-BOOK_APP-05: the server asks for the phone code only when the
+  // booking itself is refused with a 428, so the sheet is driven by that
+  // answer instead of a local "step".
+  const [otpOpen, setOtpOpen] = useState(false)
 
   const rules = TYPE_RULES[appointType] || TYPE_RULES.VISIT
 
@@ -168,10 +172,6 @@ export default function AppointmentForm({
       showToast('Please pick a date and a time slot first.', 'error')
       return
     }
-    if (!otpDone) {
-      showToast('Enter the verification code sent to your phone.', 'error')
-      return
-    }
 
     setBooking(true)
     const payload = {
@@ -212,6 +212,12 @@ export default function AppointmentForm({
       if (!collectOnly) await loadSlots()
       onSuccess?.(saved)
     } catch (err) {
+      if (err?.status === 428) {
+        // FLOW-BOOK_APP-05: the booking is refused until the phone code is
+        // cleared - raise the sheet; `handleOtpVerified` replays this save.
+        setOtpOpen(true)
+        return
+      }
       showToast(
         err?.message ||
           (reschedule
@@ -222,6 +228,13 @@ export default function AppointmentForm({
     } finally {
       setBooking(false)
     }
+  }
+
+  // The code cleared: close the sheet and send the booking again, now that
+  // the server holds the verification (it lasts ten minutes).
+  const handleOtpVerified = async () => {
+    setOtpOpen(false)
+    await handleBook()
   }
 
   return (
@@ -335,43 +348,18 @@ export default function AppointmentForm({
         </div>
       )}
 
-      {/* Step: phone OTP before the booking is saved */}
-      {slot && (
-        <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-          <p className="text-xs font-semibold text-slate-700">
-            Phone verification
-          </p>
-          {otpDone ? (
-            <p className="text-xs font-bold text-emerald-700 flex items-center gap-1.5">
-              <span>✓</span> Phone verified — ready to save
-            </p>
-          ) : (
-            <>
-              <p className="text-[11px] text-slate-500 leading-snug">
-                Enter the 6-digit code sent to your phone to confirm this slot.
-              </p>
-              <OtpInput value={otp} onChange={setOtp} length={6} />
-              <button
-                type="button"
-                disabled={otp.length < 6}
-                onClick={() => {
-                  // Contract gap: the backend exposes no OTP verification
-                  // endpoint yet, so any 6-digit code is accepted (reported).
-                  setOtpDone(true)
-                  showToast('Phone verified!')
-                }}
-                className="w-full h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Verify code
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      {/* FLOW-BOOK_APP-05: the phone code the server asks for before saving */}
+      <OtpVerifyModal
+        isOpen={otpOpen}
+        purpose="appointment"
+        title="Confirm your booking"
+        onClose={() => setOtpOpen(false)}
+        onVerified={handleOtpVerified}
+      />
 
       <button
         type="button"
-        disabled={booking || !slot || !otpDone}
+        disabled={booking || !slot}
         onClick={handleBook}
         className="w-full h-9 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
       >

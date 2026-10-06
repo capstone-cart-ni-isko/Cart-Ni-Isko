@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import Avatar from '../ui/Avatar.jsx'
+import ConfirmModal from '../ui/ConfirmModal.jsx'
 import {
   CloseIcon,
   HeartIcon,
@@ -54,6 +55,8 @@ function MenuSidebar() {
   const { currentUser, logout } = useAuth()
   const { dark, toggle: toggleTheme } = useTheme()
   const { isMenuOpen, close } = useMenu()
+  // FLOW-CUST_LOGOUT-01: the confirmation only appears after the icon is hit.
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   // Escape closes the drawer.
   useEffect(() => {
@@ -76,6 +79,13 @@ function MenuSidebar() {
     // `replace` so Back on the login screen can never re-enter an
     // authenticated page; its own Back button goes to the homepage.
     navigate('/signin', { replace: true })
+  }
+
+  // FLOW-CUST_LOGOUT-01: the drawer is stacked above every dialog, so it
+  // steps out of the way first and the confirmation takes the screen.
+  const askLogout = () => {
+    close()
+    setConfirmLogout(true)
   }
 
   const items = [
@@ -108,7 +118,7 @@ function MenuSidebar() {
     { key: 'orders', label: 'Orders', icon: <PackageIcon />, onClick: () => go('/orders') },
     { key: 'wishlist', label: 'Wishlist', icon: <HeartIcon />, onClick: () => go('/wishlist') },
     { key: 'settings', label: 'Settings', icon: <SettingsIcon />, onClick: () => go('/settings') },
-    { key: 'logout', label: 'Logout', icon: <LogOutIcon className="w-5 h-5 text-red-500" />, onClick: handleLogout },
+    { key: 'logout', label: 'Logout', icon: <LogOutIcon className="w-5 h-5 text-red-500" />, onClick: askLogout },
   ]
 
   return (
@@ -154,6 +164,18 @@ function MenuSidebar() {
           </button>
         ))}
       </aside>
+
+      {/* FLOW-CUST_LOGOUT-01/02/03: "Yes" signs out, "Cancel" keeps the session */}
+      <ConfirmModal
+        isOpen={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+        onConfirm={handleLogout}
+        title="Log out?"
+        message="Are you sure you want to log out of your Tindahan ni Isko account?"
+        confirmText="Yes"
+        cancelText="Cancel"
+        isDestructive
+      />
     </>
   )
 }

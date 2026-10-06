@@ -110,11 +110,7 @@
             $password = (string) $json->input('password');
 
             // FLOW-CUST_SIGNUP-02: cust_type is either "BUeño" or "guest".
-            $kind = preg_replace('/[^a-z]/', '', strtolower((string) $json->input('type')));
-            if (in_array($kind, ['student', 'alumni', 'faculty'], true)) {
-                $kind = 'bueno';
-            }
-            $guest = $kind !== 'bueno';
+            $guest = $this->normalizeSignupType($json->input('type')) !== 'bueno';
 
             // FLOW-CUST_SIGNUP-03 / FLOW-CUST_SIGNUP-04.
             $categ   = $guest ? null : (strtolower((string) $json->input('cust_categ')) ?: 'student');
@@ -225,7 +221,7 @@
                 'cust_pronoun'  => $json->input('pronoun') ?: 'they/them',
                 'cust_phone'    => $phone,
                 'cust_email'    => $email !== '' ? $email : null,
-                'cust_type'     => $guest ? 'guest' : 'bueño',
+                'cust_type'     => $guest ? 'guest' : 'BUeño',
                 'cust_college'  => $college,
                 'cust_wishlist' => 0,
                 'cust_orders'   => 0,
@@ -245,7 +241,10 @@
                     'cust_backup_email'        => strtolower(trim((string) ($json->input('backup_email') ?: $json->input('backupemail')))) ?: null,
                     'cust_backup_ques'         => null,
                     'cust_backup_answer'       => null,
-                    'cust_backup_code'         => null,
+                    // NOT NULL on the live system-new.docx schema with the
+                    // default "/", so the marker is written explicitly - an
+                    // explicit NULL here would abort the insert (23502).
+                    'cust_backup_code'         => '/',
                     'cust_darkmode'            => false,
                     'cust_deleted'             => null,
                     'cust_suspended'           => null,
