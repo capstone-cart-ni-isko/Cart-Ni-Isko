@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import React from 'react'
 import { useCart } from '../../hooks/useCart.js'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
@@ -12,12 +12,13 @@ const navItems = [
   { to: '/home', label: 'Home', icon: homeIcon },
   { to: '/orders', label: 'Orders', icon: ordersIcon },
   { to: '/wishlist', label: 'Wishlist', icon: wishlistIcon },
-  { to: '/cart', label: 'Cart', icon: cartIcon, isCart: true },
+  { to: '/bag', label: 'Bag', icon: cartIcon, isCart: true, active: ['/bag', '/cart'] },
   { to: '/profile', label: 'Profile', icon: profileIcon },
 ]
 
 function SideNav() {
   const { cartItems } = useCart()
+  const { pathname } = useLocation()
   const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0)
 
   return (
@@ -31,43 +32,43 @@ function SideNav() {
       </div>
 
       <ul className="flex-1 space-y-1">
-        {navItems.map(({ to, label, icon, isCart }) => (
+        {navItems.map(({ to, label, icon, isCart, active }) => {
+          // FLOW-BAG-03: "/cart" is an alias of "/bag", so both light this up.
+          const isActive = (active || [to]).some((p) => pathname === p)
+          return (
           <li key={to}>
             <NavLink
               to={to}
-              className={({ isActive }) =>
-                `flex items-center justify-between px-3 py-2 rounded-md text-xs font-semibold transition-colors ${
-                  isActive
-                    ? 'bg-brand-orange/10 text-brand-orange'
-                    : 'text-gray-600 hover:bg-slate-100'
-                }`
-              }
+              className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-semibold transition-colors ${
+                isActive
+                  ? 'bg-brand-orange/10 text-brand-orange'
+                  : 'text-gray-600 hover:bg-slate-100'
+              }`}
             >
-              {({ isActive }) => (
-                <>
-                  <div className="flex items-center gap-2.5">
-                    <img
-                      src={icon}
-                      alt=""
-                      className="w-4 h-4 shrink-0"
-                      style={{
-                        filter: isActive
-                          ? 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(100%) contrast(96%)'
-                          : 'none',
-                      }}
-                    />
-                    <span>{label}</span>
-                  </div>
-                  {isCart && cartCount > 0 && (
-                    <span className="bg-brand-orange text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-white animate-scale-in">
-                      {cartCount}
-                    </span>
-                  )}
-                </>
-              )}
+              <>
+                <div className="flex items-center gap-2.5">
+                  <img
+                    src={icon}
+                    alt=""
+                    className="w-4 h-4 shrink-0"
+                    style={{
+                      filter: isActive
+                        ? 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(100%) contrast(96%)'
+                        : 'none',
+                    }}
+                  />
+                  <span>{label}</span>
+                </div>
+                {isCart && cartCount > 0 && (
+                  <span className="bg-brand-orange text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-white animate-scale-in">
+                    {cartCount}
+                  </span>
+                )}
+              </>
             </NavLink>
           </li>
-        ))}
+          )
+        })}
       </ul>
 
       <div className="pt-4 mt-4 border-t border-gray-100">

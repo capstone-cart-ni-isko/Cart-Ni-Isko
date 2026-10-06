@@ -10,6 +10,9 @@ class EmpLog extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `emplog_id` has no sequence on the live table, so writers pass
+        // the number from App\Support\IdAllocator::next().
+        'emplog_id',
         'emp_id',
         'emplog_access',
         'emplog_endpoint',

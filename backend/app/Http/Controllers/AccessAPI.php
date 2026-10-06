@@ -46,6 +46,8 @@ class AccessAPI extends Controller
             }
 
             EmpLog::create([
+                // No sequence for emplog_id on the live table.
+                'emplog_id'       => $this->nextId('emplog', 'emplog_id'),
                 'emp_id'         => $employee->emp_id,
                 'emplog_access'  => $this->accessValue($json->input('access'), 'view'),
                 'emplog_endpoint' => $this->short($this->endpointFrom($json, 'FLAG')),
@@ -87,6 +89,8 @@ class AccessAPI extends Controller
             }
 
             EmpLog::create([
+                // No sequence for emplog_id on the live table.
+                'emplog_id'       => $this->nextId('emplog', 'emplog_id'),
                 'emp_id'         => $employee->emp_id,
                 'emplog_access'  => $this->accessValue($json->input('access'), 'view'),
                 'emplog_endpoint' => $this->short($this->endpointFrom($json, 'LOG')),

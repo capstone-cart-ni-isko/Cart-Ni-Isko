@@ -20,7 +20,12 @@ class EnsureRole
             ], 403);
         }
 
-        $rank = $this->rank($employee->emp_categ);
+        // The system-new SCHEMA names the category `emp_categ`; the legacy
+        // fixture (and older rows) still carry it as `emp_type`. Reading
+        // either keeps the rank identical on the live table, where
+        // `emp_categ` is always present, and correct on a connection that
+        // only has the pre-migration column.
+        $rank = $this->rank($employee->emp_categ ?: $employee->emp_type);
         $required = $this->rank($minimumRole);
 
         if ($rank < $required) {

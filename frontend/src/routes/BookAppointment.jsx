@@ -1,39 +1,52 @@
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
+import { saveCheckoutSlot } from '../services/checkout.js'
 
 /**
  * /book — DOMAIN 21/22 "book an appointment" page.
  *
- * The standalone booking page the Appointments ribbon and the checkout
- * pickup flow both route through. On success the form hands the saved
- * appointment (status upcoming + unique QR) back: checkout returns to
- * /checkout with it in route state, the standalone flow lands on
- * /appointments.
+ * The standalone booking page the Appointments ribbon routes through, and the
+ * page the checkout pickup flow (FLOW-CHECKOUT-04) sends the customer to:
+ *
+ *   /book?return=/checkout  -> the form COLLECTS the claim slot only. Nothing
+ *   is posted to /appoint/create here (FLOW-CHECKOUT-06): the details are
+ *   parked in sessionStorage and handed back to /checkout, where the whole
+ *   checkout transaction creates the appointment together with the order.
+ *
+ * Without that query the standalone flow keeps creating its appointment and
+ * lands on /appointments (FLOW-APPOINT-*) untouched.
  */
 function BookAppointment() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { currentUser } = useAuth()
   const [saved, setSaved] = useState(null)
   const [showLogin, setShowLogin] = useState(false)
 
-  // Checkout (DOMAIN 26) routes pickup through here and back.
-  const returnTo = location.state?.returnTo || '/appointments'
-  const pickupMode = Boolean(location.state?.pickup)
+  // Checkout (DOMAIN 26) routes pickup through here and back: the return path
+  // travels in the query string so a plain link/back button keeps working.
+  const returnTo = searchParams.get('return') || location.state?.returnTo || '/appointments'
+  const pickupMode = returnTo === '/checkout' || Boolean(location.state?.pickup)
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
   const handleSuccess = (appointment) => {
-    setSaved(appointment)
     if (pickupMode) {
-      navigate('/checkout', { state: { appointment }, replace: false })
-    } else {
-      navigate('/appointments', { state: { booked: appointment } })
+      // FLOW-CHECKOUT-05/06: hand the collected details back to /checkout.
+      // They live only in sessionStorage until the order is placed - the
+      // appointment row itself is created inside the checkout transaction.
+      saveCheckoutSlot(appointment)
+      navigate('/checkout', { state: { slot: appointment }, replace: false })
+      return
     }
+
+    setSaved(appointment)
+    navigate('/appointments', { state: { booked: appointment } })
   }
 
   if (!currentUser) {
@@ -69,22 +82,24 @@ function BookAppointment() {
             to={returnTo}
             label={pickupMode ? 'Back to Checkout' : 'Back to Appointments'}
           />
-          <Link
-            to="/appointments"
-            className="text-xs font-bold text-brand-orange hover:underline cursor-pointer"
-          >
-            My Appointments
-          </Link>
+          {!pickupMode && (
+            <Link
+              to="/appointments"
+              className="text-xs font-bold text-brand-orange hover:underline cursor-pointer"
+            >
+              My Appointments
+            </Link>
+          )}
         </div>
 
         <div>
           <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-            Book an Appointment
+            {pickupMode ? 'Choose Your Pickup Slot' : 'Book an Appointment'}
           </h1>
           <p className="text-xs text-slate-500 leading-relaxed mt-1">
-            Choose a store visit or a pickup slot. Slots are 10 minutes long, open
-            at least 30 minutes from now, and only where a staff member is
-            scheduled.
+            {pickupMode
+              ? 'Pick the slot you will claim your order in. It is saved with your order at checkout - nothing is booked until the order is placed.'
+              : 'Choose a store visit or a pickup slot. Slots are 10 minutes long, open at least 30 minutes from now, and only where a staff member is scheduled.'}
           </p>
         </div>
 
@@ -92,6 +107,7 @@ function BookAppointment() {
           key={pickupMode ? 'pickup' : 'standalone'}
           type={pickupMode ? 'PICKUP' : null}
           custId={custId}
+          collectOnly={pickupMode}
           onSuccess={handleSuccess}
           onCancel={() => navigate(returnTo)}
         />

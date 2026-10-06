@@ -30,3 +30,50 @@ export async function verifyOtp(purpose, code) {
     return { data: null, error: err.message || 'That code is not correct' }
   }
 }
+
+/**
+ * DOMAIN 17 / DOMAIN 18 - the pre-session challenge.
+ *
+ * A signup (FLOW-CUST_SIGNUP-05) and a stale login (FLOW-CUST_LOGIN-02) are
+ * answered with a signed `challenge` instead of a token: the caller owns no
+ * session yet, so that blob is what ties the six-digit code to its account.
+ * All three calls are POST-only, so the signed state never lands in a URL.
+ */
+
+/** POST /otp/challenge/start - issue a fresh code for the challenge. */
+export async function startOtpChallenge(challenge, purpose) {
+  try {
+    const data = await apiPost('/otp/challenge/start', { challenge, purpose })
+    return { data: data.data || {}, error: null }
+  } catch (err) {
+    return { data: null, error: err.message || 'Unable to send a verification code' }
+  }
+}
+
+/**
+ * POST /otp/challenge/verify - clear the code. The answer carries the full
+ * account plus its bearer token: this is the call that finalizes a signup
+ * and opens the session.
+ */
+export async function redeemOtpChallenge(challenge, purpose, code) {
+  try {
+    const data = await apiPost('/otp/challenge/verify', { challenge, purpose, code })
+    return { data: data.data || {}, error: null }
+  } catch (err) {
+    return { data: null, error: err.message || 'That code is not correct' }
+  }
+}
+
+/**
+ * POST /otp/challenge/inbox - read the code back out of the account's own
+ * notification inbox (REQ-CUST_SIGNUP-04 allows in-app delivery, and this
+ * screen is shown before any session exists).
+ */
+export async function readChallengeInbox(challenge, purpose) {
+  try {
+    const data = await apiPost('/otp/challenge/inbox', { challenge, purpose })
+    return { data: data.data || {}, error: null }
+  } catch (err) {
+    return { data: null, error: err.message || 'Unable to read your notifications' }
+  }
+}

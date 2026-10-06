@@ -71,6 +71,17 @@ function RequireAuth() {
   return <Outlet />
 }
 
+/**
+ * FLOW-CUST_LOGIN-01 - the bare "/" entry rule. A customer who was signed in
+ * on this browser-device goes straight to the storefront; anyone else is sent
+ * to the login form. Only "/" is gated: "/home" stays public so the
+ * "Back to Homepage" links can never bounce back into the login screen.
+ */
+function EntryRoute() {
+  const { currentUser } = useAuth()
+  return <Navigate to={currentUser ? '/home' : '/login'} replace />
+}
+
 function App() {
   return (
     <ToastProvider>
@@ -84,7 +95,7 @@ function App() {
               <ApiErrorBoundary>
                 <Routes>
                 {/* ── Customer Routes ── */}
-                <Route path="/" element={<Home />} />
+                <Route path="/" element={<EntryRoute />} />
                 <Route path="/home" element={<Home />} />
                 <Route path="/welcome" element={<Welcome />} />
                 <Route path="/signup/*" element={<SignUp />} />

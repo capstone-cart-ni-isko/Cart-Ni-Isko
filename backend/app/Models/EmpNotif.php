@@ -10,6 +10,9 @@ class EmpNotif extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `empnotif_id` has no sequence on the live table, so writers pass
+        // the number from App\Support\IdAllocator::next().
+        'empnotif_id',
         'emp_id',
         'empnotif_created',
         'empnotif_read',

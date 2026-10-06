@@ -4,10 +4,12 @@ import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import {
   addWishlistItem,
+  addWishlistToBag,
   fetchWishlist,
   removeWishlistItem,
   wishlistKey,
 } from '../services/wishlist.js'
+import { notifyCartChanged } from './CartContext.jsx'
 
 export const WishlistContext = createContext(null)
 
@@ -17,15 +19,21 @@ const GUEST = 'guest'
 function readLocal() {
   try {
     const saved = localStorage.getItem('isko_wishlist')
-    return saved ? JSON.parse(saved) : []
+    const rows = saved ? JSON.parse(saved) : []
+    return Array.isArray(rows) ? rows : []
   } catch {
     return []
   }
 }
 
-/** REQ-CW-01: Check if a wishlist product is still offered (not removed from catalog). */
+/**
+ * FLOW-WISHLIST-07: a saved product that is no longer offered must stay on the
+ * list - the server ships `available` on every row - so it is only flagged
+ * here, never filtered out.
+ */
 function isProductOffered(product) {
   if (!product) return false
+  if (product.available === false) return false
   return product.status !== 'Disabled' && product.status !== 'Deleted'
 }
 
@@ -40,13 +48,17 @@ export function WishlistProvider({ children }) {
   const [wishlistItems, setWishlistItems] = useState(readLocal)
   const hydratedFor = useRef(null)
 
-  // Persist locally so guests keep their picks across reloads.
+  // Persist locally so guests keep their picks across reloads (REQ-WISHLIST-01
+  // keeps the server as the source of truth; this mirror covers signed-out use
+  // and API outages).
   useEffect(() => {
     localStorage.setItem('isko_wishlist', JSON.stringify(wishlistItems))
   }, [wishlistItems])
 
   // Whenever the signed-in customer changes, reload from the backend so the
-  // list always reflects Supabase rather than a stale local copy.
+  // list always reflects the API rather than a stale local copy. The server
+  // answers wish_created DESC (FLOW-WISHLIST-03) and the array is rendered
+  // exactly as it arrives.
   useEffect(() => {
     if (hydratedFor.current === owner) return
     hydratedFor.current = owner
@@ -98,7 +110,9 @@ export function WishlistProvider({ children }) {
 
       const exists = wishlistItems.some((item) => item.id === product.id)
 
-      // Optimistic update, reverted if the backend rejects it.
+      // Optimistic update, reverted if the backend rejects it. The server
+      // soft-deletes (wish_hidden) on remove - REQ-WISHLIST-02 - so the row
+      // simply disappears from the next display.
       setWishlistItems((prev) =>
         exists ? prev.filter((item) => item.id !== product.id) : [...prev, product]
       )
@@ -128,6 +142,38 @@ export function WishlistProvider({ children }) {
     [wishlistItems]
   )
 
+  /**
+   * FLOW-WISHLIST-06: put a saved item straight into the bag. The backend
+   * creates the live bag line (POST /wishlist/to_order) and answers with the
+   * cart envelope, so the bag badge is refreshed from cart_count right away.
+   */
+  const addToBag = useCallback(
+    async (product, qty = 1) => {
+      const key = wishlistKey(product)
+      if (!key) return false
+
+      if (!custId) {
+        showToast('Sign in to add wishlist items to your bag.', 'error')
+        return false
+      }
+      if (!isProductOffered(product)) {
+        showToast('This item is no longer available.', 'error')
+        return false
+      }
+
+      try {
+        await addWishlistToBag(custId, key, qty)
+        notifyCartChanged()
+        showToast(`Added "${product.name}" to your bag.`, 'success')
+        return true
+      } catch (err) {
+        showToast(err.message || 'Could not add this item to your bag.', 'error')
+        return false
+      }
+    },
+    [custId, showToast]
+  )
+
   return (
     <WishlistContext.Provider
       value={{
@@ -136,6 +182,7 @@ export function WishlistProvider({ children }) {
         isInWishlist,
         isProductOffered,
         canAddToCart: (product) => isProductOffered(product),
+        addToBag,
       }}
     >
       {children}

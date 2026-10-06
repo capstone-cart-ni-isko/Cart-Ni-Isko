@@ -160,6 +160,78 @@ class ApiToken
         return ['user' => $user, 'payload' => $payload, 'raw' => $token];
     }
 
+    /**
+     * Purpose-scoped pre-sign-in challenge (DOMAIN 17 / DOMAIN 18).
+     *
+     * A signup proves nothing but the form it filled, and a login that still
+     * owes a phone OTP has proved the password only. Neither may hold a
+     * session, so the account id + purpose travel in a signed, short-lived
+     * blob that the public OTP challenge endpoints redeem for a real token.
+     * It carries no nonce, so `parse()` - and with it every `auth:api`
+     * route - rejects it outright.
+     */
+    public const CHALLENGE_TTL = 30 * 60;
+
+    /** Signs a signup / login OTP challenge for an account. */
+    public static function challenge(object $user, string $purpose): string
+    {
+        $payload = json_encode([
+            't' => 'otp',
+            'p' => $purpose,
+            'i' => (int) $user->getKey(),
+            'a' => time(),
+        ], JSON_UNESCAPED_SLASHES);
+
+        $body = self::b64($payload);
+        $sig = self::b64(hash_hmac('sha256', self::PREFIX . '.' . $body, self::key(), true));
+
+        return self::PREFIX . '.' . $body . '.' . $sig;
+    }
+
+    /**
+     * Verifies a challenge issued by self::challenge().
+     *
+     * @return array{user: Customer, purpose: string}|null
+     */
+    public static function parseChallenge(?string $token): ?array
+    {
+        if (! $token || ! str_starts_with($token, self::PREFIX . '.')) {
+            return null;
+        }
+
+        $parts = explode('.', $token);
+        if (count($parts) !== 3) {
+            return null;
+        }
+
+        [, $body, $sig] = $parts;
+        $expected = self::b64(hash_hmac('sha256', self::PREFIX . '.' . $body, self::key(), true));
+        if (! hash_equals($expected, $sig)) {
+            return null;
+        }
+
+        $payload = json_decode(self::unb64($body), true);
+        if (! is_array($payload) || ($payload['t'] ?? '') !== 'otp') {
+            return null;
+        }
+
+        if (time() - (int) ($payload['a'] ?? 0) > self::CHALLENGE_TTL) {
+            return null;
+        }
+
+        $purpose = (string) ($payload['p'] ?? '');
+        if (! in_array($purpose, ['signup', 'login'], true)) {
+            return null;
+        }
+
+        $user = Customer::find((int) ($payload['i'] ?? 0));
+        if (! $user || $user->cust_deleted !== null || $user->cust_suspended !== null) {
+            return null;
+        }
+
+        return ['user' => $user, 'purpose' => $purpose];
+    }
+
     /** Reads the bearer token straight off the request. */
     public static function fromRequest(Request $request): ?string
     {

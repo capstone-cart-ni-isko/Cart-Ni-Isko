@@ -10,6 +10,9 @@ class CustLog extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `custlog_id` has no sequence on the live table, so writers pass
+        // the number from App\Support\IdAllocator::next().
+        'custlog_id',
         'cust_id',
         'custlog_access',
         'custlog_endpoint',

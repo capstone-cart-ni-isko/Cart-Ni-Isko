@@ -9,7 +9,6 @@ import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
-import QRScanner from '../components/ui/QRScanner.jsx'
 import {
   PackageIcon,
   ShirtIcon,
@@ -20,15 +19,28 @@ import {
 import { fetchOrder,
   fetchOrders,
   requestCancel,
-  requestReturn,
 } from '../services/orders.js'
 import { getTrack, scanQr } from '../services/tracking.js'
+import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
 const CAN_CANCEL = ['TO PROCESS']
-const CAN_RETURN = ['CLAIMED', 'UNCLAIMED']
+
+/** "Jan 5, 2026, 9:00 AM" for the live appointment / delivery stamps. */
+function formatStamp(value) {
+  if (!value) return null
+  const d = new Date(String(value).replace(' ', 'T'))
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
 
 /** Normalise the tracking payload into timeline steps (shape is unconfirmed). */
 function parseTimeline(res) {
@@ -64,8 +76,8 @@ function OrderDetail() {
   const [trackRes, setTrackRes] = useState(null)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [busy, setBusy] = useState(false)
-  const [scanModalOpen, setScanModalOpen] = useState(false)
-  const [scanError, setScanError] = useState('')
+  // null | 'delivery' (FLOW-ORD_CLAIM-07) | 'pickup' (FLOW-ORD_CLAIM-01)
+  const [scanMode, setScanMode] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -114,12 +126,18 @@ function OrderDetail() {
     load()
   }, [load])
 
-  /* QR payload: the signed code from POST /tracking/create, which is what
-     staff scanners verify (REQ-APC-01). Only claimable/receivable orders
-     show a QR (SRS QR-code verification). */
+  /* QR payload: the signed code from POST /tracking/create (staff scanners
+     verify it, REQ-APC-01), falling back to the live dispatch codes the order
+     payload itself carries: `appoint_qr` for pickup, `deliver_qr` for the
+     parcel. Only claimable/receivable orders show a QR. */
   const isDelivery = order?.fulfillment?.method === 'Courier Delivery'
   const showQr = Boolean(order && RECEIVING.includes(order.status))
-  const qrPayload = !order ? null : trackQrOf(trackRes) || order.raw?.ord_tag || `ORD-${order.id}`
+  const qrPayload = !order
+    ? null
+    : trackQrOf(trackRes) ||
+      order.raw?.appoint_qr ||
+      order.raw?.deliver_qr ||
+      null
 
   useEffect(() => {
     let alive = true
@@ -165,22 +183,9 @@ function OrderDetail() {
     }
   }
 
-  const handleReturn = async () => {
-    if (busy) return
-    setBusy(true)
-    try {
-      await requestReturn(order.id)
-      showToast('Return requested. The store will review it shortly.', 'success')
-      load()
-    } catch (err) {
-      showToast(err?.message || 'Unable to request a return.', 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  /* REQ-APC-02: the owning customer verifies a delivery by scanning the
-     parcel code shown here; that moves TO RECEIVE -> CLAIMED. */
+  /* REQ-APC-02 / FLOW-ORD_CLAIM-07: the owning customer verifies the parcel
+     by posting its own code; that stamps `deliver_end` and moves the order to
+     `received` (FLOW-ORD_CLAIM-08 - `load()` then re-reads both). */
   const handleConfirmReceipt = async () => {
     if (busy || !qrPayload) return
     setBusy(true)
@@ -195,21 +200,9 @@ function OrderDetail() {
     }
   }
 
-  const handleScanReceipt = async (code) => {
-    if (busy) return
-    setBusy(true)
-    setScanError('')
-    try {
-      const res = await scanQr(code, 'customer')
-      showToast(res?.message || 'Order marked as received.', 'success')
-      setScanModalOpen(false)
-      load()
-    } catch (err) {
-      setScanError(err?.message || 'Scan failed. Please try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
+  /** FLOW-ORD_CLAIM-01: the customer scans their own pickup `appoint_qr`. */
+  const canClaimPickup =
+    !isDelivery && order?.status === 'TO CLAIM' && Boolean(order?.raw?.appoint_qr)
 
   if (loading) {
     return (
@@ -260,9 +253,26 @@ function OrderDetail() {
 
   const orderItems = order.raw?.items || []
   const subtotal = order.subtotal
-  const deliveryFee = isDelivery ? Number(order.raw?.ord_fee ?? order.raw?.dispatch_fee ?? 0) : 0
-  const total = Number(order.raw?.ord_total ?? subtotal + deliveryFee)
+  // Live delivery columns only: `deliver_fee_charged` is the courier fee the
+  // store actually charged. Totals come from `ord_amount` (no ord_total).
+  const deliveryFee = isDelivery
+    ? Number(order.raw?.deliver_fee_charged ?? order.raw?.deliver_fee_actual ?? 0)
+    : 0
+  const total = Number(order.raw?.ord_amount ?? subtotal + deliveryFee)
   const statusContext = STATUS_CONTEXT[order.status] || order.statusContext
+  const appointment = {
+    start: formatStamp(order.raw?.appoint_start),
+    end: formatStamp(order.raw?.appoint_end),
+    status: order.raw?.appoint_status || null,
+    closed: formatStamp(order.raw?.appoint_closed),
+  }
+  const delivery = {
+    expect: formatStamp(order.raw?.deliver_expect),
+    received: formatStamp(order.raw?.deliver_end),
+    address: order.raw?.deliver_address || null,
+    phone: order.raw?.deliver_phone || null,
+    recipient: order.raw?.deliver_recipient || null,
+  }
 
   return (
     <AccountLayout>
@@ -324,7 +334,7 @@ function OrderDetail() {
                 <StatusBadge status={order.status} className="px-2 py-0.5" />
               </div>
 
-              {showQr && (
+              {showQr && qrPayload && (
                 <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
                   {qrDataUrl ? (
                     <img
@@ -355,7 +365,7 @@ function OrderDetail() {
                       <>
                         <button
                           type="button"
-                          onClick={() => setScanModalOpen(true)}
+                          onClick={() => setScanMode('delivery')}
                           className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
                         >
                           Scan Parcel QR Code
@@ -370,51 +380,41 @@ function OrderDetail() {
                         </button>
                       </>
                     )}
+                    {/* FLOW-ORD_CLAIM-01: the customer scans their own pickup code */}
+                    {canClaimPickup && (
+                      <button
+                        type="button"
+                        onClick={() => setScanMode('pickup')}
+                        className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        Scan to claim
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* QR Camera Scanner Modal for Delivery */}
-              {isDelivery && order.status === 'TO RECEIVE' && scanModalOpen && (
-                <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
-                  <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900">Scan Parcel QR Code</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">Point camera at the QR code on your parcel</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setScanModalOpen(false)}
-                        className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
-                    </div>
-                    <div className="p-4">
-                      <QRScanner
-                        onScan={(code) => handleScanReceipt(code)}
-                        onError={(error) => setScanError(error)}
-                        className="w-full aspect-video"
-                      />
-                      {scanError && (
-                        <p className="mt-2 text-center text-xs text-rose-600">{scanError}</p>
-                      )}
-                    </div>
-                    <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/40">
-                      <button
-                        type="button"
-                        onClick={() => setScanModalOpen(false)}
-                        className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Camera scanner: delivery receipt (FLOW-ORD_CLAIM-07) or
+                  pickup claim (FLOW-ORD_CLAIM-01) - both post the scanned
+                  text to POST /tracking/scan as { scanned_by: 'customer' }. */}
+              <QrScanModal
+                open={scanMode === 'delivery'}
+                title="Scan Parcel QR Code"
+                subtitle="Point the camera at the QR code on your parcel."
+                fallbackCode={isDelivery ? qrPayload : null}
+                fallbackLabel="Use this order's code"
+                onClose={() => setScanMode(null)}
+                onSuccess={() => load()}
+              />
+              <QrScanModal
+                open={scanMode === 'pickup'}
+                title={`Scan to claim · Order #${order.id}`}
+                subtitle="Point the camera at the claim QR code for this pickup order."
+                fallbackCode={order.raw?.appoint_qr || qrPayload}
+                fallbackLabel="Use this order's code"
+                onClose={() => setScanMode(null)}
+                onSuccess={() => load()}
+              />
 
               {timeline.length > 0 && (
                 <ol className="space-y-0">
@@ -474,6 +474,36 @@ function OrderDetail() {
                 </p>
               </div>
             </div>
+
+            {/* Live dispatch stamps: appoint_start/appoint_end for pickup,
+                deliver_expect (ETA) / deliver_end (claim time) for delivery. */}
+            {[
+              isDelivery
+                ? { label: 'Expected delivery', value: delivery.expect }
+                : { label: 'Claim window', value: appointment.start ? `${appointment.start} – ${appointment.end || '—'}` : null },
+              isDelivery && delivery.received
+                ? { label: 'Received at', value: delivery.received }
+                : null,
+              !isDelivery && appointment.closed
+                ? { label: 'Claimed at', value: appointment.closed }
+                : null,
+              !isDelivery && appointment.status
+                ? { label: 'Appointment status', value: appointment.status }
+                : null,
+              isDelivery && delivery.recipient
+                ? { label: 'Recipient', value: delivery.recipient }
+                : null,
+              isDelivery && delivery.phone
+                ? { label: 'Contact', value: delivery.phone }
+                : null,
+            ]
+              .filter((row) => row && row.value)
+              .map((row) => (
+                <div key={row.label} className="flex items-start justify-between gap-3 text-xs">
+                  <span className="text-gray-500">{row.label}</span>
+                  <span className="font-semibold text-gray-800 text-right">{row.value}</span>
+                </div>
+              ))}
           </div>
 
           {/* Items Ordered Card */}
@@ -484,18 +514,24 @@ function OrderDetail() {
             <div className="space-y-3.5">
               {(orderItems.length ? orderItems : [null]).map((entry, idx) => {
                 const product = entry?.product || {}
+                const prodvar = entry?.prodvar || null
                 const productImage =
-                  entry?.color?.image ||
+                  prodvar?.prodvar_pic ||
+                  product.main_image ||
+                  (Array.isArray(product.prod_images) ? product.prod_images[0] : product.prod_images) ||
                   order.image ||
-                  product.image ||
-                  product.images?.[0] ||
                   null
-                const name = product.name || product.prod_name || order.name
-                const price = Number(entry?.item_amount ?? order.price ?? 0)
-                const qty = Number(entry?.item_qty ?? order.qty ?? 1)
-                const size = entry?.size ?? order.size ?? product.size ?? null
-                const color = entry?.color ?? order.color ?? null
-                const itemKey = entry?.prod_id ?? idx
+                const name = product.prod_name || product.name || entry?.prod_name || order.name
+                // `amount` is the unit price, `line_total` the line; the
+                // legacy `item_amount` alias is a LINE total, never a unit.
+                const price = Number(entry?.amount ?? order.price ?? 0)
+                const qty = Number(entry?.qty ?? entry?.item_qty ?? order.qty ?? 1)
+                const size = prodvar?.prodvar_name ?? entry?.size ?? order.size ?? null
+                const color =
+                  prodvar?.prodvar_pic
+                    ? { name: prodvar.prodvar_name || 'Variation', value: '#FF6A00' }
+                    : entry?.color ?? order.color ?? null
+                const itemKey = entry?.item_id ?? `${entry?.bag_id ?? 'line'}-${idx}`
 
                 return (
                   <div key={itemKey} className="flex gap-3.5 items-center">
@@ -590,37 +626,25 @@ function OrderDetail() {
             <p className="text-gray-500">{currentUser?.course || ''}</p>
           </div>
 
-          {/* Cancel / Return (customer-requested, staff-approved) */}
-          {(CAN_CANCEL.includes(order.status) || CAN_RETURN.includes(order.status)) && (
+          {/* Cancel (customer-requested, staff-approved - FLOW-ORD_LIST-04) */}
+          {CAN_CANCEL.includes(order.status) && (
             <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-2 shadow-2xs">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                 Need help with this order?
               </h3>
               <div className="flex items-center gap-2 flex-wrap">
-                {CAN_CANCEL.includes(order.status) && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={handleCancel}
-                    className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
-                  >
-                    {busy ? 'Sending…' : 'Cancel Order'}
-                  </button>
-                )}
-                {CAN_RETURN.includes(order.status) && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={handleReturn}
-                    className="px-4 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-bold hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-60"
-                  >
-                    {busy ? 'Sending…' : 'Request Return / Refund'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleCancel}
+                  className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  {busy ? 'Sending…' : 'Cancel Order'}
+                </button>
               </div>
               <p className="text-[11px] text-gray-500">
-                Requests are reviewed by the store team. You'll get a notification once it's
-                approved.
+                Cancellation is a request: the store reviews it and you'll get a notification
+                once it's approved (the order then shows “Cancel requested”).
               </p>
             </div>
           )}

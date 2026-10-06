@@ -12,8 +12,7 @@ use App\Models\Order;
 use App\Models\Parcel;
 use App\Models\Payment;
 use App\Models\Pickup;
-use App\Models\Product;
-use App\Models\Schedule;
+use App\Models\Prodvar;
 use App\Services\PayMongoService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -22,28 +21,41 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
- * DOMAIN 26 (ORDER CHECKOUT).
+ * DOMAIN 26 (ORDER CHECKOUT) - assembled against the restored live schema.
  *
- * Live database schema (no bag/prodvar/prodsales tables):
- *   - Cart lines: orders with ord_tag CART-* and ord_status CART
- *   - Items: items table (item_id, ord_id, prod_id, item_qty, item_amount)
- *   - Payment: payment table (pay_id, pay_created, pay_ref, pay_given, pay_due, pay_change)
- *   - Pickup: pickup table (pickup_id, ord_id, appoint_id, pay_id, pickup_created, pickup_completed)
- *   - Delivery: delivery table (deliver_id, deliver_created, delivery_ref, deliver_date,
- *               deliver_address, deliver_status, deliver_qr, deliver_deleted)
- *   - Parcel: parcel table (parcel_id, ord_id, deliver_id, pay_id, parcel_created, parcel_completed)
+ * The cart is the `bag` table (bag_deleted IS NULL, bag_placed = false).
+ * One checkout cuts the selected rows into ONE order:
  *
- * Checkout flow:
- *   1. POST /checkout/dispatch → fee/ETA preview (no DB writes)
- *   2. POST /checkout/payment  → atomic: promote CART-* orders to ORD-*,
- *      create items on the new order, create payment row, create pickup or
- *      delivery+parcel rows, decrement stock, notify.
+ *   bag rows --(bag_id)--> items(ord_id, bag_id) --> orders
+ *   orders   : ord_status 'processing', ord_claiming 'pickup'|'delivery',
+ *              ord_amount = goods subtotal + dispatch fee,
+ *              pay_reference / pay_received / pay_change
+ *   payment  : pay_ref, pay_given, pay_due, pay_change (one row per checkout)
+ *   pickup   : pickup(appoint_id, ord_id) + the claim appointment created in
+ *              the same transaction (FLOW-CHECKOUT-06)
+ *   delivery : delivery(ord_id, cust_id, deliver_address, deliver_phone,
+ *              deliver_qr, deliver_expect) + parcel(ord_id, deliver_id, pay_id)
+ *   stock    : prodvar.prodvar_stock - bag_qty per line
+ *   counters : customer.cust_orders + 1 (the bag badge is customer.cust_bag)
+ *   messages : custnotif / empnotif identify the order by ord_id only
  *
- * The frontend sends ord_ids (the CART-* order ids) as `ord_id` (single)
- * or `bag_ids` (array). CheckoutAPI uses these to load the cart lines.
+ * Endpoints
+ *   POST /checkout/dispatch        fee/ETA preview - no writes, no OTP
+ *   POST /checkout/payment         OTP purpose `checkout`, ONE transaction
+ *   POST /checkout/payment/intent  the same assembly plus a PayMongo intent
+ *                                  whose metadata is `order:<ord_id>`
+ *   POST /checkout/payment/webhook public (outside auth:api), marks THAT order
+ *                                  paid: orders.pay_reference / pay_received +
+ *                                  the payment row (REQ-CHECKOUT-03)
+ *
+ * Cart selection: `bag_ids` (the checked rows) or nothing = every live bag
+ * row (REQ-CHECKOUT-01).
  */
 class CheckoutAPI extends Controller
 {
+    /** Delivery tier fees in PHP; pickup is always free. */
+    const DISPATCH_FEES = ['priority' => 100.0, 'standard' => 50.0, 'saver' => 30.0];
+
     // ==========================================
     // DISPATCH DETAILS (preview only, no DB writes)
     // ==========================================
@@ -53,13 +65,13 @@ class CheckoutAPI extends Controller
         ----------
         JSON REQUEST
 
-        ord_id         - integer (req: a CART-* order id, or an already created order)
-        bag_ids        - array (opt: explicit selection of CART-* order ids)
+        bag_ids        - array (opt: checked bag rows; empty = all live rows)
         dispatch_type  - string (req: pickup | delivery)
         speed          - string (opt: priority | standard | saver, default: standard)
-        deliver_address- string (opt)
-        appoint_id     - integer (opt)
-        appoint_start  - string/datetime (opt)
+        deliver_address- string (opt: falls back to customer.cust_address)
+        deliver_expect - string/datetime (opt: delivery date)
+        appoint_id     - integer (opt: an already booked claim appointment)
+        appoint_start  - string/datetime (opt: requested slot start)
     */
     public function determineDispatchDetails(Request $json)
     {
@@ -68,7 +80,7 @@ class CheckoutAPI extends Controller
 
         try {
             $dispatchType = strtolower($json->input('dispatch_type'));
-            $speed = strtolower($json->input('speed', 'standard'));
+            $speed        = strtolower($json->input('speed', 'standard'));
 
             $custId = $this->customerId($json);
             if ($custId === null) {
@@ -78,109 +90,77 @@ class CheckoutAPI extends Controller
                 ], 403);
             }
 
-            $scope = $this->resolveCheckoutScope($json, $custId);
+            $scope = $this->resolveBagScope($json, $custId);
             if (isset($scope['error'])) {
                 return response()->json(['success' => false, 'message' => $scope['error'][0]], $scope['error'][1]);
             }
-            if (isset($scope['order'])) {
-                return response()->json(['success' => false, 'message' => 'Order has already been checked out.'], 409);
-            }
 
-            $cartOrders = $scope['cartOrders'];
-            $subtotal   = $this->cartSubtotal($cartOrders);
-
-            $feeMap = ['priority' => 100.00, 'standard' => 50.00, 'saver' => 30.00];
-            $dispatchFee = $dispatchType === 'pickup' ? 0.00 : ($feeMap[$speed] ?? 50.00);
+            $bags        = $scope['bags'];
+            $subtotal    = $this->bagSubtotal($bags);
+            $dispatchFee = $this->dispatchFee($dispatchType, $speed);
             $totalDue    = round($subtotal + $dispatchFee, 2);
 
-            $dispatchDetails = [];
-
             if ($dispatchType === 'pickup') {
-                $appointId  = (int) $json->input('appoint_id', 0);
-                $slotStart  = $this->slotStartFrom($json);
+                $slotStart = $this->slotStartFrom($json) ?? $this->defaultSlotStart();
+                $slotEnd   = $slotStart->copy()->addMinutes($this->slotMinutes());
+                $appointId = (int) $json->input('appoint_id', 0);
 
                 if ($appointId > 0) {
                     $appointment = Appointment::find($appointId);
-                    $usable = $appointment
-                        && (int) $appointment->cust_id === $custId
-                        && $appointment->appoint_closed === null
-                        && in_array(strtolower((string) $appointment->appoint_type), ['pickup', 'claim'], true)
-                        && ! Pickup::where('appoint_id', $appointment->appoint_id)->exists();
 
-                    if (! $usable) {
+                    if (! $appointment || ! $this->usableAppointment($appointment, $custId)) {
                         return response()->json([
                             'success' => false,
                             'message' => 'A valid order-claiming appointment is required.',
                         ], 422);
                     }
-                    $slotStart = $slotStart ?? $this->defaultSlotStart();
+
+                    $slotStart = $this->normalizeSlotStart($appointment->appoint_start ?? $slotStart);
+                    $slotEnd   = $slotStart->copy()->addMinutes($this->slotMinutes());
                 }
 
-                $slotStart = $slotStart ?? $this->defaultSlotStart();
+                if (! $this->slotHasCapacity($slotStart, $slotEnd, $appointId ?: null)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The selected pickup slot is already full. Please pick another slot.',
+                    ], 409);
+                }
 
                 $dispatchDetails = [
                     'type'             => 'PICKUP',
                     'appoint_id'       => $appointId ?: null,
-                    'appointment_date' => $slotStart,
                     'appoint_start'    => $slotStart,
-                    'appoint_end'      => $slotStart
-                        ? $slotStart->copy()->addMinutes((int) $this->settingValue('slot_minutes', 10))
-                        : null,
-                    'location' => 'Tindahan ni Isko Physical Store',
+                    'appoint_end'      => $slotEnd,
+                    'appointment_date' => $slotStart,
+                    'location'         => 'Tindahan ni Isko Physical Store',
                 ];
             } else {
-                $deliverAddress = $json->input('deliver_address');
-                if (! $deliverAddress) {
-                    $customer = Customer::find($custId);
-                    // Build address from separate fields (live schema has no cust_address column)
-                    $deliverAddress = $customer
-                        ? implode(', ', array_filter([
-                            $customer->cust_brgy,
-                            $customer->cust_city,
-                            $customer->cust_province,
-                            $customer->cust_country,
-                        ]))
-                        : null;
-                }
-                if (empty($deliverAddress)) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'A delivery address is required.',
-                    ], 422);
-                }
-
-                $estDate = $this->deliveryExpect($speed);
+                $customer     = Customer::find($custId);
+                $deliverAddress = $this->deliveryAddress($json, $customer);
+                $expect       = $this->deliveryExpectation($json, $speed);
 
                 $dispatchDetails = [
                     'type'               => 'DELIVERY',
                     'speed'              => strtoupper($speed),
                     'deliver_address'    => $deliverAddress,
-                    'estimated_delivery' => $estDate->toDateTimeString(),
-                    'deliver_expect'     => $estDate,
+                    'deliver_phone'      => (string) ($customer->cust_phone ?? ''),
+                    'deliver_expect'     => $expect,
+                    'estimated_delivery' => $expect->toDateTimeString(),
                 ];
             }
-
-            $ordIds = $cartOrders->pluck('ord_id')->all();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Dispatch details determined successfully',
                 'data'    => [
-                    'ord_id'           => $ordIds[0] ?? null,
-                    'bag_ids'          => $ordIds,
+                    'bag_ids'          => $bags->pluck('bag_id')->all(),
                     'subtotal'         => $subtotal,
                     'dispatch_fee'     => $dispatchFee,
                     'total_due'        => $totalDue,
                     'total'            => $totalDue,
+                    'cart_count'       => CartAPI::cartCount($custId),
+                    'items'            => $bags->map(fn ($bag) => OrdersAPI::lineFromBag($bag))->values()->all(),
                     'dispatch_details' => $dispatchDetails,
-                    'items'            => $cartOrders->flatMap(fn ($o) => $o->items)->map(fn ($item) => [
-                        'item_id'     => $item->item_id,
-                        'ord_id'      => $item->ord_id,
-                        'prod_id'     => $item->prod_id,
-                        'item_qty'    => (int) $item->item_qty,
-                        'item_amount' => (float) $item->item_amount,
-                        'product'     => $item->product ? $item->product->toArray() : null,
-                    ])->values()->all(),
                 ],
             ], 200);
 
@@ -204,12 +184,13 @@ class CheckoutAPI extends Controller
         ----------
         JSON REQUEST
 
-        ord_id          - integer (req: a CART-* order id)
-        bag_ids         - array (opt: explicit CART-* order ids)
-        pay_given       - numeric (req)
+        bag_ids         - array (opt: checked bag rows; empty = all live rows)
+        pay_given       - numeric (req: cash / on-hand amount tendered)
+        pay_ref         - string (opt: reference stamped on the payment row)
         dispatch_type   - string (req: pickup | delivery)
         speed           - string (opt: priority | standard | saver)
         deliver_address - string (opt)
+        deliver_expect  - string/datetime (opt: delivery date)
         appoint_id      - integer (opt)
         appoint_start   - string/datetime (opt)
     */
@@ -221,7 +202,7 @@ class CheckoutAPI extends Controller
         try {
             $dispatchType = strtolower($json->input('dispatch_type'));
             $speed        = strtolower($json->input('speed', 'standard'));
-            $payGiven     = (float) $json->input('pay_given');
+            $payGiven     = round((float) $json->input('pay_given'), 2);
 
             $custId = $this->customerId($json);
             if ($custId === null) {
@@ -231,33 +212,18 @@ class CheckoutAPI extends Controller
                 ], 403);
             }
 
-            $scope = $this->resolveCheckoutScope($json, $custId);
+            // FLOW-CHECKOUT-08: the phone OTP gates the order placement.
+            $gate = $this->otpGate($json, 'checkout');
+            if ($gate) return $gate;
+
+            $scope = $this->resolveBagScope($json, $custId);
             if (isset($scope['error'])) {
                 return response()->json(['success' => false, 'message' => $scope['error'][0]], $scope['error'][1]);
             }
 
-            // Idempotent: order already checked out
-            if (isset($scope['order'])) {
-                $existing  = $scope['order'];
-                $pickup    = Pickup::where('ord_id', $existing->ord_id)->first();
-                $parcel    = Parcel::where('ord_id', $existing->ord_id)->first();
-                $alreadyDone = $pickup || $parcel;
-
-                return response()->json([
-                    'success' => true,
-                    'message' => $alreadyDone
-                        ? 'Order checkout was already completed.'
-                        : 'Order has already been checked out.',
-                    'data'    => ['ord_id' => $existing->ord_id],
-                ], $alreadyDone ? 200 : 409);
-            }
-
-            $cartOrders = $scope['cartOrders'];
-            $ordIds     = $cartOrders->pluck('ord_id')->all();
-
-            $feeMap      = ['priority' => 100.0, 'standard' => 50.0, 'saver' => 30.0];
-            $dispatchFee = $dispatchType === 'pickup' ? 0.0 : ($feeMap[$speed] ?? 50.0);
-            $subtotal    = $this->cartSubtotal($cartOrders);
+            $bags        = $scope['bags'];
+            $subtotal    = $this->bagSubtotal($bags);
+            $dispatchFee = $this->dispatchFee($dispatchType, $speed);
             $totalDue    = round($subtotal + $dispatchFee, 2);
 
             if ($payGiven < $totalDue) {
@@ -268,210 +234,33 @@ class CheckoutAPI extends Controller
                 ], 400);
             }
 
-            $payRef    = 'PAY-' . strtoupper(Str::random(16));
+            $payRef    = $json->input('pay_ref') ?: ('PAY-' . strtoupper(Str::random(16)));
             $payChange = round($payGiven - $totalDue, 2);
 
-            // REQ-CHECKOUT-02: everything in one transaction
-            $result = DB::transaction(function () use (
-                $json, $custId, $dispatchType, $speed, $payGiven, $payRef,
-                $payChange, $ordIds, $dispatchFee, $totalDue, $subtotal
-            ) {
-                // Lock the cart orders for the duration
-                $cartOrders = Order::with(['items.product'])
-                    ->whereIn('ord_id', $ordIds)
-                    ->where('cust_id', $custId)
-                    ->where('ord_status', 'CART')
-                    ->whereRaw("ord_tag LIKE 'CART-%'")
-                    ->lockForUpdate()
-                    ->get();
-
-                if ($cartOrders->count() !== count($ordIds)) {
-                    throw new \RuntimeException('One or more cart items are no longer available.');
-                }
-
-                // Validate products are still buyable
-                foreach ($cartOrders as $cartOrder) {
-                    foreach ($cartOrder->items as $item) {
-                        $product = $item->product;
-                        if (! $product || ! $product->isBuyable()) {
-                            throw new InsufficientStockException(
-                                'Product "' . ($product?->prod_name ?? $item->prod_id) . '" is no longer available.'
-                            );
-                        }
-                        $qty = (int) $item->item_qty;
-                        if (! $product->prod_preorder && (int) $product->prod_qty < $qty) {
-                            throw new InsufficientStockException(
-                                '"' . $product->prod_name . '" only has ' . $product->prod_qty . ' unit(s) in stock.'
-                            );
-                        }
-                    }
-                }
-
-                $recalc = 0.0;
-                foreach ($cartOrders as $co) {
-                    foreach ($co->items as $item) {
-                        $recalc += (float) $item->item_amount;
-                    }
-                }
-                $recalc = round($recalc, 2);
-
-                // 1. ONE new ORD-* order absorbs all cart lines
-                $newOrdTag = 'ORD-' . strtoupper(Str::random(12));
-                $order = Order::create([
-                    'cust_id'     => $custId,
-                    'ord_created' => now(),
-                    'ord_tag'     => $newOrdTag,
-                    'ord_status'  => $dispatchType === 'pickup' ? 'TO CLAIM' : 'TO RECEIVE',
-                ]);
-
-                // 2. Migrate items from each CART-* order to the new ORD-* order
-                foreach ($cartOrders as $cartOrder) {
-                    foreach ($cartOrder->items as $item) {
-                        Item::create([
-                            'ord_id'      => $order->ord_id,
-                            'prod_id'     => $item->prod_id,
-                            'item_qty'    => $item->item_qty,
-                            'item_amount' => $item->item_amount,
-                        ]);
-
-                        // Decrement product stock
-                        Product::where('prod_id', $item->prod_id)
-                            ->decrement('prod_qty', $item->item_qty);
-                    }
-                    // Delete old cart items and the CART-* order
-                    Item::where('ord_id', $cartOrder->ord_id)->delete();
-                    $cartOrder->delete();
-                }
-
-                // 3. Payment row
-                $payment = Payment::create([
-                    'pay_created' => now(),
-                    'pay_ref'     => $payRef,
-                    'pay_given'   => $payGiven,
-                    'pay_due'     => $totalDue,
-                    'pay_change'  => $payChange,
-                ]);
-
-                $dispatchResult = [];
-
-                // 4a. Pickup
-                if ($dispatchType === 'pickup') {
-                    $appointment = $this->bookingAppointment($json, $custId);
-                    $pickup = Pickup::create([
-                        'ord_id'         => $order->ord_id,
-                        'appoint_id'     => $appointment->appoint_id,
-                        'pay_id'         => $payment->pay_id,
-                        'pickup_created' => now(),
-                    ]);
-
-                    $dispatchResult = [
-                        'modality'    => 'PICKUP',
-                        'pickup_id'   => $pickup->pickup_id,
-                        'appoint_id'  => $appointment->appoint_id,
-                        'appoint_qr'  => $appointment->appoint_qr,
-                        'appoint_date'=> $appointment->appoint_date,
+            $result = $this->placeOrder($json, $custId, $dispatchType, $speed,
+                function (Order $order, float $due) use ($payRef, $payGiven, $payChange) {
+                    return [
+                        'pay_ref' => $payRef,
+                        'paid'    => true,
+                        'given'   => $payGiven,
+                        'due'     => $due,
+                        'change'  => $payChange,
                     ];
-                } else {
-                    // 4b. Delivery + Parcel
-                    $customer = Customer::find($custId);
-                    $deliverAddress = $json->input('deliver_address')
-                        ?: ($customer
-                            ? implode(', ', array_filter([
-                                $customer->cust_brgy,
-                                $customer->cust_city,
-                                $customer->cust_province,
-                                $customer->cust_country,
-                            ]))
-                            : null);
+                });
 
-                    if (empty($deliverAddress)) {
-                        throw new \RuntimeException('A delivery address is required.');
-                    }
-
-                    $deliverRef = 'DEL-' . strtoupper(Str::random(8));
-                    $delivery = Delivery::create([
-                        'deliver_created' => now(),
-                        'delivery_ref'    => $deliverRef,
-                        'deliver_date'    => $this->deliveryExpect($speed),
-                        'deliver_address' => $deliverAddress,
-                        'deliver_status'  => 'PENDING',
-                        'deliver_qr'      => 'QR-DEL-' . strtoupper(Str::random(10)),
-                    ]);
-
-                    $parcel = Parcel::create([
-                        'ord_id'         => $order->ord_id,
-                        'deliver_id'     => $delivery->deliver_id,
-                        'pay_id'         => $payment->pay_id,
-                        'parcel_created' => now(),
-                    ]);
-
-                    $dispatchResult = [
-                        'modality'       => 'DELIVERY',
-                        'delivery_id'    => $delivery->deliver_id,
-                        'delivery_ref'   => $deliverRef,
-                        'deliver_qr'     => $delivery->deliver_qr,
-                        'deliver_address'=> $delivery->deliver_address,
-                        'deliver_date'   => $delivery->deliver_date,
-                    ];
-                }
-
-                // 5. Update customer counters
-                Customer::where('cust_id', $custId)->increment('cust_orders');
-                // Reset cart counter (all CART-* orders for this customer are now gone)
-                $cartCount = Order::where('cust_id', $custId)
-                    ->where('ord_status', 'CART')
-                    ->whereRaw("ord_tag LIKE 'CART-%'")
-                    ->count();
-                Customer::where('cust_id', $custId)->update(['cust_cart' => $cartCount]);
-
-                return [
-                    'order'    => $order,
-                    'dispatch' => $dispatchResult,
-                    'payment'  => [
-                        'pay_id'        => $payment->pay_id,
-                        'pay_ref'       => $payRef,
-                        'pay_reference' => $payRef,
-                        'pay_given'     => $payGiven,
-                        'pay_due'       => $totalDue,
-                        'pay_change'    => $payChange,
-                        'ord_amount'    => $recalc,
-                        'pay_created'   => now(),
-                    ],
-                    'ord_ids' => $ordIds,
-                ];
-            });
-
-            // 6. Low-stock alerts for admins (REQ-IM-03)
-            $freshOrder = $result['order']->fresh(['items.product']);
-            $lowThreshold = (int) $this->settingValue('low_stock_threshold', 5);
-            foreach ($freshOrder->items as $item) {
-                $prod = $item->product;
-                if ($prod && (int) $prod->prod_qty <= $lowThreshold) {
-                    $this->notifyEmployeesByType(
-                        ['ADMIN', 'SUPER ADMIN'],
-                        '[PRIORITY] Low stock: "' . $prod->prod_name . '" is now down to ' . $prod->prod_qty . ' unit(s).'
-                    );
-                }
-            }
-
-            // 7. Customer notification (non-silent status)
-            $this->notifyCustomer(
-                $custId,
-                'Your order #' . $result['order']->ord_tag . ' has been placed and payment received. '
-                . ($result['dispatch']['modality'] === 'PICKUP'
-                    ? 'Please proceed to your pickup appointment.'
-                    : 'Your order is on its way!')
-            );
+            // The verification is burned only once the order exists.
+            $this->consumeOtp($json, 'checkout');
 
             return response()->json([
                 'success' => true,
                 'message' => 'Payment integrated and order checkout completed successfully',
                 'data'    => [
-                    'payment'  => $result['payment'],
-                    'dispatch' => $result['dispatch'],
-                    'order'    => $this->orderPayload($result['order']->fresh()),
-                    'ord_id'   => $result['order']->ord_id,
-                    'bag_ids'  => $result['ord_ids'],
+                    'ord_id'     => $result['order']->ord_id,
+                    'bag_ids'    => $result['bag_ids'],
+                    'cart_count' => CartAPI::cartCount($custId),
+                    'payment'    => $result['payment'],
+                    'dispatch'   => $result['dispatch'],
+                    'order'      => OrdersAPI::orderPayload($result['order']),
                 ],
             ], 201);
 
@@ -493,12 +282,20 @@ class CheckoutAPI extends Controller
     // ==========================================
 
     /*
-        Create PayMongo Payment Intent
+        Create PayMongo Payment Intent (REQ-CHECKOUT-03)
         ----------
+        Assembles the order first so the intent metadata can identify it as
+        `order:<ord_id>`; the webhook then marks exactly that order paid.
+
         JSON REQUEST
 
-        ord_id   - integer (req)
-        gateway  - string (req: paymongo)
+        bag_ids        - array (opt: checked bag rows; empty = all live rows)
+        gateway        - string (req: paymongo)
+        dispatch_type  - string (opt: pickup | delivery, default: pickup)
+        speed          - string (opt)
+        deliver_address- string (opt)
+        appoint_id     - integer (opt)
+        appoint_start  - string/datetime (opt)
     */
     public function createPaymentIntent(Request $json)
     {
@@ -506,7 +303,9 @@ class CheckoutAPI extends Controller
         if ($validator) return $validator;
 
         try {
-            $gateway = strtolower($json->input('gateway'));
+            $gateway      = strtolower($json->input('gateway'));
+            $dispatchType = strtolower($json->input('dispatch_type', 'pickup'));
+            $speed        = strtolower($json->input('speed', 'standard'));
 
             $custId = $this->customerId($json);
             if ($custId === null) {
@@ -516,47 +315,58 @@ class CheckoutAPI extends Controller
                 ], 403);
             }
 
-            $scope = $this->resolveCheckoutScope($json, $custId);
-            if (isset($scope['error'])) {
-                return response()->json(['success' => false, 'message' => $scope['error'][0]], $scope['error'][1]);
-            }
-            if (isset($scope['order'])) {
-                return response()->json(['success' => false, 'message' => 'Order has already been checked out.'], 409);
+            if ($gateway !== 'paymongo') {
+                return response()->json(['success' => false, 'message' => 'Unsupported payment gateway'], 400);
             }
 
-            $cartOrders  = $scope['cartOrders'];
-            $dispatchType= strtolower($json->input('dispatch_type', 'pickup'));
-            $speed       = strtolower($json->input('speed', 'standard'));
-            $subtotal    = $this->cartSubtotal($cartOrders);
-            $dispatchFee = $dispatchType === 'delivery'
-                ? (['priority' => 100.00, 'standard' => 50.00, 'saver' => 30.00][$speed] ?? 50.00)
-                : 0.00;
-            $totalDue    = round($subtotal + $dispatchFee, 2);
+            // Same gate as the cash path: this endpoint also places the order.
+            $gate = $this->otpGate($json, 'checkout');
+            if ($gate) return $gate;
 
-            if ($gateway === 'paymongo') {
-                $metadataId = 'cart:' . implode(',', $cartOrders->pluck('ord_id')->all());
-                $paymongo   = new PayMongoService();
-                $result     = $paymongo->createPaymentIntent(
-                    $totalDue,
-                    $metadataId,
-                    'Order payment (' . $cartOrders->count() . ' cart line(s))'
-                );
+            $result = $this->placeOrder($json, $custId, $dispatchType, $speed,
+                function (Order $order, float $due) {
+                    $paymongo = new PayMongoService();
+                    $intent   = $paymongo->createPaymentIntent(
+                        $due,
+                        'order:' . $order->ord_id,
+                        'Payment for order #' . $order->ord_id
+                    );
 
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Payment intent created successfully',
-                    'data'    => [
-                        'checkout_url'      => $result['checkout_url'],
-                        'payment_intent_id' => $result['payment_intent_id'],
-                        'client_key'        => $result['client_key'],
-                        'total_due'         => $totalDue,
-                        'bag_ids'           => $cartOrders->pluck('ord_id')->all(),
-                    ],
-                ], 200);
-            }
+                    return [
+                        'pay_ref' => $intent['payment_intent_id'],
+                        'paid'    => false,
+                        'given'   => 0.0,
+                        'due'     => $due,
+                        'change'  => 0.0,
+                        'intent'  => $intent,
+                    ];
+                });
 
-            return response()->json(['success' => false, 'message' => 'Unsupported payment gateway'], 400);
+            $this->consumeOtp($json, 'checkout');
 
+            $intent = $result['reference']['intent'] ?? [];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment intent created successfully',
+                'data'    => [
+                    'checkout_url'      => $intent['checkout_url'] ?? null,
+                    'payment_intent_id' => $intent['payment_intent_id'] ?? null,
+                    'client_key'        => $intent['client_key'] ?? null,
+                    'ord_id'            => $result['order']->ord_id,
+                    'bag_ids'           => $result['bag_ids'],
+                    'total_due'         => $result['payment']['pay_due'],
+                    'cart_count'        => CartAPI::cartCount($custId),
+                    'payment'           => $result['payment'],
+                    'dispatch'          => $result['dispatch'],
+                    'order'             => OrdersAPI::orderPayload($result['order']),
+                ],
+            ], 201);
+
+        } catch (InsufficientStockException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
         } catch (\Exception $e) {
             Log::error('PayMongo createPaymentIntent error', ['error' => $e->getMessage()]);
             return response()->json([
@@ -568,7 +378,7 @@ class CheckoutAPI extends Controller
     }
 
     // ==========================================
-    // PAYMONGO WEBHOOK
+    // PAYMONGO WEBHOOK (public - REQ-CHECKOUT-03)
     // ==========================================
 
     public function paymentWebhook(Request $json)
@@ -588,62 +398,48 @@ class CheckoutAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
             }
 
-            $event         = json_decode($payload, true);
-            $paymentIntent = $event['data']['attributes']['data']['attributes'] ?? [];
-            $metadata      = $paymentIntent['metadata'] ?? [];
-            $orderId       = $metadata['order_id'] ?? null;
-            $paymentStatus = $paymentIntent['status'] ?? '';
-
-            if (! $orderId || $paymentStatus !== 'succeeded') {
-                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
-            }
-
-            // Cart-keyed intents (no order yet) — nothing to stamp
-            if (str_starts_with((string) $orderId, 'cart:')) {
-                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
-            }
-
-            $order = Order::where('ord_id', $orderId)->first();
-            if (! $order) {
-                Log::warning('PayMongo webhook: order not found', ['order_id' => $orderId]);
-                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
-            }
-
-            $paymentIntentId = $paymentIntent['id'] ?? null;
-            $amount = isset($paymentIntent['amount']) ? (float) $paymentIntent['amount'] / 100 : 0;
-
-            // Update or create the payment row linked to this order's pickup
-            $pickup = Pickup::where('ord_id', $order->ord_id)->first();
-            if ($pickup) {
-                if ($pickup->pay_id) {
-                    Payment::where('pay_id', $pickup->pay_id)->update([
-                        'pay_ref'   => $paymentIntentId ?? $pickup->payment?->pay_ref,
-                        'pay_given' => $amount,
-                    ]);
-                } else {
-                    $payment = Payment::create([
-                        'pay_created' => now(),
-                        'pay_ref'     => $paymentIntentId ?? ('PM-' . strtoupper(Str::random(16))),
-                        'pay_given'   => $amount,
-                        'pay_due'     => $amount,
-                        'pay_change'  => 0,
-                    ]);
-                    $pickup->update(['pay_id' => $payment->pay_id]);
+            $event      = json_decode($payload, true);
+            $attributes = $event['data']['attributes']['data']['attributes'] ?? [];
+            if ($attributes === []) {
+                $candidate = $event['data']['attributes'] ?? [];
+                if (isset($candidate['status']) || isset($candidate['metadata'])) {
+                    $attributes = $candidate;
                 }
             }
 
-            $order->update(['ord_status' => 'TO CLAIM']);
+            // The intent metadata carries `order:<ord_id>` (REQ-CHECKOUT-03).
+            $reference = (string) ($attributes['metadata']['order_id'] ?? '');
+            $paid      = ($attributes['status'] ?? '') === 'succeeded';
 
-            $this->notifyCustomer(
+            if (! str_starts_with($reference, 'order:') || ! $paid) {
+                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+            }
+
+            $order = Order::find((int) substr($reference, 6));
+            if (! $order) {
+                Log::warning('PayMongo webhook: order not found', ['reference' => $reference]);
+                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+            }
+
+            $payment = $this->markOrderPaid($order, $attributes);
+
+            $this->announce(
                 (int) $order->cust_id,
-                '[PRIORITY] Payment confirmed for order #' . $order->ord_tag . '. Your order is being processed.'
+                '[PRIORITY] Payment confirmed for order #' . $order->ord_id
+                    . '. Your order is being processed.'
             );
-            $this->notifyEmployeesByType(
-                ['ADMIN', 'SUPER ADMIN'],
-                '[PRIORITY] Online payment received for order #' . $order->ord_tag . '.'
-            );
+            $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
 
-            return response()->json(['success' => true, 'message' => 'Payment confirmed'], 200);
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment confirmed',
+                'data'    => [
+                    'ord_id'     => $order->ord_id,
+                    'pay_ref'    => $payment->pay_ref,
+                    'pay_given'  => (float) $payment->pay_given,
+                    'pay_due'    => (float) $payment->pay_due,
+                ],
+            ], 200);
 
         } catch (\Exception $e) {
             Log::error('PayMongo webhook error', ['error' => $e->getMessage()]);
@@ -652,155 +448,362 @@ class CheckoutAPI extends Controller
     }
 
     // ==========================================
+    // ORDER ASSEMBLY (REQ-CHECKOUT-02 - ONE transaction)
+    // ==========================================
+
+    /**
+     * Validates the selected bag rows, then writes the whole checkout:
+     * order, items, bag_placed, stock, payment, pickup/delivery + parcel,
+     * counters and notifications - all inside ONE transaction, so any failure
+     * leaves the bag exactly as it was (REQ-CHECKOUT-02).
+     *
+     * The $resolveReference callback runs after the order row exists and
+     * before the payment row: the cash path returns the tendered amounts,
+     * the PayMongo path creates the intent tagged `order:<ord_id>`.
+     *
+     * @return array{order: Order, payment: array, dispatch: array,
+     *               bag_ids: array, reference: array}
+     */
+    protected function placeOrder(Request $json, int $custId, string $dispatchType, string $speed, callable $resolveReference): array
+    {
+        return DB::transaction(function () use ($json, $custId, $dispatchType, $speed, $resolveReference) {
+            // 1. Lock the selected bag rows for the duration of the checkout.
+            $bags = $this->lockBagRows($json, $custId);
+
+            // 2. Validate every variation still holds its stock.
+            $subtotal = 0.0;
+            foreach ($bags as $bag) {
+                $prodvar = Prodvar::with('product')
+                    ->where('prodvar_id', $bag->prodvar_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $prodvar || $prodvar->prodvar_deleted || $prodvar->prodvar_disabled || ! $prodvar->product) {
+                    throw new InsufficientStockException('A product in your bag is no longer available.');
+                }
+                if (! $prodvar->product->isBuyable()) {
+                    throw new InsufficientStockException(
+                        'Product "' . $prodvar->product->prod_name . '" is no longer available.'
+                    );
+                }
+
+                $name  = $prodvar->product->prod_name . ($prodvar->prodvar_name ? ' (' . $prodvar->prodvar_name . ')' : '');
+                $qty   = max(1, (int) $bag->bag_qty);
+                $stock = (int) $prodvar->prodvar_stock;
+
+                if (! $prodvar->prodvar_preorder && $stock < $qty) {
+                    throw new InsufficientStockException(
+                        'Insufficient stock for ' . $name . ' - only ' . $stock . ' unit(s) remain.'
+                    );
+                }
+
+                $subtotal += round((float) $bag->bag_amount * $qty, 2);
+            }
+
+            $subtotal    = round($subtotal, 2);
+            $dispatchFee = $this->dispatchFee($dispatchType, $speed);
+            $totalDue    = round($subtotal + $dispatchFee, 2);
+
+            // 3. The order itself (FLOW-CHECKOUT-02: one order per checkout).
+            $order = Order::create([
+                // No sequence for ord_id on the live table; allocated inside
+                // this checkout transaction (see Controller::nextId).
+                'ord_id'      => $this->nextId('orders', 'ord_id'),
+                'cust_id'      => $custId,
+                'ord_amount'   => $totalDue,
+                'ord_status'   => 'processing',
+                'ord_claiming' => $dispatchType === 'pickup' ? 'pickup' : 'delivery',
+                'ord_created'  => now(),
+            ]);
+
+            // 4. The payment reference (cash amounts or the PayMongo intent).
+            $reference = $resolveReference($order, $totalDue);
+            if ($reference['paid'] && $reference['given'] < $reference['due']) {
+                throw new \RuntimeException('Payment amount is below the server-calculated total.');
+            }
+
+            $payment = Payment::create([
+                'pay_created' => now(),
+                'pay_ref'     => $reference['pay_ref'],
+                'pay_given'   => $reference['given'],
+                'pay_due'     => $reference['due'],
+                'pay_change'  => $reference['change'],
+            ]);
+
+            $order->update([
+                'pay_reference' => $reference['pay_ref'],
+                'pay_received'  => $reference['paid'] ? $reference['given'] : 0,
+                'pay_change'    => $reference['paid'] ? $reference['change'] : 0,
+            ]);
+
+            // 5. One items row per bag row, the bag rows become placed and the
+            //    variation stock comes down (items carry no quantities).
+            foreach ($bags as $bag) {
+                Item::create([
+                    // No sequence for item_id on the live table.
+                    'item_id' => $this->nextId('items', 'item_id'),
+                    'ord_id' => $order->ord_id,
+                    'bag_id' => $bag->bag_id,
+                ]);
+
+                $bag->update(['bag_placed' => DB::raw('true')]);
+
+                Prodvar::where('prodvar_id', $bag->prodvar_id)
+                    ->decrement('prodvar_stock', max(1, (int) $bag->bag_qty));
+            }
+
+            // 6. Claiming details - the appointment is created here too
+            //    (FLOW-CHECKOUT-06: appointments are saved with the order).
+            $customer = Customer::find($custId);
+            $dispatch  = [];
+
+            if ($dispatchType === 'pickup') {
+                $appointment = $this->bookingAppointment($json, $custId);
+                $pickup      = Pickup::create([
+                    // No sequence for pickup_id on the live table.
+                    'pickup_id'       => $this->nextId('pickup', 'pickup_id'),
+                    'appoint_id'     => $appointment->appoint_id,
+                    'ord_id'         => $order->ord_id,
+                    'pickup_created' => now(),
+                ]);
+
+                $dispatch = [
+                    'modality'     => 'PICKUP',
+                    'pickup_id'    => $pickup->pickup_id,
+                    'appoint_id'   => $appointment->appoint_id,
+                    'appoint_qr'   => $appointment->appoint_qr,
+                    'appoint_start'=> $appointment->appoint_start,
+                    'appoint_end'  => $appointment->appoint_end,
+                    'appoint_type' => $appointment->appoint_type,
+                ];
+                $placedNote = 'Please proceed to your pickup appointment on '
+                    . ($appointment->appoint_start
+                        ? $appointment->appoint_start->format('M j, Y g:i A')
+                        : 'your booked slot') . '.';
+            } else {
+                $address = $this->deliveryAddress($json, $customer);
+                $expect  = $this->deliveryExpectation($json, $speed);
+
+                $delivery = Delivery::create([
+                    // No sequence for deliver_id on the live table.
+                    'deliver_id'     => $this->nextId('delivery', 'deliver_id'),
+                    'ord_id'         => $order->ord_id,
+                    'cust_id'        => $custId,
+                    'deliver_address'=> $address,
+                    'deliver_phone'  => (string) ($customer->cust_phone ?? ''),
+                    'deliver_qr'     => 'QR-DEL-' . strtoupper(Str::random(10)),
+                    'deliver_expect' => $expect,
+                    'deliver_created'=> now(),
+                ]);
+
+                $parcel = Parcel::create([
+                    'ord_id'         => $order->ord_id,
+                    'deliver_id'     => $delivery->deliver_id,
+                    'pay_id'         => $payment->pay_id,
+                    'parcel_created' => now(),
+                ]);
+
+                $dispatch = [
+                    'modality'        => 'DELIVERY',
+                    'delivery_id'     => $delivery->deliver_id,
+                    'parcel_id'       => $parcel->parcel_id,
+                    'deliver_qr'      => $delivery->deliver_qr,
+                    'deliver_address' => $delivery->deliver_address,
+                    'deliver_phone'   => $delivery->deliver_phone,
+                    'deliver_expect'  => $delivery->deliver_expect,
+                ];
+                $placedNote = 'It is expected to arrive by '
+                    . ($delivery->deliver_expect
+                        ? $delivery->deliver_expect->format('M j, Y')
+                        : 'the estimated date') . '.';
+            }
+
+            // 7. Customer counter (REQ-BAG-03 keeps the bag badge on cust_bag).
+            Customer::where('cust_id', $custId)->increment('cust_orders');
+
+            // 8. Messages identify the order by ord_id - never by a tag.
+            $this->announce((int) $order->cust_id,
+                'Your order #' . $order->ord_id . ' has been placed. ' . $placedNote);
+            $this->lowStockAlerts($bags);
+
+            return [
+                'order'     => $order->fresh(['items.bag.prodvar.product', 'pickup.appointment', 'delivery', 'parcel.delivery']),
+                'payment'   => [
+                    'pay_id'        => $payment->pay_id,
+                    'pay_ref'       => $payment->pay_ref,
+                    'pay_reference' => $payment->pay_ref,
+                    'pay_given'     => (float) $payment->pay_given,
+                    'pay_due'       => (float) $payment->pay_due,
+                    'pay_change'    => (float) $payment->pay_change,
+                    'ord_amount'    => (float) $order->ord_amount,
+                    'pay_created'   => $payment->pay_created,
+                ],
+                'dispatch'  => $dispatch,
+                'bag_ids'   => $bags->pluck('bag_id')->all(),
+                'reference' => $reference,
+            ];
+        });
+    }
+
+    // ==========================================
     // CHECKOUT HELPERS
     // ==========================================
 
     /**
-     * Resolve the set of CART-* orders (or an already-placed order) the
-     * request wants to check out.
+     * The bag rows this request wants to check out: the explicit `bag_ids`,
+     * or every live bag row when none were sent (REQ-CHECKOUT-01).
      *
-     * Returns:
-     *   ['cartOrders' => Collection]  – cart lines ready to check out
-     *   ['order'      => Order]       – already placed order (idempotent)
-     *   ['error'      => [msg, code]] – validation error
+     * @return array{bags?: \Illuminate\Support\Collection, error?: array{0: string, 1: int}}
      */
-    protected function resolveCheckoutScope(Request $json, int $custId): array
+    protected function resolveBagScope(Request $json, int $custId): array
     {
+        $query  = CartAPI::bagQuery($custId);
         $bagIds = $json->input('bag_ids');
-        if (is_array($bagIds) && count($bagIds)) {
-            $unique = array_values(array_unique(array_map('intval', $bagIds)));
 
-            $cartOrders = Order::with(['items.product'])
-                ->whereIn('ord_id', $unique)
-                ->where('cust_id', $custId)
-                ->where('ord_status', 'CART')
-                ->whereRaw("ord_tag LIKE 'CART-%'")
-                ->get();
-
-            if ($cartOrders->count() !== count($unique)) {
-                return ['error' => ['One or more cart items are no longer available.', 409]];
-            }
-
-            return ['cartOrders' => $cartOrders];
+        if (is_scalar($bagIds)) {
+            $bagIds = [$bagIds];
         }
 
-        $id = (int) $json->input('ord_id');
+        if (is_array($bagIds)) {
+            $unique = array_values(array_unique(
+                array_filter(array_map('intval', $bagIds), fn ($id) => $id > 0)
+            ));
 
-        if ($id > 0) {
-            // Check if it is already a placed order
-            $placed = Order::find($id);
-            if ($placed && (int) $placed->cust_id === $custId) {
-                if (! str_starts_with((string) $placed->ord_tag, 'CART-')) {
-                    return ['order' => $placed];
-                }
-                // It is still a cart order — treat as a single-item checkout
-                $placed->loadMissing(['items.product']);
-                if ($placed->ord_status === 'CART') {
-                    return ['cartOrders' => collect([$placed])];
-                }
-                return ['order' => $placed];
+            if ($unique === []) {
+                return ['error' => ['Your bag is empty.', 409]];
             }
 
-            if ($placed && (int) $placed->cust_id !== $custId) {
-                return ['error' => ['Order not found', 404]];
+            $bags = $query->whereIn('bag_id', $unique)->orderByDesc('bag_created')->get();
+
+            if ($bags->count() !== count($unique)) {
+                return ['error' => ['One or more bag items are no longer available.', 409]];
             }
+
+            return ['bags' => $bags];
         }
 
-        return ['error' => ['Order not found', 404]];
+        $bags = $query->orderByDesc('bag_created')->get();
+
+        if ($bags->isEmpty()) {
+            return ['error' => ['Your bag is empty.', 409]];
+        }
+
+        return ['bags' => $bags];
     }
 
     /**
-     * Sum item_amount across all items in all cart orders.
+     * Same selection again, but with the rows locked for the transaction.
      */
-    protected function cartSubtotal($cartOrders): float
+    protected function lockBagRows(Request $json, int $custId)
     {
-        $total = 0.0;
-        foreach ($cartOrders as $order) {
-            $order->loadMissing('items');
-            foreach ($order->items as $item) {
-                $total += (float) $item->item_amount;
-            }
+        $scope = $this->resolveBagScope($json, $custId);
+        if (isset($scope['error'])) {
+            throw new \RuntimeException($scope['error'][0]);
         }
-        return round($total, 2);
+
+        $ids  = $scope['bags']->pluck('bag_id')->all();
+        $bags = CartAPI::bagQuery($custId)
+            ->whereIn('bag_id', $ids)
+            ->orderByDesc('bag_created')
+            ->lockForUpdate()
+            ->get();
+
+        if ($bags->count() !== count($ids)) {
+            throw new \RuntimeException('One or more bag items are no longer available.');
+        }
+
+        return $bags;
+    }
+
+    /** FLOW-BAG-06: subtotal = sum(bag_amount * bag_qty) over the selection. */
+    protected function bagSubtotal($bags): float
+    {
+        return round((float) $bags->sum(
+            fn ($bag) => round((float) $bag->bag_amount * (int) $bag->bag_qty, 2)
+        ), 2);
+    }
+
+    protected function dispatchFee(string $dispatchType, string $speed): float
+    {
+        if ($dispatchType === 'pickup') {
+            return 0.0;
+        }
+
+        return self::DISPATCH_FEES[$speed] ?? self::DISPATCH_FEES['standard'];
     }
 
     /**
-     * FLOW-CHECKOUT-04..06: booking or re-using the pickup appointment.
-     * Uses `appoint_date` (live column) instead of non-existent `appoint_start`.
+     * FLOW-CHECKOUT-04..06: reuse the claim appointment the customer booked on
+     * `/book`, otherwise create it right here - inside the checkout
+     * transaction, so the appointment only exists once the order does.
      */
     protected function bookingAppointment(Request $json, int $custId): Appointment
     {
-        $slotMinutes = (int) $this->settingValue('slot_minutes', 10);
-        $slotStart   = $this->slotStartFrom($json);
+        $slotStart = $this->slotStartFrom($json) ?? $this->defaultSlotStart();
+        $slotEnd   = $slotStart->copy()->addMinutes($this->slotMinutes());
+
+        if ($slotStart->isPast()) {
+            throw new \RuntimeException('Appointment slots must be booked for a future time.');
+        }
 
         $appointId = (int) $json->input('appoint_id', 0);
         $existing  = $appointId > 0 ? Appointment::find($appointId) : null;
 
-        $reusable = $existing
-            && (int) $existing->cust_id === $custId
-            && $existing->appoint_closed === null
-            && in_array(strtolower((string) $existing->appoint_type), ['pickup', 'claim'], true)
-            && ! Pickup::where('appoint_id', $existing->appoint_id)->exists();
-
-        if ($reusable) {
-            $start = $slotStart ?? $this->defaultSlotStart();
-            if (! $this->slotHasCapacity($start, $existing->appoint_id)) {
-                throw new \RuntimeException('The selected pickup slot is already full. Please pick another slot.');
+        if ($appointId > 0) {
+            if (! $existing || ! $this->usableAppointment($existing, $custId)) {
+                throw new \RuntimeException('A valid order-claiming appointment is required.');
             }
+        }
+
+        if ($existing) {
             $existing->update([
-                'appoint_type'   => 'CLAIM',
-                'appoint_closed' => null,
-                'appoint_qr'     => $existing->appoint_qr ?: ('APPT-' . strtoupper(Str::random(16))),
-                'appoint_date'   => $start,
+                'appoint_start' => $slotStart,
+                'appoint_end'   => $slotEnd,
+                'appoint_qr'    => $existing->appoint_qr ?: ('APPT-' . strtoupper(Str::random(16))),
             ]);
+
             return $existing->refresh();
         }
 
-        $start = $slotStart ?? $this->defaultSlotStart();
-        if ($start->isPast()) {
-            throw new \RuntimeException('Appointment slots must be booked for a future time.');
-        }
-        if (! $this->slotHasCapacity($start)) {
+        if (! $this->slotHasCapacity($slotStart, $slotEnd)) {
             throw new \RuntimeException('The selected pickup slot is already full. Please pick another slot.');
         }
 
         return Appointment::create([
-            'cust_id'        => $custId,
-            'appoint_created'=> now(),
-            'appoint_closed' => null,
-            'appoint_date'   => $start,
-            'appoint_type'   => 'CLAIM',
-            'appoint_qr'     => 'APPT-' . strtoupper(Str::random(16)),
-            'appoint_desc'   => 'Order pickup appointment',
+            // No sequence for appoint_id on the live `appointments` table.
+            // NOTE: `payment`, `parcel` and the legacy singular `appointment`
+            // table own sequences and must not be allocated manually here.
+            'appoint_id'    => $this->nextId('appointments', 'appoint_id'),
+            'cust_id'         => $custId,
+            'emp_id'          => $this->assigneeEmployeeId(),
+            'appoint_type'    => 'CLAIM',
+            'appoint_status'  => 'upcoming',
+            'appoint_qr'      => 'APPT-' . strtoupper(Str::random(16)),
+            'appoint_start'   => $slotStart,
+            'appoint_end'     => $slotEnd,
+            'appoint_created' => now(),
+            'appoint_closed'  => null,
         ]);
     }
 
-    protected function slotStartFrom(Request $json): ?Carbon
+    /** An appointment may only carry one order and must still be open. */
+    protected function usableAppointment(Appointment $appointment, int $custId): bool
     {
-        $raw = $json->input('appoint_start') ?? $json->input('appoint_date');
-        if (empty($raw)) return null;
-        try {
-            return Carbon::parse($raw);
-        } catch (\Throwable $e) {
-            throw new \RuntimeException('A valid appointment slot is required.');
-        }
+        return (int) $appointment->cust_id === $custId
+            && $appointment->appoint_closed === null
+            && in_array(strtolower((string) $appointment->appoint_type), ['pickup', 'claim'], true)
+            && ! Pickup::where('appoint_id', $appointment->appoint_id)->exists();
     }
 
-    protected function defaultSlotStart(): Carbon
-    {
-        return Carbon::parse(
-            now()->addMinutes((int) $this->settingValue('booking_lead_minutes', 30))->format('Y-m-d H:00')
-        );
-    }
-
-    /** D8: a slot holds at most `pickup_slot_capacity` pickup appointments. */
-    protected function slotHasCapacity(Carbon $start, ?int $ignoreAppointId = null): bool
+    /** D8: a slot holds at most `pickup_slot_capacity` claim appointments. */
+    protected function slotHasCapacity(Carbon $start, Carbon $end, ?int $ignoreAppointId = null): bool
     {
         $capacity = max(1, (int) $this->settingValue('pickup_slot_capacity', 5));
 
-        $query = Appointment::where('appoint_type', 'CLAIM')
+        $query = Appointment::whereRaw("LOWER(appoint_type) IN ('pickup', 'claim')")
             ->whereNull('appoint_closed')
-            ->where('appoint_date', $start);
+            ->where('appoint_start', '<', $end)
+            ->where('appoint_end', '>', $start);
 
         if ($ignoreAppointId) {
             $query->where('appoint_id', '!=', $ignoreAppointId);
@@ -809,64 +812,190 @@ class CheckoutAPI extends Controller
         return $query->count() < $capacity;
     }
 
-    protected function deliveryExpect(string $speed): Carbon
+    /**
+     * `appointments.emp_id` is NOT NULL in the live schema, so every claim
+     * appointment needs a staff owner: prefer an admin, else any active
+     * employee (the restored database ships no roster rows yet).
+     */
+    protected function assigneeEmployeeId(): int
     {
-        return match ($speed) {
-            'priority' => now()->addHours(24),
-            'saver'    => now()->addDays(5),
-            default    => now()->addDays(2),
-        };
+        $staff = Employee::whereNull('emp_deleted')
+            ->orderBy('emp_id')
+            ->get()
+            ->filter(fn (Employee $employee) => $employee->isActive());
+
+        $owner = $staff->first(fn (Employee $employee) => $employee->isAdmin()) ?? $staff->first();
+
+        if (! $owner) {
+            throw new \RuntimeException('No staff member is available to host pickup appointments.');
+        }
+
+        return (int) $owner->emp_id;
     }
 
-    /** Render a placed (ORD-*) order for the frontend. */
-    protected function orderPayload(Order $order): array
+    protected function slotStartFrom(Request $json): ?Carbon
     {
-        $order->loadMissing(['items.product', 'pickup.appointment', 'pickup.payment', 'parcel.delivery', 'parcel.payment']);
+        $raw = $json->input('appoint_start');
+        if (empty($raw)) return null;
 
-        $items = $order->items->map(fn ($item) => [
-            'item_id'     => $item->item_id,
-            'ord_id'      => $item->ord_id,
-            'prod_id'     => $item->prod_id,
-            'item_qty'    => (int) $item->item_qty,
-            'item_amount' => (float) $item->item_amount,
-            'product'     => $item->product ? $item->product->toArray() : null,
-        ])->values()->all();
+        try {
+            return $this->normalizeSlotStart(Carbon::parse($raw));
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('A valid appointment slot is required.');
+        }
+    }
 
-        $total   = $order->items->sum(fn ($item) => (float) $item->item_amount);
-        $payload = $order->toArray();
-        $payload['items']      = $items;
-        $payload['status']     = $order->ord_status;
-        $payload['ord_amount'] = round($total, 2);
-        $payload['amount']     = $payload['ord_amount'];
+    /** Slots snap to whole minutes; seconds/milliseconds never reach the DB. */
+    protected function normalizeSlotStart(Carbon $slot): Carbon
+    {
+        return $slot->copy()->second(0)->millisecond(0);
+    }
 
-        $payment = $order->pickup?->payment ?? $order->parcel?->payment ?? null;
-        if ($payment) {
-            $payload['pay_ref']       = $payment->pay_ref;
-            $payload['pay_reference'] = $payment->pay_ref;
-            $payload['pay_given']     = (float) $payment->pay_given;
-            $payload['pay_due']       = (float) $payment->pay_due;
-            $payload['pay_change']    = (float) $payment->pay_change;
+    protected function defaultSlotStart(): Carbon
+    {
+        return $this->normalizeSlotStart(
+            Carbon::parse(now()->addMinutes((int) $this->settingValue('booking_lead_minutes', 30))->format('Y-m-d H:00'))
+        );
+    }
+
+    protected function slotMinutes(): int
+    {
+        return max(1, (int) $this->settingValue('slot_minutes', 10));
+    }
+
+    /**
+     * FLOW-CHECKOUT-07: the delivery date the form sends, else the tier
+     * estimate for the selected speed.
+     */
+    protected function deliveryExpectation(Request $json, string $speed): Carbon
+    {
+        $raw = $json->input('deliver_expect');
+
+        if (empty($raw)) {
+            return match ($speed) {
+                'priority' => now()->addHours(24),
+                'saver'    => now()->addDays(5),
+                default    => now()->addDays(2),
+            };
         }
 
-        if ($order->pickup && $order->pickup->appointment) {
-            $payload['dispatch_type'] = 'pickup';
-            $payload['appoint_id']    = $order->pickup->appointment->appoint_id;
-            $payload['appoint_date']  = $order->pickup->appointment->appoint_date;
-            $payload['appoint_qr']    = $order->pickup->appointment->appoint_qr;
+        try {
+            $expect = Carbon::parse($raw);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('A valid delivery date is required.');
         }
 
-        if ($order->parcel && $order->parcel->delivery) {
-            $delivery = $order->parcel->delivery;
-            $payload['dispatch_type']   = 'delivery';
-            $payload['deliver_qr']      = $delivery->deliver_qr;
-            $payload['deliver_address'] = $delivery->deliver_address;
-            $payload['deliver_status']  = $delivery->deliver_status;
-            $payload['deliver_date']    = $delivery->deliver_date;
-            $payload['delivery_ref']    = $delivery->delivery_ref;
+        if ($expect->lt(now()->startOfDay())) {
+            throw new \RuntimeException('The delivery date must be today or later.');
         }
 
-        $payload['is_preorder'] = $order->pickup !== null || $order->parcel !== null;
+        return $expect;
+    }
 
-        return $payload;
+    /** The saved customer address is the fallback for the delivery branch. */
+    protected function deliveryAddress(Request $json, ?Customer $customer): string
+    {
+        $sent = trim((string) $json->input('deliver_address'));
+        if ($sent !== '') {
+            return $sent;
+        }
+
+        $saved = trim((string) ($customer->cust_address ?? ''));
+        if ($saved !== '') {
+            return str_replace(' | ', ', ', $saved);
+        }
+
+        throw new \RuntimeException('A delivery address is required.');
+    }
+
+    /** Orders the payment row for an online payment (REQ-CHECKOUT-03). */
+    protected function markOrderPaid(Order $order, array $attributes): Payment
+    {
+        $intentId = $attributes['id'] ?? null;
+        $amount   = isset($attributes['amount']) ? round((float) $attributes['amount'] / 100, 2) : 0.0;
+
+        return DB::transaction(function () use ($order, $attributes, $intentId, $amount) {
+            $payment = null;
+
+            if ($intentId) {
+                $payment = Payment::where('pay_ref', $intentId)->first();
+            }
+            if (! $payment && $order->pay_reference) {
+                $payment = Payment::where('pay_ref', $order->pay_reference)->first();
+            }
+
+            if ($payment) {
+                $payment->update([
+                    'pay_ref'   => $intentId ?: $payment->pay_ref,
+                    'pay_given' => $amount > 0 ? $amount : (float) $payment->pay_given,
+                ]);
+            } else {
+                $payment = Payment::create([
+                    'pay_created' => now(),
+                    'pay_ref'     => $intentId ?: ('PM-' . strtoupper(Str::random(16))),
+                    'pay_given'   => $amount,
+                    'pay_due'     => $amount > 0 ? $amount : (float) $order->ord_amount,
+                    'pay_change'  => 0,
+                ]);
+            }
+
+            $order->update([
+                'pay_reference' => $intentId ?: $order->pay_reference,
+                'pay_received'  => $amount > 0 ? $amount : (float) $order->pay_received,
+                'pay_change'    => round(max(0, $amount - (float) $order->ord_amount), 2),
+            ]);
+
+            return $payment;
+        });
+    }
+
+    /** REQ-IM-03: stock at/below the threshold raises a priority admin alert. */
+    protected function lowStockAlerts($bags): void
+    {
+        $threshold = (int) $this->settingValue('low_stock_threshold', 5);
+        $alerts    = [];
+
+        foreach ($bags as $bag) {
+            $prodvar = $bag->prodvar;
+            if (! $prodvar || (int) $prodvar->prodvar_stock > $threshold) continue;
+
+            $alerts[] = [
+                'name'  => $prodvar->product
+                    ? $prodvar->product->prod_name
+                    : ('variation #' . $bag->prodvar_id),
+                'stock' => (int) $prodvar->prodvar_stock,
+            ];
+        }
+
+        foreach ($alerts as $alert) {
+            $this->alertAdmins('[PRIORITY] Low stock: "' . $alert['name'] . '" is now down to '
+                . $alert['stock'] . ' unit(s).');
+        }
+    }
+
+    /**
+     * A notification inbox write must never roll back a placed order, so the
+     * admin broadcast is best-effort (see the handoff note on
+     * Controller::notifyEmployeesByType).
+     */
+    protected function alertAdmins(string $message): void
+    {
+        try {
+            $this->notifyEmployeesByType(['ADMIN', 'SUPER ADMIN'], $message);
+        } catch (\Throwable $e) {
+            Log::warning('Checkout admin notification failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /** Best-effort customer inbox write (logCustomer-style tolerance). */
+    protected function announce(int $custId, string $message): void
+    {
+        if ($custId <= 0) return;
+
+        try {
+            $this->notifyCustomer($custId, $message);
+        } catch (\Throwable $e) {
+            Log::warning('Checkout customer notification failed', ['error' => $e->getMessage()]);
+        }
     }
 }

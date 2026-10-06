@@ -9,6 +9,9 @@ class Appointment extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `appoint_id` has no sequence on the live `appointments` table, so
+        // writers pass the number from App\Support\IdAllocator::next().
+        'appoint_id',
         'cust_id',
         'emp_id',
         'appoint_type',

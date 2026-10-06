@@ -108,30 +108,64 @@ export async function signUpUser(details) {
       year_level: details.yearLevel || details.year || '',
       ...(details.username ? { username: details.username } : {}),
     })
-    // data.data carries the account; data.data.token is the bearer token.
-    return { user: data.data, error: null }
+    // FLOW-CUST_SIGNUP-05: the account row is created but NOT finalized -
+    // the answer carries a signed `challenge` and no token, so the caller
+    // has to clear the phone OTP before a session exists.
+    const payload = data.data || {}
+    if (payload.requires_otp) {
+      return {
+        user: null,
+        error: null,
+        requiresOtp: true,
+        challenge: payload.challenge,
+        phone: payload.phone || '',
+        purpose: payload.purpose || 'signup',
+        custId: payload.cust_id ?? null,
+      }
+    }
+    return { user: payload, error: null, requiresOtp: false, challenge: null, phone: '', purpose: null }
   } catch (err) {
-    return { user: null, error: err.message || 'Signup failed' }
+    return { user: null, error: err.message || 'Signup failed', requiresOtp: false, challenge: null }
   }
 }
 
 export async function signInUser(credentials) {
-  // Login accepts email OR phone (D17/D18): the identifier travels
-  // under both keys so either backend generation resolves it.
-  const identifier = credentials.phone || credentials.email || credentials.identifier || ''
-  const body = {
-    password: credentials.password,
-    phone: credentials.phone || identifier,
-  }
-  if (credentials.email || (!credentials.phone && identifier.includes('@'))) {
-    body.email = credentials.email || identifier
+  // FLOW-CUST_LOGIN-02: the login form's identifier is the e-mail address;
+  // the registered phone number is accepted as the same identifier for the
+  // accounts that predate it. It travels under its own key so the backend
+  // never has to guess which one it was given.
+  const identifier = String(
+    credentials.identifier || credentials.email || credentials.phone || ''
+  ).trim()
+  const body = { password: credentials.password }
+
+  if (identifier.includes('@')) {
+    body.email = identifier
+    if (credentials.phone && credentials.phone !== identifier) body.phone = credentials.phone
+  } else {
+    body.phone = identifier
+    if (credentials.email && credentials.email !== identifier) body.email = credentials.email
   }
   try {
     const data = await apiPost('/auth/cust_login', body)
-    // data.data carries the account; data.data.token is the bearer token.
-    return { user: data.data, error: null }
+    // FLOW-CUST_LOGIN-02: a login more than fifteen days after the last
+    // logout (or one whose signup never finished) answers with a signed
+    // `challenge` instead of a token - the OTP gate comes before the session.
+    const payload = data.data || {}
+    if (payload.requires_otp) {
+      return {
+        user: null,
+        error: null,
+        requiresOtp: true,
+        challenge: payload.challenge,
+        phone: payload.phone || '',
+        purpose: payload.purpose || 'login',
+        custId: payload.cust_id ?? null,
+      }
+    }
+    return { user: payload, error: null, requiresOtp: false, challenge: null, phone: '', purpose: null }
   } catch (err) {
-    return { user: null, error: err.message || 'Login failed' }
+    return { user: null, error: err.message || 'Login failed', requiresOtp: false, challenge: null }
   }
 }
 

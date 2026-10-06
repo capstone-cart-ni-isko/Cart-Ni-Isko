@@ -9,7 +9,9 @@ use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Setting;
+use App\Support\IdAllocator;
 use App\Support\SystemSettings;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -18,6 +20,32 @@ abstract class Controller
 {
     // The single phone value every walk-in customer record carries
     const WALK_IN_PHONE = '0000000000';
+
+    // ==========================================
+    // PRIMARY KEY ALLOCATION (legacy tables have no sequence)
+    // ==========================================
+
+    /**
+     * Next free primary key for a table whose legacy bigint PK carries no
+     * sequence / identity / default (bag, orders, items, pickup, delivery,
+     * appointments, wishlist, custnotif, empnotif, custlog, emplog, ...).
+     *
+     * See App\Support\IdAllocator for the full per-table decision (payment,
+     * parcel and the legacy singular `appointment` table own a sequence and
+     * must NEVER be passed here) and for the CONCURRENCY CAVEAT: this is a
+     * best-effort MAX(pk)+1 read, so two simultaneous requests can be handed
+     * the same number and the loser of the insert fails with a duplicate-key
+     * error. When the insert already runs inside DB::transaction(), call this
+     * inside that same transaction (checkout, appointment booking) to keep the
+     * allocation next to the write - it narrows, but does not close, the race.
+     *
+     * @param string $table physical table name (e.g. 'orders')
+     * @param string $pk    primary key column (e.g. 'ord_id')
+     */
+    protected function nextId(string $table, string $pk): int
+    {
+        return IdAllocator::next($table, $pk);
+    }
 
     // ==========================================
     // AUTHORIZATION HELPERS
@@ -161,8 +189,11 @@ abstract class Controller
             return null;
         }
 
+        // AppointAPI stores the type uppercase ('VISIT' / 'CLAIM') while the
+        // column default and older rows are lowercase, so the match is
+        // case-insensitive instead of assuming one spelling.
         $hasOpenVisit = Appointment::where('cust_id', $customer->cust_id)
-            ->where('appoint_type', 'visit')
+            ->whereRaw('UPPER(appoint_type) = ?', ['VISIT'])
             ->where('appoint_status', 'upcoming')
             ->where('appoint_end', '>=', now())
             ->exists();
@@ -187,6 +218,8 @@ abstract class Controller
     protected function notifyCustomer(int $custId, string $message): void
     {
         CustNotif::create([
+            // Legacy table: custnotif_id is bigint NOT NULL with no sequence.
+            'custnotif_id'      => $this->nextId('custnotif', 'custnotif_id'),
             'cust_id'           => $custId,
             'custnotif_created' => now(),
             'custnotif_read'    => null,
@@ -240,6 +273,8 @@ abstract class Controller
     protected function notifyEmployee(int $empId, string $message): void
     {
         EmpNotif::create([
+            // Legacy table: empnotif_id is bigint NOT NULL with no sequence.
+            'empnotif_id'      => $this->nextId('empnotif', 'empnotif_id'),
             'emp_id'           => $empId,
             'empnotif_created' => now(),
             'empnotif_read'    => null,
@@ -247,10 +282,47 @@ abstract class Controller
         ]);
     }
 
-    // Inserts a notification for every active (not suspended/deleted) employee
+    /**
+     * The live Supabase `employee` table has no `emp_disabled` column (it
+     * ships emp_deleted / emp_suspended instead - probed read-only through
+     * information_schema), while the legacy/sqlite schema used by the test
+     * suite still carries it. Filtering on a column that does not exist kills
+     * the whole query with an undefined-column error, so the filter is applied
+     * only when the column is actually there, and the probe result is kept for
+     * the lifetime of the process (the schema never changes mid-request).
+     */
+    private static ?bool $employeeHasDisabledColumn = null;
+
+    protected function employeeDisabledColumnExists(): bool
+    {
+        if (self::$employeeHasDisabledColumn === null) {
+            try {
+                self::$employeeHasDisabledColumn = Schema::hasColumn('employee', 'emp_disabled');
+            } catch (\Throwable $e) {
+                return false; // schema not readable right now: skip, do not cache
+            }
+        }
+
+        return self::$employeeHasDisabledColumn;
+    }
+
+    /** The employee rows that count as active for a broadcast. */
+    protected function activeEmployeeQuery()
+    {
+        $query = Employee::whereNull('emp_deleted');
+
+        if ($this->employeeDisabledColumnExists()) {
+            $query->whereNull('emp_disabled');
+        }
+
+        return $query;
+    }
+
+    // Inserts a notification for every employee row that counts as active
+    // (not soft-deleted, and not disabled when the legacy column exists).
     protected function notifyAllEmployees(string $message): void
     {
-        $employees = Employee::whereNull('emp_deleted')->whereNull('emp_disabled')->get();
+        $employees = $this->activeEmployeeQuery()->get();
         foreach ($employees as $employee) {
             $this->notifyEmployee((int) $employee->emp_id, $message);
         }
@@ -263,8 +335,7 @@ abstract class Controller
         $upper = array_map('strtoupper', $types);
         $placeholders = implode(',', array_fill(0, count($upper), '?'));
 
-        $employees = Employee::whereNull('emp_deleted')
-            ->whereNull('emp_disabled')
+        $employees = $this->activeEmployeeQuery()
             ->whereRaw('UPPER(emp_categ) IN (' . $placeholders . ')', $upper)
             ->get();
 
@@ -283,6 +354,8 @@ abstract class Controller
     {
         try {
             \App\Models\CustLog::create([
+                // Legacy table: custlog_id is bigint NOT NULL with no sequence.
+                'custlog_id' => $this->nextId('custlog', 'custlog_id'),
                 'cust_id' => $custId,
                 'custlog_access' => $access,
                 'custlog_endpoint' => $endpoint,
@@ -297,6 +370,8 @@ abstract class Controller
     {
         try {
             EmpLog::create([
+                // Legacy table: emplog_id is bigint NOT NULL with no sequence.
+                'emplog_id' => $this->nextId('emplog', 'emplog_id'),
                 'emp_id' => $empId,
                 'emplog_access' => $access,
                 'emplog_endpoint' => $endpoint,
@@ -315,7 +390,7 @@ abstract class Controller
      * The sensitive customer flows that must be OTP-verified first
      * (FLOW-CUST_SET-03, FLOW-CUST_SET-06, REQ-CUST_SET-02).
      */
-    const OTP_PURPOSES = ['password_change', 'backup_contacts'];
+    const OTP_PURPOSES = ['password_change', 'backup_contacts', 'checkout'];
 
     // A code lives five minutes, may be tried five times, and may be
     // re-requested after a 45-second cooldown. No new table or column is
@@ -329,6 +404,19 @@ abstract class Controller
     protected function otpCodeKey(int $custId, string $purpose): string
     {
         return 'otp:code:' . $custId . ':' . $purpose;
+    }
+
+    /**
+     * Cache flag of an account whose signup row exists but whose phone OTP
+     * never cleared (FLOW-CUST_SIGNUP-05: the account is created, not
+     * finalized). While the flag lives, the next login resumes that
+     * challenge instead of opening a session, and clearing it is what
+     * finalizes the signup. Lives a week: a customer may well come back
+     * to finish a signup on another day.
+     */
+    protected function signupPendingKey(int $custId): string
+    {
+        return 'auth:signup_pending:' . $custId;
     }
 
     /** Cache key flagging that an account already passed verification. */

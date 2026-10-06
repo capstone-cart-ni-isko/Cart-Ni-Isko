@@ -6,6 +6,7 @@ use App\Models\CustNotif;
 use App\Models\EmpNotif;
 use App\Models\Customer;
 use App\Models\Employee;
+use App\Support\IdAllocator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -44,6 +45,8 @@ class NotificationFollowUpJob implements ShouldQueue
             if ($exists) continue;
 
             CustNotif::create([
+                // Live custnotif has no sequence for its PK (max+1 allocation).
+                'custnotif_id'      => IdAllocator::next('custnotif', 'custnotif_id'),
                 'cust_id'           => $notif->cust_id,
                 'custnotif_created' => now(),
                 'custnotif_read'    => null,
@@ -74,6 +77,8 @@ class NotificationFollowUpJob implements ShouldQueue
             if ($exists) continue;
 
             EmpNotif::create([
+                // Live empnotif has no sequence for its PK (max+1 allocation).
+                'empnotif_id'       => IdAllocator::next('empnotif', 'empnotif_id'),
                 'emp_id'           => $notif->emp_id,
                 'empnotif_created' => now(),
                 'empnotif_read'    => null,

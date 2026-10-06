@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\TrackingAPI;
 use App\Jobs\NotificationFollowUpJob;
 use App\Support\AcademicPeriodRoster;
 use Illuminate\Foundation\Inspiring;
@@ -42,6 +43,19 @@ Schedule::call(function () {
 Schedule::call(fn () => AcademicPeriodRoster::apply())
     ->hourly()
     ->name('academic-period-start')
+    ->withoutOverlapping();
+
+/*
+    FLOW-ORD_CLAIM-06: a pickup appointment that passes appoint_end with no
+    QR scan turns `absent` and its order turns `unclaimed` on schedule, so the
+    flip no longer depends on a tracking call arriving (TrackingAPI still runs
+    the same sweep at the top of tracking/create and tracking/scan).
+    Checked every minute - claim slots are 10 minutes long - and the sweep
+    clears the QR, so an appointment is only ever flipped once.
+*/
+Schedule::call(fn () => app(TrackingAPI::class)->sweepExpiredPickups())
+    ->everyMinute()
+    ->name('sweep-expired-pickups')
     ->withoutOverlapping();
 
 

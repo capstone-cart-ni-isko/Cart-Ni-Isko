@@ -8,10 +8,15 @@ class Order extends Model
     protected $primaryKey = 'ord_id';
     public $timestamps = false;
 
-    // Live schema columns only (verified against Supabase):
-    // ord_id, cust_id, ord_created, ord_completed, ord_tag,
-    // ord_status, ord_rating, ord_review
+    // Live schema columns (verified against Supabase): ord_id, cust_id,
+    // ord_amount, ord_status, ord_claiming, pay_received, pay_change,
+    // pay_reference, ord_created. Legacy keys (ord_tag/ord_completed/
+    // ord_rating/ord_review) stay fillable for writers/tests that still send
+    // them; they are simply absent from the live table.
+    // `ord_id` is fillable because the live table has no sequence for it:
+    // writers must pass the number from App\Support\IdAllocator::next().
     protected $fillable = [
+        'ord_id',
         'cust_id',
         'ord_created',
         'ord_completed',
@@ -19,6 +24,11 @@ class Order extends Model
         'ord_status',
         'ord_rating',
         'ord_review',
+        'ord_amount',
+        'ord_claiming',
+        'pay_reference',
+        'pay_received',
+        'pay_change',
     ];
 
     protected $casts = [
@@ -47,11 +57,23 @@ class Order extends Model
         return $this->hasOne(Delivery::class, 'ord_id', 'ord_id');
     }
 
+    /**
+     * The legacy order -> delivery link (CartAPI/OrdersAPI/CheckoutAPI and
+     * ReportBuilder all eager-load `parcel.delivery` / `parcel.payment`).
+     * The relation used to be missing entirely, which made every one of those
+     * queries die with RelationNotFoundException; the `parcel` table does exist
+     * live (parcel_id, ord_id, deliver_id, pay_id, ...), so point at it.
+     */
+    public function parcel()
+    {
+        return $this->hasOne(Parcel::class, 'ord_id', 'ord_id');
+    }
+
     public function payment()
     {
-        // Payment is linked through pickup.pay_id or parcel.pay_id;
-        // for convenience, load via pickup first.
-        return $this->hasOneThrough(Payment::class, Pickup::class, 'ord_id', 'pay_id', 'ord_id', 'pay_id');
+        // Payment is linked through parcel.pay_id (live `pickup` has no pay_id
+        // column any more); payment columns also live on the order itself.
+        return $this->hasOneThrough(Payment::class, Parcel::class, 'ord_id', 'pay_id', 'ord_id', 'pay_id');
     }
 
     /**

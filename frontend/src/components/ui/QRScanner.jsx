@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useToast } from '../../hooks/useToast.js'
+import { scanQr } from '../../services/tracking.js'
 
 /**
  * QRScanner - Camera-based QR code scanner using html5-qrcode
@@ -166,6 +168,117 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
         >
           Stop Scanner
         </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Camera-scan modal used by the customer claiming flows.
+ *
+ * FLOW-ORD_CLAIM-01 (pickup: scan the order's `appoint_qr` from /orders or
+ * /appointments) and FLOW-ORD_CLAIM-07 (delivery: scan the parcel's
+ * `deliver_qr`). Whatever the camera reads is posted to `POST /tracking/scan`
+ * as { code, scanned_by: 'customer' }; the server's message is surfaced and
+ * `onSuccess` fires so the caller can re-fetch its order.
+ *
+ * `fallbackCode` offers a button with the code the order payload already
+ * carries, because a phone camera cannot read the QR shown on its own screen.
+ */
+export function QrScanModal({
+  open,
+  title = 'Scan QR code',
+  subtitle = 'Point the camera at the code on your order or parcel.',
+  fallbackCode = null,
+  fallbackLabel = "Use this order's code",
+  onClose,
+  onSuccess,
+}) {
+  const { showToast } = useToast()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (open) setError('')
+  }, [open])
+
+  const submit = useCallback(
+    async (code) => {
+      const value = String(code ?? '').trim()
+      if (busy) return
+      if (!value) {
+        setError('No QR code detected. Please try again.')
+        return
+      }
+
+      setBusy(true)
+      setError('')
+      try {
+        const res = await scanQr(value, 'customer')
+        showToast(res?.message || 'Order updated successfully.', 'success')
+        onClose?.()
+        onSuccess?.(res)
+      } catch (err) {
+        setError(err?.message || 'Scan failed. Please try again.')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [busy, onClose, onSuccess, showToast]
+  )
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
+      <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onClose?.()}
+            aria-label="Close scanner"
+            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-4">
+          <QRScanner
+            onScan={(code) => submit(code)}
+            onError={(scanError) => setError(scanError)}
+            className="w-full aspect-video"
+          />
+          {error && <p className="mt-2 text-center text-xs text-rose-600">{error}</p>}
+        </div>
+
+        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-2 bg-slate-50/40">
+          {fallbackCode ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => submit(fallbackCode)}
+              className="h-8 px-3 rounded-md border border-brand-orange text-xs font-bold text-brand-orange hover:bg-orange-50 disabled:opacity-50 cursor-pointer"
+            >
+              {fallbackLabel}
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            onClick={() => onClose?.()}
+            className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+          >
+            {busy ? 'Verifying…' : 'Close'}
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -1,10 +1,15 @@
 import { apiGet, apiPost } from './api.js'
 import { mapProduct } from './products.js'
+import { cartEnvelope } from './cart.js'
 
 /**
  * Backend rows come back as wishlist entries with an embedded `product`
  * relation. Convert each one into the same product shape the catalog uses
  * so ProductCard / Wishlist can render them directly.
+ *
+ * The server orders the rows wish_created DESC (FLOW-WISHLIST-03) - the array
+ * is mapped as-is - and every row carries `available` so a product that is no
+ * longer offered still renders, labelled "Unavailable" (FLOW-WISHLIST-07).
  */
 function itemToProduct(item) {
   const row = item?.product
@@ -13,6 +18,9 @@ function itemToProduct(item) {
   if (!mapped) return null
   return {
     ...mapped,
+    available: item.available !== false,
+    wishId: item.wish_id ?? null,
+    wishCreated: item.wish_created ?? null,
     wishQty: item.item_qty ?? 1,
     wishAmount: item.item_amount != null ? Number(item.item_amount) : mapped.price,
   }
@@ -32,9 +40,23 @@ export function addWishlistItem(custId, prodId, itemQty = 1, itemAmount = null) 
   return apiPost('/wishlist/add', body)
 }
 
-/** POST /wishlist/remove - idempotent delete for one product. */
+/** POST /wishlist/remove - idempotent soft delete for one product. */
 export function removeWishlistItem(custId, prodId) {
   return apiPost('/wishlist/remove', { cust_id: custId, prod_id: prodId })
+}
+
+/**
+ * POST /wishlist/to_order - FLOW-WISHLIST-06: move a saved item straight into
+ * the shopping bag. The backend creates/updates the live bag line and answers
+ * with the regular cart envelope, so the caller can adopt cart_count right away.
+ */
+export async function addWishlistToBag(custId, prodId, itemQty = 1) {
+  const data = await apiPost('/wishlist/to_order', {
+    cust_id: custId,
+    prod_id: prodId,
+    item_qty: itemQty,
+  })
+  return cartEnvelope(data)
 }
 
 /** Best-effort identifier for the API: numeric prod_id, else prod_tag. */

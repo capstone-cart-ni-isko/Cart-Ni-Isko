@@ -40,7 +40,10 @@ class WalkInGuardTest extends TestCase
 
         $key = get_class($model) . ':' . $model->getKey();
         if (! isset($this->tokens[$key])) {
-            $this->tokens[$key] = $model->createToken('test')->plainTextToken;
+            // The api guard is the signed `cni_token` bearer (ApiToken), so the
+            // test mints one the same way login does instead of a Sanctum
+            // personal access token, which the guard no longer accepts.
+            $this->tokens[$key] = \App\Support\ApiToken::issue($model);
         }
 
         return ['Authorization' => 'Bearer ' . $this->tokens[$key]];

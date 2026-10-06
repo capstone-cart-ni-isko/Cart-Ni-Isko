@@ -11,7 +11,10 @@ class Pickup extends Model
 
     // Live schema columns: pickup_id, ord_id, appoint_id, pay_id,
     // pickup_created, pickup_completed
+    // `pickup_id` is fillable because the live table has no sequence for it:
+    // writers must pass the number from App\Support\IdAllocator::next().
     protected $fillable = [
+        'pickup_id',
         'ord_id',
         'appoint_id',
         'pay_id',

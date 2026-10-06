@@ -5,9 +5,12 @@
     use App\Models\Customer;
     use App\Models\Employee;
     use App\Models\EmpLog;
+    use App\Support\ApiToken;
+    use Carbon\Carbon;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\DB;
     use Illuminate\Support\Facades\Hash;
+    use Illuminate\Support\Facades\Cache;
     use Illuminate\Support\Str;
     use Illuminate\Support\Facades\Schema;
 
@@ -71,103 +74,110 @@
         public function customerSignup(Request $json)
         {
             /*
-                CUSTOMER SIGNUP
+                CUSTOMER SIGNUP (DOMAIN 17)
                 ----------
                 JSON REQUEST
 
-                password - string (req)
-                nickname - string (req)
-                pronoun - string (req)
-                birthday - string (req)
-                brgy - string (req)
-                city - string (req)
-                province - string (req)
-                country - string (opt)
-                callcode - string (req)
-                phone - string (req)
-                email - string (req)
-                type - string (req)
+                email       - string (req - Bicol University address for BUños)
+                phone       - string (req - 10 to 11 digits)
+                password    - string (req)
+                givname     - string (req)
+                surname     - string (req)
+                type        - string (req - "BUeño" | "guest")
+                cust_categ  - string (req for BUños: student | alumni | faculty)
+                cust_college- string (req for BUños)
+                cust_dept   - string (req for BUños)
+                pronoun     - string (opt)
+                bday        - string (opt)
+                address     - string (opt)
+                callcode    - string (opt)
+                backup_phone- string (opt)
+                backup_email- string (opt)
+
+                FLOW-CUST_SIGNUP-05: the account is created but NOT opened -
+                no session token is returned. Only a cleared phone OTP
+                finalizes it, so `cust_login_active` stays NULL (a token with
+                no matching nonce is rejected by ApiToken::parse) and a signed
+                `challenge` carries the customer to /verify-otp.
             */
 
             // Validate signup input
-            $validator = (new InputValidatorAPI())->customerSignup($json);      
+            $validator = (new InputValidatorAPI())->customerSignup($json);
             if ($validator) return $validator;
 
-            // Get user phone and password
-            $phone = $json->input('phone');
-            $password = $json->input('password');
+            $email    = strtolower(trim((string) $json->input('email')));
+            $phone    = (string) $json->input('phone');
+            $password = (string) $json->input('password');
 
-            // Check if phone already exists
-            if (Customer::where('cust_phone', $phone)->exists()) {
-                // JSON ERROR
+            // FLOW-CUST_SIGNUP-02: cust_type is either "BUeño" or "guest".
+            $kind = preg_replace('/[^a-z]/', '', strtolower((string) $json->input('type')));
+            if (in_array($kind, ['student', 'alumni', 'faculty'], true)) {
+                $kind = 'bueno';
+            }
+            $guest = $kind !== 'bueno';
+
+            // FLOW-CUST_SIGNUP-03 / FLOW-CUST_SIGNUP-04.
+            $categ   = $guest ? null : (strtolower((string) $json->input('cust_categ')) ?: 'student');
+            $college = $guest ? null : (trim((string) $json->input('cust_college')) ?: null);
+            $dept    = $guest ? null : (trim((string) $json->input('cust_dept')) ?: null);
+
+            // FLOW-CUST_SIGNUP-06: the email address may not be registered.
+            if ($email !== '' && Customer::where('cust_email', $email)->exists()) {
                 return response()->json([
-                        'success' => false,
-                        'message' => 'Phone already exists'
-                    ], 409);
+                    'success' => false,
+                    'message' => 'That email address is already registered.'
+                ], 409);
+            }
+
+            // FLOW-CUST_SIGNUP-07 (uniqueness half): one account per number.
+            if (Customer::where('cust_phone', $phone)->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'That phone number is already registered.'
+                ], 409);
             }
 
             // Inserts to database using Models
             try {
-                // Create new Customer
-                $type = $json->input('type') ?? 'Student';
-                $attributes = [
-                    'cust_created' => now(),
-                    'cust_password' => Hash::make($password),
-                    'cust_nickname' => $json->input('nickname') ?? 'User',
-                    'cust_pronoun' => $json->input('pronoun') ?? 'they/them',
-                    'cust_birthday' => $json->input('birthday') ?? '2000-01-01',
-                    'cust_brgy' => $json->input('brgy') ?? '',
-                    'cust_city' => $json->input('city') ?? '',
-                    'cust_province' => $json->input('province') ?? '',
-                    'cust_callcode' => $json->input('callcode') ?? '+63',
-                    'cust_phone' => $phone,
-                    'cust_email' => $json->input('email') ?: null,
-                    'cust_type' => $type,
-                    'cust_college' => ($type === 'Student') ? ($json->input('college') ?? '') : '',
-                    'cust_wishlist' => 0,
-                    'cust_cart' => 0,
-                    'cust_orders' => 0,
-                    'cust_appoints' => 0,
-                ];
+                $customer = Customer::create(
+                    $this->signupAttributes($json, $email, $phone, $password, $guest, $categ, $college, $dept)
+                );
 
-                // Stamp the first credential set (REQ-APC-01 baseline);
-                // guarded so connections without the migration still work
-                if (Schema::hasColumn('customer', 'cust_cred_changed')) {
-                    $attributes['cust_cred_changed'] = now();
-                }
+                // FLOW-CUST_SIGNUP-05 / REQ-CUST_SIGNUP-04: the six-digit
+                // code lands in the new account's own notification inbox,
+                // and the signed challenge is what the verify screen redeems.
+                [$code, $error] = $this->issueOtpCode($customer, 'signup');
 
-                // Optional default country (guarded until the column exists)
-                if (Schema::hasColumn('customer', 'cust_country')) {
-                    $attributes['cust_country'] = $json->input('country') ?? '';
-                }
+                // REQ-CUST_LOGOUT-03 / FLOW-ACCESS_LOG-01: the registration
+                // itself is an authentication action.
+                $this->logCustomer((int) $customer->cust_id, 'authentication',
+                    'POST /api/auth/cust_signup - account created, phone OTP pending');
 
-                // Signup details the edit-profile form round-trips; guarded so
-                // connections without the migration still sign up cleanly.
-                if (Schema::hasColumn('customer', 'cust_username')) {
-                    $attributes['cust_username'] = $json->input('username') ?? '';
-                }
-                if ($type === 'Student') {
-                    if (Schema::hasColumn('customer', 'cust_campus')) {
-                        $attributes['cust_campus'] = $json->input('campus') ?? '';
-                    }
-                    if (Schema::hasColumn('customer', 'cust_course')) {
-                        $attributes['cust_course'] = $json->input('course') ?? '';
-                    }
-                    if (Schema::hasColumn('customer', 'cust_year')) {
-                        $attributes['cust_year'] = $json->input('year_level') ?? '';
-                    }
-                }
+                // FLOW-CUST_SIGNUP-05: the row exists but is NOT finalized, so
+                // the signup stays flagged for a week - a login inside that
+                // window resumes this OTP challenge instead of opening a
+                // session, and clearing the flag is what finalizes the signup.
+                Cache::put(
+                    $this->signupPendingKey((int) $customer->cust_id),
+                    ['email' => $email, 'phone' => $phone, 'ts' => now()->timestamp],
+                    now()->addDays(7)
+                );
 
-                $customer = Customer::create($attributes);
-
-                // Issue an API token for the new account
-                $token = $customer->createToken('auth_token')->plainTextToken;
-
-                // JSON SUCCESS
+                // JSON SUCCESS (account pending, no session yet)
                 return response()->json([
                     'success' => true,
-                    'message' => 'Signup successful',
-                    'data' => array_merge($customer->toArray(), ['token' => $token])
+                    'message' => $code !== null
+                        ? 'Verification code sent to your notification inbox.'
+                        : (string) $error,
+                    'data' => [
+                        'requires_otp' => true,
+                        'purpose'      => 'signup',
+                        'challenge'    => ApiToken::challenge($customer, 'signup'),
+                        'phone'        => $this->maskPhone($customer->cust_phone),
+                        'delivery'     => 'in_app_notification',
+                        'expires_in'   => self::OTP_TTL_MINUTES * 60,
+                        'cust_id'      => (int) $customer->cust_id,
+                    ],
                 ], 201);
 
             } catch (\Exception $e) {
@@ -180,54 +190,184 @@
             }
         }
 
+        /**
+         * Builds the CUSTOMER row for the schema that is actually connected:
+         * the live system-new.docx columns when they exist, the pre-migration
+         * columns otherwise (the legacy fixtures used by the test suite).
+         * No column outside either generation is ever written.
+         */
+        private function signupAttributes(
+            Request $json,
+            string $email,
+            string $phone,
+            string $password,
+            bool $guest,
+            ?string $categ,
+            ?string $college,
+            ?string $dept
+        ): array {
+            $address = trim((string) ($json->input('address')
+                ?: implode(', ', array_filter([
+                    $json->input('brgy'),
+                    $json->input('city'),
+                    $json->input('province'),
+                    $json->input('country'),
+                ]))));
+            $bday = (string) ($json->input('bday') ?: $json->input('birthday'));
+
+            $attributes = [
+                // The live customer table carries no sequence, so the key is
+                // handed out by the shared allocator (see IdAllocator).
+                'cust_id'       => $this->nextId('customer', 'cust_id'),
+                'cust_created'  => now(),
+                'cust_password' => Hash::make($password),
+                'cust_callcode' => $json->input('callcode') ?: '+63',
+                'cust_pronoun'  => $json->input('pronoun') ?: 'they/them',
+                'cust_phone'    => $phone,
+                'cust_email'    => $email !== '' ? $email : null,
+                'cust_type'     => $guest ? 'guest' : 'bueño',
+                'cust_college'  => $college,
+                'cust_wishlist' => 0,
+                'cust_orders'   => 0,
+            ];
+
+            if (Schema::hasColumn('customer', 'cust_givname')) {
+                return $attributes + [
+                    'cust_givname'             => trim((string) $json->input('givname')),
+                    'cust_surname'             => trim((string) $json->input('surname')),
+                    'cust_address'             => $address !== '' ? $address : null,
+                    'cust_bday'                => $bday !== '' ? $bday : null,
+                    'cust_avatar'              => null,
+                    // FLOW-CUST_SIGNUP-03 / FLOW-CUST_SIGNUP-04
+                    'cust_categ'               => $categ,
+                    'cust_dept'                => $dept,
+                    'cust_backup_phone'        => trim((string) ($json->input('backup_phone') ?: $json->input('backupphone'))) ?: null,
+                    'cust_backup_email'        => strtolower(trim((string) ($json->input('backup_email') ?: $json->input('backupemail')))) ?: null,
+                    'cust_backup_ques'         => null,
+                    'cust_backup_answer'       => null,
+                    'cust_backup_code'         => null,
+                    'cust_darkmode'            => false,
+                    'cust_deleted'             => null,
+                    'cust_suspended'           => null,
+                    // FLOW-CUST_SIGNUP-05: no live session until the OTP clears
+                    'cust_login_active'        => null,
+                    'cust_login_failed'        => null,
+                    'cust_last_logout'         => null,
+                    'cust_notif_appointremind' => 10,
+                    'cust_notif_email'         => false,
+                    'cust_notif_prod'          => false,
+                    'cust_appoint'             => 0,
+                    'cust_bag'                 => 0,
+                    'cust_unread'              => 0,
+                ];
+            }
+
+            // Legacy (pre-migration) table shape.
+            return $attributes + [
+                'cust_nickname'  => trim((string) $json->input('givname') . ' ' . (string) $json->input('surname')),
+                'cust_birthday'  => $bday !== '' ? $bday : '2000-01-01',
+                'cust_brgy'      => (string) $json->input('brgy'),
+                'cust_city'      => (string) $json->input('city'),
+                'cust_province'  => (string) $json->input('province'),
+                'cust_country'   => (string) ($json->input('country') ?: ''),
+                'cust_cart'      => 0,
+                'cust_appoints'  => 0,
+            ];
+        }
+
+        /** 09171234567 -> 0917****567 (REQ-CUST_SIGNUP-04 delivery notice). */
+        protected function maskPhone(?string $phone): string
+        {
+            $phone = trim((string) $phone);
+            $length = strlen($phone);
+
+            if ($length < 7) {
+                return $phone;
+            }
+
+            return substr($phone, 0, 4) . str_repeat('*', $length - 7) . substr($phone, -3);
+        }
+
         public function customerLogin(Request $json)
         {
             /*
-                CUSTOMER LOGIN
+                CUSTOMER LOGIN (DOMAIN 18)
                 ----------
                 JSON REQUEST
 
+                email    - string (req - the login form's email address; a
+                           registered phone number is accepted as the same
+                           identifier for accounts with a NULL cust_email)
+                phone    - string (req|alt)
                 password - string (req)
-                phone - string (req)
+
+                FLOW-CUST_LOGIN-02: correct credentials open the session,
+                except when the last logout is more than fifteen days old -
+                or the signup was never finished - in which case the answer
+                carries a signed `challenge` instead of a token and the
+                customer has to clear a phone OTP first.
             */
 
             // Validate login input
             $validator = (new InputValidatorAPI())->customerLogin($json);
             if ($validator) return $validator;
 
-            // Get user phone and password
-            $phone = $json->input('phone');
-            $password = $json->input('password');
+            $identifier = (string) ($json->input('email') ?: $json->input('phone'));
+            $password   = (string) $json->input('password');
 
-            // Single round trip: the database returns the account only when the
-            // bcrypt digest matches, and hashes there instead of in this worker
-            // (see api_auth_cust_login). A wrong phone and a wrong password are
-            // reported identically, as before.
             try {
-                $customer = $this->findCustomerByCredentials((string) $phone, (string) $password);
+                $customer = $this->findCustomerByIdentifier($identifier, $password);
 
                 if (! $customer) {
+                    $this->stampFailedLogin($identifier);
+
+                    // JSON ERROR (the form keeps every typed value: REQ-CUST_LOGIN-02)
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
                 }
 
-                // Banned or deleted accounts lose access immediately (REQ-UM-02)
-                if ($customer->cust_disabled || $customer->cust_deleted) {
+                // Banned or deleted accounts lose access immediately (REQ-UM-02).
+                // `cust_suspended` is the live flag; `cust_disabled` is the
+                // legacy spelling still carried by older rows, so both end
+                // the login the same way.
+                if ($customer->cust_deleted || $customer->cust_suspended || $customer->cust_disabled) {
                     return response()->json(['success' => false, 'message' => 'Account disabled'], 403);
                 }
 
-                // Issue an API token for the session
-                try {
-                    $token = \App\Support\ApiToken::issue($customer);
-                } catch (\Throwable $e) {
-                    $token = $customer->createToken('auth_token')->plainTextToken;
+                // FLOW-CUST_SIGNUP-05: an account whose phone OTP never
+                // cleared is still pending, so logging in resumes that
+                // challenge instead of opening a session.
+                $pendingSignup = Cache::get($this->signupPendingKey((int) $customer->cust_id));
+
+                // FLOW-CUST_LOGIN-02: more than fifteen days since
+                // cust_last_logout (a first login counts from cust_created).
+                $anchor = $customer->cust_last_logout ?: $customer->cust_created;
+                $staleLogin = $anchor !== null && Carbon::parse($anchor)->addDays(15)->isPast();
+
+                if ($pendingSignup || $staleLogin) {
+                    $purpose = $pendingSignup ? 'signup' : 'login';
+                    [$code] = $this->issueOtpCode($customer, $purpose);
+
+                    $this->logCustomer((int) $customer->cust_id, 'authentication',
+                        'POST /api/auth/cust_login - phone OTP required (' . $purpose . ')');
+
+                    // JSON SUCCESS: a challenge, never a session token.
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Verification code sent to your notification inbox.',
+                        'data' => [
+                            'requires_otp' => true,
+                            'purpose'      => $purpose,
+                            'challenge'    => ApiToken::challenge($customer, $purpose),
+                            'phone'        => $this->maskPhone($customer->cust_phone),
+                            'delivery'     => 'in_app_notification',
+                            'expires_in'   => self::OTP_TTL_MINUTES * 60,
+                            'cust_id'      => (int) $customer->cust_id,
+                        ],
+                    ], 200);
                 }
 
                 // JSON SUCCESS
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Login successful',
-                    'data' => array_merge($customer->toArray(), ['token' => $token])
-                ], 200);
+                return $this->openCustomerSession($customer, 'POST /api/auth/cust_login', 'Login successful');
 
             } catch (\Exception $e) {
                 // If stored password in DB is plain text or fails bcrypt verification
@@ -238,6 +378,106 @@
                     'error' => $e->getMessage()
                 ], 400);
             }
+        }
+
+        /**
+         * Resolves an account from the login form's identifier (email first,
+         * registered phone number as the legacy fallback) and checks the
+         * password on the way through.
+         */
+        private function findCustomerByIdentifier(string $identifier, string $password): ?Customer
+        {
+            if (str_contains($identifier, '@')) {
+                $customer = Customer::where('cust_email', strtolower(trim($identifier)))->first();
+
+                if (! $customer) {
+                    return null;
+                }
+
+                $matches = false;
+                try {
+                    $matches = Hash::check($password, (string) $customer->cust_password);
+                } catch (\Throwable $e) {
+                    $matches = false;
+                }
+
+                return ($matches || (string) $customer->cust_password === $password)
+                    ? $customer
+                    : null;
+            }
+
+            $phone = preg_replace('/[^0-9]/', '', $identifier) ?: $identifier;
+
+            return $this->findCustomerByCredentials($phone, $password);
+        }
+
+        /**
+         * FLOW-ACCESS_LOG-01: a rejected login still leaves its mark on the
+         * account it was aimed at (cust_login_failed).
+         */
+        private function stampFailedLogin(string $identifier): void
+        {
+            try {
+                $customer = str_contains($identifier, '@')
+                    ? Customer::where('cust_email', strtolower(trim($identifier)))->first()
+                    : Customer::where('cust_phone', preg_replace('/[^0-9]/', '', $identifier))->first();
+
+                if ($customer && Schema::hasColumn('customer', 'cust_login_failed')) {
+                    $customer->cust_login_failed = now();
+                    $customer->save();
+                }
+            } catch (\Throwable $e) {
+                // Bookkeeping must never change the login answer.
+            }
+        }
+
+        /**
+         * Opens the customer session: the nonce in `cust_login_active` is
+         * rotated (so any older token dies at once), the failed-login stamp
+         * is cleared and DOMAIN 32 gets its authentication entry.
+         */
+        private function openCustomerSession(Customer $customer, string $endpoint, string $message)
+        {
+            $customer->cust_login_failed = null;
+
+            try {
+                $token = ApiToken::issue($customer);
+            } catch (\Throwable $e) {
+                $token = ApiToken::issue($customer);
+            }
+
+            $this->logCustomer((int) $customer->cust_id, 'authentication', $endpoint);
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => array_merge($customer->toArray(), ['token' => $token]),
+            ], 200);
+        }
+
+        /**
+         * Keeps the subset of $attributes whose columns exist on the connected
+         * schema. The system-new.docx SCHEMA (live) and the pre-migration
+         * fixture phpunit runs on do not carry the same names, and writing a
+         * column the connection does not have - or omitting one it requires -
+         * fails the whole statement.
+         *
+         * @param  array<string, mixed>  $attributes
+         * @return array<string, mixed>
+         */
+        private function existingColumns(string $table, array $attributes): array
+        {
+            static $listing = [];
+
+            $columns = $listing[$table] ??= Schema::getColumnListing($table);
+
+            return array_filter(
+                $attributes,
+                // ARRAY_FILTER_USE_KEY hands the key - the column name - as
+                // the callback's only argument.
+                static fn (string $column) => in_array($column, $columns, true),
+                ARRAY_FILTER_USE_KEY
+            );
         }
 
         public function employeeSignup(Request $json)
@@ -307,22 +547,38 @@
                     'emp_cred_changed' => null,
                 ];
 
-                $employee = Employee::create($attributes);
+                // The connected schema decides which of those columns exist:
+                // the live employee table carries the system-new.docx set
+                // (no emp_birthday / emp_brgy / emp_type ...), while the
+                // pre-migration fixture phpunit runs on still declares its own
+                // NOT NULL columns. forceCreate writes exactly the intersection
+                // - the model's fillable list would silently drop the fixture's
+                // required columns and fail the insert - and every key above
+                // comes from this whitelist, never straight from the request.
+                $employee = Employee::forceCreate(
+                    $this->existingColumns('employee', $attributes)
+                );
 
                 // REQ-UM-04: registrations are logged with the responsible
                 // super admin and the timestamp, like every other user
                 // management action.
-                $by = $json->user('sanctum');
-                EmpLog::create([
-                    'emp_id'         => $employee->emp_id,
-                    'emplog_created' => now(),
-                    'emplog_action'  => 'REGISTER',
-                    'emplog_desc'    => 'Registered employee ' . $employee->emp_id . ' ('
-                        . $employee->emp_givname . ' ' . $employee->emp_surname . ') as '
-                        . $employee->emp_type . ' by super admin '
-                        . ($by instanceof Employee ? $by->emp_id : 'unknown')
-                        . '. Reason: new employee onboarding.',
-                ]);
+                $by = $json->user('api');
+                EmpLog::forceCreate(
+                    $this->existingColumns('emplog', [
+                        'emplog_id'      => $this->nextId('emplog', 'emplog_id'),
+                        'emp_id'         => $employee->emp_id,
+                        'emplog_created' => now(),
+                        'emplog_access'  => 'edit',
+                        'emplog_endpoint' => 'POST /api/auth/emp_signup',
+                        // Legacy fixture columns (dropped where they are absent).
+                        'emplog_action'  => 'REGISTER',
+                        'emplog_desc'    => 'Registered employee ' . $employee->emp_id . ' ('
+                            . $employee->emp_givname . ' ' . $employee->emp_surname . ') as '
+                            . $type . ' by super admin '
+                            . ($by instanceof Employee ? $by->emp_id : 'unknown')
+                            . '. Reason: new employee onboarding.',
+                    ])
+                );
 
                 return response()->json([
                     'success' => true,
@@ -387,8 +643,10 @@
                     ], 403);
                 }
 
-                // Banned or deleted accounts lose access immediately (REQ-UM-02)
-                if ($employee->emp_disabled || $employee->emp_deleted) {
+                // Banned or deleted accounts lose access immediately (REQ-UM-02).
+                // `emp_suspended` is the live flag; `emp_disabled` is the legacy
+                // spelling some rows still carry.
+                if ($employee->emp_suspended || $employee->emp_deleted || $employee->emp_disabled) {
                     // JSON ERROR
                     return response()->json(['success' => false, 'message' => 'Account disabled'], 403);
                 }
@@ -422,7 +680,40 @@
 
         public function logout(Request $json)
         {
-            $json->user()->currentAccessToken()?->delete();
+            /*
+                LOGOUT (DOMAIN 30)
+                ----------
+                FLOW-CUST_LOGOUT-04: the logout timestamp is saved to the
+                database, REQ-CUST_LOGOUT-03: the event itself is written to
+                the access log, and FLOW-CUST_LOGOUT-05: the client is sent
+                back to /login.
+
+                Clearing the session nonce in *_login_active revokes the very
+                token that carried this request, so it - and every other token
+                of the same session - is dead the moment the answer lands
+                (ApiToken::parse compares the nonce field against that column).
+            */
+            $user = $json->user('api');
+
+            if ($user instanceof Customer) {
+                $user->cust_last_logout = now();
+                $user->cust_login_active = null;
+                $user->cust_login_failed = null;
+                $user->save();
+
+                $this->logCustomer((int) $user->cust_id, 'authentication', 'POST /api/auth/logout');
+            } elseif ($user instanceof Employee) {
+                $user->emp_last_logout = now();
+                $user->emp_login_active = null;
+                $user->save();
+
+                $this->logEmployee((int) $user->emp_id, 'authentication', 'POST /api/auth/logout');
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Account is not supported.',
+                ], 403);
+            }
 
             return response()->json([
                 'success' => true,

@@ -52,7 +52,10 @@ class SrsRequirementsTest extends TestCase
 
         $key = get_class($model) . ':' . $model->getKey();
         if (!isset($this->tokens[$key])) {
-            $this->tokens[$key] = $model->createToken('test')->plainTextToken;
+            // The api guard is the signed `cni_token` bearer (ApiToken), not a
+            // Sanctum personal access token, so the test mints one the same
+            // way login does.
+            $this->tokens[$key] = \App\Support\ApiToken::issue($model);
         }
 
         return ['Authorization' => 'Bearer ' . $this->tokens[$key]];
@@ -196,8 +199,9 @@ class SrsRequirementsTest extends TestCase
             ->assertStatus(403)
             ->assertJson(['success' => false, 'message' => 'Account disabled']);
 
-        // Disabled employees are refused as well
-        $bannedEmployee = $this->makeEmployee(['emp_disabled' => now()]);
+        // Suspended employees are refused as well (emp_suspended is the live
+        // column; emp_disabled no longer exists on the live employee table)
+        $bannedEmployee = $this->makeEmployee(['emp_suspended' => now()]);
         $this->postJson('/api/auth/emp_login', [
             'email'    => $bannedEmployee->emp_email,
             'password' => 'Password123!',

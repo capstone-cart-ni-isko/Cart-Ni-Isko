@@ -31,6 +31,16 @@ Route::post('/auth/cust_login', [AuthAPI::class, 'customerLogin']);
 Route::post('/auth/emp_login', [AuthAPI::class, 'employeeLogin']);
 Route::post('/auth/recover_credentials', [AuthAPI::class, 'recoverCredentials']);
 
+// DOMAIN 17 / DOMAIN 18 - the phone OTP challenge that gates a signup
+// (FLOW-CUST_SIGNUP-05) and a login taken more than fifteen days after the
+// last logout (FLOW-CUST_LOGIN-02). They stay outside `auth:api` because
+// neither caller owns a session yet: the signed, purpose-scoped challenge in
+// the request body is what identifies the account, and it is rejected by
+// ApiToken::parse() - so it can never open a protected route.
+Route::post('/otp/challenge/start', [OtpAPI::class, 'startChallenge']);
+Route::post('/otp/challenge/verify', [OtpAPI::class, 'verifyChallenge']);
+Route::post('/otp/challenge/inbox', [OtpAPI::class, 'challengeInbox']);
+
 // Public Products API Routes (guest catalog browsing)
 Route::get('/products/filter', [ProductsAPI::class, 'filterCatalog']);
 Route::get('/products/search', [ProductsAPI::class, 'searchProducts']);
@@ -40,6 +50,10 @@ Route::get('/products/view', [ProductsAPI::class, 'viewProductDetails']);
 // Public Reviews API Routes (guest rating browsing)
 Route::get('/reviews/display', [ReviewsAPI::class, 'displayReviews']);
 Route::get('/reviews/score', [ReviewsAPI::class, 'scoreRating']);
+
+// Public PayMongo webhook (REQ-CHECKOUT-03): the gateway calls this without a
+// bearer token, so it stays outside `auth:api` and verifies its own signature.
+Route::post('/checkout/payment/webhook', [CheckoutAPI::class, 'paymentWebhook']);
 
 // Everything else requires a Sanctum bearer token
 Route::middleware('auth:api')->group(function () {
@@ -52,18 +66,18 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/otp/issue', [OtpAPI::class, 'issue']);
     Route::post('/otp/verify', [OtpAPI::class, 'verify']);
 
-    // Cart API Routes
+    // Cart API Routes (DOMAIN 25: customer bag lives in the `bag` table)
     Route::post('/cart/add', [CartAPI::class, 'addOrder']);
-    Route::get('/cart/display', [CartAPI::class, 'displayOrders']);
+    Route::match(['get', 'post'], '/cart/display', [CartAPI::class, 'displayOrders']);
     Route::get('/cart/search', [CartAPI::class, 'searchOrders']);
     Route::get('/cart/sort', [CartAPI::class, 'sortOrders']);
     Route::delete('/cart/remove', [CartAPI::class, 'removeOrder']);
+    Route::post('/cart/clear', [CartAPI::class, 'clearCart']);
 
-    // Checkout API Routes
+    // Checkout API Routes (the webhook above is public)
     Route::post('/checkout/dispatch', [CheckoutAPI::class, 'determineDispatchDetails']);
     Route::post('/checkout/payment', [CheckoutAPI::class, 'integratePayment']);
     Route::post('/checkout/payment/intent', [CheckoutAPI::class, 'createPaymentIntent']);
-    Route::post('/checkout/payment/webhook', [CheckoutAPI::class, 'paymentWebhook']);
 
     // Reports API Routes
     Route::middleware('role:staff')->group(function () {
@@ -75,9 +89,11 @@ Route::middleware('auth:api')->group(function () {
     });
 
     // Orders API Routes
-    Route::post('/orders/add', [OrdersAPI::class, 'addProductToOrder']);
+    // /orders/add and /orders/remove are the customer cart line endpoints
+    // (CartAPI owns them per spec: they operate on bag rows now).
+    Route::post('/orders/add', [CartAPI::class, 'updateBagLine']);
     Route::put('/orders/update', [OrdersAPI::class, 'updateOrderDetails']);
-    Route::delete('/orders/remove', [OrdersAPI::class, 'removeProductFromOrder']);
+    Route::delete('/orders/remove', [CartAPI::class, 'removeOrder']);
 
     // POS API Routes
     Route::post('/pos/add', [PosAPI::class, 'addProductToOrder'])->middleware('role:admin');

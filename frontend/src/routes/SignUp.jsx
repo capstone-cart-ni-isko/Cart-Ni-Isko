@@ -4,7 +4,6 @@ import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import collegesData from '../data/colleges.json'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
-import OtpInput from '../components/ui/OtpInput.jsx'
 import Button from '../components/ui/Button.jsx'
 import AppShell from '../components/layout/AppShell.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
@@ -26,8 +25,6 @@ function SignUp() {
     'role',
     'details',
     'password',
-    'otp',
-    'success',
     'college',
     'complete'
   ]
@@ -70,9 +67,16 @@ function SignUp() {
   const [showPass, setShowPass] = useState(false)
   const [showConfirmPass, setShowConfirmPass] = useState(false)
 
-  // OTP step timer
-  const [otp, setOtp] = useState('')
-  const [timer, setTimer] = useState(59)
+  // FLOW-CUST_SIGNUP-02/03: a BUeño carries the academic affiliation
+  // (cust_categ, cust_college, cust_dept); a guest leaves it NULL
+  // (FLOW-CUST_SIGNUP-04), so the academic step belongs to everyone
+  // except Guest.
+  const isBueño = form.role !== 'Guest'
+
+  // REQ-CUST_SIGNUP-02: a BUeño signs up with a Bicol University address.
+  const BU_EMAIL_RE = /^[^\s@]+@bicol-u\.edu\.ph$/i
+  const emailLooksWrong = isBueño && form.email.trim() !== '' && !BU_EMAIL_RE.test(form.email.trim())
+
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Dropdown options for mobile
@@ -83,15 +87,6 @@ function SignUp() {
   useEffect(() => {
     localStorage.setItem('isko_signup_progress', JSON.stringify(form))
   }, [form])
-
-  // Timer for OTP step
-  useEffect(() => {
-    if (step !== 3 || timer <= 0) return
-    const interval = setInterval(() => {
-      setTimer((t) => t - 1)
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [step, timer])
 
   // Sync colleges data when campus changes
   useEffect(() => {
@@ -146,6 +141,16 @@ function SignUp() {
       showToast('Please fill out all fields', 'error')
       return
     }
+    // REQ-CUST_SIGNUP-02: a BUeño signs up with a Bicol University address.
+    if (isBueño && !BU_EMAIL_RE.test(form.email.trim())) {
+      showToast('BUeños must use their @bicol-u.edu.ph email address', 'error')
+      return
+    }
+    // FLOW-CUST_SIGNUP-07: the phone has to look like a real number.
+    if (form.phone.replace(/\D/g, '').length < 10) {
+      showToast('Please enter a valid phone number', 'error')
+      return
+    }
     goToStep(2)
   }
 
@@ -163,22 +168,13 @@ function SignUp() {
       showToast('You must agree to the Terms of Use', 'error')
       return
     }
-    goToStep(3)
-  }
-
-  const handleOtpNext = async (e) => {
-    e.preventDefault()
-    if (otp.length < 6) return
-    setIsSubmitting(true)
-    // No OTP verification endpoint exists yet, so any 6-digit code is
-    // accepted here (contract gap reported).
-    showToast('Phone verified!')
-    if (form.role === 'Student') {
-      goToStep(5)
-    } else {
-      await handleCompleteNext()
+    // FLOW-CUST_SIGNUP-03: a BUeño still owes the academic details; a guest
+    // (FLOW-CUST_SIGNUP-04) can submit right away.
+    if (isBueño) {
+      goToStep(3)
+      return
     }
-    setIsSubmitting(false)
+    submitRegistration()
   }
 
   const handleCollegeNext = async (e) => {
@@ -187,45 +183,57 @@ function SignUp() {
       showToast('Please select your academic details', 'error')
       return
     }
-    await handleCompleteNext()
+    await submitRegistration()
   }
 
-  const handleCompleteNext = async () => {
-    const combinedYearLevel = form.role === 'Student'
+  /**
+   * FLOW-CUST_SIGNUP-05: submitting creates the row but does NOT finalize it
+   * - the answer carries the signed challenge and the customer is taken to
+   * the OTP screen, which is what turns the account live.
+   */
+  const submitRegistration = async () => {
+    setIsSubmitting(true)
+    const combinedYearLevel = isBueño
       ? (form.block ? `${form.yearLevel} - Block ${form.block}` : form.yearLevel)
-      : 'N/A'
+      : ''
     const registrationDetails = {
       ...form,
       yearLevel: combinedYearLevel,
       password,
     }
-    if (form.role !== 'Student') {
-      registrationDetails.campus = 'N/A'
-      registrationDetails.college = 'N/A'
-      registrationDetails.course = 'N/A'
-      registrationDetails.yearLevel = 'N/A'
+    if (!isBueño) {
+      // FLOW-CUST_SIGNUP-04: no university affiliation for a guest.
+      registrationDetails.campus = ''
+      registrationDetails.college = ''
+      registrationDetails.course = ''
+      registrationDetails.yearLevel = ''
     }
-    const { error } = await register(registrationDetails)
-    if (error) {
-      showToast(error, 'error')
+
+    const result = await register(registrationDetails)
+    setIsSubmitting(false)
+    if (result.error) {
+      showToast(result.error, 'error')
       return
     }
+
     localStorage.removeItem('isko_signup_progress')
-    localStorage.setItem('isko_device_verified', 'true')
+
+    if (result.requiresOtp) {
+      showToast('A verification code was sent to your notification inbox.')
+      navigate('/verify-otp', {
+        state: {
+          challenge: result.challenge,
+          phone: result.phone,
+          purpose: result.purpose || 'signup',
+          fromSignUp: true,
+        },
+      })
+      return
+    }
+
+    // No challenge came back (the backend already finalized): land on sign-in.
     showToast('Registration complete! Please sign in.')
     navigate('/signin')
-  }
-
-  const formatTime = (secs) => {
-    const m = Math.floor(secs / 60).toString().padStart(2, '0')
-    const s = (secs % 60).toString().padStart(2, '0')
-    return `${m}:${s}`
-  }
-
-  const handleResend = () => {
-    setTimer(59)
-    setOtp('')
-    showToast('A new 6-digit verification code has been sent!')
   }
 
   // Desktop Form Actions
@@ -245,49 +253,34 @@ function SignUp() {
       showToast('Please complete all credential fields correctly', 'error')
       return
     }
-    goToStep(3)
+    // REQ-CUST_SIGNUP-02: a BUeño signs up with a Bicol University address.
+    if (isBueño && !BU_EMAIL_RE.test(form.email.trim())) {
+      showToast('BUeños must use their @bicol-u.edu.ph email address', 'error')
+      return
+    }
+    if (form.phone.replace(/\D/g, '').length < 10) {
+      showToast('Please enter a valid phone number', 'error')
+      return
+    }
+    // FLOW-CUST_SIGNUP-03 / -04: only a BUeño still has the academic step.
+    if (isBueño) {
+      goToStep(3)
+      return
+    }
+    submitRegistration()
   }
 
   const handleDesktopPersonalizeSubmit = async (e) => {
     e.preventDefault()
 
-    // Academic details are only required for Student role
-    if (form.role === 'Student') {
-      if (!form.college || !form.course || !form.yearLevel) {
-        showToast('Please fill out all academic details', 'error')
-        return
-      }
-    }
-
-    const combinedYearLevel = form.role === 'Student'
-      ? (form.block ? `${form.yearLevel} - Block ${form.block}` : form.yearLevel)
-      : 'N/A'
-
-    const registrationDetails = {
-      ...form,
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      yearLevel: combinedYearLevel,
-      password,
-    }
-    if (form.role !== 'Student') {
-      registrationDetails.campus = 'N/A'
-      registrationDetails.college = 'N/A'
-      registrationDetails.course = 'N/A'
-      registrationDetails.yearLevel = 'N/A'
-    }
-
-    const { error } = await register(registrationDetails)
-
-    if (error) {
-      showToast(error, 'error')
+    // FLOW-CUST_SIGNUP-03: every BUeño owes the academic details.
+    if (isBueño && (!form.campus || !form.college || !form.course || !form.yearLevel)) {
+      showToast('Please fill out all academic details', 'error')
       return
     }
 
-    localStorage.removeItem('isko_signup_progress')
-    localStorage.setItem('isko_device_verified', 'true')
-    showToast('Registration complete! Please sign in.')
-    navigate('/signin')
+    updateForm({ firstName: form.firstName.trim(), lastName: form.lastName.trim() })
+    await submitRegistration()
   }
 
   return (
@@ -415,8 +408,15 @@ function SignUp() {
                       placeholder="student@bicol-u.edu.ph"
                       value={form.email}
                       onChange={(e) => updateForm({ email: e.target.value })}
-                      className="w-full h-11 px-3.5 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2"
+                      className={`w-full h-11 px-3.5 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 ${
+                        emailLooksWrong ? 'border-red-400' : 'border-gray-200'
+                      }`}
                     />
+                    {emailLooksWrong && (
+                      <p className="text-red-500 text-[11px] font-semibold mt-1">
+                        BUeños must use their @bicol-u.edu.ph email address.
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -433,7 +433,7 @@ function SignUp() {
                   </div>
                 </div>
 
-                <Button type="submit" disabled={!form.firstName || !form.lastName || !form.phone || !form.email} className="w-full h-12 rounded-full font-bold mt-2 shadow-md">
+                <Button type="submit" disabled={!form.firstName || !form.lastName || !form.phone || !form.email || emailLooksWrong} className="w-full h-12 rounded-full font-bold mt-2 shadow-md">
                   Continue
                 </Button>
               </form>
@@ -489,38 +489,16 @@ function SignUp() {
                 </div>
 
                 <Button type="submit" disabled={password.length < 8 || password !== confirmPassword || !agreeToTerms} className="w-full h-12 rounded-full font-bold mt-2 shadow-md">
-                  Create Account
+                  {isBueño ? 'Continue' : 'Create Account'}
                 </Button>
               </form>
             )}
 
-            {/* STEP 3: OTP */}
-            {step === 3 && (
-              <form onSubmit={handleOtpNext} className="space-y-6 animate-fade-in">
-                <div>
-                  <h1 className="text-2xl font-black text-gray-900 leading-tight">Verify Phone</h1>
-                </div>
-                <p className="text-sm text-gray-500 font-medium">We sent a code to {form.phone}.</p>
-                <OtpInput value={otp} onChange={setOtp} length={6} />
-                <Button type="submit" disabled={otp.length < 6 || isSubmitting} className="w-full h-12 rounded-full font-bold shadow-md">
-                  {isSubmitting ? 'Verifying...' : 'Continue'}
-                </Button>
-                <div className="text-center pt-2">
-                  {timer > 0 ? (
-                    <p className="text-xs text-gray-400 font-semibold">Resend code in <span className="text-brand-orange">{formatTime(timer)}</span></p>
-                  ) : (
-                    <button type="button" onClick={handleResend} className="text-xs text-brand-orange font-black">Resend code</button>
-                  )}
-                </div>
-              </form>
-            )}
-
-            {/* STEP 5: College (Only shown for Student role) */}
-            {step === 5 && form.role === 'Student' && (
+            {/* STEP 3: Academic details - every BUeño (FLOW-CUST_SIGNUP-03) */}
+            {step === 3 && isBueño && (
               <form onSubmit={handleCollegeNext} className="space-y-5 animate-fade-in">
                 <div className="flex justify-between items-start">
                   <h1 className="text-2xl font-black text-gray-900">Your College</h1>
-                  <button type="button" onClick={handleCompleteNext} className="text-xs font-black text-gray-400">Skip</button>
                 </div>
                 <div className="space-y-4">
                   <select
@@ -585,18 +563,20 @@ function SignUp() {
                     </div>
                   </div>
                 </div>
-                <Button type="submit" disabled={!form.campus || !form.college || !form.course || !form.yearLevel} className="w-full h-12 rounded-full font-bold">Go to Sign In</Button>
+                <Button type="submit" disabled={!form.campus || !form.college || !form.course || !form.yearLevel || isSubmitting} className="w-full h-12 rounded-full font-bold">
+                  {isSubmitting ? 'Creating account…' : 'Create Account'}
+                </Button>
               </form>
             )}
 
-            {/* STEP 6: Complete */}
-            {step === 6 && (
+            {/* STEP 4: Complete */}
+            {step === 4 && (
               <div className="text-center space-y-6 py-6 animate-fade-in">
                 <div className="w-24 h-24 bg-brand-orange/10 rounded-full flex items-center justify-center mx-auto">
                   <img src={logo} alt="Tindahan ni Isko" className="w-16 animate-bounce" />
                 </div>
                 <h1 className="text-2xl font-black text-gray-900">All Set!</h1>
-                <Button onClick={handleCompleteNext} className="w-full h-12 rounded-full font-bold">Go to Sign In</Button>
+                <Button onClick={() => navigate('/signin')} className="w-full h-12 rounded-full font-bold">Go to Sign In</Button>
               </div>
             )}
           </div>
@@ -655,7 +635,7 @@ function SignUp() {
           )}
 
           {/* STEP 1 / Credentials Entry (Image 4 Wireframe with Phone & Email) */}
-          {(step === 1 || step === 2 || (!location.pathname.includes('/signup/') && step !== 0 && step !== 3 && step !== 5)) && (
+          {(step === 1 || step === 2) && (
             <div className="p-10 animate-fade-in bg-white min-h-[540px] flex flex-col justify-between">
               <div>
                 <BackButton onClick={handleBack} label="Back to Role Selection" className="mb-6" />
@@ -798,55 +778,11 @@ function SignUp() {
             </div>
           )}
 
-          {/* STEP 3 - OTP Verification (Desktop) */}
-          {step === 3 && (
-            <div className="p-10 animate-fade-in bg-white min-h-[500px] flex flex-col justify-between">
-              <div>
-                <BackButton onClick={handleBack} label="Back to Credentials" className="mb-6" />
-                <div className="mb-8">
-                  <h1 className="text-3xl font-black text-gray-900 leading-tight">Verify Phone</h1>
-                  <p className="text-sm text-gray-500 font-medium mt-2">
-                    Enter the verification code sent to <span className="font-bold">{form.phone}</span>.
-                  </p>
-                </div>
-
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault()
-                    if (otp.length !== 6) return
-                    showToast('Phone verified!')
-                    if (form.role === 'Student') {
-                      goToStep(5)
-                    } else {
-                      await handleCompleteNext()
-                    }
-                  }}
-                  className="space-y-6"
-                >
-                  <OtpInput value={otp} onChange={setOtp} length={6} />
-                  <Button type="submit" disabled={otp.length < 6} className="w-full h-12 font-bold rounded-xl shadow-md mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer">
-                    Verify & Continue
-                  </Button>
-                </form>
-              </div>
-
-              <div className="text-center pt-8">
-                {timer > 0 ? (
-                  <p className="text-sm text-gray-500">Resend code in <span className="text-brand-orange font-bold">{formatTime(timer)}</span></p>
-                ) : (
-                  <button type="button" onClick={handleResend} className="text-sm text-brand-orange font-black hover:underline">
-                    Resend Code
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* STEP 5 - Student academic details */}
-          {step === 5 && form.role === 'Student' && (
+          {/* STEP 3 - Academic details for every BUeño (FLOW-CUST_SIGNUP-03) */}
+          {step === 3 && isBueño && (
             <div className="p-10 animate-fade-in bg-white min-h-[520px] flex flex-col justify-between">
               <div>
-                <BackButton onClick={handleBack} label="Back to Phone Verification" className="mb-6" />
+                <BackButton onClick={handleBack} label="Back to Password" className="mb-6" />
                 <div className="mb-6">
                   <h1 className="page-title text-gray-900">Academic Details</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2">

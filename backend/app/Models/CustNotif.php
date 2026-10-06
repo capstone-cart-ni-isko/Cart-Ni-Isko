@@ -10,6 +10,9 @@ class CustNotif extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `custnotif_id` has no sequence on the live table, so writers pass
+        // the number from App\Support\IdAllocator::next().
+        'custnotif_id',
         'cust_id',
         'custnotif_created',
         'custnotif_read',

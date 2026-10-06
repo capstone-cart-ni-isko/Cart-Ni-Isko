@@ -23,34 +23,201 @@ class InputValidatorAPI extends Controller
 
     public function customerSignup(Request $json)
     {
+        // DOMAIN 17 - FLOW-CUST_SIGNUP-01..07 / REQ-CUST_SIGNUP-01..04.
+        $this->aliasSignupFields($json);
+
         $requiredCheck = $this->validateFields($json, [
-            'phone' => 'required',
+            'email'    => 'required|email:rfc',
+            'phone'    => 'required',
             'password' => 'required',
-            'nickname' => 'required',
+            'givname'  => 'required|string|max:100',
+            'surname'  => 'required|string|max:100',
+            'type'     => 'required|string|max:50',
         ], [
-            'phone.required' => 'Phone number is required.',
+            'email.required'    => 'Email address is required.',
+            'email.email'       => 'Invalid email format.',
+            'phone.required'    => 'Phone number is required.',
             'password.required' => 'Password is required.',
-            'nickname.required' => 'Nickname is required.',
+            'givname.required'  => 'Given name is required.',
+            'surname.required'  => 'Surname is required.',
+            'type.required'     => 'Please choose your account type.',
         ]);
         if ($requiredCheck) {
             return $requiredCheck;
         }
 
+        // FLOW-CUST_SIGNUP-02: cust_type is either "BUeño" or "guest".
+        // The legacy forms still post "Student" / "Alumni" / "Faculty",
+        // which all describe a BUeño, so those spellings fold into it too.
+        $kind = preg_replace('/[^a-z]/', '', strtolower((string) $json->input('type')));
+        if (in_array($kind, ['student', 'alumni', 'faculty'], true)) {
+            $kind = 'bueno';
+        }
+
+        if (! in_array($kind, ['bueno', 'guest'], true)) {
+            return $this->fail('Account type must be either "BUeño" or "guest".', 422);
+        }
+
+        // FLOW-CUST_SIGNUP-04 / REQ-CUST_SIGNUP-03: a guest carries no
+        // university affiliation, so the academic rules never apply.
+        if ($kind === 'guest') {
+            return $this->validateAllFormats($json);
+        }
+
+        // FLOW-CUST_SIGNUP-03 / REQ-CUST_SIGNUP-02: a BUeño fills out the
+        // whole form, names cust_categ / cust_college / cust_dept and holds
+        // a Bicol University email address.
+        $buenoCheck = $this->validateFields($json, [
+            'cust_categ'   => 'required|in:student,alumni,faculty',
+            'cust_college' => 'required|string|max:120',
+            'cust_dept'    => 'required|string|max:120',
+            'email'        => 'required|email:rfc|ends_with:bicol-u.edu.ph',
+        ], [
+            'cust_categ.required'   => 'Please choose your category (student, alumni, or faculty).',
+            'cust_categ.in'         => 'Please choose your category (student, alumni, or faculty).',
+            'cust_college.required' => 'College or institute is required.',
+            'cust_dept.required'    => 'Department or program is required.',
+            'email.required'        => 'Bicol University email address is required.',
+            'email.ends_with'       => 'Use a Bicol University email address (name@bicol-u.edu.ph).',
+        ]);
+        if ($buenoCheck) {
+            return $buenoCheck;
+        }
+
         return $this->validateAllFormats($json);
+    }
+
+    /**
+     * Folds the signup aliases onto their canonical (system-new.docx) names
+     * so one rule set covers both payload generations: the new form posts
+     * `cust_categ` / `cust_college` / `cust_dept` / `bday` / `backup_phone`,
+     * the legacy one posts `categ` / `college` / `dept` / `birthday` /
+     * `backupphone`.
+     */
+    private function aliasSignupFields(Request $json): void
+    {
+        $pairs = [
+            'cust_categ'   => ['categ'],
+            'cust_college' => ['college'],
+            'cust_dept'    => ['dept', 'course', 'program'],
+            'bday'         => ['birthday'],
+            'backup_phone' => ['backupphone'],
+            'backup_email' => ['backupemail', 'backup_email'],
+        ];
+
+        foreach ($pairs as $canonical => $aliases) {
+            if ($json->filled($canonical)) {
+                continue;
+            }
+            foreach ($aliases as $alias) {
+                if ($json->filled($alias)) {
+                    $json->merge([$canonical => $json->input($alias)]);
+                    break;
+                }
+            }
+        }
+
+        // The category may be implied by the legacy role alone.
+        if (! $json->filled('cust_categ')) {
+            $fromType = preg_replace('/[^a-z]/', '', strtolower((string) $json->input('type')));
+            if (in_array($fromType, ['student', 'alumni', 'faculty'], true)) {
+                $json->merge(['cust_categ' => $fromType]);
+            }
+        }
+
+        // The reusable format rules still read the legacy key names, so the
+        // canonical values are mirrored back onto them before they run.
+        $mirror = [
+            'birthday'    => 'bday',
+            'backupphone' => 'backup_phone',
+            'backupemail' => 'backup_email',
+        ];
+        foreach ($mirror as $legacy => $canonical) {
+            if (! $json->filled($legacy) && $json->filled($canonical)) {
+                $json->merge([$legacy => $json->input($canonical)]);
+            }
+        }
+
+        // FLOW-CUST_SIGNUP-01: the new form posts givname + surname; a
+        // single legacy `nickname` is split the same way the backend does.
+        if (! $json->filled('givname') && $json->filled('nickname')) {
+            $full = trim(preg_replace('/\s+/', ' ', (string) $json->input('nickname')));
+            $space = strpos($full, ' ');
+            $json->merge([
+                'givname' => $space === false ? $full : substr($full, 0, $space),
+                'surname' => $space === false ? $full : substr($full, $space + 1),
+            ]);
+        }
     }
 
     public function customerLogin(Request $json)
     {
+        // DOMAIN 18 - FLOW-CUST_LOGIN-02: the login form carries the
+        // account's email address and password. A registered phone number
+        // is still accepted as the same identifier, because accounts created
+        // before email was mandatory keep a NULL cust_email.
         $requiredCheck = $this->validateFields($json, [
-            'phone'    => 'required',
+            'email'    => 'required_without:phone|nullable|string|max:255',
+            'phone'    => 'required_without:email',
             'password' => 'required',
         ], [
-            'phone.required' => 'Phone is required to log in.',
+            'email.required_without' => 'Email address is required to log in.',
+            'phone.required_without' => 'Email address is required to log in.',
             'password.required'      => 'Password is required.',
         ]);
         if ($requiredCheck) return $requiredCheck;
 
+        // An identifier without "@" was typed in the email box on purpose:
+        // treat it as a legacy phone login instead of rejecting it.
+        if ($json->filled('email') && ! str_contains((string) $json->input('email'), '@')) {
+            $json->merge([
+                'phone' => $json->input('phone') ?: $json->input('email'),
+                'email' => null,
+            ]);
+        }
+
+        if ($json->filled('email')) {
+            $emailCheck = $this->validateFields($json, [
+                'email' => 'required|email:rfc',
+            ], [
+                'email.email' => 'Invalid email format.',
+            ]);
+            if ($emailCheck) return $emailCheck;
+        }
+
         return $this->validateAllFormats($json);
+    }
+
+    /**
+     * DOMAIN 17 / DOMAIN 18 - the phone OTP challenge that gates a signup
+     * (FLOW-CUST_SIGNUP-05) and a login taken more than fifteen days after
+     * the last logout (FLOW-CUST_LOGIN-02).
+     */
+    public function otpChallengeStart(Request $json)
+    {
+        return $this->validateFields($json, [
+            'purpose'   => 'required|in:signup,login',
+            'challenge' => 'required|string',
+        ], [
+            'purpose.required'   => 'A verification purpose is required.',
+            'purpose.in'         => 'Unknown verification purpose.',
+            'challenge.required' => 'The verification session expired. Please start again.',
+        ]);
+    }
+
+    public function otpChallengeVerify(Request $json)
+    {
+        return $this->validateFields($json, [
+            'purpose'   => 'required|in:signup,login',
+            'challenge' => 'required|string',
+            'code'      => 'required|string|digits:6',
+        ], [
+            'purpose.required'    => 'A verification purpose is required.',
+            'purpose.in'          => 'Unknown verification purpose.',
+            'challenge.required'  => 'The verification session expired. Please start again.',
+            'code.required'       => 'The verification code is required.',
+            'code.digits'         => 'The verification code must be 6 digits.',
+        ]);
     }
 
     public function employeeSignup(Request $json)
@@ -280,6 +447,7 @@ class InputValidatorAPI extends Controller
     {
         return $this->validateFields($json, [
             'pronoun'  => 'nullable|string|max:50',
+            'address'  => 'nullable|string|max:255',
             'brgy'     => 'nullable|string|max:100',
             'city'     => 'nullable|string|max:100',
             'province' => 'nullable|string|max:100',
@@ -517,14 +685,20 @@ class InputValidatorAPI extends Controller
 
     public function createAppointment(Request $json)
     {
+        // The live column is `appoint_start`; `appoint_date` is the legacy
+        // request spelling (AppointAPI aliases one onto the other before this
+        // runs), so a booking may be expressed with EITHER key - requiring the
+        // legacy one alone rejected every modern client that only sends
+        // appoint_start.
         return $this->validateFields($json, [
-            'cust_id'      => 'required',
-            'appoint_date' => 'required',
-            'appoint_type' => 'required',
+            'cust_id'       => 'required',
+            'appoint_date'  => 'required_without:appoint_start',
+            'appoint_start' => 'nullable',
+            'appoint_type'  => 'required',
         ], [
-            'cust_id.required'      => 'Customer ID is required.',
-            'appoint_date.required' => 'Appointment date is required.',
-            'appoint_type.required' => 'Appointment type is required.',
+            'cust_id'       => 'Customer ID is required.',
+            'appoint_date.required_without' => 'Appointment date is required: send appoint_start (live column) or appoint_date (legacy alias).',
+            'appoint_type'  => 'Appointment type is required.',
         ]);
     }
 
@@ -726,56 +900,83 @@ class InputValidatorAPI extends Controller
     public function determineDispatchDetails(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id' => 'required|integer',
+            'ord_id' => 'nullable|integer',
+            'bag_ids' => 'nullable|array',
+            'bag_ids.*' => 'integer',
             'dispatch_type' => 'required|in:pickup,delivery',
             'speed' => 'nullable|in:priority,standard,saver',
-            'deliver_address' => 'required_if:dispatch_type,delivery|string|max:500',
-            'appoint_id' => 'required_if:dispatch_type,pickup|integer',
+            'deliver_address' => 'nullable|string|max:500',
+            'deliver_expect' => 'nullable',
+            'appoint_id' => 'nullable|integer',
+            'appoint_start' => 'nullable',
         ], [
-            'ord_id.required' => 'Order ID is required.',
+            'ord_id.integer' => 'Order ID must be an integer.',
+            'bag_ids.array' => 'Bag IDs must be a list of bag row IDs.',
+            'bag_ids.*.integer' => 'Every bag ID must be an integer.',
             'dispatch_type.required' => 'Dispatch type (pickup or delivery) is required.',
             'dispatch_type.in' => 'Dispatch type must be either pickup or delivery.',
             'speed.in' => 'Delivery speed must be priority, standard, or saver.',
-            'deliver_address.required_if' => 'Delivery address is required.',
-            'appoint_id.required_if' => 'An order-claiming appointment is required.',
+            'deliver_address.string' => 'Delivery address must be text.',
+            'deliver_address.max' => 'Delivery address is too long.',
+            'appoint_id.integer' => 'Appointment ID must be an integer.',
         ]);
     }
 
     public function integratePayment(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id' => 'required|integer',
+            'ord_id' => 'nullable|integer',
+            'bag_ids' => 'nullable|array',
+            'bag_ids.*' => 'integer',
             'pay_given' => 'required|numeric|min:0',
+            'pay_ref' => 'nullable|string|max:100',
             'dispatch_type' => 'required|in:pickup,delivery',
             'speed' => 'nullable|in:priority,standard,saver',
-            'deliver_address' => 'required_if:dispatch_type,delivery|string|max:500',
-            'appoint_id' => 'required_if:dispatch_type,pickup|integer',
+            'deliver_address' => 'nullable|string|max:500',
+            'deliver_expect' => 'nullable',
+            'appoint_id' => 'nullable|integer',
+            'appoint_start' => 'nullable',
         ], [
-            'ord_id.required' => 'Order ID is required.',
+            'ord_id.integer' => 'Order ID must be an integer.',
+            'bag_ids.array' => 'Bag IDs must be a list of bag row IDs.',
+            'bag_ids.*.integer' => 'Every bag ID must be an integer.',
             'pay_given.required' => 'Payment given amount is required.',
             'pay_given.numeric' => 'Payment given must be a numeric amount.',
             'pay_given.min' => 'Payment given cannot be negative.',
+            'pay_ref.max' => 'Payment reference is too long.',
             'dispatch_type.required' => 'Dispatch type (pickup or delivery) is required.',
             'dispatch_type.in' => 'Dispatch type must be either pickup or delivery.',
             'speed.in' => 'Delivery speed must be priority, standard, or saver.',
-            'deliver_address.required_if' => 'Delivery address is required.',
-            'appoint_id.required_if' => 'An order-claiming appointment is required.',
+            'deliver_address.string' => 'Delivery address must be text.',
+            'deliver_address.max' => 'Delivery address is too long.',
+            'appoint_id.integer' => 'Appointment ID must be an integer.',
         ]);
     }
 
     public function createPaymentIntent(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id' => 'required|integer',
+            'ord_id' => 'nullable|integer',
+            'bag_ids' => 'nullable|array',
+            'bag_ids.*' => 'integer',
             'gateway' => 'required|in:paymongo',
             'dispatch_type' => 'nullable|in:pickup,delivery',
             'speed' => 'nullable|in:priority,standard,saver',
+            'deliver_address' => 'nullable|string|max:500',
+            'deliver_expect' => 'nullable',
+            'appoint_id' => 'nullable|integer',
+            'appoint_start' => 'nullable',
         ], [
-            'ord_id.required' => 'Order ID is required.',
+            'ord_id.integer' => 'Order ID must be an integer.',
+            'bag_ids.array' => 'Bag IDs must be a list of bag row IDs.',
+            'bag_ids.*.integer' => 'Every bag ID must be an integer.',
             'gateway.required' => 'Payment gateway is required.',
             'gateway.in' => 'Payment gateway must be paymongo.',
             'dispatch_type.in' => 'Dispatch type must be either pickup or delivery.',
             'speed.in' => 'Delivery speed must be priority, standard, or saver.',
+            'deliver_address.string' => 'Delivery address must be text.',
+            'deliver_address.max' => 'Delivery address is too long.',
+            'appoint_id.integer' => 'Appointment ID must be an integer.',
         ]);
     }
 

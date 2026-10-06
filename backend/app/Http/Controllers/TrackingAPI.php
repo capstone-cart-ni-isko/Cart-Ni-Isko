@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Delivery;
 use App\Models\Employee;
 use App\Models\Order;
+use App\Models\Parcel;
 use App\Models\Pickup;
 use App\Models\Prodsales;
 use App\Models\Prodvar;
@@ -18,9 +19,11 @@ use Illuminate\Support\Str;
 /**
  * DOMAIN 28 (order claiming) + the fulfillment track the admin pages read.
  *
- * There is no `parcel` / `payment` table any more: a pickup order links its
- * appointment through `pickup`, a delivery order carries its own `delivery`
- * row. Fulfilment status lives on `orders.ord_status`
+ * There is no `parcel` / `payment` *linkage* on the happy path any more: a
+ * pickup order links its appointment through `pickup`, a delivery order
+ * carries its own `delivery` row (delivery.ord_id). Both legacy tables still
+ * exist live, so `Order::parcel()` / `Order::payment()` resolve and act as the
+ * fallback link for rows written before ord_id was stamped. Fulfilment status lives on `orders.ord_status`
  * (processing | to cancel | to claim | delivering | to receive | claimed |
  * received | unclaimed | cancelled); the legacy `delivery.deliver_status`
  * spelling is only re-derived on the way out so old screens keep working.
@@ -31,8 +34,10 @@ use Illuminate\Support\Str;
  *    `appoint_end`, `absent` when scanned after it);
  *  - never scanned after `appoint_end` -> appointment `absent`, order
  *    `unclaimed` (the sweep below);
- *  - delivery: scanning `deliver_qr` stamps `deliver_end` and moves the order
- *    to `received`.
+ *  - delivery: scanning `deliver_qr` stamps the claim/end stamp
+ *    (`delivery.deliver_end`, which the spec calls `deliver_timestamp` - see
+ *    Delivery::setDeliverTimestampAttribute) and moves the order to
+ *    `received`.
  * Stock only leaves the store on those two scans (REQ-WALKIN-03 is the POS
  * twin), and every claim is logged (REQ-ORD_CLAIM-03).
  */
@@ -98,7 +103,7 @@ class TrackingAPI extends Controller
                 ], 200);
             }
 
-            $delivery = Delivery::where('ord_id', $order->ord_id)->first();
+            $delivery = $this->deliveryForOrder($order);
             if (! $delivery) {
                 return response()->json([
                     'success' => false,
@@ -166,7 +171,8 @@ class TrackingAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Delivery record not found'], 404);
             }
 
-            $order = Order::find($delivery->ord_id);
+            // FLOW-ORD_CLAIM-07: legacy delivery rows may carry no ord_id
+            $order = $this->resolveDeliveryOrder($delivery, $employee);
             if (! $order) {
                 return response()->json(['success' => false, 'message' => 'Order not found'], 404);
             }
@@ -217,14 +223,15 @@ class TrackingAPI extends Controller
                 }
 
                 if (in_array($status, ['claimed', 'received'], true)) {
-                    $delivery->update(['deliver_end' => $delivery->deliver_end ?? now()]);
+                    // FLOW-ORD_CLAIM-08: the claim stamp (see Delivery::$fillable)
+                    $delivery->update(['deliver_timestamp' => $delivery->deliver_end ?? now()]);
                     $this->fulfilOrder($order);
                 }
 
                 // FLOW-ORD_LIST-09: an approved cancellation closes the track
                 if ($status === 'cancelled') {
                     if ($delivery->deliver_end === null) {
-                        $delivery->update(['deliver_end' => now()]);
+                        $delivery->update(['deliver_timestamp' => now()]);
                     }
                     if (in_array($priorStatus, ['claimed', 'received'], true)) {
                         $this->restockOrder($order);
@@ -241,8 +248,10 @@ class TrackingAPI extends Controller
                 'tracking/update ' . $status . ' - order #' . $order->ord_id
             );
 
-            // REQ-OT-01: cancel requests and the queue statuses stay silent.
-            if ((int) $order->cust_id > 0 && ! in_array($status, ['to cancel', 'to claim', 'to receive'], true)) {
+            // REQ-ORD_LIST-03: every customer-visible status change notifies -
+            // including `to cancel`, `to claim` and `to receive`, which used to
+            // be swallowed by the old REQ-OT-01 silent set.
+            if ((int) $order->cust_id > 0) {
                 $this->notifyCustomer(
                     (int) $order->cust_id,
                     'Order #' . $order->ord_id . ' status changed to ' . $status . '.'
@@ -327,7 +336,7 @@ class TrackingAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Fulfillment track not found.'], 404);
             }
 
-            $order = Order::find($delivery->ord_id);
+            $order = $this->resolveDeliveryOrder($delivery, $json->user('api'));
             $scanned = $delivery->deliver_end !== null
                 || ($order && in_array($order->ord_status, ['received', 'claimed', 'cancelled'], true));
 
@@ -394,7 +403,9 @@ class TrackingAPI extends Controller
             if ($candidateDelivery) {
                 $viaDeliveryQr = true;
                 $delivery = $candidateDelivery;
-                $order = Order::find($candidateDelivery->ord_id);
+                // Never `Order::find(null)`: rows written before checkout
+                // stamped delivery.ord_id resolve through parcel / customer.
+                $order = $this->resolveDeliveryOrder($candidateDelivery, $user);
             }
 
             // 2. FLOW-ORD_CLAIM-01: the appointment's code
@@ -436,7 +447,7 @@ class TrackingAPI extends Controller
 
             $order->loadMissing(['items.bag.prodvar.product', 'pickup.appointment', 'delivery']);
             if (! $delivery) {
-                $delivery = $order->delivery;
+                $delivery = $order->delivery ?? $this->deliveryForOrder($order);
             }
             if (! $appointment && $order->pickup) {
                 $appointment = $order->pickup->appointment;
@@ -469,7 +480,8 @@ class TrackingAPI extends Controller
 
     /**
      * FLOW-ORD_CLAIM-07/08: the owning customer confirms the parcel.
-     * `deliver_end` is stamped and the order becomes `received`.
+     * `deliver_timestamp` (the live `deliver_end` column) is stamped and the
+     * order becomes `received`.
      */
     private function completeDelivery(Request $json, Order $order, ?Delivery $delivery, string $byLabel, bool $isEmployee)
     {
@@ -526,7 +538,8 @@ class TrackingAPI extends Controller
         }
 
         DB::transaction(function () use ($order, $delivery) {
-            $delivery->update(['deliver_end' => $delivery->deliver_end ?? now()]);
+            // FLOW-ORD_CLAIM-08: deliver_timestamp -> live `deliver_end` column
+            $delivery->update(['deliver_timestamp' => $delivery->deliver_end ?? now()]);
             $order->update(['ord_status' => 'received']);
             $this->fulfilOrder($order);
         });
@@ -698,10 +711,13 @@ class TrackingAPI extends Controller
      * FLOW-ORD_CLAIM-06 / D8: a pickup slot whose window passed with no scan
      * turns `absent`, the order turns `unclaimed`, and the code is cleared so
      * the sweep never fires twice.
+     *
+     * Public because routes/console.php schedules it, so the flip happens on
+     * time even when no tracking call ever arrives (REQ-ORD_LIST-02 polling).
      */
-    private function sweepExpiredPickups(): void
+    public function sweepExpiredPickups(): void
     {
-        $appointments = Appointment::whereIn('appoint_type', ['pickup', 'claim'])
+        $appointments = Appointment::whereRaw('LOWER(appoint_type) IN (?, ?)', ['pickup', 'claim'])
             ->where('appoint_status', 'upcoming')
             ->whereNotNull('appoint_qr')
             ->where('appoint_end', '<', now())
@@ -730,6 +746,74 @@ class TrackingAPI extends Controller
                 );
             }
         }
+    }
+
+    /**
+     * The delivery row carrying an order's track (FLOW-ORD_CLAIM-07): the
+     * direct `delivery.ord_id` link first, then the legacy parcel link, so an
+     * order never reports "no delivery record" while its row exists.
+     */
+    private function deliveryForOrder(Order $order): ?Delivery
+    {
+        $delivery = Delivery::where('ord_id', $order->ord_id)->first();
+        if ($delivery) {
+            return $delivery;
+        }
+
+        try {
+            $parcel = Parcel::where('ord_id', $order->ord_id)->first();
+        } catch (\Throwable $e) {
+            return null; // no parcel table -> no legacy link to try
+        }
+
+        return $parcel ? Delivery::find($parcel->deliver_id) : null;
+    }
+
+    /**
+     * FLOW-ORD_CLAIM-07: which order does this delivery row belong to?
+     *
+     * Checkout stamps `delivery.ord_id` from now on, but rows written before
+     * that leave it NULL and `Order::find(null)` was a dead end (404/500).
+     * Resolution order: the direct key -> the legacy `parcel.ord_id` link ->
+     * the owning customer's delivery order that is still in flight.
+     */
+    private function resolveDeliveryOrder(Delivery $delivery, $user = null): ?Order
+    {
+        if (is_numeric($delivery->ord_id) && (int) $delivery->ord_id > 0) {
+            return Order::find((int) $delivery->ord_id);
+        }
+
+        try {
+            $parcel = Parcel::where('deliver_id', $delivery->deliver_id)->first();
+        } catch (\Throwable $e) {
+            $parcel = null; // no parcel table -> fall through to the customer
+        }
+
+        if ($parcel && (int) $parcel->ord_id > 0) {
+            $order = Order::find((int) $parcel->ord_id);
+            if ($order) {
+                return $order;
+            }
+        }
+
+        $custId = (int) ($delivery->cust_id ?? 0);
+        if ($custId <= 0 && $user instanceof Customer) {
+            $custId = (int) $user->cust_id;
+        }
+        if ($custId <= 0) {
+            return null;
+        }
+
+        $candidates = Order::where('cust_id', $custId)
+            ->where('ord_claiming', 'delivery')
+            ->orderByDesc('ord_created');
+
+        // an order still moving through delivery beats the customer's newest
+        $active = (clone $candidates)
+            ->whereIn('ord_status', ['delivering', 'to receive', 'to claim'])
+            ->first();
+
+        return $active ?? $candidates->first();
     }
 
     // ==========================================

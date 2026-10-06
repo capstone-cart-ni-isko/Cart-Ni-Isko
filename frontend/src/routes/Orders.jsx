@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import React from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
@@ -12,15 +12,28 @@ import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon } from '../components/ui/Icons.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
-import { fetchOrders, requestCancel, requestReturn } from '../services/orders.js'
+import { QrScanModal } from '../components/ui/QRScanner.jsx'
+import { fetchOrders, requestCancel, orderFilterBucket } from '../services/orders.js'
 
+/**
+ * FLOW-ORD_LIST-03: the six spec buckets, each backed by the server-side
+ * `filter` param of `GET /cart/display`. The last tab is a client-side view
+ * over the full list: a pre-order is derived from the products' own
+ * `prod_preorder` / `prodvar_preorder` flags (the orders table carries no
+ * tag), so it never needs its own request.
+ */
 const tabs = [
   { key: 'all', label: 'All' },
-  { key: 'pre-order', label: 'Pre-orders' },
   { key: 'processing', label: 'Processing' },
-  { key: 'receive', label: 'To Receive' },
-  { key: 'history', label: 'Completed' },
+  { key: 'to-claim', label: 'To claim-receive' },
+  { key: 'claimed', label: 'Claimed-Received' },
+  { key: 'unclaimed', label: 'Unclaimed' },
+  { key: 'cancelled', label: 'Cancelled' },
+  { key: 'pre-order', label: 'Pre-orders' },
 ]
+
+/** Tabs the backend filters for us (CartAPI::applyOrderFilter). */
+const SERVER_TABS = ['processing', 'to-claim', 'claimed', 'unclaimed', 'cancelled']
 
 /** Friendly line under the status pill (SRS status vocabulary). */
 export const STATUS_CONTEXT = {
@@ -28,16 +41,15 @@ export const STATUS_CONTEXT = {
   'TO CLAIM': 'Ready for pickup — show your claim QR at the counter.',
   'TO RECEIVE': 'Out for courier delivery to your address.',
   CLAIMED: 'Picked up and claimed. Thank you!',
+  RECEIVED: 'Delivered and received. Thank you!',
   UNCLAIMED: 'Not claimed within the pickup window. Contact the store.',
   CANCELLED: 'This order was cancelled.',
   RETURNED: 'This order was returned.',
   REFUNDED: 'Your payment has been refunded.',
   'CANCEL REQUESTED': 'Cancellation requested — waiting for staff approval.',
-  'RETURN REQUESTED': 'Return requested — waiting for staff approval.',
 }
 
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
-const HISTORY = ['CLAIMED', 'UNCLAIMED', 'CANCELLED', 'RETURNED', 'REFUNDED', 'COMPLETED']
 
 /**
  * The API now stores lowercase statuses (`processing`, `to claim`, …). Normalize
@@ -52,7 +64,7 @@ const STATUS_DISPLAY_MAP = {
   delivering: 'TO RECEIVE',
   'to receive': 'TO RECEIVE',
   claimed: 'CLAIMED',
-  received: 'COMPLETED',
+  received: 'RECEIVED',
   unclaimed: 'UNCLAIMED',
   cancelled: 'CANCELLED',
   returned: 'RETURNED',
@@ -74,33 +86,23 @@ function formatDate(value) {
 function dispatchOf(row) {
   // Explicit flag first: an order with neither a pickup nor a delivery row is
   // a walk-in (POS) order, regardless of what ord_claiming defaults to.
-  if (row.is_preorder === false) return 'Walk-in'
+  if (row.is_walk_in === true || row.is_preorder === false) return 'Walk-in'
 
-  const raw = String(
-    row.dispatch_type ?? row.ord_dispatch ?? row.deliver_type ?? row.ord_type ?? ''
-  ).toLowerCase()
+  const raw = String(row.dispatch_type ?? row.ord_claiming ?? '').toLowerCase()
   if (raw.includes('deliver')) return 'Courier Delivery'
   if (raw.includes('pickup') || raw.includes('pick')) return 'Store Pickup'
-  // Fallbacks until the display contract is confirmed.
-  if (row.deliver_qr || row.deliver_addr) return 'Courier Delivery'
-  const status = String(row.ord_status || '').toLowerCase()
-  if (status === 'to receive' || status === 'delivering' || status === 'TO RECEIVE') {
-    return 'Courier Delivery'
-  }
+  // Last resort: the live delivery columns of a dispatched order.
+  if (row.deliver_qr || row.deliver_address || row.deliver_addr) return 'Courier Delivery'
   return 'Store Pickup'
 }
 
-function isPreOrderRow(row) {
-  // Canonical signal: an order with a pickup or delivery row is a preorder.
-  if (typeof row.is_preorder === 'boolean') return row.is_preorder
-  const tag = String(row.ord_tag || '')
-  if (/PRE/i.test(tag)) return true
+/** A pre-order row: any bought variation flagged `prodvar_preorder`. */
+export function isPreOrderRow(row) {
   return (row.items || []).some(
     (i) =>
-      i.product?.preOrder ||
-      i.product?.pre_order ||
-      i.product?.prod_preorder ||
-      i.product?.ord_type === 'PRE-ORDER'
+      Boolean(i.prodvar?.prodvar_preorder) ||
+      Boolean(i.product?.prod_preorder) ||
+      Boolean(i.product?.preOrder)
   )
 }
 
@@ -109,58 +111,65 @@ export function mapServerOrder(row) {
   const items = row.items || []
   const first = items[0] || null
   const product = first?.product || {}
-  const qty = items.reduce((sum, i) => sum + Number(i.item_qty || 0), 0)
-  const subtotal = items.reduce(
-    (sum, i) => sum + Number(i.item_amount ?? 0) * Number(i.item_qty || 0),
-    0
-  )
-  const status = toDisplayStatus(row.ord_status ?? row.status ?? 'TO PROCESS')
+  const prodvar = first?.prodvar || null
+
+  // Line detail is always items -> bag -> prodvar -> product: quantities and
+  // amounts live on the bag row and ship as qty / amount / line_total.
+  const qty = items.reduce((sum, i) => sum + Number(i.qty ?? i.item_qty ?? 0), 0)
+  const lineTotal = items.reduce((sum, i) => {
+    if (i.line_total != null) return sum + Number(i.line_total)
+    return sum + Number(i.amount ?? 0) * Number(i.qty ?? i.item_qty ?? 0)
+  }, 0)
+
+  const status = toDisplayStatus(row.ord_status ?? row.status ?? 'processing')
   const method = dispatchOf(row)
+  // ord_amount is authoritative (there is no ord_total); the bag lines are
+  // only the fallback when it is somehow missing.
+  const amount = Number(row.ord_amount ?? row.amount ?? lineTotal)
+  const image =
+    prodvar?.prodvar_pic ||
+    product.main_image ||
+    (Array.isArray(product.prod_images) ? product.prod_images[0] : product.prod_images) ||
+    null
 
   return {
     id: row.ord_id ?? row.id,
-    date: formatDate(row.ord_created ?? row.ord_date ?? row.created_at ?? row.ord_placed),
+    date: formatDate(row.ord_created ?? row.created ?? null),
     status,
     statusContext: STATUS_CONTEXT[status] || '',
-    type: isPreOrderRow(row) ? 'pre-order' : 'regular',
+    rawStatus: String(row.ord_status ?? row.status ?? '').trim(),
     qty: qty || items.length,
     name:
-      product.name ||
       product.prod_name ||
+      product.name ||
       (items.length > 1 ? `${items.length} products` : 'Merchandise'),
-    image:
-      first?.color?.image ||
-      product.image ||
-      product.images?.[0] ||
-      first?.prodvar_pic ||
-      (Array.isArray(product.prod_images) ? product.prod_images[0] : product.prod_images) ||
-      (Array.isArray(product.prod_img) ? product.prod_img[0] : product.prod_img) ||
-      null,
-    productId: product.prod_tag ?? product.id ?? product.prod_id ?? null,
-    price: Number(first?.item_amount ?? product.price ?? 0),
-    size: first?.size ?? product.size ?? null,
-    color: first?.color ?? product.color ?? null,
+    image,
+    productId: product.prod_tag ?? product.prod_id ?? null,
+    // Unit price of the first line ("… each"); the order total is `total`.
+    price: Number(first?.amount ?? 0),
+    size: prodvar?.prodvar_name ?? first?.size ?? null,
+    color:
+      prodvar?.prodvar_pic
+        ? {
+            name: prodvar.prodvar_name || 'Variation',
+            value: '#FF6A00',
+            image: prodvar.prodvar_pic,
+          }
+        : first?.color ?? null,
     preOrder: isPreOrderRow(row),
-    subtotal,
+    subtotal: lineTotal,
+    total: amount,
     deliverQr: row.deliver_qr || null,
+    pickupQr: row.appoint_qr || null,
     fulfillment: {
       method,
       location:
         method === 'Courier Delivery'
-          ? row.deliver_addr || row.ord_addr || 'Delivery address on file'
+          ? row.deliver_address || row.deliver_addr || 'Delivery address on file'
           : 'Tindahan ni Isko · BU Student Center',
     },
     raw: row,
   }
-}
-
-function tabMatch(order, key) {
-  if (key === 'all') return true
-  if (key === 'pre-order') return order.type === 'pre-order'
-  if (key === 'processing') return order.status === 'TO PROCESS'
-  if (key === 'receive') return RECEIVING.includes(order.status)
-  if (key === 'history') return HISTORY.includes(order.status)
-  return true
 }
 
 function Orders() {
@@ -171,44 +180,134 @@ function Orders() {
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
   const statusToTab = {
-    in_progress: 'processing',
     processing: 'processing',
-    for_pickup: 'receive',
-    for_delivery: 'receive',
-    completed: 'history',
-    history: 'history',
+    to_process: 'processing',
+    for_pickup: 'to-claim',
+    for_delivery: 'to-claim',
+    to_claim: 'to-claim',
+    claimed: 'claimed',
+    received: 'claimed',
+    completed: 'claimed',
+    unclaimed: 'unclaimed',
+    cancelled: 'cancelled',
   }
-  const initialTab = statusToTab[searchParams.get('status')] || searchParams.get('tab') || 'all'
-  const [activeTab, setActiveTab] = useState(tabs.some((tab) => tab.key === initialTab) ? initialTab : 'all')
+  const initialTab =
+    statusToTab[String(searchParams.get('status') || '').toLowerCase()] ||
+    searchParams.get('tab') ||
+    'all'
+  const [activeTab, setActiveTab] = useState(
+    tabs.some((tab) => tab.key === initialTab) ? initialTab : 'all'
+  )
+  // `orders` is always the FULL list (used for the tab counts); `bucket` is
+  // the server-filtered answer for one FLOW-ORD_LIST-03 bucket, remembered
+  // with its key so a stale answer can never paint under another tab.
   const [orders, setOrders] = useState([])
+  const [bucket, setBucket] = useState({ key: null, rows: null })
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
+  const [claimTarget, setClaimTarget] = useState(null)
+  const firstLoad = useRef(true)
 
-  const load = useCallback(async () => {
-    if (!custId) {
-      setOrders([])
-      setLoading(false)
-      return
-    }
-    try {
-      const rows = await fetchOrders(custId)
-      setOrders((rows || []).map(mapServerOrder))
-    } catch (err) {
-      console.warn('Failed to load orders:', err?.message)
-      showToast('Unable to load your orders. Please try again.', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [custId, showToast])
+  const load = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!custId) {
+        setOrders([])
+        setBucket({ key: null, rows: null })
+        setLoading(false)
+        return
+      }
 
+      const showSpinner = !silent && firstLoad.current
+      if (showSpinner) setLoading(true)
+
+      try {
+        const needsBucket = SERVER_TABS.includes(activeTab)
+        const [baseRows, bucketRows] = await Promise.all([
+          fetchOrders(custId),
+          needsBucket
+            ? fetchOrders(custId, activeTab).catch((err) => {
+                console.warn('Order bucket load failed:', err?.message)
+                return null
+              })
+            : Promise.resolve(null),
+        ])
+        setOrders((baseRows || []).map(mapServerOrder))
+        setBucket({
+          key: needsBucket ? activeTab : null,
+          rows: bucketRows ? bucketRows.map(mapServerOrder) : null,
+        })
+      } catch (err) {
+        console.warn('Failed to load orders:', err?.message)
+        // Polls fail silently and keep the list already on screen.
+        if (!silent) showToast('Unable to load your orders. Please try again.', 'error')
+      } finally {
+        firstLoad.current = false
+        if (showSpinner) setLoading(false)
+      }
+    },
+    [custId, activeTab, showToast]
+  )
+
+  /* REQ-ORD_LIST-02: refresh the list every ~10s while the tab is visible.
+     The interval stops while the document is hidden and is re-armed (with an
+     immediate refresh) when the customer comes back. */
   useEffect(() => {
     load()
-  }, [load])
 
-  const filteredOrders = useMemo(
-    () => orders.filter((o) => tabMatch(o, activeTab)),
-    [orders, activeTab]
-  )
+    if (!custId) return undefined
+
+    let timer = null
+    const tick = () => {
+      if (!document.hidden) load({ silent: true })
+    }
+    const start = () => {
+      if (timer === null) timer = setInterval(tick, 10000)
+    }
+    const stop = () => {
+      if (timer !== null) {
+        clearInterval(timer)
+        timer = null
+      }
+    }
+    const onVisibility = () => {
+      if (document.hidden) stop()
+      else {
+        start()
+        load({ silent: true })
+      }
+    }
+
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [custId, load])
+
+  const counts = useMemo(() => {
+    const totals = { all: orders.length, 'pre-order': 0 }
+    SERVER_TABS.forEach((key) => {
+      totals[key] = 0
+    })
+    orders.forEach((order) => {
+      if (order.preOrder) totals['pre-order'] += 1
+      const bucketKey = orderFilterBucket(order.rawStatus)
+      if (bucketKey) totals[bucketKey] += 1
+    })
+    return totals
+  }, [orders])
+
+  const filteredOrders = useMemo(() => {
+    if (activeTab === 'pre-order') return orders.filter((o) => o.preOrder)
+    if (SERVER_TABS.includes(activeTab)) {
+      if (bucket.key === activeTab && bucket.rows) return bucket.rows
+      // While the scoped request is in flight (or if it failed) the bucket is
+      // mirrored locally with the same status lists the server applies.
+      return orders.filter((o) => orderFilterBucket(o.rawStatus) === activeTab)
+    }
+    return orders
+  }, [orders, bucket, activeTab])
 
   const selectTab = (key) => {
     setActiveTab(key)
@@ -222,7 +321,7 @@ function Orders() {
     showToast(`Copied Order ID: #${orderId}`)
   }
 
-  /** Customer-requested cancel: pending staff approval (SRS cancellation). */
+  /** FLOW-ORD_LIST-04/06: cancel is a request the staff still has to approve. */
   const handleCancel = async (order) => {
     if (busyId) return
     setBusyId(order.id)
@@ -237,23 +336,7 @@ function Orders() {
     }
   }
 
-  /** Customer-requested return/refund after fulfilment. */
-  const handleReturn = async (order) => {
-    if (busyId) return
-    setBusyId(order.id)
-    try {
-      await requestReturn(order.id)
-      showToast('Return requested. The store will review it shortly.', 'success')
-      await load()
-    } catch (err) {
-      showToast(err?.message || 'Unable to request a return.', 'error')
-    } finally {
-      setBusyId(null)
-    }
-  }
-
   const canCancel = useCallback((o) => o.status === 'TO PROCESS', [])
-  const canReturn = useCallback((o) => ['CLAIMED', 'UNCLAIMED'].includes(o.status), [])
 
   return (
     <AccountLayout>
@@ -265,31 +348,27 @@ function Orders() {
       {/* Tabs Filter Bar (Sticky) */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-2xs">
         <div className="max-w-3xl mx-auto flex gap-2 overflow-x-auto px-4 py-3 scrollbar-none select-none">
-          {tabs.map((tab) => {
-            const count = orders.filter((o) => tabMatch(o, tab.key)).length
-
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => selectTab(tab.key)}
-                className={`px-4 py-2 rounded-full text-xs font-bold shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === tab.key
-                    ? 'bg-brand-orange border-brand-orange text-white shadow-xs'
-                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900'
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => selectTab(tab.key)}
+              className={`px-4 py-2 rounded-full text-xs font-bold shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 ${
+                activeTab === tab.key
+                  ? 'bg-brand-orange border-brand-orange text-white shadow-xs'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                  activeTab === tab.key ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
                 }`}
               >
-                <span>{tab.label}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                    activeTab === tab.key ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            )
-          })}
+                {counts[tab.key] ?? 0}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -322,8 +401,13 @@ function Orders() {
             const productImage = order.image || null
             const method = order.fulfillment?.method || 'Store Pickup'
             const isDelivery = method === 'Courier Delivery'
-            const isWalkIn = method === 'Walk-in'
-            const orderTotal = order.subtotal
+            const orderTotal = order.total
+            const claimable =
+              !isDelivery && order.status === 'TO CLAIM' && Boolean(order.pickupQr)
+            // FLOW-ORD_CLAIM-07: a delivery order in "to receive" can be
+            // confirmed from this list by scanning the parcel's deliver_qr.
+            const deliverable =
+              isDelivery && order.status === 'TO RECEIVE' && Boolean(order.deliverQr)
 
             return (
               <article
@@ -451,7 +535,7 @@ function Orders() {
                             <strong className="text-gray-900">{order.color.name}</strong>
                           </span>
                         )}
-                        <span className="text-gray-300">·</span>
+                        {order.size && <span className="text-gray-300">·</span>}
                         <span>
                           Qty: <strong className="text-gray-900">{order.qty}</strong>
                         </span>
@@ -472,8 +556,40 @@ function Orders() {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* Secondary Contextual Actions */}
-                    {RECEIVING.includes(order.status) && !isDelivery && (
+                    {/* FLOW-ORD_CLAIM-01: the customer scans the pickup QR here. */}
+                    {claimable && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setClaimTarget({
+                            code: order.pickupQr,
+                            title: `Scan to claim · Order #${order.id}`,
+                          })
+                        }
+                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                      >
+                        Scan to claim
+                      </button>
+                    )}
+
+                    {/* FLOW-ORD_CLAIM-07: scan the parcel's deliver_qr to confirm receipt. */}
+                    {deliverable && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setClaimTarget({
+                            code: order.deliverQr,
+                            title: `Scan to receive · Order #${order.id}`,
+                            delivery: true,
+                          })
+                        }
+                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                      >
+                        Scan to receive
+                      </button>
+                    )}
+
+                    {RECEIVING.includes(order.status) && !isDelivery && !claimable && (
                       <button
                         type="button"
                         onClick={() => navigate(`/orders/${order.id}`)}
@@ -494,25 +610,15 @@ function Orders() {
                       </button>
                     )}
 
-                    {canReturn(order) && (
-                      <button
-                        type="button"
-                        disabled={busyId === order.id}
-                        onClick={() => handleReturn(order)}
-                        className="px-3.5 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-bold hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-60"
-                      >
-                        {busyId === order.id ? 'Sending…' : 'Request Return'}
-                      </button>
-                    )}
-
-                    {['CLAIMED', 'COMPLETED'].includes(order.status) && order.productId != null && (
-                      <Link
-                        to={`/product/${order.productId}`}
-                        className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
-                      >
-                        Buy Again
-                      </Link>
-                    )}
+                    {['CLAIMED', 'RECEIVED', 'COMPLETED'].includes(order.status) &&
+                      order.productId != null && (
+                        <Link
+                          to={`/product/${order.productId}`}
+                          className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+                        >
+                          Buy Again
+                        </Link>
+                      )}
 
                     {/* Primary Action */}
                     <Link
@@ -529,6 +635,21 @@ function Orders() {
           })
         )}
       </div>
+
+      {/* FLOW-ORD_CLAIM-01/07: camera scan of appoint_qr (pickup) or deliver_qr (delivery). */}
+      <QrScanModal
+        open={Boolean(claimTarget)}
+        title={claimTarget?.title || 'Scan to claim'}
+        subtitle={
+          claimTarget?.delivery
+            ? 'Point the camera at the QR code printed on the delivery parcel.'
+            : 'Point the camera at the claim QR code for this pickup order.'
+        }
+        fallbackCode={claimTarget?.code || null}
+        fallbackLabel="Use this order's code"
+        onClose={() => setClaimTarget(null)}
+        onSuccess={() => load({ silent: true })}
+      />
     </AccountLayout>
   )
 }

@@ -14,6 +14,9 @@ class Bag extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `bag_id` has no sequence on the live table, so writers pass the
+        // number from App\Support\IdAllocator::next().
+        'bag_id',
         'cust_id',
         'prodvar_id',
         'bag_qty',

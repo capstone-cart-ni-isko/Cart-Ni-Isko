@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useApiWarmup } from '../hooks/useApi.js'
@@ -19,6 +19,20 @@ function AuthenticatingSkeleton() {
   )
 }
 
+/** FLOW-CUST_LOGIN-04: the typed identifier is remembered for this session. */
+const DRAFT_KEY = 'isko_login_draft'
+
+function readDraft() {
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null')
+    return { identifier: draft?.identifier || '', password: '' }
+  } catch {
+    return { identifier: '', password: '' }
+  }
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 function SignIn() {
   const navigate = useNavigate()
   const { login } = useAuth()
@@ -27,53 +41,193 @@ function SignIn() {
   // catalog read are done before the customer can possibly submit.
   const warmApi = useApiWarmup()
 
-  const [form, setForm] = useState({
-    phone: '',
-    password: '',
-  })
-
-  const [errors, setErrors] = useState({})
+  // FLOW-CUST_LOGIN-04 / REQ-CUST_LOGIN-02: what was typed survives a
+  // reload, a tab switch and a rejected attempt - only the password is kept
+  // in React state, never written to storage.
+  const [form, setForm] = useState(readDraft)
+  const [touched, setTouched] = useState({})
+  const [serverError, setServerError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ identifier: form.identifier }))
+    } catch {
+      // A blocked storage only costs the draft, never the screen.
+    }
+  }, [form.identifier])
+
   function handleChange(e) {
     const { name, value } = e.target
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }))
-    }
+    setForm((prev) => ({ ...prev, [name]: value }))
+    // REQ-CUST_LOGIN-03: an error is dropped the moment the field is fixed.
+    setServerError('')
   }
 
-  const phoneValid = form.phone.trim().length >= 10
-  const passwordValid = form.password.length >= 8
-  const formValid = phoneValid && passwordValid
+  /**
+   * FLOW-CUST_LOGIN-05 / REQ-CUST_LOGIN-05: specific feedback per field, and
+   * only once the customer has actually been in that field.
+   */
+  function fieldError(name) {
+    if (!touched[name]) return ''
+    const value = String(form[name] || '').trim()
+
+    if (name === 'identifier') {
+      if (!value) return 'Enter your email address.'
+      if (value.includes('@')) {
+        if (!EMAIL_RE.test(value)) return 'Enter a valid email address.'
+      } else if (value.replace(/\D/g, '').length < 10) {
+        return 'Enter a valid phone number.'
+      }
+      return ''
+    }
+
+    if (name === 'password') {
+      if (!value) return 'Enter your password.'
+      if (value.length < 8) return 'Password must be at least 8 characters.'
+    }
+
+    return ''
+  }
+
+  const identifierError = fieldError('identifier')
+  const passwordError = fieldError('password')
+  const identifierOk =
+    form.identifier.trim().length > 0 && !identifierError && touched.identifier
+  const formValid =
+    Boolean(!identifierError && !passwordError && form.identifier.trim() && form.password)
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!formValid) return
+
+    // Never submit blind: mark every field so each problem is on screen.
+    setTouched({ identifier: true, password: true })
+    if (identifierError || passwordError || !form.identifier.trim() || !form.password) return
 
     setIsSubmitting(true)
-    const { error } = await login(form.phone, form.password)
+    const result = await login(form.identifier.trim(), form.password)
     setIsSubmitting(false)
 
-    if (error) {
-      setErrors({ form: error })
-      showToast(error, 'error')
+    // FLOW-CUST_LOGIN-02: the password was right but the OTP gate opened.
+    // The form keeps everything typed (REQ-CUST_LOGIN-02) and the challenge
+    // is carried to the verification screen.
+    if (result.requiresOtp) {
+      showToast('A verification code was sent to your notification inbox.')
+      navigate('/verify-otp', {
+        state: {
+          challenge: result.challenge,
+          phone: result.phone,
+          purpose: result.purpose,
+          fromSignIn: true,
+        },
+      })
       return
     }
 
-    showToast('Signed in successfully!')
-
-    const isDeviceVerified = localStorage.getItem('isko_device_verified') === 'true'
-    if (!isDeviceVerified) {
-      navigate('/verify-otp', { state: { phone: form.phone, fromSignIn: true } })
-    } else {
-      navigate('/home')
+    if (result.error || !result.user) {
+      // REQ-CUST_LOGIN-02: the form is neither refreshed nor emptied.
+      setServerError(result.error || 'Unable to connect to server')
+      showToast(result.error || 'Unable to connect to server', 'error')
+      return
     }
+
+    try {
+      sessionStorage.removeItem(DRAFT_KEY)
+    } catch {
+      /* nothing to clean up */
+    }
+    showToast('Signed in successfully!')
+    // FLOW-CUST_LOGIN-03: straight to the storefront, no further login.
+    navigate('/home')
   }
+
+  const emailField = (idPrefix, inputClassName, errorClassName) => (
+    <div>
+      <label
+        htmlFor={`${idPrefix}-identifier`}
+        className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 md:text-sm md:text-gray-700 md:normal-case md:tracking-normal"
+      >
+        Email Address
+      </label>
+      <div className="relative">
+        <input
+          id={`${idPrefix}-identifier`}
+          type="email"
+          name="identifier"
+          autoComplete="username"
+          placeholder="you@bicol-u.edu.ph"
+          value={form.identifier}
+          onChange={handleChange}
+          onFocus={() => {
+            warmApi()
+            setTouched((prev) => (prev.identifier ? prev : { ...prev, identifier: true }))
+          }}
+          onBlur={() => setTouched((prev) => ({ ...prev, identifier: true }))}
+          className={`${inputClassName} ${
+            identifierError
+              ? 'border-red-400'
+              : identifierOk
+                ? 'border-green-500'
+                : 'border-gray-200'
+          }`}
+        />
+        {identifierOk && (
+          <span className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#16A34A] text-white text-xs font-black animate-scale-in">
+            ✓
+          </span>
+        )}
+      </div>
+      {identifierError && <p className={errorClassName}>{identifierError}</p>}
+      {!identifierError && (
+        <p className="text-xs text-gray-400 mt-1 font-medium md:block hidden">
+          Your registered phone number works here too.
+        </p>
+      )}
+    </div>
+  )
+
+  const passwordField = (idPrefix, inputClassName) => (
+    <div>
+      <label
+        htmlFor={`${idPrefix}-password`}
+        className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 md:text-sm md:text-gray-700 md:normal-case md:tracking-normal"
+      >
+        Password
+      </label>
+      <div className="relative">
+        <input
+          id={`${idPrefix}-password`}
+          type={showPassword ? 'text' : 'password'}
+          name="password"
+          autoComplete="current-password"
+          placeholder="Enter password"
+          value={form.password}
+          onChange={handleChange}
+          onFocus={() => {
+            warmApi()
+            setTouched((prev) => (prev.password ? prev : { ...prev, password: true }))
+          }}
+          onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
+          className={`${inputClassName} pr-12 ${
+            passwordError || (form.password.length > 0 && form.password.length < 8)
+              ? 'border-red-400 focus:ring-red-250 focus:border-red-500'
+              : 'focus:ring-brand-orange/40 focus:border-brand-orange'
+          }`}
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword((prev) => !prev)}
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange transition-colors"
+        >
+          {showPassword ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      {passwordError && (
+        <p className="text-red-500 text-xs mt-1 font-semibold">{passwordError}</p>
+      )}
+    </div>
+  )
 
   return (
     <AppShell showNav={false} showHeader={false} showBottomNav={false}>
@@ -85,59 +239,17 @@ function SignIn() {
             <BackButton to="/home" label="Back to Homepage" />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                Phone Number
-              </label>
-              <div className="relative">
-                <input
-                  type="tel"
-                  name="phone"
-                  placeholder="Enter phone number"
-                  value={form.phone}
-                  onChange={handleChange}
-                  onFocus={warmApi}
-                  className={`w-full h-12 px-4 pr-12 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-all ${
-                    errors.phone ? 'border-red-400' : 'border-gray-200'
-                  }`}
-                />
-                {phoneValid && (
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#16A34A] text-white text-xs font-black animate-scale-in">
-                    ✓
-                  </span>
-                )}
-              </div>
-              {errors.phone && <p className="text-red-500 text-xs mt-1 font-semibold">{errors.phone}</p>}
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+            {emailField(
+              'mobile',
+              'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all',
+              'text-red-500 text-xs mt-1 font-semibold'
+            )}
 
-            <div>
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  placeholder="Enter password"
-                  value={form.password}
-                  onChange={handleChange}
-                  onFocus={warmApi}
-                  className={`w-full h-12 px-4 pr-12 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all ${
-                    form.password.length > 0 && !passwordValid
-                      ? 'border-red-400 focus:ring-red-250 focus:border-red-500'
-                      : 'border-gray-200 focus:ring-brand-orange/40 focus:border-brand-orange'
-                  }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange transition-colors"
-                >
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </div>
+            {passwordField(
+              'mobile',
+              'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all'
+            )}
 
             <div className="flex items-center justify-between pt-1">
               <span className="text-sm text-gray-400 font-medium"></span>
@@ -149,7 +261,11 @@ function SignIn() {
               </Link>
             </div>
 
-            {errors.form && <p className="text-red-500 text-sm font-semibold">{errors.form}</p>}
+            {serverError && (
+              <p className="text-red-500 text-sm font-semibold" role="alert">
+                {serverError}
+              </p>
+            )}
 
             <button
               type="submit"
@@ -186,50 +302,23 @@ function SignIn() {
             <BackButton to="/home" label="Back to Homepage" className="shrink-0 mt-1" />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Phone Number
-              </label>
-              <input
-                type="tel"
-                name="phone"
-                placeholder="0912345678"
-                value={form.phone}
-                onChange={handleChange}
-                onFocus={warmApi}
-                className="w-full h-12 px-4 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
-              />
-              <p className="text-xs text-gray-400 mt-2 font-medium">
-                We'll send a verification code to this number.
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+            {emailField(
+              'desktop',
+              'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white transition-all',
+              'text-red-500 text-xs mt-1.5 font-semibold'
+            )}
+
+            {passwordField(
+              'desktop',
+              'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white transition-all'
+            )}
+
+            {serverError && (
+              <p className="text-red-500 text-sm font-semibold" role="alert">
+                {serverError}
               </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  placeholder="Enter your password"
-                  value={form.password}
-                  onChange={handleChange}
-                  onFocus={warmApi}
-                  className="w-full h-12 px-4 pr-12 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange bg-white transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange transition-colors"
-                >
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </div>
-
-            {errors.form && <p className="text-red-500 text-sm font-semibold">{errors.form}</p>}
+            )}
 
             <button
               type="submit"
@@ -257,4 +346,3 @@ function SignIn() {
 }
 
 export default SignIn
-

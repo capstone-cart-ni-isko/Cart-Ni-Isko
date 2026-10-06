@@ -68,23 +68,29 @@ function isSelectable(stamp) {
 /**
  * The one and only appointment booking form (directive 26).
  *
- * Mounted from the standalone /book page (DOMAIN 21/22) and from
- * Checkout when the customer picks "In-Store Pickup" (DOMAIN 26), so
- * both flows book through the same api_appoint endpoints and can never
- * disagree on the slot rules.
+ * Mounted from the /book page (DOMAIN 21/22) - which the checkout pickup
+ * branch also routes through (FLOW-CHECKOUT-04) - so both flows pick their
+ * slot through the same api_appoint endpoints and can never disagree on the
+ * slot rules.
  *
  * Flow: choose type (visit|pickup) -> pick a date -> pick a 10-minute
  * slot (only where an employee is prescheduled, >= 30 minutes out) ->
  * phone OTP -> save (status upcoming + unique QR issued server-side).
+ * With `collectOnly` the last step is skipped: the slot is handed back to
+ * the caller and saved by the backend together with the order instead.
  *
  * Props:
- *   type      - 'VISIT' | 'PICKUP' preset, or null to let the customer pick
- *   custId    - owning customer (required)
- *   reschedule- existing appointment to edit instead of create
- *   title     - heading override
- *   required  - checkout mode: the form is the slot gate
- *   onSuccess - called with the saved appointment (appoint_id, appoint_qr)
- *   onCancel  - called when the form is dismissed
+ *   type        - 'VISIT' | 'PICKUP' preset, or null to let the customer pick
+ *   custId      - owning customer (required)
+ *   reschedule  - existing appointment to edit instead of create
+ *   title       - heading override
+ *   required    - checkout mode: the form is the slot gate
+ *   collectOnly - checkout pickup mode (FLOW-CHECKOUT-06): the form only
+ *                 COLLECTS date + slot and hands them to onSuccess; nothing
+ *                 is POSTed to /appoint/create because the checkout
+ *                 transaction creates the appointment with the order
+ *   onSuccess   - called with the saved/collected slot (appoint_start)
+ *   onCancel    - called when the form is dismissed
  */
 export default function AppointmentForm({
   type = null,
@@ -92,6 +98,7 @@ export default function AppointmentForm({
   reschedule = null,
   title,
   required = false,
+  collectOnly = false,
   onSuccess,
   onCancel,
 }) {
@@ -179,9 +186,13 @@ export default function AppointmentForm({
     }
 
     try {
-      // Same api_appoint endpoints in both flows: POST to create,
-      // PUT to move an existing booking to a new slot.
-      const res = reschedule
+      // Two modes: the standalone booking posts to the api_appoint endpoints
+      // (POST create / PUT reschedule); the checkout pickup flow only
+      // collects the slot - FLOW-CHECKOUT-06 - because CheckoutAPI creates
+      // the appointment inside the order transaction.
+      const res = collectOnly
+        ? { data: { ...payload } }
+        : reschedule
         ? await updateAppointment(reschedule.id, payload)
         : await createAppointment({ cust_id: custId, ...payload })
       const saved = {
@@ -190,11 +201,15 @@ export default function AppointmentForm({
         appoint_id: res?.data?.appoint_id ?? reschedule?.id,
       }
       showToast(
-        reschedule ? 'Appointment updated successfully.' : 'Appointment created successfully.',
+        collectOnly
+          ? 'Pickup slot selected.'
+          : reschedule
+          ? 'Appointment updated successfully.'
+          : 'Appointment created successfully.',
         'success'
       )
       setSlot('')
-      await loadSlots()
+      if (!collectOnly) await loadSlots()
       onSuccess?.(saved)
     } catch (err) {
       showToast(

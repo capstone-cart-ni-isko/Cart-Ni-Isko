@@ -13,22 +13,59 @@
         protected $primaryKey = 'cust_id';
         public $timestamps = false;
 
-        // Define the fillable attributes for mass assignment
+        // Define the fillable attributes for mass assignment.
+        //
+        // Two generations live side by side on purpose: the system-new.docx
+        // SCHEMA (the live Supabase columns - cust_givname, cust_surname,
+        // cust_bday, cust_categ, cust_dept, ...) is what the application
+        // writes, while the legacy names stay listed because the pre-migration
+        // test fixtures still create rows with them.
         protected $fillable = [
-            'cust_created',
-            'cust_disabled',
-            'cust_deleted',
+            // --- system-new.docx SCHEMA (live database) ---
+            'cust_id',
+            'cust_givname',
+            'cust_surname',
+            'cust_email',
+            'cust_phone',
             'cust_password',
-            'cust_nickname',
+            'cust_callcode',
             'cust_pronoun',
+            'cust_type',
+            'cust_categ',
+            'cust_college',
+            'cust_dept',
+            'cust_address',
+            'cust_bday',
+            'cust_avatar',
+            'cust_backup_phone',
+            'cust_backup_email',
+            'cust_backup_ques',
+            'cust_backup_answer',
+            'cust_backup_code',
+            'cust_created',
+            'cust_deleted',
+            'cust_suspended',
+            'cust_darkmode',
+            'cust_login_active',
+            'cust_login_failed',
+            'cust_last_logout',
+            'cust_notif_appointremind',
+            'cust_notif_email',
+            'cust_notif_prod',
+            'cust_appoint',
+            'cust_orders',
+            'cust_bag',
+            'cust_wishlist',
+            'cust_unread',
+
+            // --- legacy aliases (pre-migration fixtures / old payloads) ---
+            'cust_disabled',
+            'cust_nickname',
             'cust_birthday',
             'cust_brgy',
             'cust_city',
             'cust_province',
             'cust_country',
-            'cust_callcode',
-            'cust_phone',
-            'cust_email',
             'cust_username',
             'cust_campus',
             'cust_course',
@@ -37,11 +74,7 @@
             'cust_backupcallcode',
             'cust_backupphone',
             'cust_backupemail',
-            'cust_type',
-            'cust_college',
-            'cust_wishlist',
             'cust_cart',
-            'cust_orders',
             'cust_appoints',
             'cust_photo',
         ];

@@ -5,6 +5,7 @@
     use App\Models\Appointment;
     use App\Models\Customer;
     use App\Models\DutyShift;
+    use App\Models\Employee;
     use App\Support\DayRoster;
     use Illuminate\Http\Request;
     use Illuminate\Support\Carbon;
@@ -54,8 +55,9 @@
 
                 // REQ-AB-04: the owning customer receives a priority
                 // notification detailing why the slot became unavailable
+                $start = $appointment->appoint_start;
                 $message = '[PRIORITY] Your appointment #' . $appointment->appoint_id .
-                    ' scheduled on ' . $appointment->appoint_date . ' was closed.';
+                    ' scheduled on ' . $start . ' was closed.';
                 if ($reason !== '') {
                     $message .= ' Reason: ' . $reason;
                 }
@@ -63,20 +65,27 @@
 
                 // REQ-AB-04 / REQ-SC-04: cancelling one booking also cancels the
                 // block it sits in, so every other open booking that overlaps the
-                // same block is told to reschedule.
+                // same block is told to reschedule. The block runs from the slot
+                // start to its live appoint_end (30 min CLAIM / 10 min VISIT).
                 $blockMinutes = $appointment->appoint_type === 'CLAIM' ? 30 : 10;
-                $blockEnd = Carbon::parse($appointment->appoint_date)->addMinutes($blockMinutes);
-                $others = Appointment::whereNull('appoint_closed')
-                    ->where('appoint_type', $appointment->appoint_type)
-                    ->where('appoint_id', '!=', $appointment->appoint_id)
-                    ->where('appoint_date', '>=', $appointment->appoint_date)
-                    ->where('appoint_date', '<', $blockEnd)
-                    ->get();
+                $blockEnd = $appointment->appoint_end;
+                if ($blockEnd === null && $start) {
+                    $blockEnd = Carbon::parse($start)->addMinutes($blockMinutes);
+                }
+
+                $others = ($start && $blockEnd)
+                    ? Appointment::whereNull('appoint_closed')
+                        ->where('appoint_type', $appointment->appoint_type)
+                        ->where('appoint_id', '!=', $appointment->appoint_id)
+                        ->where('appoint_start', '>=', $start)
+                        ->where('appoint_start', '<', $blockEnd)
+                        ->get()
+                    : collect();
 
                 foreach ($others as $other) {
                     $this->notifyCustomer((int) $other->cust_id,
                         '[PRIORITY] Your appointment #' . $other->appoint_id .
-                        ' on ' . $other->appoint_date .
+                        ' on ' . $other->appoint_start .
                         ' is unavailable. Please reschedule at your earliest convenience. ' .
                         ($reason !== '' ? 'Reason: ' . $reason : 'Reason: slot cancelled.')
                     );
@@ -135,20 +144,22 @@
                 // their own bookings, everyone else's stays anonymous.
                 $custId = $this->customerId($json);
                 $bookedRows = Appointment::whereNull('appoint_closed')
-                    ->where('appoint_date', '>=', $open)
-                    ->where('appoint_date', '<', $close)
-                    ->get(['appoint_type', 'appoint_date', 'cust_id']);
+                    ->where('appoint_start', '>=', $open)
+                    ->where('appoint_start', '<', $close)
+                    ->get(['appoint_type', 'appoint_start', 'cust_id']);
                 // REQ-AB-03 / REQ-SS-03: the headcount is per block, not per
                 // day, so the day's roster is loaded once here and every slot
-                // is scored against the blocks that actually span it.
-                $roster = DayRoster::for($base);
+                // is scored against the blocks that actually span it. The
+                // roster source is optional: without it the grid still opens
+                // and only the staffing rule is skipped (see rosterHeadcount).
+                $roster = $this->rosterFor($base);
                 $capacities = [
                     'CLAIM' => (int) $this->settingValue('max_claiming_slots', 10),
                     'VISIT' => (int) $this->settingValue('max_visit_slots', 1),
                 ];
                 $minStaff = ['CLAIM' => 1, 'VISIT' => 2]; // REQ-AB-03 / REQ-SC-03
                 // REQ-SS-03: counted once for the whole grid, never per slot.
-                $pendingReplacements = DutyShift::pendingReplacements();
+                $pendingReplacements = $this->pendingReplacements();
 
                 $slots = [];
                 foreach (['CLAIM' => 30, 'VISIT' => 10] as $type => $duration) {
@@ -157,9 +168,9 @@
                         $end = $start->copy()->addMinutes($duration);
                         $rows = $bookedRows->filter(function ($a) use ($type, $start, $end) {
                             if ($a->appoint_type !== $type) return false;
-                            $at = $a->appoint_date instanceof \DateTimeInterface
-                                ? Carbon::instance($a->appoint_date)
-                                : Carbon::parse($a->appoint_date);
+                            $at = $a->appoint_start instanceof \DateTimeInterface
+                                ? Carbon::instance($a->appoint_start)
+                                : Carbon::parse($a->appoint_start);
                             return $at->gte($start) && $at->lt($end);
                         });
                         $booked = $rows->count();
@@ -167,12 +178,14 @@
 
                         // REQ-AB-03 / REQ-SS-03: only the employees whose duty
                         // block spans this slot count towards its headcount.
-                        $inStore = $roster->headcount($start, $end);
+                        // null = no roster source on this connection, in which
+                        // case the staffing rule does not apply.
+                        $inStore = $roster ? $roster->headcount($start, $end) : null;
 
                         $reason = null;
                         if ($booked >= $capacities[$type]) {
                             $reason = 'Slot fully booked';
-                        } elseif ($inStore < $minStaff[$type]) {
+                        } elseif ($inStore !== null && $inStore < $minStaff[$type]) {
                             $reason = 'Not enough in-store employees available (minimum ' . $minStaff[$type] . ' required)';
                         }
 
@@ -217,18 +230,31 @@
             JSON REQUEST
 
             cust_id - integer (req)
-            appoint_date - string/datetime (req)
-            appoint_type - string (req: CLAIM | VISIT)
-            appoint_desc - string (opt)
+            appoint_start - string/datetime (req: slot start - the legacy
+                `appoint_date` field is accepted as an alias of it)
+            appoint_end - string/datetime (opt, ignored: the slot end is
+                derived server-side from the type's duration)
+            appoint_type - string (req: CLAIM | VISIT, any case)
+            emp_id - integer (opt, staff calendars may name the employee)
+            appoint_desc - string (opt: accepted and ignored - the live
+                appointments table has no description column)
         */
         public function createAppointment(Request $json)
         {
+            // The shared validator still asks for the legacy slot field name;
+            // mirroring the canonical one into it keeps every client booking
+            // until InputValidatorAPI is relaxed (backward-compat guard).
+            if (! $json->filled('appoint_date') && $json->filled('appoint_start')) {
+                $json->merge(['appoint_date' => $json->input('appoint_start')]);
+            }
+
             $validator = (new InputValidatorAPI())->createAppointment($json);
             if ($validator) return $validator;
 
             try {
-                // SRS stores the kind verbatim: CLAIM or VISIT, uppercase only.
-                $type = (string) $json->input('appoint_type', 'VISIT');
+                // SRS stores the kind verbatim: CLAIM or VISIT, uppercase.
+                // The value is normalised so lowercase clients can book too.
+                $type = strtoupper((string) $json->input('appoint_type', 'VISIT'));
                 if (!in_array($type, ['CLAIM', 'VISIT'], true)) {
                     return response()->json([
                         'success' => false,
@@ -236,10 +262,18 @@
                     ], 422);
                 }
 
+                $rawStart = $this->requestedStart($json);
+                if (! is_string($rawStart) || trim($rawStart) === '') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A valid appointment date is required'
+                    ], 400);
+                }
+
                 // Align the requested time to the slot grid (REQ-SC-02):
                 // CLAIM snaps to :00/:30, VISIT to every 10 minutes
                 try {
-                    $slotStart = Carbon::parse($json->input('appoint_date'));
+                    $slotStart = Carbon::parse($rawStart);
                 } catch (\Throwable $e) {
                     return response()->json([
                         'success' => false,
@@ -305,14 +339,23 @@
                         throw new \RuntimeException($state['reason']);
                     }
 
+                    // FLOW-BOOK_APP-06: status `upcoming` + a unique QR code.
+                    // emp_id is NOT NULL on the live table (FK -> employee),
+                    // so the booking always names the employee taking it.
                     return Appointment::create([
+                        // No sequence for appoint_id on the live `appointments`
+                        // table; allocated inside this transaction, which is
+                        // already serialised per slot by pg_advisory_xact_lock.
+                        'appoint_id' => $this->nextId('appointments', 'appoint_id'),
                         'cust_id' => $custId,
+                        'emp_id' => $this->assigneeId($json),
                         'appoint_created' => now(),
                         'appoint_closed' => null,
-                        'appoint_date' => $slotStart,
+                        'appoint_start' => $slotStart,
+                        'appoint_end' => $slotEnd,
                         'appoint_type' => $type,
+                        'appoint_status' => 'upcoming',
                         'appoint_qr' => 'APPT-' . strtoupper(Str::random(16)),
-                        'appoint_desc' => $json->input('appoint_desc'),
                     ]);
                 });
 
@@ -375,7 +418,7 @@
 
                 $this->filterByStatus($query, strtolower(trim((string) $json->input('status', ''))));
 
-                $appointments = $query->orderBy('appoint_date', 'asc')->get();
+                $appointments = $query->orderBy('appoint_start', 'asc')->get();
 
                 // SRS: APPOINTMENT has no order column - the link to the order a
                 // claim is for lives in PICKUP (appoint_id -> ord_id), written by
@@ -392,7 +435,6 @@
 
                     return array_merge($appointment->toArray(), [
                         'ord_id'     => $link['ord_id'],
-                        'ord_tag'    => $link['ord_tag'],
                         'ord_status' => $link['ord_status'],
                     ]);
                 });
@@ -438,10 +480,21 @@
                 }
 
                 if (!empty($q)) {
+                    // The live table has no free-text description column, so
+                    // the search runs over the identifying fields instead:
+                    // QR code, type, status, slot date, id and booking customer.
                     $query->where(function($builder) use ($q) {
-                        $builder->where('appoint_desc', 'like', "%{$q}%")
-                                ->orWhere('appoint_qr', 'like', "%{$q}%")
-                                ->orWhere('appoint_type', 'like', "%{$q}%");
+                        $builder->where('appoint_qr', 'like', "%{$q}%")
+                                ->orWhere('appoint_type', 'like', "%{$q}%")
+                                ->orWhere('appoint_status', 'like', "%{$q}%");
+
+                        if (preg_match('/^\d{4}-\d{2}-\d{2}/', (string) $q)) {
+                            $builder->orWhereDate('appoint_start', substr((string) $q, 0, 10));
+                        }
+                        if (ctype_digit((string) $q)) {
+                            $builder->orWhere('appoint_id', (int) $q)
+                                    ->orWhere('cust_id', (int) $q);
+                        }
                     });
                 }
 
@@ -475,7 +528,7 @@
             try {
                 $sortBy = $json->input('sort_by', 'date');
                 $order = strtolower($json->input('order', 'asc')) === 'desc' ? 'desc' : 'asc';
-                $col = $sortBy === 'created' ? 'appoint_created' : ($sortBy === 'type' ? 'appoint_type' : 'appoint_date');
+                $col = $sortBy === 'created' ? 'appoint_created' : ($sortBy === 'type' ? 'appoint_type' : 'appoint_start');
                 $query = Appointment::query();
                 $customerId = $this->customerId($json);
                 $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('api'));
@@ -512,9 +565,10 @@
             JSON REQUEST
 
             appoint_id - integer (req)
-            appoint_date - string/datetime (opt)
-            appoint_type - string (opt)
-            appoint_desc - string (opt)
+            appoint_start - string/datetime (opt: the legacy `appoint_date`
+                field is accepted as an alias; the end of the slot is always
+                recomputed from the type's duration)
+            appoint_type - string (opt: CLAIM | VISIT, any case)
         */
         public function updateAppointmentDetails(Request $json)
         {
@@ -545,13 +599,30 @@
                     ], 409);
                 }
 
-                $updates = $json->only(['appoint_date', 'appoint_type', 'appoint_desc']);
-                if (isset($updates['appoint_date']) || isset($updates['appoint_type'])) {
-                    $type = (string) ($updates['appoint_type'] ?? $appointment->appoint_type);
+                // Only live columns are ever written: the legacy description
+                // field has nowhere to go, so it is accepted and dropped.
+                $requested = $this->requestedStart($json);
+                $updates = [];
+                if (is_string($requested) && trim($requested) !== '') {
+                    $updates['appoint_start'] = $requested;
+                }
+                if ($json->filled('appoint_type')) {
+                    $updates['appoint_type'] = $json->input('appoint_type');
+                }
+
+                if (isset($updates['appoint_start']) || isset($updates['appoint_type'])) {
+                    $type = strtoupper((string) ($updates['appoint_type'] ?? $appointment->appoint_type));
                     if (! in_array($type, ['CLAIM', 'VISIT'], true)) {
                         return response()->json(['success' => false, 'message' => 'Appointment type must be CLAIM or VISIT.'], 422);
                     }
-                    $start = Carbon::parse($updates['appoint_date'] ?? $appointment->appoint_date);
+                    try {
+                        $start = Carbon::parse($updates['appoint_start'] ?? $appointment->appoint_start);
+                    } catch (\Throwable $e) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'A valid appointment date is required'
+                        ], 400);
+                    }
                     $start->second(0)->millisecond(0);
                     $duration = $type === 'CLAIM' ? 30 : 10;
                     $start->minute($type === 'CLAIM' ? ($start->minute >= 30 ? 30 : 0) : intdiv($start->minute, 10) * 10);
@@ -570,7 +641,8 @@
                     if (! $state['available']) {
                         return response()->json(['success' => false, 'message' => $state['reason']], 409);
                     }
-                    $updates['appoint_date'] = $start;
+                    $updates['appoint_start'] = $start;
+                    $updates['appoint_end'] = $end;
                     $updates['appoint_type'] = $type;
                 }
 
@@ -610,10 +682,8 @@
                 return;
             }
 
-            // A slot runs 30 minutes for a CLAIM, 10 minutes for a VISIT.
-            $ends = "(appoint_date + case when appoint_type = 'CLAIM'
-                then interval '30 minutes' else interval '10 minutes' end)";
-
+            // The live slot window is stored, not derived: a CLAIM runs
+            // appoint_start -> appoint_end (30 min), a VISIT 10 min.
             if ($status === 'done') {
                 $query->whereNotNull('appoint_closed');
                 return;
@@ -621,11 +691,11 @@
 
             $query->whereNull('appoint_closed');
             if ($status === 'cancelled') {
-                $query->whereRaw("$ends < ?", [now()]);
+                $query->where('appoint_end', '<', now());
             } elseif ($status === 'today') {
-                $query->whereBetween('appoint_date', [now()->startOfDay(), now()->endOfDay()]);
+                $query->whereBetween('appoint_start', [now()->startOfDay(), now()->endOfDay()]);
             } else {
-                $query->whereRaw("$ends >= ?", [now()]);
+                $query->where('appoint_end', '>=', now());
             }
         }
 
@@ -645,13 +715,12 @@
             $rows = DB::table('pickup')
                 ->join('orders', 'orders.ord_id', '=', 'pickup.ord_id')
                 ->whereIn('pickup.appoint_id', $appointIds)
-                ->get(['pickup.appoint_id', 'orders.ord_id', 'orders.ord_tag', 'orders.ord_status']);
+                ->get(['pickup.appoint_id', 'orders.ord_id', 'orders.ord_status']);
 
             $links = [];
             foreach ($rows as $row) {
                 $links[(int) $row->appoint_id] = [
                     'ord_id'     => $row->ord_id,
-                    'ord_tag'    => $row->ord_tag,
                     'ord_status' => $row->ord_status,
                 ];
             }
@@ -679,21 +748,23 @@
                 $bookedQuery->where('appoint_id', '!=', $excludeId);
             }
             $booked = $bookedQuery
-                ->where('appoint_date', '>=', $start)
-                ->where('appoint_date', '<', $end)
+                ->where('appoint_start', '>=', $start)
+                ->where('appoint_start', '<', $end)
                 ->count();
 
             // Staffing: VISIT needs at least two in-store employees,
             // CLAIM needs at least one (REQ-AB-03 / REQ-SC-03). The count is
             // per block, not per day: only an employee whose duty_shift block
-            // spans this slot counts towards it.
+            // spans this slot counts towards it. A null count means the
+            // roster source is unavailable on this connection, in which case
+            // the staffing rule is skipped and the capacity rule still holds.
             $minStaff = $type === 'CLAIM' ? 1 : 2;
-            $inStore = DayRoster::for($start)->headcount($start, $end);
+            $inStore = $this->rosterHeadcount($start, $end);
 
             $reason = null;
             if ($booked >= $capacity) {
                 $reason = 'Slot fully booked';
-            } elseif ($inStore < $minStaff) {
+            } elseif ($inStore !== null && $inStore < $minStaff) {
                 $reason = 'Not enough in-store employees available (minimum ' . $minStaff . ' required)';
             }
 
@@ -707,7 +778,90 @@
                 // counted separately from the in-store minimum above because
                 // the minimum only asks whether enough staff exist, not
                 // whether this block still has its own person.
-                'pending_replacements' => DutyShift::pendingReplacements(),
+                'pending_replacements' => $this->pendingReplacements(),
             ];
+        }
+
+        // ==========================================
+        // SLOT INPUT / STAFFING HELPERS
+        // ==========================================
+
+        /**
+         * Slot start the client asked for. `appoint_start` is the live column
+         * and the canonical request field; the pre-restore `appoint_date`
+         * field is still read as an alias so older clients (and the admin
+         * calendar) keep booking. It is only ever a request key - it is
+         * never written to or read from the database.
+         */
+        protected function requestedStart(Request $json)
+        {
+            $start = $json->input('appoint_start');
+
+            return ($start === null || $start === '') ? $json->input('appoint_date') : $start;
+        }
+
+        /**
+         * appointments.emp_id is NOT NULL with a foreign key to employee, so
+         * every booking has to name one. An explicit emp_id (staff calendars)
+         * wins; otherwise the first employee still on the payroll is attached.
+         * Nothing in the flow reads the value back - the claiming scan records
+         * who scanned - it only has to satisfy the constraint.
+         *
+         * @throws \RuntimeException when no employee exists to hold the booking
+         */
+        protected function assigneeId(Request $json): int
+        {
+            $sent = $json->input('emp_id');
+            if ($sent !== null && $sent !== '' && Employee::where('emp_id', (int) $sent)->exists()) {
+                return (int) $sent;
+            }
+
+            $empId = Employee::whereNull('emp_deleted')->orderBy('emp_id')->value('emp_id');
+            if (! $empId) {
+                throw new \RuntimeException('No employee is available to take this appointment.');
+            }
+
+            return (int) $empId;
+        }
+
+        /**
+         * The roster used by the staffing rule (REQ-AB-03), or null when this
+         * connection has no roster source (the DutyShift model or its table
+         * may be absent). Callers then skip only the staffing rule; the
+         * capacity and slot-window rules always apply.
+         */
+        protected function rosterFor(Carbon $day): ?DayRoster
+        {
+            try {
+                if (! class_exists(DutyShift::class)) {
+                    return null;
+                }
+
+                return DayRoster::for($day);
+            } catch (\Throwable $e) {
+                return null;
+            }
+        }
+
+        /** In-store headcount for one block, or null when unknown. */
+        protected function rosterHeadcount(Carbon $start, Carbon $end): ?int
+        {
+            $roster = $this->rosterFor($start);
+
+            return $roster ? $roster->headcount($start, $end) : null;
+        }
+
+        /** REQ-SS-03: blocks whose assignee is unavailable (0 when unknown). */
+        protected function pendingReplacements(): int
+        {
+            try {
+                if (! class_exists(DutyShift::class)) {
+                    return 0;
+                }
+
+                return (int) DutyShift::pendingReplacements();
+            } catch (\Throwable $e) {
+                return 0;
+            }
         }
     }

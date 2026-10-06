@@ -63,6 +63,8 @@
                     }
 
                     $notif = CustNotif::create([
+                        // No sequence for custnotif_id on the live table.
+                        'custnotif_id'      => $this->nextId('custnotif', 'custnotif_id'),
                         'cust_id'           => $recipientId,
                         'custnotif_created' => now(),
                         'custnotif_read'    => null,
@@ -76,6 +78,8 @@
                     }
 
                     $notif = EmpNotif::create([
+                        // No sequence for empnotif_id on the live table.
+                        'empnotif_id'       => $this->nextId('empnotif', 'empnotif_id'),
                         'emp_id'           => $recipientId,
                         'empnotif_created' => now(),
                         'empnotif_read'    => null,
@@ -135,8 +139,12 @@
                     $customers = $query->get();
 
                     $inserts = [];
+                    // Live custnotif has no sequence: allocate a run of ids
+                    // starting at MAX+1 (batch insert happens after the loop).
+                    $nextNotifId = $this->nextId('custnotif', 'custnotif_id');
                     foreach ($customers as $customer) {
                         $inserts[] = [
+                            'custnotif_id'      => $nextNotifId++,
                             'cust_id'           => $customer->cust_id,
                             'custnotif_created' => $now,
                             'custnotif_read'    => null,
@@ -157,8 +165,12 @@
                     $employees = $query->get();
 
                     $inserts = [];
+                    // Live empnotif has no sequence: allocate a run of ids
+                    // starting at MAX+1 (batch insert happens after the loop).
+                    $nextNotifId = $this->nextId('empnotif', 'empnotif_id');
                     foreach ($employees as $employee) {
                         $inserts[] = [
+                            'empnotif_id'       => $nextNotifId++,
                             'emp_id'           => $employee->emp_id,
                             'empnotif_created' => $now,
                             'empnotif_read'    => null,

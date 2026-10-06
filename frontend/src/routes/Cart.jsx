@@ -25,12 +25,20 @@ function Cart() {
     updateQuantity,
     removeFromCart,
     restoreItem,
+    clearCart,
     subtotal,
+    serverSubtotal,
   } = useCart()
   const { canCheckoutItem } = useCart()
   const { showToast } = useToast()
 
   const [showLogin, setShowLogin] = useState(false)
+
+  // FLOW-BAG-06: the total amount due always comes from the server subtotal
+  // (sum of every live line); the local sum is the offline fallback.
+  const bagSubtotal =
+    serverSubtotal ??
+    cartItems.reduce((sum, item) => sum + (item.amount ?? item.product?.price ?? 0) * item.qty, 0)
 
   // Mixed order classification (Requirement 8 & 9)
   const regularSelected = selectedItems.filter((i) => !i.product.preOrder)
@@ -56,6 +64,17 @@ function Cart() {
         },
       })
     }
+  }
+
+  // FLOW-BAG-07: one visible action empties the whole bag, after confirming.
+  const handleClearBag = () => {
+    if (cartItems.length === 0) return
+    const ok = window.confirm(
+      'Clear your entire bag? Every item will be removed and this cannot be undone.'
+    )
+    if (!ok) return
+    clearCart()
+    showToast('Your bag has been cleared.', 'info')
   }
 
   const handleCheckout = () => {
@@ -229,9 +248,20 @@ function Cart() {
                   <span>Select All ({cartItems.length} {cartItems.length === 1 ? 'item' : 'items'})</span>
                 </label>
 
-                <span className="text-sm font-semibold text-gray-600 bg-slate-100 px-3 py-1 rounded-md">
-                  {selectedItems.length} selected
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-gray-600 bg-slate-100 px-3 py-1 rounded-md">
+                    {selectedItems.length} selected
+                  </span>
+                  {/* FLOW-BAG-07: clear the entire bag in one action */}
+                  <button
+                    type="button"
+                    onClick={handleClearBag}
+                    className="text-xs font-bold text-red-500 hover:text-red-600 hover:underline cursor-pointer"
+                    title="Remove every item from your bag"
+                  >
+                    Clear bag
+                  </button>
+                </div>
               </div>
 
               {/* Bag Items List */}
@@ -409,6 +439,20 @@ function Cart() {
                     <span className="font-bold text-gray-900 text-base">{formatPrice(subtotal)}</span>
                   </div>
 
+                  {/* FLOW-BAG-06: total amount due for the whole bag, straight
+                      from the server `subtotal` on every cart response. */}
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500 font-medium">Total Amount Due</span>
+                    <span className="font-bold text-brand-orange text-base">
+                      {formatPrice(bagSubtotal)}
+                    </span>
+                  </div>
+                  {selectedItems.length !== cartItems.length && (
+                    <p className="text-[11px] text-gray-400 -mt-1">
+                      Across all {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'} in your bag
+                    </p>
+                  )}
+
                   {/* Shipping = Calculated at checkout (Requirement 7) */}
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 font-medium">Shipping Estimate</span>
@@ -489,6 +533,10 @@ function Cart() {
                 </p>
                 <span className="text-base font-black text-brand-orange block leading-tight">
                   {formatPrice(subtotal)}
+                </span>
+                {/* FLOW-BAG-06: the bag's total amount due stays visible here too */}
+                <span className="text-[11px] text-gray-400 block leading-tight">
+                  Bag total {formatPrice(bagSubtotal)}
                 </span>
               </div>
             </div>
