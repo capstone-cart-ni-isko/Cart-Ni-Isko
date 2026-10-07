@@ -34,6 +34,16 @@ function slotStart(slot) {
   return slot.slot_start ?? slot.start_time ?? slot.start ?? slot.time ?? slot.slot_time ?? ''
 }
 
+/**
+ * The slot grid keeps the two stored kinds (CLAIM / VISIT) while the form
+ * speaks VISIT / PICKUP, so the two vocabularies are aligned here before
+ * comparing: CLAIM and PICKUP are the same pickup slot.
+ */
+function kindOf(type) {
+  const kind = String(type || '').toUpperCase()
+  return kind === 'CLAIM' || kind === 'PICKUP' ? 'PICKUP' : 'VISIT'
+}
+
 /** A slot is bookable only when an employee is prescheduled for it. */
 function slotOpen(slot) {
   if (slot.available === false || slot.is_available === false) return false
@@ -106,8 +116,11 @@ export default function AppointmentForm({
   onCancel,
 }) {
   const { showToast } = useToast()
+  // A stored appointment may carry the backend kind CLAIM / VISIT while the
+  // form speaks PICKUP / VISIT - fold CLAIM onto PICKUP so the rule tables,
+  // labels and the posted `appoint_type` stay consistent.
   const [appointType, setAppointType] = useState(
-    reschedule?.type || type || APPOINT_TYPE.VISIT
+    kindOf(reschedule?.type || type) === 'PICKUP' ? APPOINT_TYPE.PICKUP : APPOINT_TYPE.VISIT
   )
   const [typeLocked, setTypeLocked] = useState(Boolean(reschedule?.type || type))
   const [date, setDate] = useState(reschedule?.dateISO || '')
@@ -317,7 +330,7 @@ export default function AppointmentForm({
           {selectableSlots.map((s, index) => {
             const time = slotStart(s)
             const mine = s.mine === true
-            const open = !mine && (!s.type || s.type === appointType) && slotOpen(s)
+            const open = !mine && (!s.type || kindOf(s.type) === kindOf(appointType)) && slotOpen(s)
             const active = open && slot === time
             return (
               <button

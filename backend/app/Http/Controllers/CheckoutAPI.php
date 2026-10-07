@@ -251,6 +251,10 @@ class CheckoutAPI extends Controller
             // The verification is burned only once the order exists.
             $this->consumeOtp($json, 'checkout');
 
+            // REQ-ACCESS_LOG-01/03: placing an order is recorded on the account.
+            $this->logCustomer($custId, 'edit',
+                'POST /api/checkout/payment - order #' . $result['order']->ord_id);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Payment integrated and order checkout completed successfully',
@@ -346,6 +350,10 @@ class CheckoutAPI extends Controller
 
             $intent = $result['reference']['intent'] ?? [];
 
+            // REQ-ACCESS_LOG-01/03: opening an online checkout is recorded.
+            $this->logCustomer($custId, 'edit',
+                'POST /api/checkout/payment/intent - order #' . $result['order']->ord_id);
+
             return response()->json([
                 'success' => true,
                 'message' => 'Payment intent created successfully',
@@ -423,6 +431,12 @@ class CheckoutAPI extends Controller
 
             $payment = $this->markOrderPaid($order, $attributes);
 
+            // REQ-ACCESS_LOG-01/03: the paid order is recorded on the account.
+            if ((int) $order->cust_id > 0) {
+                $this->logCustomer((int) $order->cust_id, 'edit',
+                    'POST /api/checkout/payment/webhook - order #' . $order->ord_id . ' paid');
+            }
+
             $this->announce(
                 (int) $order->cust_id,
                 '[PRIORITY] Payment confirmed for order #' . $order->ord_id
@@ -472,6 +486,7 @@ class CheckoutAPI extends Controller
 
             // 2. Validate every variation still holds its stock.
             $subtotal = 0.0;
+            $preorderLines = [];
             foreach ($bags as $bag) {
                 $prodvar = Prodvar::with('product')
                     ->where('prodvar_id', $bag->prodvar_id)
@@ -495,6 +510,14 @@ class CheckoutAPI extends Controller
                     throw new InsufficientStockException(
                         'Insufficient stock for ' . $name . ' - only ' . $stock . ' unit(s) remain.'
                     );
+                }
+
+                // The in-stock and the pre-order lines are deducted at different
+                // moments: on-hand stock leaves the shelf at placement, while a
+                // pre-order is only fulfilled once the goods arrive (the claim /
+                // delivery receipt deducts it, TrackingAPI::fulfilOrder).
+                if ((bool) $prodvar->prodvar_preorder) {
+                    $preorderLines[(int) $bag->prodvar_id] = true;
                 }
 
                 $subtotal += round((float) $bag->bag_amount * $qty, 2);
@@ -537,7 +560,11 @@ class CheckoutAPI extends Controller
             ]);
 
             // 5. One items row per bag row, the bag rows become placed and the
-            //    variation stock comes down (items carry no quantities).
+            //    variation stock comes down (items carry no quantities). In-stock
+            //    lines are deducted now; pre-order lines are booked without
+            //    touching stock and deducted when the claim/receipt fulfils the
+            //    order (TrackingAPI::fulfilOrder) - so each line is deducted
+            //    exactly once across the two moments.
             foreach ($bags as $bag) {
                 Item::create([
                     // No sequence for item_id on the live table.
@@ -548,8 +575,10 @@ class CheckoutAPI extends Controller
 
                 $bag->update(['bag_placed' => DB::raw('true')]);
 
-                Prodvar::where('prodvar_id', $bag->prodvar_id)
-                    ->decrement('prodvar_stock', max(1, (int) $bag->bag_qty));
+                if (! isset($preorderLines[(int) $bag->prodvar_id])) {
+                    Prodvar::where('prodvar_id', $bag->prodvar_id)
+                        ->decrement('prodvar_stock', max(1, (int) $bag->bag_qty));
+                }
             }
 
             // 6. Claiming details - the appointment is created here too
@@ -791,6 +820,7 @@ class CheckoutAPI extends Controller
     {
         return (int) $appointment->cust_id === $custId
             && $appointment->appoint_closed === null
+            && $appointment->appoint_status !== 'cancelled'
             && in_array(strtolower((string) $appointment->appoint_type), ['pickup', 'claim'], true)
             && ! Pickup::where('appoint_id', $appointment->appoint_id)->exists();
     }

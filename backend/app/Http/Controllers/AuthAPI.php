@@ -8,6 +8,7 @@
     use App\Models\Schedule;
     use App\Support\ApiToken;
     use App\Support\EmployeePassword;
+    use App\Support\SystemSettings;
     use Carbon\Carbon;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\DB;
@@ -635,6 +636,13 @@
             }
         }
 
+        // The super-admin test itself lives on the base Controller
+        // (`protected isSuperAdmin($user)`) and delegates to
+        // Employee::isSuperAdmin(). Redeclaring it here - with a narrower
+        // visibility *and* a narrower parameter type - is a PHP fatal error
+        // that php -l cannot see, and it 500'd /auth/emp_login, which the
+        // portal then surfaced as "Cannot reach the server".
+
         /**
          * FLOW-EMP_ENROLL-02 - the initial category posted by the enrolment
          * form, folded onto rule 32's vocabulary ("staff", "admin", "super
@@ -812,6 +820,24 @@
                     return response()->json(['success' => false, 'message' => 'Account disabled'], 403);
                 }
 
+                // FLOW-SETUP-03 - configuration must be complete before the
+                // portal opens its doors. Super admins are exempt: the
+                // first-time administrator (FLOW-SETUP-05) has to be able to
+                // sign in and finish the wizard, and REQ-SETUP-04 keeps the
+                // blocked attempt in the access log.
+                $missingSetup = SystemSettings::missingCritical();
+                if ($missingSetup && ! $this->isSuperAdmin($employee)) {
+                    $this->logEmployee((int) $employee->emp_id, 'auth',
+                        'POST /api/auth/emp_login - blocked, setup incomplete');
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Store setup is incomplete. A super admin must finish the setup wizard first.',
+                        'code'    => 'SETUP_INCOMPLETE',
+                        'data'    => ['missing_critical' => $missingSetup],
+                    ], 503);
+                }
+
                 // Issue an API token for the session
                 try {
                     $token = \App\Support\ApiToken::issue($employee);
@@ -982,6 +1008,16 @@
                 return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
             }
 
+            // REQ-EMP_SET-02 / REQ-CUST_SET-02: a settings change is logged
+            // with the account id and the timestamp it happened at.
+            if ($user instanceof Employee) {
+                $this->logEmployee((int) $user->emp_id, 'edit',
+                    'POST /api/auth/backup_credentials - backup contacts updated');
+            } else {
+                $this->logCustomer((int) $user->cust_id, 'edit',
+                    'POST /api/auth/backup_credentials - backup contacts updated');
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Backup credentials updated successfully',
@@ -1024,6 +1060,30 @@
                 return response()->json([
                     'success' => false,
                     'message' => 'Current password is incorrect.',
+                ], 422);
+            }
+
+            // REQ-SETUP-03 - a super admin credential has to meet the store's
+            // security standard: minimum length and complexity. The same bar
+            // EmployeePassword::generateTemporary() already clears for the
+            // temporary password issued at enrollment (REQ-EMP_ENROLL-03), so
+            // every super admin password in the system is produced by one
+            // shared rule. Only super admins are held to it; customers and
+            // other employees keep the validator's own 8-character floor.
+            $employeeCategory = $user instanceof Employee
+                ? (string) ($user->emp_categ ?: $user->emp_type)
+                : '';
+            $isSuperAdmin = in_array(
+                strtoupper(str_replace([' ', '-'], '_', trim($employeeCategory))),
+                ['SUPER_ADMIN', 'SUPERADMIN'],
+                true
+            );
+
+            if ($isSuperAdmin && ! EmployeePassword::meetsStandard((string) $json->input('new_password'))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Super admin passwords must be at least 16 characters and include an uppercase letter, a lowercase letter, a number and a symbol.',
+                    'code' => 'WEAK_PASSWORD',
                 ], 422);
             }
 

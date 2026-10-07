@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
 
 abstract class Controller
 {
@@ -474,9 +475,9 @@ abstract class Controller
     const OTP_VERIFIED_TTL_MINUTES = 10;
 
     /** Cache key of a code issued for one account + purpose. */
-    protected function otpCodeKey(int $custId, string $purpose): string
+    protected function otpCodeKey(int $userId, string $purpose, string $scope = 'cust'): string
     {
-        return 'otp:code:' . $custId . ':' . $purpose;
+        return 'otp:code:' . $scope . ':' . $userId . ':' . $purpose;
     }
 
     /**
@@ -492,47 +493,110 @@ abstract class Controller
         return 'auth:signup_pending:' . $custId;
     }
 
-    /** Cache key flagging that an account already passed verification. */
-    protected function otpVerifiedKey(int $custId, string $purpose): string
+    /**
+     * Cache key flagging that an account already passed verification.
+     *
+     * The scope matters: employee and customer ids come from independent
+     * sequences, so without `emp:` / `cust:` in the key employee 7 would
+     * inherit the verification customer 7 already earned.
+     */
+    protected function otpVerifiedKey(int $userId, string $purpose, string $scope = 'cust'): string
     {
-        return 'otp:ok:' . $custId . ':' . $purpose;
+        return 'otp:ok:' . $scope . ':' . $userId . ':' . $purpose;
+    }
+
+    /** `emp` for an employee (email OTP), `cust` for a customer (phone OTP). */
+    protected function otpScope(object $user): string
+    {
+        return $user instanceof Employee ? 'emp' : 'cust';
+    }
+
+    /** The account id behind an OTP subject. */
+    protected function otpSubjectId(object $user): int
+    {
+        return (int) ($user instanceof Employee ? $user->emp_id : $user->cust_id);
     }
 
     /**
-     * Issues a six-digit code for a customer: it is hashed into the cache and
-     * delivered through the account's own notification inbox (REQ-CUST_SIGNUP-04
-     * allows SMS or in-app delivery, and no SMS gateway is configured).
+     * Issues a six-digit code for an account.
+     *
+     * A customer's code is delivered to their phone inbox (REQ-CUST_SIGNUP-04
+     * allows SMS or in-app delivery, and no SMS gateway is configured); an
+     * employee's is delivered to their Bicol University mailbox and to their
+     * in-app notification feed - the employee channel is email, never SMS.
      *
      * @return array{0: string|null, 1: string|null} [code, error message]
      */
-    protected function issueOtpCode(Customer $customer, string $purpose): array
+    protected function issueOtpCode(object $user, string $purpose): array
     {
-        $custId = (int) $customer->cust_id;
+        $scope = $this->otpScope($user);
+        $userId = $this->otpSubjectId($user);
 
-        if (Cache::get('otp:cool:' . $custId . ':' . $purpose)) {
+        if (Cache::get('otp:cool:' . $scope . ':' . $userId . ':' . $purpose)) {
             return [null, 'Please wait before requesting another code.'];
         }
 
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
 
-        Cache::put($this->otpCodeKey($custId, $purpose), [
+        Cache::put($this->otpCodeKey($userId, $purpose, $scope), [
             'hash'  => hash('sha256', $code),
             'tries' => 0,
         ], now()->addMinutes(self::OTP_TTL_MINUTES));
 
-        Cache::put('otp:cool:' . $custId . ':' . $purpose, true, self::OTP_COOLDOWN_SECONDS);
+        Cache::put('otp:cool:' . $scope . ':' . $userId . ':' . $purpose, true, self::OTP_COOLDOWN_SECONDS);
 
-        $this->notifyCustomer($custId, '[PRIORITY] Your verification code is ' . $code
-            . '. It expires in ' . self::OTP_TTL_MINUTES . ' minutes. Do not share it with anyone.');
+        $message = '[PRIORITY] Your verification code is ' . $code
+            . '. It expires in ' . self::OTP_TTL_MINUTES . ' minutes. Do not share it with anyone.';
+
+        if ($user instanceof Employee) {
+            $this->notifyEmployee($userId, $message);
+            $this->mailEmployeeOtp($user, $code);
+        } else {
+            $this->notifyCustomer($userId, $message);
+        }
 
         return [$code, null];
     }
 
-    /** Verifies a submitted code and flags the purpose as verified. */
-    protected function verifyOtpCode(Customer $customer, string $purpose, string $code): array
+    /**
+     * FLOW - the employee channel for a verification code is email: the six
+     * digits go to the Bicol University mailbox on file. Delivery is
+     * best-effort exactly like the enrollment mail (MAIL_MAILER=log keeps an
+     * unconfigured transport from failing the request) - the code still lives
+     * in the cache and the in-app notification either way.
+     */
+    protected function mailEmployeeOtp(Employee $employee, string $code): void
     {
-        $custId = (int) $customer->cust_id;
-        $entry = Cache::get($this->otpCodeKey($custId, $purpose));
+        try {
+            $to = (string) $employee->emp_email;
+            if ($to === '') {
+                return;
+            }
+
+            Mail::raw(
+                "Your Tindahan ni Isko verification code is {$code}.\n\n"
+                . 'It expires in ' . self::OTP_TTL_MINUTES . ' minutes. Do not share it with anyone.',
+                function ($message) use ($to, $employee) {
+                    $message->to($to)
+                        ->subject('Your verification code - Tindahan ni Isko')
+                        ->from(
+                            (string) config('mail.from.address', 'tindahan.ni.isko@bicol-u.edu.ph'),
+                            'Tindahan ni Isko'
+                        );
+                    unset($employee);
+                }
+            );
+        } catch (\Throwable $e) {
+            // Never let a mail transport problem block the verification flow.
+        }
+    }
+
+    /** Verifies a submitted code and flags the purpose as verified. */
+    protected function verifyOtpCode(object $user, string $purpose, string $code): array
+    {
+        $scope = $this->otpScope($user);
+        $userId = $this->otpSubjectId($user);
+        $entry = Cache::get($this->otpCodeKey($userId, $purpose, $scope));
 
         if (! is_array($entry)) {
             return [false, 'No verification code is active. Request a new one.'];
@@ -542,46 +606,57 @@ abstract class Controller
             $tries = (int) ($entry['tries'] ?? 0) + 1;
 
             if ($tries >= self::OTP_MAX_ATTEMPTS) {
-                Cache::forget($this->otpCodeKey($custId, $purpose));
+                Cache::forget($this->otpCodeKey($userId, $purpose, $scope));
 
                 return [false, 'Too many attempts. Request a new code.'];
             }
 
-            Cache::put($this->otpCodeKey($custId, $purpose), ['hash' => $entry['hash'], 'tries' => $tries],
+            Cache::put($this->otpCodeKey($userId, $purpose, $scope),
+                ['hash' => $entry['hash'], 'tries' => $tries],
                 now()->addMinutes(self::OTP_TTL_MINUTES));
 
             return [false, 'Incorrect code. Please try again.'];
         }
 
-        Cache::forget($this->otpCodeKey($custId, $purpose));
-        Cache::put($this->otpVerifiedKey($custId, $purpose), true,
+        Cache::forget($this->otpCodeKey($userId, $purpose, $scope));
+        Cache::put($this->otpVerifiedKey($userId, $purpose, $scope), true,
             now()->addMinutes(self::OTP_VERIFIED_TTL_MINUTES));
 
         return [true, 'Code verified.'];
     }
 
     /**
-     * Returns a 428 response when a customer has not yet verified the given
-     * purpose, or null when the caller may proceed (employees and system
-     * actors are never OTP-gated here).
+     * Returns a 428 response when the account has not yet verified the given
+     * purpose, or null when the caller may proceed (system actors - and any
+     * account that is neither a customer nor an employee - are never gated).
+     *
+     * REQ-CUST_SET-02 covers customers, whose channel is the phone; the admin
+     * side answers the same rule with the employee's email channel, so both
+     * sides of the portal clear their own OTP before a sensitive change lands.
      */
     protected function otpGate(Request $json, string $purpose)
     {
         $user = $json->user('api');
 
-        if (! $user instanceof Customer) {
+        if (! $user instanceof Customer && ! $user instanceof Employee) {
             return null;
         }
 
-        if (Cache::get($this->otpVerifiedKey((int) $user->cust_id, $purpose))) {
+        $scope = $this->otpScope($user);
+        if (Cache::get($this->otpVerifiedKey($this->otpSubjectId($user), $purpose, $scope))) {
             return null;
         }
 
         return response()->json([
             'success' => false,
             'code'    => 'OTP_REQUIRED',
-            'message' => 'Phone OTP verification is required before this change can be saved.',
-            'data'    => ['purpose' => $purpose],
+            'message' => 'Verification is required before this change can be saved.',
+            'data'    => [
+                'purpose' => $purpose,
+                // Which channel the code went to: customers get SMS/phone
+                // inbox, employees get their Bicol University mailbox.
+                'channel' => $user instanceof Employee ? 'email' : 'phone',
+            ],
         ], 428);
     }
 
@@ -593,8 +668,8 @@ abstract class Controller
     {
         $user = $json->user('api');
 
-        if ($user instanceof Customer) {
-            Cache::forget($this->otpVerifiedKey((int) $user->cust_id, $purpose));
+        if ($user instanceof Customer || $user instanceof Employee) {
+            Cache::forget($this->otpVerifiedKey($this->otpSubjectId($user), $purpose, $this->otpScope($user)));
         }
     }
 

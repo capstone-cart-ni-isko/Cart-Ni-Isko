@@ -29,6 +29,9 @@ function OtpVerifyModal({ isOpen, purpose, title, onClose, onVerified }) {
   const { currentUser } = useAuth()
   const [code, setCode] = useState('')
   const [phone, setPhone] = useState('')
+  // Which channel the server used: customers are reached by phone, the admin
+  // side by the employee's Bicol University mailbox.
+  const [channel, setChannel] = useState('phone')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [hint, setHint] = useState('')
@@ -57,7 +60,8 @@ function OtpVerifyModal({ isOpen, purpose, title, onClose, onVerified }) {
       setError(err)
       return
     }
-    setPhone(data.phone || '')
+    setChannel(data.channel || (data.email ? 'email' : 'phone'))
+    setPhone(data.email || data.phone || '')
     setCooldown(RESEND_COOLDOWN)
     setCode('')
     setHint('')
@@ -121,9 +125,16 @@ function OtpVerifyModal({ isOpen, purpose, title, onClose, onVerified }) {
         </div>
 
         <p className="text-sm text-gray-500 font-medium leading-relaxed mb-5">
-          Enter the 6-digit code we sent to{' '}
-          <span className="font-semibold text-gray-700">{phone || 'your registered phone'}</span>.
-          It expires in 5 minutes.
+          Enter the 6-digit code we sent to your{' '}
+          <span className="font-semibold text-gray-700">
+            {channel === 'email' ? 'Bicol University email' : 'registered phone'}
+          </span>
+          {phone ? (
+            <>
+              {' '}at <span className="font-semibold text-gray-700">{phone}</span>
+            </>
+          ) : null}
+          . It expires in 5 minutes.
         </p>
 
         <form onSubmit={submit} className="space-y-4">

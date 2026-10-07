@@ -3,8 +3,9 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import Avatar from '../../components/ui/Avatar.jsx'
+import OtpVerifyModal from '../../components/ui/OtpVerifyModal.jsx'
 import { fetchAccounts, updateAccount } from '../../services/accounts.js'
-import { updateCredentials } from '../../services/auth.js'
+import { updateCredentials, updateBackupCredentials } from '../../services/auth.js'
 import { first, empCateg, empFullName } from '../../components/admin/schema.js'
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024 // 2 MB
@@ -42,6 +43,21 @@ export default function AdminAccount() {
   const [passwordError, setPasswordError] = useState('')
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
 
+  // FLOW-EMP_LOGOUT-02: every sign-out asks first, wherever it is started.
+  const [confirmLogout, setConfirmLogout] = useState(false)
+
+  // FLOW-EMP_SET-03 - backup phone / email used for account recovery.
+  const [backupPhone, setBackupPhone] = useState('')
+  const [backupEmail, setBackupEmail] = useState('')
+  const [isSavingBackup, setIsSavingBackup] = useState(false)
+
+  // REQ-CUST_SET-02's admin-side twin: every sensitive change clears a
+  // six-digit code first. Customers get it on the phone channel; employees
+  // get it in their Bicol University mailbox (email is the staff channel).
+  const [otpOpen, setOtpOpen] = useState(false)
+  const [otpPurpose, setOtpPurpose] = useState('password_change')
+  const [pendingAction, setPendingAction] = useState(null) // 'password' | 'backup'
+
   const fileInputRef = useRef(null)
 
   // Load the backend row for the signed-in employee
@@ -70,6 +86,8 @@ export default function AdminAccount() {
           setPronoun(String(first(found, 'emp_pronoun') || 'they/them'))
           setCategory(empCateg(found))
           setAvatarPreview(String(first(found, 'emp_avatar', 'emp_photo') || ''))
+          setBackupPhone(String(first(found, 'emp_backupphone') || ''))
+          setBackupEmail(String(first(found, 'emp_backupemail') || ''))
         } else {
           setGivenName(currentAdminUser?.firstName || '')
           setSurname(currentAdminUser?.lastName || currentAdminUser?.surname || '')
@@ -78,6 +96,8 @@ export default function AdminAccount() {
           setPronoun(currentAdminUser?.pronoun || 'they/them')
           setCategory(empCateg(currentAdminUser))
           setAvatarPreview(currentAdminUser?.avatarImage || '')
+          setBackupPhone(String(currentAdminUser?.backupPhone || ''))
+          setBackupEmail(String(currentAdminUser?.backupEmail || ''))
         }
         setIsLoadingRecord(false)
       })
@@ -239,17 +259,40 @@ export default function AdminAccount() {
       return
     }
 
+    // The server answers 428 OTP_REQUIRED until the emailed code clears, so
+    // the sheet goes up first and the change is sent from `onVerified`.
+    setPendingAction('password')
+    setOtpPurpose('password_change')
+    setOtpOpen(true)
+  }
+
+  /** Runs once the email OTP is accepted (and again after a 428 retry). */
+  const savePassword = async () => {
     setIsUpdatingPassword(true)
     const result = await updateCredentials({
       account_type: 'employee',
       user_id: record?.emp_id ?? currentAdminUser?.id,
       current_password: currentPassword,
+      // REQ-EMP_SET-01: `new_password` is the key InputValidatorAPI and
+      // AuthAPI::updateCredentials read; `password` is kept as the legacy
+      // alias so either spelling is accepted server-side.
+      new_password: newPassword,
       password: newPassword,
     })
     setIsUpdatingPassword(false)
 
     if (result.error) {
-      setPasswordError(result.error)
+      // The gate answers 428 OTP_REQUIRED while the emailed code is still
+      // outstanding - most often because the 10-minute window expired. Raise
+      // the sheet again rather than leaving the employee stuck on a message.
+      if (result.code === 'OTP_REQUIRED' || /OTP_REQUIRED|Verification is required/i.test(result.error)) {
+        setPasswordError('')
+        setPendingAction('password')
+        setOtpPurpose('password_change')
+        setOtpOpen(true)
+      } else {
+        setPasswordError(result.error)
+      }
       return
     }
 
@@ -257,7 +300,56 @@ export default function AdminAccount() {
     setCurrentPassword('')
     setNewPassword('')
     setConfirmPassword('')
-    showToast('Password updated successfully.', 'success')
+    // AuthAPI::updateCredentials revokes every token of the account, so the
+    // session cannot survive the change - end it here and send the employee
+    // back to the login form (FLOW-EMP_LOGOUT-04).
+    showToast('Password updated successfully. Please sign in again.', 'success')
+    logoutAdmin()
+  }
+
+  // FLOW-EMP_SET-03 - backup contact information used for account recovery.
+  const handleSaveBackup = async () => {
+    const cleanEmail = backupEmail.trim()
+
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      showToast('Please provide a valid backup email address.', 'error')
+      return
+    }
+
+    // REQ-CUST_SET-02 / FLOW-EMP_SET-03: the emailed code comes first.
+    setPendingAction('backup')
+    setOtpPurpose('backup_contacts')
+    setOtpOpen(true)
+  }
+
+  /** Runs once the email OTP for `backup_contacts` is accepted. */
+  const saveBackupContacts = async () => {
+    const cleanPhone = backupPhone.trim()
+    const cleanEmail = backupEmail.trim()
+
+    setIsSavingBackup(true)
+    // Empty fields are simply left out: AuthAPI::backupCredentials keeps the
+    // stored value for anything the request does not carry.
+    const payload = { backupcallcode: '+63' }
+    if (cleanPhone) payload.backupphone = cleanPhone
+    if (cleanEmail) payload.backupemail = cleanEmail
+    const { error } = await updateBackupCredentials(payload)
+    setIsSavingBackup(false)
+
+    if (error) {
+      showToast(error, 'error')
+      return
+    }
+    showToast('Backup contacts updated.', 'success')
+  }
+
+  /** Hands the queued action to the server once its code has cleared. */
+  const handleOtpVerified = async () => {
+    setOtpOpen(false)
+    const action = pendingAction
+    setPendingAction(null)
+    if (action === 'password') await savePassword()
+    else if (action === 'backup') await saveBackupContacts()
   }
 
   const initials = `${givenName[0] || ''}${surname[0] || ''}`.toUpperCase() || '—'
@@ -460,21 +552,111 @@ export default function AdminAccount() {
                   Change password
                 </button>
               </div>
+
+              {/* FLOW-EMP_SET-03 - backup contacts for account recovery */}
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-900">Backup contacts</p>
+                  <p className="text-[11px] text-slate-400">
+                    Used to reach you if you lose access to your account.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Backup phone number
+                    </label>
+                    <input
+                      type="tel"
+                      value={backupPhone}
+                      onChange={(e) => setBackupPhone(e.target.value)}
+                      placeholder="+63 912 345 6789"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Backup email address
+                    </label>
+                    <input
+                      type="email"
+                      value={backupEmail}
+                      onChange={(e) => setBackupEmail(e.target.value)}
+                      placeholder="backup@bicol-u.edu.ph"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveBackup}
+                    disabled={isSavingBackup}
+                    className="h-8 px-3 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer transition-colors disabled:opacity-50"
+                  >
+                    {isSavingBackup ? 'Saving…' : 'Save backup contacts'}
+                  </button>
+                </div>
+              </div>
             </section>
           </div>
         )}
 
-        {/* Sign-out shortcut */}
+        {/* Sign-out shortcut - FLOW-EMP_LOGOUT-01/02: the confirmation
+            dialog comes before the session is terminated. */}
         <div className="flex justify-end">
           <button
             type="button"
-            onClick={logoutAdmin}
+            onClick={() => setConfirmLogout(true)}
             className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
           >
             Sign out of the admin portal
           </button>
         </div>
+
+        {confirmLogout && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
+            <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-100 p-5 shadow-2xl animate-scale-in">
+              <h2 className="text-sm font-bold text-slate-900">Sign out of the admin portal?</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Your session ends immediately on all devices.
+              </p>
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setConfirmLogout(false)}
+                  className="h-8 px-3 rounded-md bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmLogout(false)
+                    logoutAdmin()
+                  }}
+                  className="h-8 px-3 rounded-md bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 cursor-pointer"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Email OTP that gates the sensitive changes above (REQ-CUST_SET-02,
+          admin-side channel = the employee's Bicol University mailbox). */}
+      <OtpVerifyModal
+        isOpen={otpOpen}
+        purpose={otpPurpose}
+        title="Verify it is you"
+        onClose={() => {
+          setOtpOpen(false)
+          setPendingAction(null)
+        }}
+        onVerified={handleOtpVerified}
+      />
 
       {/* Password change modal */}
       {showPasswordModal && (

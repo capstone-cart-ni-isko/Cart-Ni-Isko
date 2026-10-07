@@ -481,6 +481,10 @@
                     ->map(fn (Review $review) => $this->present($review, $this->orderIdFor($review, $map)))
                     ->values();
 
+                // REQ-ACCESS_LOG-01: reading reviews (customer wall or the
+                // moderation queue) is logged on the reading account.
+                $this->logView($json, 'reviews');
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Product reviews retrieved successfully',
@@ -551,6 +555,13 @@
                     $this->notifyCustomer((int) $review->cust_id, $approve
                         ? 'Your review for ' . $label . ' has been approved.'
                         : 'Your review for ' . $label . ' was not approved.');
+                }
+
+                // REQ-ACCESS_LOG-01/03: moderating a review is an edit action.
+                $user = $json->user('api');
+                if ($this->isEmployee($user)) {
+                    $this->logEmployee((int) $user->emp_id, 'edit',
+                        'POST /api/reviews/moderate - ' . $newStatus . ' review #' . $review->rev_id);
                 }
 
                 $ordId = $json->input('ord_id');

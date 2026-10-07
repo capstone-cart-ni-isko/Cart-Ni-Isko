@@ -180,6 +180,50 @@ export function AdminProvider({ children }) {
     setCurrentAdminUser((prev) => (prev ? { ...prev, ...updatedFields } : prev))
   }, [])
 
+  // REQ-EMP_LOGOUT-03: an employee is logged out automatically after thirty
+  // minutes without touching the portal. Any real interaction (pointer,
+  // keyboard, wheel) restarts the window, and signing out - by hand or by
+  // this timer - tears the session down exactly the same way, so the server
+  // stamps emp_last_logout and revokes every token of the account
+  // (FLOW-EMP_LOGOUT-05/06).
+  //
+  // The clock lives in a ref and the callbacks are read through refs, so a
+  // background data refresh re-rendering the provider can never silently
+  // restart the thirty-minute window.
+  const idleSinceRef = useRef(0)
+  const logoutAdminRef = useRef(logoutAdmin)
+  const showToastRef = useRef(showToast)
+  useEffect(() => {
+    logoutAdminRef.current = logoutAdmin
+    showToastRef.current = showToast
+  })
+
+  useEffect(() => {
+    if (!currentAdminUser) return undefined
+
+    const IDLE_MS = 30 * 60 * 1000
+    idleSinceRef.current = Date.now()
+
+    const markActive = () => {
+      idleSinceRef.current = Date.now()
+    }
+
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart']
+    events.forEach((name) => window.addEventListener(name, markActive, { passive: true }))
+
+    const timer = setInterval(() => {
+      if (Date.now() - idleSinceRef.current < IDLE_MS) return
+      clearInterval(timer)
+      logoutAdminRef.current()
+      showToastRef.current('Signed out after 30 minutes of inactivity.', 'info')
+    }, 30 * 1000)
+
+    return () => {
+      clearInterval(timer)
+      events.forEach((name) => window.removeEventListener(name, markActive))
+    }
+  }, [currentAdminUser])
+
   // ── ORDER ACTIONS (backend-driven: PUT /orders/update) ──
   const updateOrderStatus = useCallback(
     async (orderId, newStatus) => {

@@ -223,6 +223,9 @@ class WishlistAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
             }
 
+            // REQ-ACCESS_LOG-01: reading the customer's wishlist is logged.
+            $this->logView($json, 'wishlist');
+
             // FLOW-WISHLIST-03: hidden rows stay hidden, newest first.
             // Unavailable rows REMAIN in the list (FLOW-WISHLIST-07): each
             // payload carries `available` so the frontend can label them.

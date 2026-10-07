@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AppointAPI;
 use App\Http\Controllers\TrackingAPI;
 use App\Jobs\NotificationFollowUpJob;
 use App\Support\AcademicPeriodRoster;
@@ -56,6 +57,17 @@ Schedule::call(fn () => AcademicPeriodRoster::apply())
 Schedule::call(fn () => app(TrackingAPI::class)->sweepExpiredPickups())
     ->everyMinute()
     ->name('sweep-expired-pickups')
+    ->withoutOverlapping();
+
+/*
+    REQ-MANAGE_APP-07: a store-visit appointment whose window ended more than
+    ten minutes ago auto-closes (status `done` + appoint_closed). Pickup
+    bookings are handled by the sweep above (sweep-expired-pickups marks them
+    `absent`); visits have no QR scan to flip them, so the scheduler does it.
+*/
+Schedule::call(fn () => app(AppointAPI::class)->autoCloseExpired())
+    ->everyMinute()
+    ->name('auto-close-expired-visits')
     ->withoutOverlapping();
 
 

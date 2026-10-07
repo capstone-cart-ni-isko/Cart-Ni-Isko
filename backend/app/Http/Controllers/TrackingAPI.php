@@ -837,10 +837,19 @@ class TrackingAPI extends Controller
             $bag = $item->bag;
             if (! $bag || ! $bag->prodvar_id) continue;
 
-            Prodvar::where('prodvar_id', $bag->prodvar_id)
-                ->decrement('prodvar_stock', (int) $bag->bag_qty);
-
             $prodvar = $bag->prodvar;
+
+            // A pre-order variation is paid for before the goods exist, so it
+            // is left on the shelf untouched at placement and only deducted
+            // now - the moment the goods actually leave the store. In-stock
+            // lines were already deducted at placement (CheckoutAPI), so the
+            // claim must never deduct them a second time (D8 / REQ-CHECKOUT-06).
+            if ($prodvar && (int) $prodvar->prodvar_preorder === 1) {
+                Prodvar::where('prodvar_id', $bag->prodvar_id)
+                    ->decrement('prodvar_stock', (int) $bag->bag_qty);
+                $prodvar->prodvar_stock = max(0, (int) $prodvar->prodvar_stock - (int) $bag->bag_qty);
+            }
+
             if ($prodvar && (int) $prodvar->prodvar_stock <= $threshold) {
                 $lowStock[] = [
                     'name' => $prodvar->product ? $prodvar->product->prod_name : ('variation #' . $prodvar->prodvar_id),

@@ -191,9 +191,35 @@ export async function recoverCredentials(identifier, accountType = 'customer') {
 export async function updateCredentials(payload) {
   try {
     const data = await apiPut('/auth/update_credentials', payload)
-    return { data, error: null }
+    return { data, error: null, code: null, status: null }
   } catch (err) {
-    return { data: null, error: err.message || 'Unable to update password' }
+    return {
+      data: null,
+      error: err.message || 'Unable to update password',
+      // DOMAIN 29 - the machine code (OTP_REQUIRED / CHALLENGE_EXPIRED ...)
+      // travels with the message so the caller can branch on it instead of
+      // matching text.
+      code: err?.payload?.code || null,
+      status: err?.status || null,
+    }
+  }
+}
+
+/**
+ * POST /auth/backup_credentials - DOMAIN 15 / FLOW-EMP_SET-03: the backup
+ * phone and email an employee keeps reachable for account recovery.
+ */
+export async function updateBackupCredentials(payload) {
+  try {
+    const data = await apiPost('/auth/backup_credentials', payload)
+    return { data, error: null, code: null, status: null }
+  } catch (err) {
+    return {
+      data: null,
+      error: err.message || 'Unable to update backup contacts',
+      code: err?.payload?.code || null,
+      status: err?.status || null,
+    }
   }
 }
 

@@ -19,11 +19,19 @@ use App\Http\Controllers\TrackingAPI;
 use App\Http\Controllers\ProductsAPI;
 use App\Http\Controllers\ReviewsAPI;
 use App\Http\Controllers\SettingsAPI;
+use App\Http\Controllers\SetupAPI;
 use App\Http\Controllers\WishlistAPI;
 use App\Http\Controllers\UploadAPI;
 
 // Public Scheduler Health Route (REQ-AN-03 watchdog, no token required)
 Route::get('/health/scheduler', [HealthAPI::class, 'schedulerHealth']);
+
+// DOMAIN 1 - FLOW-SETUP-05 wizard. Public because no account exists yet when
+// they matter: /setup/initialize mints the first super admin, so it is
+// throttled hard and refuses outright (409) the moment any employee row is
+// already there - it can never be used to add a second privileged account.
+Route::get('/setup/status', [SetupAPI::class, 'status']);
+Route::post('/setup/initialize', [SetupAPI::class, 'initialize'])->middleware('throttle:10,1');
 
 // Public Auth API Routes (no token required, login/signup issue the Sanctum token)
 Route::post('/auth/cust_signup', [AuthAPI::class, 'customerSignup']);

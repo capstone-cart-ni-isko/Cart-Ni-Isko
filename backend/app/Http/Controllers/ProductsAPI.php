@@ -385,6 +385,9 @@
                     'bag.bag_amount as item_amount'
                 )->distinct()->orderBy('orders.ord_created', 'desc')->get();
 
+                // REQ-ACCESS_LOG-01: reading the inventory/orders list is logged.
+                $this->logView($json, 'inventory');
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Orders retrieved successfully',
@@ -453,6 +456,9 @@
                         fn ($row) => (int) $row['prod_qty'] <= $lowStockThreshold
                     ));
                 }
+
+                // REQ-ACCESS_LOG-01: reading the catalog is logged.
+                $this->logView($json, 'catalog');
 
                 return response()->json([
                     'success' => true,
@@ -533,6 +539,9 @@
                     });
                 }
 
+                // REQ-ACCESS_LOG-01: reading the catalog search is logged.
+                $this->logView($json, 'catalog search');
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Search completed',
@@ -601,6 +610,9 @@
                         return $dir * (((float) ($a[$column] ?? 0)) <=> ((float) ($b[$column] ?? 0)));
                     });
                 }
+
+                // REQ-ACCESS_LOG-01: reading the sorted catalog is logged.
+                $this->logView($json, 'catalog sort');
 
                 return response()->json([
                     'success' => true,
@@ -783,6 +795,9 @@
                         'message' => 'Product not found'
                     ], 404);
                 }
+
+                // REQ-ACCESS_LOG-01: opening a product page is logged.
+                $this->logView($json, 'product');
 
                 return response()->json([
                     'success' => true,

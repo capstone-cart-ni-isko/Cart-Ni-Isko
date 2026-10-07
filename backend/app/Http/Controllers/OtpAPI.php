@@ -40,14 +40,23 @@ class OtpAPI extends Controller
 
         $user = $json->user('api');
 
-        if (! $user instanceof Customer) {
+        // Customers verify on the phone channel; employees - the admin side -
+        // verify on their Bicol University mailbox.
+        if (! $user instanceof Customer && ! $user instanceof Employee) {
             return response()->json([
                 'success' => false,
-                'message' => 'Phone OTP verification is only available to customer accounts.',
+                'message' => 'Phone OTP verification is only available to customer and employee accounts.',
             ], 403);
         }
 
-        if ($user->cust_deleted || $user->cust_suspended) {
+        if ($user instanceof Employee) {
+            if ($user->emp_deleted || $user->emp_suspended || $user->emp_disabled) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This account is not active.',
+                ], 403);
+            }
+        } elseif ($user->cust_deleted || $user->cust_suspended) {
             return response()->json([
                 'success' => false,
                 'message' => 'This account is not active.',
@@ -60,15 +69,22 @@ class OtpAPI extends Controller
             return response()->json(['success' => false, 'message' => $error], 429);
         }
 
-        $phone = $this->maskPhone($user->cust_phone);
+        $isEmployee = $user instanceof Employee;
+        $address = $isEmployee
+            ? $this->maskEmail((string) $user->emp_email)
+            : $this->maskPhone($user->cust_phone);
 
         return response()->json([
             'success' => true,
-            'message' => 'Verification code sent to your notification inbox.',
+            'message' => $isEmployee
+                ? 'Verification code sent to your Bicol University email.'
+                : 'Verification code sent to your notification inbox.',
             'data'    => [
                 'purpose'    => $json->input('purpose'),
-                'phone'      => $phone,
-                'delivery'   => 'in_app_notification',
+                'channel'    => $isEmployee ? 'email' : 'phone',
+                'phone'      => $address,
+                'email'      => $isEmployee ? $address : null,
+                'delivery'   => $isEmployee ? 'email' : 'in_app_notification',
                 'expires_in' => self::OTP_TTL_MINUTES * 60,
             ],
         ], 200);
@@ -89,10 +105,10 @@ class OtpAPI extends Controller
 
         $user = $json->user('api');
 
-        if (! $user instanceof Customer) {
+        if (! $user instanceof Customer && ! $user instanceof Employee) {
             return response()->json([
                 'success' => false,
-                'message' => 'Phone OTP verification is only available to customer accounts.',
+                'message' => 'Phone OTP verification is only available to customer and employee accounts.',
             ], 403);
         }
 
@@ -103,8 +119,12 @@ class OtpAPI extends Controller
         );
 
         // DOMAIN 32 - an authentication attempt is always written down.
-        $this->logCustomer((int) $user->cust_id, 'authentication',
-            'POST /api/otp/verify - ' . $json->input('purpose') . ($ok ? ' verified' : ' failed'));
+        $attempt = 'POST /api/otp/verify - ' . $json->input('purpose') . ($ok ? ' verified' : ' failed');
+        if ($user instanceof Employee) {
+            $this->logEmployee((int) $user->emp_id, 'authentication', $attempt);
+        } else {
+            $this->logCustomer((int) $user->cust_id, 'authentication', $attempt);
+        }
 
         if (! $ok) {
             return response()->json(['success' => false, 'message' => $message], 422);
@@ -309,5 +329,26 @@ class OtpAPI extends Controller
         }
 
         return substr($phone, 0, 4) . str_repeat('*', $length - 7) . substr($phone, -3);
+    }
+
+    /** juandelacruz@bicol-u.edu.ph -> j***z@bicol-u.edu.ph. */
+    private function maskEmail(string $email): string
+    {
+        $email = trim($email);
+        $at = strrpos($email, '@');
+
+        if ($at === false || $at < 1) {
+            return $email;
+        }
+
+        $local = substr($email, 0, $at);
+        $domain = substr($email, $at);
+
+        if (strlen($local) <= 2) {
+            return substr($local, 0, 1) . '***' . $domain;
+        }
+
+        return substr($local, 0, 1) . str_repeat('*', strlen($local) - 2)
+            . substr($local, -1) . $domain;
     }
 }

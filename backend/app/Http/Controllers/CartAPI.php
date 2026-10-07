@@ -184,6 +184,9 @@ class CartAPI extends Controller
                 ], 403);
             }
 
+            // REQ-ACCESS_LOG-01: reading the customer's cart/orders is logged.
+            $this->logView($json, 'cart');
+
             if ($this->wantsBagRows($json)) {
                 // Self-heal the badge counter while the bag is being read
                 // (legacy behaviour: the cart view refreshed cust_cart).

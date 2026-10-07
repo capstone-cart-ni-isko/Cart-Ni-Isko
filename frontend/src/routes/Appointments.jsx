@@ -12,6 +12,7 @@ import {
   fetchAppointments,
   readAppointmentsCache,
   SLOT_RULES,
+  updateAppointment,
   writeAppointmentsCache,
 } from '../services/appointments.js'
 import { fetchOrder } from '../services/orders.js'
@@ -21,12 +22,12 @@ const STORE = {
   subLocation: 'Bicol University, Main Campus',
 }
 
-/** The four REQ-AB filter pills, in the order the ribbon expects. */
+/** The four FLOW-MANAGE_BOOKED-02 filter pills, in the order the ribbon expects. */
 const FILTERS = [
-  { id: 'today', label: 'Today' },
+  { id: 'all', label: 'All' },
   { id: 'upcoming', label: 'Upcoming' },
   { id: 'done', label: 'Done' },
-  { id: 'cancelled', label: 'Cancelled' },
+  { id: 'absent', label: 'Absent' },
 ]
 
 /** How many cards render before "Load more" - keeps long lists instant. */
@@ -172,8 +173,8 @@ function Appointments() {
 
   // The pill the customer pressed (instant) and the filter the request uses
   // (debounced), so tapping pills never fires competing requests.
-  const [filter, setFilter] = useState('today')
-  const [status, setStatus] = useState('today')
+  const [filter, setFilter] = useState('upcoming')
+  const [status, setStatus] = useState('upcoming')
   const [list, setList] = useState([])
   const [limit, setLimit] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(true) // first paint → skeleton
@@ -251,6 +252,26 @@ function Appointments() {
   }, [])
   const closeForm = useCallback(() => setForm(null), [])
 
+  // FLOW-MANAGE_BOOKED-05/06: the customer cancels through the list; the
+  // backend flips `appoint_status` to `cancelled` and deletes the QR code.
+  const handleCancel = useCallback(
+    async (appt) => {
+      if (!appt) return
+      if (!window.confirm(`Cancel appointment #${appt.id}?\n\nYour slot will be freed up.`)) return
+      try {
+        await updateAppointment(appt.id, { appoint_status: 'cancelled' })
+        setViewing(null)
+        setForm(null)
+        refresh()
+      } catch (err) {
+        setError(
+          apiErrorMessage(err, 'Failed to cancel the appointment. Please try again.')
+        )
+      }
+    },
+    [refresh]
+  )
+
   const cards = list.slice(0, limit)
 
   return (
@@ -267,7 +288,7 @@ function Appointments() {
           <span className="min-w-0">
             <span className="block text-base font-extrabold">Add Appointment</span>
             <span className="block text-xs font-medium text-white/85 leading-snug mt-0.5">
-              Reserve a 10-minute store visit or a 30-minute order claiming slot.
+              Reserve a 10-minute store visit or an order pickup slot.
             </span>
           </span>
           <span className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
@@ -350,6 +371,7 @@ function Appointments() {
                   appointment={appt}
                   onView={() => setViewing(appt)}
                   onEdit={() => startEdit(appt)}
+                  onCancel={handleCancel}
                 />
 
                 {/* FLOW-ORD_CLAIM-01: scan the pickup order's appoint_qr
@@ -392,6 +414,7 @@ function Appointments() {
         appointment={viewing}
         onClose={() => setViewing(null)}
         onEdit={() => startEdit(viewing)}
+        onCancel={handleCancel}
       />
 
       {/* Camera scan of the pickup QR: POST /tracking/scan {scanned_by:'customer'} */}

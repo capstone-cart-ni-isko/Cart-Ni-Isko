@@ -62,7 +62,7 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
               ? `Order #${appointment.orderId} · ${appointment.itemCount} ${
                   appointment.itemCount === 1 ? 'item' : 'items'
                 }`
-              : appointment.type === 'PICKUP'
+              : appointment.type === 'CLAIM' || appointment.type === 'PICKUP'
                 ? 'Order Pickup'
                 : 'Store Visit'}
           </p>
