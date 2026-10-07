@@ -231,41 +231,351 @@ body {
   transform: scale(0.97);
 }
 
-/* ── Dark mode (Menu → Dark/Light Mode) ─────────────────────────────
-   Written outside Tailwind's layers so these overrides win over the
-   matching light-mode utilities without editing every component. */
+/* ══════════════════════════════════════════════════════════════
+   THEME TOKENS — one source of truth, two value sets.
+
+   Tailwind v4 emits every utility as `var(--color-…)` (verified in the
+   build output), so repointing those variables below re-themes all ~90
+   components at once: no `dark:` class has to be added by hand and no
+   page can drift out of sync with the rest. Light values sit on
+   `:root`, dark values on `html.dark`, and section 1 is the bridge
+   that maps the classes the markup already uses onto the tokens.
+
+   FLOW-EMP_HOME-09/10 · FLOW-EMP_SET-05 · FLOW-CUST_HOME-08
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces, page → raised. */
+  --surface: #ffffff;
+  --surface-2: #f8f9fa;
+  --surface-3: #f3f4f6;
+  --surface-4: #e5e7eb;
+  --surface-5: #d1d5db;
+
+  /* Ink, headline → hint. */
+  --ink: #111827;
+  --ink-2: #1f2937;
+  --ink-3: #374151;
+  --muted: #6b7280;
+  --muted-2: #9ca3af;
+  --muted-3: #d1d5db;
+
+  /* Lines. */
+  --line: #e5e7eb;
+  --line-2: #d1d5db;
+  --line-3: #9ca3af;
+
+  /* Status tints. Surface and readable ink travel together, so a badge
+     can never borrow a colour that does not belong to its own fill. */
+  --tint-brand-bg: #fff7ed;
+  --tint-brand-fg: #c2410c;
+  --tint-brand-solid: #ea580c;
+  --tint-ok-bg: #ecfdf5;
+  --tint-ok-fg: #047857;
+  --tint-ok-solid: #059669;
+  --tint-info-bg: #eff6ff;
+  --tint-info-fg: #1d4ed8;
+  --tint-info-solid: #2563eb;
+  --tint-warn-bg: #fffbeb;
+  --tint-warn-fg: #b45309;
+  --tint-warn-solid: #d97706;
+  --tint-danger-bg: #fef2f2;
+  --tint-danger-fg: #b91c1c;
+  --tint-danger-solid: #dc2626;
+  --tint-accent-bg: #fff1f2;
+  --tint-accent-fg: #be123c;
+  --tint-accent-solid: #e11d48;
+  --tint-plain-bg: #f5f3ff;
+  --tint-plain-fg: #6d28d9;
+  --tint-plain-solid: #7c3aed;
+}
+
 html.dark {
-  background: #0b1220;
   color-scheme: dark;
+  background: var(--surface);
+
+  --surface: #0b1220;
+  --surface-2: #0f172a;
+  --surface-3: #111827;
+  --surface-4: #1f2937;
+  --surface-5: #334155;
+
+  --ink: #f8fafc;
+  --ink-2: #e2e8f0;
+  --ink-3: #cbd5e1;
+  --muted: #a3b0c2;
+  --muted-2: #8494a8;
+  --muted-3: #6b7885;
+
+  --line: #1f2937;
+  --line-2: #334155;
+  --line-3: #475569;
+
+  --tint-brand-bg: #2a1409;
+  --tint-brand-fg: #fdba74;
+  --tint-brand-solid: #ea580c;
+  --tint-ok-bg: #052e22;
+  --tint-ok-fg: #6ee7b7;
+  --tint-ok-solid: #059669;
+  --tint-info-bg: #0b1f3d;
+  --tint-info-fg: #93c5fd;
+  --tint-info-solid: #2563eb;
+  --tint-warn-bg: #2a1f05;
+  --tint-warn-fg: #fcd34d;
+  --tint-warn-solid: #d97706;
+  --tint-danger-bg: #2b0f0f;
+  --tint-danger-fg: #fca5a5;
+  --tint-danger-solid: #dc2626;
+  --tint-accent-bg: #2d0b13;
+  --tint-accent-fg: #fda4af;
+  --tint-accent-solid: #e11d48;
+  --tint-plain-bg: #1e1233;
+  --tint-plain-fg: #c4b5fd;
+  --tint-plain-solid: #7c3aed;
 }
 
 html.dark body {
-  background: #0b1220;
-  color: #e5e7eb;
+  background: var(--surface);
+  color: var(--ink-2);
 }
 
-html.dark .bg-white { background-color: #111827; }
-html.dark .bg-gray-50,
-html.dark .bg-slate-50 { background-color: #1f2937; }
-html.dark .bg-gray-100,
-html.dark .bg-slate-100 { background-color: #334155; }
+/* ── 1 · Palette → token bridge ─────────────────────────────────
+   The markup already speaks `bg-slate-50`, `text-gray-900`,
+   `border-slate-200`. Repointing the variable behind each of those
+   classes is what changes every page at once. The neutral ramp keeps
+   its ordering (a "50" surface stays a surface, a "900" heading stays
+   a heading) — it is simply read dark-first. */
+html.dark {
+  --color-gray-50: var(--surface-2);
+  --color-gray-100: var(--surface-3);
+  --color-gray-150: var(--line);
+  --color-gray-200: var(--line);
+  --color-gray-250: var(--line);
+  --color-gray-300: var(--line-2);
+  --color-gray-400: var(--muted-2);
+  --color-gray-450: var(--muted);
+  --color-gray-455: var(--muted);
+  --color-gray-500: var(--muted);
+  --color-gray-600: var(--ink-3);
+  --color-gray-700: var(--ink-2);
+  --color-gray-800: var(--ink-2);
+  --color-gray-900: var(--ink);
+  --color-slate-50: var(--surface-2);
+  --color-slate-100: var(--surface-3);
+  --color-slate-200: var(--line);
+  --color-slate-300: var(--line-2);
+  --color-slate-400: var(--muted-2);
+  --color-slate-500: var(--muted);
+  --color-slate-600: var(--ink-3);
+  --color-slate-700: var(--ink-2);
+  --color-slate-800: var(--ink-2);
+  --color-slate-900: var(--ink);
+  --color-zinc-50: var(--surface-2);
+  --color-zinc-100: var(--surface-3);
+  --color-zinc-200: var(--line);
+  --color-zinc-300: var(--line-2);
+  --color-zinc-400: var(--muted-2);
+  --color-zinc-500: var(--muted);
+  --color-zinc-600: var(--ink-3);
+  --color-zinc-700: var(--ink-2);
+  --color-zinc-800: var(--ink-2);
+  --color-zinc-900: var(--ink);
+
+  /* Pale status washes become deep washes … */
+  --color-orange-50: var(--tint-brand-bg);
+  --color-orange-100: var(--tint-brand-bg);
+  --color-emerald-50: var(--tint-ok-bg);
+  --color-emerald-100: var(--tint-ok-bg);
+  --color-green-50: var(--tint-ok-bg);
+  --color-green-100: var(--tint-ok-bg);
+  --color-blue-50: var(--tint-info-bg);
+  --color-blue-100: var(--tint-info-bg);
+  --color-sky-50: var(--tint-info-bg);
+  --color-sky-100: var(--tint-info-bg);
+  --color-amber-50: var(--tint-warn-bg);
+  --color-amber-100: var(--tint-warn-bg);
+  --color-yellow-50: var(--tint-warn-bg);
+  --color-yellow-100: var(--tint-warn-bg);
+  --color-red-50: var(--tint-danger-bg);
+  --color-red-100: var(--tint-danger-bg);
+  --color-rose-50: var(--tint-accent-bg);
+  --color-rose-100: var(--tint-accent-bg);
+  --color-pink-50: var(--tint-plain-bg);
+  --color-pink-100: var(--tint-plain-bg);
+  --color-purple-50: var(--tint-plain-bg);
+  --color-purple-100: var(--tint-plain-bg);
+
+  /* … and the deep ink of those same hues lightens to stay readable
+     on them. The 500 step is left alone: it is a solid fill as often
+     as it is text, and it already clears contrast on a dark wash. */
+  --color-orange-700: var(--tint-brand-fg);
+  --color-orange-800: var(--tint-brand-fg);
+  --color-orange-900: var(--tint-brand-fg);
+  --color-emerald-600: var(--tint-ok-fg);
+  --color-emerald-700: var(--tint-ok-fg);
+  --color-emerald-800: var(--tint-ok-fg);
+  --color-emerald-900: var(--tint-ok-fg);
+  --color-green-700: var(--tint-ok-fg);
+  --color-green-800: var(--tint-ok-fg);
+  --color-green-900: var(--tint-ok-fg);
+  --color-blue-600: var(--tint-info-fg);
+  --color-blue-700: var(--tint-info-fg);
+  --color-blue-800: var(--tint-info-fg);
+  --color-blue-900: var(--tint-info-fg);
+  --color-sky-700: var(--tint-info-fg);
+  --color-sky-800: var(--tint-info-fg);
+  --color-amber-600: var(--tint-warn-fg);
+  --color-amber-700: var(--tint-warn-fg);
+  --color-amber-800: var(--tint-warn-fg);
+  --color-amber-900: var(--tint-warn-fg);
+  --color-yellow-700: var(--tint-warn-fg);
+  --color-yellow-800: var(--tint-warn-fg);
+  --color-red-600: var(--tint-danger-fg);
+  --color-red-700: var(--tint-danger-fg);
+  --color-red-800: var(--tint-danger-fg);
+  --color-red-900: var(--tint-danger-fg);
+  --color-rose-600: var(--tint-accent-fg);
+  --color-rose-700: var(--tint-accent-fg);
+  --color-rose-800: var(--tint-accent-fg);
+  --color-rose-900: var(--tint-accent-fg);
+  --color-purple-600: var(--tint-plain-fg);
+  --color-purple-700: var(--tint-plain-fg);
+  --color-purple-800: var(--tint-plain-fg);
+  --color-purple-900: var(--tint-plain-fg);
+
+  /* The -200 step of a status hue is a border in this app far more
+     often than a fill, so it becomes a tinted line, not a pastel. */
+  --color-orange-200: color-mix(in srgb, var(--tint-brand-fg) 38%, transparent);
+  --color-emerald-200: color-mix(in srgb, var(--tint-ok-fg) 38%, transparent);
+  --color-green-200: color-mix(in srgb, var(--tint-ok-fg) 38%, transparent);
+  --color-blue-200: color-mix(in srgb, var(--tint-info-fg) 38%, transparent);
+  --color-sky-200: color-mix(in srgb, var(--tint-info-fg) 38%, transparent);
+  --color-amber-200: color-mix(in srgb, var(--tint-warn-fg) 38%, transparent);
+  --color-yellow-200: color-mix(in srgb, var(--tint-warn-fg) 38%, transparent);
+  --color-red-200: color-mix(in srgb, var(--tint-danger-fg) 38%, transparent);
+  --color-rose-200: color-mix(in srgb, var(--tint-accent-fg) 38%, transparent);
+  --color-purple-200: color-mix(in srgb, var(--tint-plain-fg) 38%, transparent);
+  --color-pink-200: color-mix(in srgb, var(--tint-plain-fg) 38%, transparent);
+}
+
+/* ── 2 · Conflicts one variable cannot express ──────────────────
+   A handful of steps are used as BOTH a fill and a text colour, and
+   one variable cannot serve both once the theme flips. `[class*=…]`
+   is used deliberately so `dark:bg-slate-800`, `hover:bg-white` and
+   the `bg-white/80` opacity form are all caught. Attribute selectors
+   lose to nothing here: they sit outside Tailwind's layers. */
+
+/* Translucent sheets (ribbon, drawer, modal scrim) must follow the
+   surface too — v4 inlines those, so no variable reaches them. */
+html.dark [class*="bg-white/"] {
+  background-color: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+html.dark [class*="bg-white"] {
+  background-color: var(--surface);
+}
+
+/* …while a step that reads as a dark surface in light mode must not
+   be flipped to near-white just because it also serves as text. */
+html.dark [class*="bg-gray-800"],
+html.dark [class*="bg-gray-900"],
+html.dark [class*="bg-slate-800"],
+html.dark [class*="bg-slate-900"] {
+  background-color: var(--surface-4);
+}
+
+/* Light ink on a dark surface — the inverse of the two rules above. */
+html.dark [class*="text-gray-200"],
+html.dark [class*="text-gray-300"],
+html.dark [class*="text-slate-200"],
+html.dark [class*="text-slate-300"],
+html.dark [class*="text-zinc-300"] {
+  color: var(--ink-3);
+}
+
+/* Solid status fills keep their own colour: a red button stays red,
+   it does not inherit the lightened ink of its own text step. */
+html.dark [class*="bg-orange-6"],
+html.dark [class*="bg-orange-7"] { background-color: var(--tint-brand-solid); }
+html.dark [class*="bg-emerald-6"],
+html.dark [class*="bg-emerald-7"],
+html.dark [class*="bg-green-6"],
+html.dark [class*="bg-green-7"] { background-color: var(--tint-ok-solid); }
+html.dark [class*="bg-blue-6"],
+html.dark [class*="bg-blue-7"] { background-color: var(--tint-info-solid); }
+html.dark [class*="bg-amber-6"],
+html.dark [class*="bg-amber-7"] { background-color: var(--tint-warn-solid); }
+html.dark [class*="bg-red-6"],
+html.dark [class*="bg-red-7"],
+html.dark [class*="bg-red-8"] { background-color: var(--tint-danger-solid); }
+html.dark [class*="bg-rose-6"],
+html.dark [class*="bg-rose-7"] { background-color: var(--tint-accent-solid); }
+html.dark [class*="bg-purple-6"],
+html.dark [class*="bg-purple-7"] { background-color: var(--tint-plain-solid); }
+
+/* The near-white `*-50` ink is only ever paired with a solid fill, so
+   it stays light instead of following its wash down into the dark. */
+html.dark [class*="text-orange-50"],
+html.dark [class*="text-emerald-50"],
+html.dark [class*="text-green-50"],
+html.dark [class*="text-blue-50"],
+html.dark [class*="text-sky-50"],
+html.dark [class*="text-amber-50"],
+html.dark [class*="text-yellow-50"],
+html.dark [class*="text-red-50"],
+html.dark [class*="text-rose-50"],
+html.dark [class*="text-pink-50"],
+html.dark [class*="text-purple-50"] {
+  color: var(--ink);
+}
+
+/* ── 3 · Literals Tailwind cannot see ─────────────────────────── */
 html.dark [class*="#F8F9FA"],
-html.dark [class*="#f8f9fa"] { background-color: #0b1220; }
+html.dark [class*="#f8f9fa"] { background-color: var(--surface); }
 
-html.dark .text-gray-900,
-html.dark .text-slate-900 { color: #f9fafb; }
-html.dark .text-gray-700,
-html.dark .text-gray-600,
-html.dark .text-slate-700,
-html.dark .text-slate-600 { color: #d1d5db; }
-html.dark .text-gray-500,
-html.dark .text-gray-400,
-html.dark .text-slate-500,
-html.dark .text-slate-400,
-html.dark .text-text-muted { color: #9ca3af; }
-html.dark .placeholder-gray-400::placeholder { color: #6b7280; }
+/* Arbitrary values (`bg-[#EBF2FF]`) are inlined as literals, so no
+   variable reaches them either — without these the pale status tiles
+   stay paper-bright on a dark page. Grouped by the tint they belong
+   to rather than listed one by one, so a new tile is one line away. */
+html.dark [class*="bg-[#EBF2FF]"], html.dark [class*="bg-[#DBEAFE]"],
+html.dark [class*="bg-[#F0F5FF]"], html.dark [class*="bg-[#F0F7FF]"],
+html.dark [class*="bg-[#EFF6FF]"] { background-color: var(--tint-info-bg); }
 
-html.dark [class*="border-gray-100"],
-html.dark [class*="border-slate-100"],
-html.dark [class*="border-gray-200"],
-html.dark [class*="border-slate-200"] { border-color: #334155; }
+html.dark [class*="bg-[#F0FDF4]"], html.dark [class*="bg-[#E8F8EE]"],
+html.dark [class*="bg-[#ECFDF5]"] { background-color: var(--tint-ok-bg); }
+
+html.dark [class*="bg-[#FFF7ED]"], html.dark [class*="bg-[#FFE8D6]"],
+html.dark [class*="bg-[#FFF4E5]"], html.dark [class*="bg-[#FFF5ED]"],
+html.dark [class*="bg-[#FFE2D1]"], html.dark [class*="bg-[#FFF9F5]"],
+html.dark [class*="bg-[#FFF4EC]"], html.dark [class*="bg-[#FFEDE1]"],
+html.dark [class*="bg-[#FFF8F3]"], html.dark [class*="bg-[#FFE7D6]"] {
+  background-color: var(--tint-brand-bg);
+}
+
+html.dark [class*="bg-[#F3E8FF]"], html.dark [class*="bg-[#FAF5FF]"] {
+  background-color: var(--tint-plain-bg);
+}
+html.dark [class*="bg-[#FEF3C7]"] { background-color: var(--tint-warn-bg); }
+html.dark [class*="bg-[#F1F5F9]"] { background-color: var(--surface-4); }
+
+/* Their borders follow their tint instead of staying pastel. */
+html.dark [class*="border-[#DCEBFE]"] { border-color: color-mix(in srgb, var(--tint-info-fg) 38%, transparent); }
+html.dark [class*="border-[#DCFCE7]"] { border-color: color-mix(in srgb, var(--tint-ok-fg) 38%, transparent); }
+html.dark [class*="border-[#FFE2D1]"], html.dark [class*="border-[#FFE7D6]"],
+html.dark [class*="border-[#FFE5D3]"] { border-color: color-mix(in srgb, var(--tint-brand-fg) 38%, transparent); }
+
+/* Ink written as a literal: near-black steps must not follow the page
+   down, and mid-tone accents must lighten to clear the dark wash. */
+html.dark [class*="text-[#0F172A]"] { color: var(--ink); }
+html.dark [class*="text-[#475569]"] { color: var(--muted); }
+html.dark [class*="text-[#2563EB]"] { color: var(--tint-info-fg); }
+html.dark [class*="text-[#059669]"] { color: var(--tint-ok-fg); }
+html.dark [class*="text-[#E65100]"], html.dark [class*="text-[#EA580C]"] {
+  color: var(--tint-brand-fg);
+}
+html.dark [class*="text-[#D97706]"] { color: var(--tint-warn-fg); }
+html.dark [class*="text-[#8B5CF6]"] { color: var(--tint-plain-fg); }
+html.dark .text-text-muted { color: var(--muted); }
+html.dark .placeholder-gray-400::placeholder { color: var(--muted-2); }
+html.dark ::placeholder { color: var(--muted-2); }

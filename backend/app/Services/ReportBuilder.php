@@ -6,7 +6,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Appointment;
 use App\Models\Employee;
-use App\Models\DutyShift;
+use App\Models\Schedule;
 use App\Models\Item;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -272,8 +272,7 @@ class ReportBuilder
     public function buildStaffingReport(array $filters): array
     {
         $query = Employee::whereNull('emp_deleted')
-            ->whereNull('emp_disabled')
-            ->with(['dutyShifts']);
+            ->whereNull('emp_disabled');
 
         if (!empty($filters['emp_type'])) {
             $query->where('emp_type', $filters['emp_type']);
@@ -281,15 +280,22 @@ class ReportBuilder
 
         $employees = $query->get();
 
-        // Calculate hours worked from duty_shifts
-        $staffData = $employees->map(function ($emp) {
-            $shifts = $emp->dutyShifts ?? collect();
+        // Calculate hours worked from `schedules`, the Domain 7 duty table.
+        // One query for the whole roster rather than a per-employee load.
+        $blocks = Schedule::whereIn('emp_id', $employees->pluck('emp_id'))
+            ->get()
+            ->groupBy('emp_id');
+
+        $staffData = $employees->map(function ($emp) use ($blocks) {
+            $shifts = $blocks->get($emp->emp_id) ?? collect();
             $totalHours = $shifts->sum(function ($shift) {
-                $start = Carbon::parse($shift->shift_start);
-                $end = Carbon::parse($shift->shift_end);
-                return $start->diffInHours($end);
+                if (! $shift->sched_time_start || ! $shift->sched_time_end) return 0;
+                return $shift->sched_time_start->diffInHours($shift->sched_time_end);
             });
-            $upcomingShifts = $shifts->where('shift_date', '>=', now()->format('Y-m-d'))->count();
+            $upcomingShifts = $shifts->filter(
+                fn ($shift) => $shift->sched_time_start
+                    && $shift->sched_time_start->gte(now()->startOfDay())
+            )->count();
             
             return [
                 'emp_id' => $emp->emp_id,
@@ -319,13 +325,14 @@ class ReportBuilder
         $coverage = [];
         for ($i = 0; $i < 7; $i++) {
             $date = now()->addDays($i)->format('Y-m-d');
-            $dayShifts = DutyShift::where('shift_date', $date)->get();
+            $dayShifts = Schedule::whereDate('sched_time_start', $date)->get();
             $coverage[] = [
                 'date' => $date,
                 'shifts_count' => $dayShifts->count(),
                 'staff_count' => $dayShifts->pluck('emp_id')->unique()->count(),
                 'hours_covered' => $dayShifts->sum(function ($s) {
-                    return Carbon::parse($s->shift_start)->diffInHours(Carbon::parse($s->shift_end));
+                    if (! $s->sched_time_start || ! $s->sched_time_end) return 0;
+                    return $s->sched_time_start->diffInHours($s->sched_time_end);
                 }),
             ];
         }

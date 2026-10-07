@@ -62,14 +62,9 @@ export default function ScheduleShiftList({
           <div className="min-w-0">
             <p className="text-xs font-bold text-slate-900 truncate">
               {shift.employee_name || `Employee #${shift.emp_id}`}
-              <span className="font-semibold text-slate-500">
-                {' '}
-                · {shift.shift_type}
-              </span>
             </p>
             <p className="text-[11px] text-slate-500">
               {shift.shift_start} – {shift.shift_end}
-              {shift.shift_location ? ` · ${shift.shift_location}` : ''}
               {' · block #'}
               {shift.shift_id}
             </p>

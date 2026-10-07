@@ -5,6 +5,9 @@ import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import StatCard from '../../components/admin/StatCard.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
+import { jsPDF } from 'jspdf'
+// v5 exports the caller rather than patching the jsPDF prototype.
+import autoTable from 'jspdf-autotable'
 
 import {
   fetchDashboardSnapshot,
@@ -23,8 +26,8 @@ import {
 const REFRESH_MS = 30000
 
 /** % change of *customer* orders (active buyers) vs the previous window. */
-function customerTrend(rows, range) {
-  const { from, duration } = rangeBounds(range)
+function customerTrend(rows, range, custom = null) {
+  const { from, duration } = rangeBounds(range, custom)
   const current = new Set()
   const previous = new Set()
 
@@ -50,10 +53,36 @@ function customerTrend(rows, range) {
   }
 }
 
+/** ISO yyyy-mm-dd for a day offset from today (date inputs read this shape). */
+function isoDay(offsetDays) {
+  return new Date(Date.now() + offsetDays * 86400000).toISOString().slice(0, 10)
+}
+
+/** FLOW-ANALYTICS-06: the presets the date filter must offer. */
+const RANGE_PRESETS = [
+  { value: 'Today', label: 'Today' },
+  { value: 'Week', label: 'This Week' },
+  { value: 'Month', label: 'This Month' },
+  { value: 'Custom', label: 'Custom' },
+]
+
 export default function AdminAnalytics() {
   const navigate = useNavigate()
   const { orders: rawOrders = [], refreshOrders, products = [] } = useAdmin()
-  const [timeRange, setTimeRange] = useState('7D') // 'Today' | '7D' | '30D'
+  const [timeRange, setTimeRange] = useState('Week') // 'Today' | 'Week' | 'Month' | 'Custom'
+  const [customFrom, setCustomFrom] = useState(() => isoDay(-6))
+  const [customTo, setCustomTo] = useState(() => isoDay(0))
+
+  // FLOW-ANALYTICS-06 / REQ-ANALYTICS-06: one window object that every filter,
+  // chart and export below reads, so the numbers a report carries always
+  // describe the range shown on screen.
+  const customWindow = useMemo(() => {
+    if (timeRange !== 'Custom' || !customFrom || !customTo) return null
+    const from = new Date(`${customFrom}T00:00:00`).getTime()
+    const to = new Date(`${customTo}T23:59:59`).getTime() + 1
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return null
+    return { from, to, duration: to - from }
+  }, [timeRange, customFrom, customTo])
   const [snapshot, setSnapshot] = useState(null)
 
   const syncData = useCallback(() => {
@@ -72,15 +101,27 @@ export default function AdminAnalytics() {
   }, [syncData])
 
   const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
-  const rangeOrders = useMemo(() => filterOrdersByRange(orders, timeRange), [orders, timeRange])
+  const rangeOrders = useMemo(
+    () => filterOrdersByRange(orders, timeRange, customWindow),
+    [orders, timeRange, customWindow]
+  )
   const sales = useMemo(() => summarizeSales(rangeOrders), [rangeOrders])
   const baseline = useMemo(
     () => summarizeSales(filterOrdersByRange(orders, '30D')).avg,
     [orders]
   )
-  const salesTrend = useMemo(() => buildTrendLabel(orders, timeRange), [orders, timeRange])
-  const ordersTrend = useMemo(() => buildTrendLabel(orders, timeRange, () => 1), [orders, timeRange])
-  const buyersTrend = useMemo(() => customerTrend(orders, timeRange), [orders, timeRange])
+  const salesTrend = useMemo(
+    () => buildTrendLabel(orders, timeRange, (row) => row.total, customWindow),
+    [orders, timeRange, customWindow]
+  )
+  const ordersTrend = useMemo(
+    () => buildTrendLabel(orders, timeRange, () => 1, customWindow),
+    [orders, timeRange, customWindow]
+  )
+  const buyersTrend = useMemo(
+    () => customerTrend(orders, timeRange, customWindow),
+    [orders, timeRange, customWindow]
+  )
 
   const activeCustomers = useMemo(() => {
     const ids = new Set(
@@ -93,7 +134,10 @@ export default function AdminAnalytics() {
   const avgProgress = baseline > 0 ? Math.min(100, Math.round((avgOrderValue / baseline) * 100)) : 0
 
   // Chart data points (Online vs Walk-in POS per bucket)
-  const trendData = useMemo(() => buildSalesTrend(rangeOrders, timeRange), [rangeOrders, timeRange])
+  const trendData = useMemo(
+    () => buildSalesTrend(rangeOrders, timeRange, customWindow),
+    [rangeOrders, timeRange, customWindow]
+  )
   const maxSales = Math.max(...trendData.map((d) => d.total || 0), 1)
   const peakPoint = useMemo(
     () => trendData.reduce((best, point) => (point.total > (best?.total || 0) ? point : best), null),
@@ -112,6 +156,91 @@ export default function AdminAnalytics() {
     [orders, snapshot]
   )
 
+  // FLOW-ANALYTICS-08 / REQ-ANALYTICS-06: the export carries the active date
+  // range, every KPI on screen and all three breakdowns, so a downloaded file
+  // always describes exactly what the dashboard is showing.
+  const rangeLabel =
+    timeRange === 'Custom' && customWindow
+      ? `Custom: ${customFrom} to ${customTo}`
+      : RANGE_PRESETS.find((preset) => preset.value === timeRange)?.label || timeRange
+
+  const buildReport = () => ({
+    meta: [
+      ['Date range', rangeLabel],
+      ['Generated', new Date().toLocaleString()],
+      ['Total sales (PHP)', sales.gross.toFixed(2)],
+      ['Total orders', String(sales.count)],
+      ['Average order value (PHP)', sales.avg.toFixed(2)],
+      ['Active customers', String(activeCustomers)],
+    ],
+    tables: [
+      {
+        title: 'Sales trend by order type',
+        head: ['Date', 'Walk-in', 'Pre-order', 'Online', 'Total'],
+        rows: trendData.map((p) => [p.date, p.walkin, p.preorder, p.online, p.total]),
+      },
+      {
+        title: 'Top products',
+        head: ['Product', 'Category', 'Units sold', 'Revenue (PHP)'],
+        rows: topProducts.map((p) => [p.name, p.category, p.sales, p.revenue]),
+      },
+      {
+        title: 'Recent orders',
+        head: ['Order', 'Customer', 'Total (PHP)', 'Status', 'Date'],
+        rows: recentOrders.map((o) => [o.id, o.customer, (Number(o?.total) || 0).toFixed(2), o.status, o.date]),
+      },
+    ],
+  })
+
+  const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`
+
+  const exportFile = (extension) => {
+    const filename = `analytics-${timeRange.toLowerCase()}-${isoDay(0)}.${extension}`
+    if (extension === 'csv') {
+      const report = buildReport()
+      const lines = report.meta.map(([label, value]) => `${csvCell(label)},${csvCell(value)}`)
+      report.tables.forEach((table) => {
+        lines.push('')
+        lines.push(csvCell(table.title))
+        lines.push(table.head.map(csvCell).join(','))
+        table.rows.forEach((row) => lines.push(row.map(csvCell).join(',')))
+      })
+      const blob = new Blob([`\uFEFF${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+      return
+    }
+
+    const report = buildReport()
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+    doc.setFontSize(16)
+    doc.text('Analytics Report', 40, 40)
+    doc.setFontSize(10)
+    report.meta.forEach(([label, value], index) => doc.text(`${label}: ${value}`, 40, 62 + index * 14))
+    let y = 62 + report.meta.length * 14 + 20
+    report.tables.forEach((table) => {
+      if (y > doc.internal.pageSize.getHeight() - 80) {
+        doc.addPage()
+        y = 40
+      }
+      doc.setFontSize(12)
+      doc.text(table.title, 40, y)
+      const rendered = autoTable(doc, {
+        startY: y + 6,
+        head: [table.head],
+        body: table.rows.map((row) => row.map((cell) => String(cell ?? ''))),
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [255, 106, 0] },
+      })
+      y = (rendered?.finalY ?? doc.lastAutoTable?.finalY ?? y + 60) + 20
+    })
+    doc.save(filename)
+  }
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -126,22 +255,65 @@ export default function AdminAnalytics() {
             </p>
           </div>
 
-          {/* Timeframe Toggle Pills */}
-          <div className="flex bg-white p-1 rounded-xl border border-gray-200/80 shadow-2xs self-start sm:self-auto">
-            {['Today', '7D', '30D'].map((tab) => (
+          {/* Date range — FLOW-ANALYTICS-06 presets plus a custom window */}
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <div className="flex bg-white p-1 rounded-xl border border-gray-200/80 shadow-2xs">
+              {RANGE_PRESETS.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => setTimeRange(preset.value)}
+                  aria-pressed={timeRange === preset.value}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    timeRange === preset.value
+                      ? 'bg-brand-orange text-white shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {timeRange === 'Custom' && (
+              <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-xl border border-gray-200/80 shadow-2xs">
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  aria-label="Custom range start"
+                  className="text-xs font-bold text-gray-700 focus:outline-none"
+                />
+                <span className="text-xs text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  aria-label="Custom range end"
+                  className="text-xs font-bold text-gray-700 focus:outline-none"
+                />
+              </div>
+            )}
+
+            {/* FLOW-ANALYTICS-08: export what is currently on screen */}
+            <div className="flex items-center gap-1.5">
               <button
-                key={tab}
                 type="button"
-                onClick={() => setTimeRange(tab)}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  timeRange === tab
-                    ? 'bg-brand-orange text-white shadow-xs'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
+                onClick={() => exportFile('csv')}
+                className="h-8 px-3 rounded-lg border border-gray-200 bg-white text-xs font-bold text-gray-700 hover:text-brand-orange hover:border-brand-orange transition-all cursor-pointer"
               >
-                {tab}
+                Export CSV
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => exportFile('pdf')}
+                className="h-8 px-3 rounded-lg bg-brand-orange text-white text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
+              >
+                Export PDF
+              </button>
+            </div>
           </div>
         </div>
 
@@ -216,17 +388,21 @@ export default function AdminAnalytics() {
                     Sales Overview
                   </h2>
                   <p className="text-xs text-gray-400 font-medium">
-                    Revenue breakdown (Online vs In-Store POS)
+                    Revenue breakdown by order type (walk-in vs. preorder)
                   </p>
                 </div>
                 <div className="flex items-center gap-4 text-xs font-bold">
                   <div className="flex items-center gap-1.5 text-brand-orange">
                     <span className="w-2.5 h-2.5 rounded-full bg-brand-orange" />
-                    <span>Online Sales</span>
+                    <span>Pre-order</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-blue-600">
                     <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                    <span>POS Walk-in</span>
+                    <span>Walk-in</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-emerald-600">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span>Online</span>
                   </div>
                 </div>
               </div>
@@ -240,8 +416,9 @@ export default function AdminAnalytics() {
                     </div>
                   )}
                   {trendData.map((point) => {
+                    const preorderH = Math.round((point.preorder / maxSales) * 100)
+                    const walkinH = Math.round((point.walkin / maxSales) * 100)
                     const onlineH = Math.round((point.online / maxSales) * 100)
-                    const posH = Math.round((point.pos / maxSales) * 100)
 
                     return (
                       <div
@@ -251,8 +428,9 @@ export default function AdminAnalytics() {
                         {/* Hover card */}
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[10px] p-2 rounded-xl pointer-events-none whitespace-nowrap shadow-xl -mb-2 z-20 space-y-0.5">
                           <p className="font-extrabold text-orange-300">{point.date}</p>
+                          <p>Walk-in: ₱{point.walkin.toLocaleString()}</p>
+                          <p>Pre-order: ₱{point.preorder.toLocaleString()}</p>
                           <p>Online: ₱{point.online.toLocaleString()}</p>
-                          <p>POS: ₱{point.pos.toLocaleString()}</p>
                           <p className="font-bold border-t border-gray-700 pt-0.5">
                             Total: ₱{point.total.toLocaleString()}
                           </p>
@@ -262,11 +440,15 @@ export default function AdminAnalytics() {
                         <div className="w-full max-w-[42px] flex flex-col justify-end h-full gap-1">
                           <div
                             className="w-full bg-brand-orange rounded-t-lg transition-all duration-500 group-hover:brightness-110"
-                            style={{ height: `${onlineH}%` }}
+                            style={{ height: `${preorderH}%` }}
                           />
                           <div
-                            className="w-full bg-blue-500 rounded-t-sm transition-all duration-500 group-hover:brightness-110"
-                            style={{ height: `${posH}%` }}
+                            className="w-full bg-blue-500 transition-all duration-500 group-hover:brightness-110"
+                            style={{ height: `${walkinH}%` }}
+                          />
+                          <div
+                            className="w-full bg-emerald-500 rounded-t-sm transition-all duration-500 group-hover:brightness-110"
+                            style={{ height: `${onlineH}%` }}
                           />
                         </div>
 

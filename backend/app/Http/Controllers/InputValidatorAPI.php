@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\DutyShift;
+use App\Models\Schedule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -673,7 +673,7 @@ class InputValidatorAPI extends Controller
         ]);
     }
 
-    public function updateShift(Request $json, DutyShift $shift)
+    public function updateShift(Request $json, Schedule $shift)
     {
         $requiredCheck = $this->validateFields($json, [
             'emp_id'      => 'nullable|integer|exists:employee,emp_id',
@@ -693,11 +693,20 @@ class InputValidatorAPI extends Controller
         if ($requiredCheck) return $requiredCheck;
 
         // A partial update is checked against the window it will end up with,
-        // so moving only the end time past the start is still rejected.
-        $start = $json->input('shift_start', $shift->shift_start);
-        $end = $json->input('shift_end', $shift->shift_end);
+        // so moving only the end time past the start is still rejected. The
+        // block stores one timestamp pair, so an untouched side falls back to
+        // the half the stored window already holds; both format to a
+        // zero-padded HH:MM, which compares in order.
+        $start = (string) $json->input(
+            'shift_start',
+            optional($shift->sched_time_start)->format('H:i')
+        );
+        $end = (string) $json->input(
+            'shift_end',
+            optional($shift->sched_time_end)->format('H:i')
+        );
 
-        if ($end <= $start) {
+        if ($start !== '' && $end !== '' && $end <= $start) {
             return $this->fail('Shift end time must be later than the start time.');
         }
 

@@ -465,7 +465,7 @@ export default function AdminDashboard() {
               <CardHeader
                 title="On duty today"
                 action={
-                  <Link to="/admin/schedule" className={ACTION_LINK}>
+                  <Link to="/admin/schedules" className={ACTION_LINK}>
                     <span>View full schedule</span>
                     <Chevron />
                   </Link>

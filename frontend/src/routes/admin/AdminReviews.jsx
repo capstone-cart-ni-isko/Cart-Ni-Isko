@@ -109,6 +109,9 @@ export default function AdminReviews() {
   const [ratingFilter, setRatingFilter] = useState('all')
   const [mediaFilter, setMediaFilter] = useState('all')
   const [sortBy, setSortBy] = useState('newest')
+  // Rating and Media are secondary to status and sort; folded so the default
+  // toolbar stays four controls wide.
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   const [selectedId, setSelectedId] = useState(null)
@@ -449,6 +452,23 @@ export default function AdminReviews() {
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={() => setShowMoreFilters((open) => !open)}
+              aria-expanded={showMoreFilters}
+              className={`h-8 px-2.5 rounded-md border text-xs font-semibold whitespace-nowrap cursor-pointer focus:outline-none ${
+                showMoreFilters || ratingFilter !== 'all' || mediaFilter !== 'all'
+                  ? 'bg-brand-orange text-white border-brand-orange'
+                  : SELECT_CLASS
+              }`}
+            >
+              Filters
+              {[ratingFilter, mediaFilter].filter((v) => v !== 'all').length
+                ? ` · ${[ratingFilter, mediaFilter].filter((v) => v !== 'all').length}`
+                : ''}
+            </button>
+            {showMoreFilters && (
+            <>
             <select value={ratingFilter} onChange={(e) => setRatingFilter(e.target.value)} className={SELECT_CLASS} aria-label="Rating">
               {RATING_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -459,6 +479,8 @@ export default function AdminReviews() {
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+            </>
+            )}
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className={SELECT_CLASS} aria-label="Sort">
               {SORT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>

@@ -184,7 +184,12 @@ function App() {
                     <Route path="/admin/analytics" element={<AdminAnalytics />} />
                   </Route>
                   <Route path="/admin/customization" element={<AdminStoreCustomization />} />
-                  <Route path="/admin/schedule" element={<AdminSchedule />} />
+                  {/* FLOW-EMP_SCHED-01: super admins reach the interface through
+              `/admin/schedules`. The singular spelling was the only one
+              registered, so the documented URL fell through to the dashboard;
+              it is kept as an alias so existing deep links still land. */}
+          <Route path="/admin/schedules" element={<AdminSchedule />} />
+          <Route path="/admin/schedule" element={<AdminSchedule />} />
                   <Route path="/admin/appointments" element={<AdminAppointments />} />
                   {/* REQ-EMP_HOME-01 — the Reviews entry never renders for a
                       'staff' employee, so the screen behind it is guarded the

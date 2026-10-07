@@ -1,11 +1,10 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import LoadingSpinner from '../../components/ui/LoadingSpinner.jsx'
 import Button from '../../components/ui/Button.jsx'
-import Input from '../../components/ui/Input.jsx'
-import { DownloadIcon, FileTextIcon, CalendarIcon, UsersIcon, PackageIcon, Trash2Icon, SaveIcon } from '../../components/ui/Icons.jsx'
+import { DownloadIcon, FileTextIcon, CalendarIcon, UsersIcon, PackageIcon, SaveIcon } from '../../components/ui/Icons.jsx'
 import { apiPost, apiGet } from '../../services/api.js'
 import { empCateg, empIsActive, first, fmtDateTime, productStock, toNumber } from '../../components/admin/schema.js'
 import { jsPDF } from 'jspdf'
@@ -25,7 +24,7 @@ const readTemplates = () => {
   try {
     const parsed = JSON.parse(localStorage.getItem(TEMPLATE_KEY) || '[]')
     return Array.isArray(parsed) ? parsed : []
-  } catch (e) {
+  } catch {
     return []
   }
 }
@@ -52,8 +51,6 @@ const REPORT_TYPES = [
   { id: 'staffing', label: 'Staffing Report', icon: UsersIcon, desc: 'Employee availability, hours, shift coverage' },
 ]
 
-const DELIVERY_SPEEDS = ['priority', 'standard', 'saver']
-
 /** Human-readable value for a generated report summary cell. */
 const summaryDisplay = (value) => {
   if (value === null || value === undefined) return '—'
@@ -66,7 +63,7 @@ const summaryDisplay = (value) => {
 }
 
 function AdminReports() {
-  const { currentAdminUser, isSuperAdmin } = useAdmin()
+  useAdmin()
   const { showToast } = useToast()
 
   const [reportType, setReportType] = useState('sales')
@@ -81,25 +78,39 @@ function AdminReports() {
   const [employees, setEmployees] = useState([])
   const [savedReports, setSavedReports] = useState([])
   const [generatedData, setGeneratedData] = useState(null)
+  // The filter grid is conditional and can reach seven controls, which put
+  // the whole block between the report type and Generate for every page load.
+  // Collapsed by default; the header carries the active count so a hidden
+  // filter is never invisible.
+  const [showFilters, setShowFilters] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isLoadingReports, setIsLoadingReports] = useState(true)
-  const [isLoadingOptions, setIsLoadingOptions] = useState(true)
+  const [, setIsLoadingOptions] = useState(true)
   const [templateName, setTemplateName] = useState('')
   const [showSaveModal, setShowSaveModal] = useState(false)
 
-  // Load saved report templates (localStorage — reports are never persisted server-side)
+  // Load saved report templates (localStorage — reports are never persisted
+  // server-side). Both loaders are inlined into their effect: they used to be
+  // called through callbacks declared further down, which the hooks rule
+  // flags as reading a binding before it exists.
   useEffect(() => {
-    loadSavedReports()
+    setSavedReports(readTemplates())
+    setIsLoadingReports(false)
   }, [])
 
   // Load filter options (products, employees)
   useEffect(() => {
-    loadFilterOptions()
-  }, [])
-
-  const loadSavedReports = useCallback(() => {
-    setSavedReports(readTemplates())
-    setIsLoadingReports(false)
+    Promise.all([apiGet('/products/filter'), apiGet('/accounts/display')])
+      .then(([prodData, empData]) => {
+        if (prodData.success) setProducts(prodData.data?.products || prodData.data || [])
+        if (empData.success) {
+          setEmployees(
+            (empData.data?.employees || empData.data || []).filter((employee) => empIsActive(employee))
+          )
+        }
+      })
+      .catch((e) => console.warn('Failed to load filter options:', e))
+      .finally(() => setIsLoadingOptions(false))
   }, [])
 
   const handleLoadTemplate = useCallback((report) => {
@@ -120,28 +131,10 @@ function AdminReports() {
       }
       setGeneratedData(null)
       showToast(`Loaded template: ${report.report_title}`, 'success')
-    } catch (e) {
+    } catch {
       showToast('Failed to load template', 'error')
     }
   }, [showToast])
-
-  const loadFilterOptions = useCallback(async () => {
-    try {
-      const [prodData, empData] = await Promise.all([
-        apiGet('/products/filter'),
-        apiGet('/accounts/display'),
-      ])
-      if (prodData.success) setProducts(prodData.data?.products || prodData.data || [])
-      if (empData.success) {
-        const emps = (empData.data?.employees || empData.data || []).filter(e => empIsActive(e))
-        setEmployees(emps)
-      }
-    } catch (e) {
-      console.warn('Failed to load filter options:', e)
-    } finally {
-      setIsLoadingOptions(false)
-    }
-  }, [])
 
   const buildFilters = () => {
     const filters = {}
@@ -398,40 +391,6 @@ function AdminReports() {
     return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
   }
 
-  const renderPrintTables = (data) => {
-    switch (reportType) {
-      case 'sales':
-        return `
-          <h3>By Date</h3>
-          <table><thead><tr><th>Date</th><th>Transactions</th><th>Revenue</th></tr></thead>
-          <tbody>${data.by_date?.map(d => `<tr><td>${d.date}</td><td>${d.transactions}</td><td>₱${d.revenue}</td></tr>`).join('')}</tbody></table>
-          <h3>By Product</h3>
-          <table><thead><tr><th>Product</th><th>Qty</th><th>Revenue</th><th>Orders</th></tr></thead>
-          <tbody>${data.by_product?.map(p => `<tr><td>${p.prod_name}</td><td>${p.total_qty}</td><td>₱${p.total_revenue}</td><td>${p.orders_count}</td></tr>`).join('')}</tbody></table>
-        `
-      case 'inventory':
-        return `
-          <h3>Items</h3>
-          <table><thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Qty</th><th>Stock Value</th><th>Low Stock</th></tr></thead>
-          <tbody>${data.items?.map(i => `<tr><td>${i.prod_name}</td><td>${i.prod_categ}</td><td>₱${i.prod_price}</td><td>${productStock(i)}</td><td>₱${i.stock_value}</td><td>${i.is_low_stock ? 'Yes' : 'No'}</td></tr>`).join('')}</tbody></table>
-        `
-      case 'appointments':
-        return `
-          <h3>Appointments</h3>
-          <table><thead><tr><th>ID</th><th>Type</th><th>Date</th><th>Status</th><th>Customer</th></tr></thead>
-          <tbody>${data.items?.map(a => `<tr><td>${a.appoint_id}</td><td>${a.appoint_type}</td><td>${fmtDateTime(reportDate(a))}</td><td>${reportStatus(a)}</td><td>${a.customer}</td></tr>`).join('')}</tbody></table>
-        `
-      case 'staffing':
-        return `
-          <h3>Staff</h3>
-          <table><thead><tr><th>Name</th><th>Type</th><th>Email</th><th>In-Store</th><th>Shifts</th><th>Hours</th></tr></thead>
-          <tbody>${data.staff?.map(s => `<tr><td>${s.name}</td><td>${reportEmpType(s)}</td><td>${s.emp_email}</td><td>${reportAvailability(s)}</td><td>${s.total_shifts}</td><td>${s.total_hours}</td></tr>`).join('')}</tbody></table>
-        `
-      default:
-        return ''
-    }
-  }
-
   const downloadFile = (content, filename, mimeType) => {
     const blob = new Blob([content], { type: mimeType })
     const url = URL.createObjectURL(blob)
@@ -442,7 +401,10 @@ function AdminReports() {
     URL.revokeObjectURL(url)
   }
 
-  const selectedTypeInfo = REPORT_TYPES.find(t => t.id === reportType)
+  /** How many filters are set to something other than their default. */
+  const activeFilterCount = [dateFrom, dateTo, prodId, empId, appointType, statusFilter, empTypeFilter]
+    .filter((value) => value !== '' && value !== null && value !== undefined)
+    .length
 
   const showDateFilter = ['sales', 'appointments'].includes(reportType)
   const showProductFilter = ['sales', 'inventory'].includes(reportType)
@@ -491,8 +453,28 @@ function AdminReports() {
           </div>
 
           <div className="p-6 border-b border-slate-100">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">Filters</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <button
+              type="button"
+              onClick={() => setShowFilters((open) => !open)}
+              aria-expanded={showFilters}
+              className="w-full flex items-center justify-between gap-3 text-left cursor-pointer group"
+            >
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 group-hover:text-slate-600">
+                Filters
+                {activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
+              </span>
+              <span
+                className={`text-xs font-semibold px-2 py-1 rounded-md border ${
+                  showFilters || activeFilterCount > 0
+                    ? 'bg-brand-orange text-white border-brand-orange'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 group-hover:bg-slate-100'
+                }`}
+              >
+                {showFilters ? 'Hide' : 'Show'}
+              </span>
+            </button>
+            {showFilters && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
               {showDateFilter && (
                 <>
                   <div>
@@ -557,6 +539,7 @@ function AdminReports() {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           <div className="p-6 border-b border-slate-100 flex flex-wrap items-center gap-3">

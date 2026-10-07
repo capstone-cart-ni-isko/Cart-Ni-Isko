@@ -8,14 +8,6 @@ export const SHIFT_STATUS = {
   PENDING_REPLACEMENT: 'PENDING REPLACEMENT',
 }
 
-/** Duty types offered by the assign form, matching the SRS wording. */
-export const SHIFT_TYPES = [
-  { value: 'DESK DUTY', label: 'Desk Duty (Main Counter)' },
-  { value: 'EVENT PREP', label: 'Event Prep (Merch Distribution)' },
-  { value: 'INVENTORY AUDIT', label: 'Inventory Audit (Org Stockroom)' },
-  { value: 'POS CASHIER', label: 'POS Cashier (In-Store)' },
-]
-
 /** GET /shifts - list duty blocks, filtered by employee, date or status. */
 export async function fetchShifts(params = {}) {
   const data = await apiGet('/shifts', params)

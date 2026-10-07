@@ -40,7 +40,11 @@ export default function AdminLayout({ children, className = '' }) {
         <AdminTopBar onToggleMobileMenu={() => setMobileMenuOpen(true)} />
 
         {/* Page Body Viewport — fills remaining height, scrollable */}
-        <main className={`flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 w-full mx-auto ${className}`}>
+        {/* One gutter step at mobile, one at desktop: the old three-step
+            `p-3 sm:p-4 md:p-5` re-flowed the content edge on every breakpoint,
+            so tables and card grids sat at a different offset depending on
+            where they were viewed. */}
+        <main className={`flex-1 overflow-y-auto p-4 md:p-5 w-full mx-auto ${className}`}>
           {children}
         </main>
       </div>

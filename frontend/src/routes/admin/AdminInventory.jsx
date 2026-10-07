@@ -20,6 +20,9 @@ export default function AdminInventory() {
   const [filterCategory, setFilterCategory] = useState('All')
   const [filterAvailability, setFilterAvailability] = useState('All')
   const [filterStockStatus, setFilterStockStatus] = useState('All')
+  // Five facet selects plus sort crowded the toolbar; only sort stays out by
+  // default. The chips row below still lists whatever is folded away.
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [filterPublication, setFilterPublication] = useState('All')
   const [sortBy, setSortBy] = useState('featured')
 
@@ -347,6 +350,30 @@ export default function AdminInventory() {
 
             {/* Dropdown Filters */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => setShowMoreFilters((open) => !open)}
+                aria-expanded={showMoreFilters}
+                className={`h-8 px-2.5 rounded-md border text-xs font-semibold whitespace-nowrap cursor-pointer focus:outline-none ${
+                  showMoreFilters ||
+                  [filterCollection, filterCategory, filterAvailability, filterStockStatus, filterPublication].some(
+                    (v) => v !== 'All'
+                  )
+                    ? 'bg-brand-orange text-white border-brand-orange'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                Filters
+                {(() => {
+                  const n = [filterCollection, filterCategory, filterAvailability, filterStockStatus, filterPublication].filter(
+                    (v) => v !== 'All'
+                  ).length
+                  return n > 0 ? ` · ${n}` : ''
+                })()}
+              </button>
+
+              {showMoreFilters && (
+              <>
               <select
                 value={filterCollection}
                 onChange={(e) => setFilterCollection(e.target.value)}
@@ -399,6 +426,8 @@ export default function AdminInventory() {
                 <option value="Published">Published</option>
                 <option value="Draft">Draft</option>
               </select>
+              </>
+              )}
 
               <select
                 value={sortBy}

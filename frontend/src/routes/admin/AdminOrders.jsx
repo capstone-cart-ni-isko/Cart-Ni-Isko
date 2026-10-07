@@ -63,6 +63,10 @@ export default function AdminOrders() {
   const [activeOrderDetail, setActiveOrderDetail] = useState(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkNewStatus, setBulkNewStatus] = useState('To Process')
+  // Type / Fulfillment / Item are secondary to search, sort and status, so
+  // they open on demand instead of crowding the default toolbar. Their state
+  // still shows as chips, so nothing hidden ever becomes invisible.
+  const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
 
   // Server-backed search (/cart/search) and sort (/cart/sort) results.
@@ -441,42 +445,6 @@ export default function AdminOrders() {
               />
             </div>
 
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
-            >
-              <option value="All">Type: All</option>
-              <option value="Regular">Online Regular</option>
-              <option value="Pre-order">Online Pre-order</option>
-              <option value="Onsite Regular">Onsite Regular</option>
-            </select>
-
-            <select
-              value={filterFulfillment}
-              onChange={(e) => setFilterFulfillment(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
-            >
-              <option value="All">Fulfillment: All</option>
-              <option value="Courier">Courier</option>
-              <option value="Store Pickup">Store Pickup</option>
-              <option value="Instant POS">Instant POS</option>
-            </select>
-
-            {/* Product item filter */}
-            <select
-              value={filterItem}
-              onChange={(e) => setFilterItem(e.target.value)}
-              className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none max-w-[190px]"
-            >
-              <option value="All">Item: All</option>
-              {itemOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-
             {/* Server-backed sort (/cart/sort) - replaces the old hardcoded Batch filter */}
             <select
               value={sortValue}
@@ -508,6 +476,24 @@ export default function AdminOrders() {
               ))}
             </select>
 
+            <button
+              type="button"
+              onClick={() => setShowMoreFilters((open) => !open)}
+              aria-expanded={showMoreFilters}
+              className={`h-8 px-2.5 rounded-md border text-xs font-semibold cursor-pointer focus:outline-none ${
+                showMoreFilters || filterType !== 'All' || filterFulfillment !== 'All' || filterItem !== 'All'
+                  ? 'bg-brand-orange text-white border-brand-orange'
+                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              Filters
+              {filterType !== 'All' || filterFulfillment !== 'All' || filterItem !== 'All'
+                ? ` · ${
+                    [filterType, filterFulfillment, filterItem].filter((v) => v !== 'All').length
+                  }`
+                : ''}
+            </button>
+
             {(searchQuery || activeChips.length > 0) && (
               <button
                 type="button"
@@ -525,6 +511,46 @@ export default function AdminOrders() {
               </button>
             )}
           </div>
+
+          {showMoreFilters && (
+            <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-slate-100">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
+              >
+                <option value="All">Type: All</option>
+                <option value="Regular">Online Regular</option>
+                <option value="Pre-order">Online Pre-order</option>
+                <option value="Onsite Regular">Onsite Regular</option>
+              </select>
+
+              <select
+                value={filterFulfillment}
+                onChange={(e) => setFilterFulfillment(e.target.value)}
+                className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
+              >
+                <option value="All">Fulfillment: All</option>
+                <option value="Courier">Courier</option>
+                <option value="Store Pickup">Store Pickup</option>
+                <option value="Instant POS">Instant POS</option>
+              </select>
+
+              {/* Product item filter */}
+              <select
+                value={filterItem}
+                onChange={(e) => setFilterItem(e.target.value)}
+                className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none max-w-[190px]"
+              >
+                <option value="All">Item: All</option>
+                {itemOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {activeChips.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">

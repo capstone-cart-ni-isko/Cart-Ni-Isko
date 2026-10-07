@@ -81,13 +81,16 @@ export default function ScheduleTimelineGrid({ shifts = [], officers = [], onShi
                       <div
                         key={shift.shift_id}
                         onClick={() => onShiftClick && onShiftClick(shift)}
-                        title={`${shift.shift_type}: ${shift.shift_start} - ${shift.shift_end}`}
+                        title={`${shift.employee_name ? `${shift.employee_name}: ` : ''}${shift.shift_start} - ${shift.shift_end}`}
                         className={`rounded-md p-1.5 text-xs font-semibold border transition-colors cursor-pointer ${
-                          BLOCK_STYLE[shift.shift_type] || BLOCK_STYLE['DESK DUTY']
+                          // Blocks no longer carry a duty type (`schedules`
+                          // has no column for one), so every block takes the
+                          // same base treatment rather than pretending to be
+                          // colour-coded by a value that is always null.
+                          BLOCK_STYLE['DESK DUTY']
                         }`}
                         style={{ gridColumn: `${first} / span ${span}` }}
                       >
-                        <p className="font-bold text-xs">{shift.shift_type}</p>
                         <p className="text-[10px] opacity-80 font-normal">
                           {shift.shift_start} - {shift.shift_end}
                         </p>

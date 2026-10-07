@@ -275,7 +275,7 @@ function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
         </div>
         <div className="px-4 py-2.5 border-t border-slate-100">
           <Link
-            to="/admin/schedule"
+            to="/admin/schedules"
             className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
           >
             View Full Schedule
@@ -319,7 +319,7 @@ function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
             View Unscheduled
           </button>
           <Link
-            to="/admin/schedule"
+            to="/admin/schedules"
             className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0 text-slate-400">

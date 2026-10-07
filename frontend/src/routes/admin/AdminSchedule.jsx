@@ -121,7 +121,7 @@ export default function AdminSchedule() {
     await roster.setDuty(payload.emp_id, true)
     recordLog(
       'ASSIGN DUTY',
-      `Assigned ${payload.shift_type} (${payload.shift_start} - ${payload.shift_end}, ${payload.shift_location}) on ${fmtLongDate(
+      `Assigned ${payload.shift_start} - ${payload.shift_end} on ${fmtLongDate(
         selectedDate
       )} to ${target?.name || 'officer'}`
     )
@@ -139,7 +139,7 @@ export default function AdminSchedule() {
 
     recordLog(
       'CANCEL SHIFT',
-      `Cancelled block #${shift.shift_id} (${shift.shift_type}) for ${
+      `Cancelled block #${shift.shift_id} for ${
         shift.employee_name || 'officer'
       } on ${fmtLongDate(selectedDate)}`
     )
@@ -174,7 +174,7 @@ export default function AdminSchedule() {
           officers={roster.officers}
           onShiftClick={(shift) =>
             showToast(
-              `${shift.employee_name} · ${shift.shift_type} (${shift.shift_start} - ${shift.shift_end})`,
+              `${shift.employee_name} · ${shift.shift_start} - ${shift.shift_end}`,
               'info'
             )
           }

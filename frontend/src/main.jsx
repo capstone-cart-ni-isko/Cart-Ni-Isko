@@ -7,8 +7,15 @@ import { ApiErrorBoundary } from './components/ui/ApiErrorBoundary.jsx'
 import './index.css'
 import App from './App.jsx'
 
-// Apply the stored light/dark preference before the first paint.
-if (localStorage.getItem('isko_theme') === 'dark') {
+// Apply the stored light/dark preference before the first paint. Each portal
+// owns its own key (rule 71), so this has to know which portal is loading —
+// and falls back to the pre-split key for anyone who already chose a theme.
+const bootThemeKey =
+  window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/')
+    ? 'isko_theme_staff'
+    : 'isko_theme_customer'
+const bootTheme = localStorage.getItem(bootThemeKey) ?? localStorage.getItem('isko_theme')
+if (bootTheme === 'dark') {
   document.documentElement.classList.add('dark')
 }
 
