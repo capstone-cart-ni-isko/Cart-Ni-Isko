@@ -1,9 +1,12 @@
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import Avatar from '../../components/ui/Avatar.jsx'
+import { fetchNotifications, unreadCount } from '../../services/notifications.js'
+import { fetchMyPreferences, updateMyPreferences } from '../../services/settings.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import { empHomePath } from './schema.js'
 
 /* ── Breadcrumb map ── */
 const BREADCRUMB_MAP = {
@@ -28,28 +31,128 @@ const BREADCRUMB_MAP = {
   '/admin/setup': ['Management', 'Store Setup'],
   '/admin/account': ['Overview', 'Account Settings'],
   '/admin/profile': ['Overview', 'Account Settings'],
+  '/admin/notifications': ['Overview', 'Notifications'],
   '/admin/qr': ['Overview', 'QR Scanner'],
 }
 
+/** The employee whose saved theme has already been applied this session.
+    Module scope (not component state) so a route change cannot re-fetch it -
+    but keyed by employee, so signing out and in as someone else hydrates
+    THAT person's saved preference instead of inheriting the last one. */
+let themeHydratedFor = null
+
+// Same geometry as the customer ribbon: a 40px hit area, 20px glyph.
+const ICON_BTN =
+  'w-10 h-10 rounded-xl hover:bg-slate-100 text-gray-700 flex items-center justify-center relative transition-all cursor-pointer'
+
+/** One ribbon entry: hit area, active tint, hover chip and optional badge. */
+function RibbonIcon({ label, onClick, active, badge, children }) {
+  return (
+    <div className="relative group flex items-center justify-center">
+      <button
+        type="button"
+        onClick={onClick}
+        title={label}
+        aria-label={label}
+        className={`${ICON_BTN} ${active ? 'bg-slate-100 text-brand-orange' : ''}`}
+      >
+        {children}
+        {badge > 0 && (
+          <span className="absolute top-1 right-1 bg-brand-orange text-white text-[10px] font-black min-w-4 h-4 px-0.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+      </button>
+      <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
+        {label}
+      </span>
+    </div>
+  )
+}
+
 /**
- * The ribbon (DOMAIN 3 / REQ-EMP_HOME-05):
- *   left = Tindahan ni Isko logo, center = search bar,
- *   right = exactly 5 icons: home, QR, notifications, dark mode, settings.
- * The dark-mode icon flips to a light-mode icon while dark mode is on
- * (REQ-EMP_HOME-09/10).
+ * DOMAIN 3 / DOMAIN 31 - the navigation ribbon:
+ *   left  = "Tindahan ni Isko" logo (FLOW-EMP_HOME-02)
+ *   center = search bar, centermost (FLOW-EMP_HOME-03)
+ *   right = home · QR · notifications · dark mode · settings, in that order
+ *           (FLOW-EMP_HOME-04, exactly five icons)
  *
- * A slim sub-ribbon below carries the breadcrumb with the back button
- * at the top-left and the exit action at the top-right (NAV RULES 68-75).
+ * The dark-mode icon flips to a light-mode icon while dark mode is on
+ * (FLOW-EMP_HOME-09/10) and the choice is saved to `emp_darkmode`
+ * (FLOW-EMP_SET-05 / REQ-EMP_SET-05).
+ *
+ * The ribbon itself, its spacing, its tooltip chips and its badge geometry
+ * mirror the customer portal's DesktopHeader, so both portals share one set
+ * of fonts and one visual language (REQ-CUST_HOME-01's admin twin).
  */
 export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { alerts = [], resolveAlert, currentAdminUser, logoutAdmin } = useAdmin()
-  const { dark, toggle: toggleTheme } = useTheme()
-  const [showNotifications, setShowNotifications] = useState(false)
-  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const { currentAdminUser, logoutAdmin } = useAdmin()
+  const { dark, set: setTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
   const [confirmExit, setConfirmExit] = useState(false)
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0)
+
+  const empId = currentAdminUser?.id ?? null
+
+  /* ── DOMAIN 31 — real-time unread counter on the ribbon icon ── */
+  const refreshUnread = useCallback(async () => {
+    if (!empId) {
+      setUnreadNotifCount(0)
+      return
+    }
+    try {
+      const rows = await fetchNotifications('employee', empId)
+      setUnreadNotifCount(unreadCount(rows))
+    } catch {
+      // Keep the last known count when the API is unreachable.
+    }
+  }, [empId])
+
+  useEffect(() => {
+    refreshUnread()
+    if (!empId) return undefined
+    const timer = setInterval(refreshUnread, 60000)
+    const onChanged = () => refreshUnread()
+    window.addEventListener('notifications-changed', onChanged)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('notifications-changed', onChanged)
+    }
+  }, [empId, refreshUnread])
+
+  /* ── FLOW-EMP_SET-05 / REQ-EMP_SET-03 — the saved theme follows the
+        employee across sessions: hydrate once, then save on every flip. ── */
+  useEffect(() => {
+    if (!empId) {
+      // A signed-out ribbon re-arms the hydration for the next employee.
+      themeHydratedFor = null
+      return undefined
+    }
+    if (themeHydratedFor === empId) return undefined
+    themeHydratedFor = empId
+    let cancelled = false
+    fetchMyPreferences()
+      .then((prefs) => {
+        const stored = prefs?.emp_darkmode ?? prefs?.darkmode
+        if (!cancelled && typeof stored === 'boolean') setTheme(stored)
+      })
+      .catch(() => {
+        // The local theme still applies when the API is unreachable.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [empId, setTheme])
+
+  const handleToggleTheme = () => {
+    const next = !dark
+    setTheme(next)
+    if (empId) {
+      updateMyPreferences({ darkmode: next }).catch(() => {})
+    }
+  }
 
   const breadcrumb =
     BREADCRUMB_MAP[location.pathname] ||
@@ -61,7 +164,11 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
 
   const trail = activeTabLabel ? [breadcrumb[0], breadcrumb[1], activeTabLabel] : breadcrumb
 
-  const isHome = location.pathname === '/admin' || location.pathname === '/admin/dashboard'
+  const homePath = empHomePath(currentAdminUser)
+
+  // FLOW-EMP_HOME-06: the "home" icon goes to THIS employee's home page, which
+  // for a staff member is not the Dashboard (REQ-EMP_HOME-01).
+  const isHome = location.pathname === homePath || location.pathname === '/admin'
 
   const submitSearch = (e) => {
     e.preventDefault()
@@ -71,70 +178,56 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
 
   const handleLogout = () => {
     logoutAdmin()
-    setShowProfileMenu(false)
     setConfirmExit(false)
     navigate('/admin/login')
   }
 
-  const iconBtn =
-    'w-10 h-10 rounded-xl hover:bg-gray-100 text-slate-600 flex items-center justify-center relative transition-colors cursor-pointer border border-slate-100'
-
   return (
     <header className="sticky top-0 z-30 select-none">
-      {/* ── Ribbon ── */}
-      <div className="h-16 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center gap-4">
-        {/* LEFT — brand logo */}
-        <Link to="/admin/dashboard" className="flex items-center gap-2 shrink-0 min-w-0" title="Tindahan ni Isko">
-          <img src={brandLogo} alt="Tindahan ni Isko" className="h-8 w-auto object-contain" />
+      {/* ── Ribbon (DOMAIN 3) ── */}
+      <div className="h-14 bg-white border-b border-gray-100 px-4 md:px-6 flex items-center gap-4">
+        {/* LEFT — brand logo (FLOW-EMP_HOME-02) */}
+        <Link to={homePath} className="flex items-center gap-2 shrink-0 min-w-0" title="Tindahan ni Isko">
+          <img src={brandLogo} alt="Tindahan ni Isko" className="h-9 object-contain hover:opacity-90 transition-opacity" />
           <span className="hidden lg:block text-sm font-extrabold text-slate-900 tracking-tight truncate">
             Tindahan ni Isko
           </span>
         </Link>
 
-        {/* CENTER — search bar */}
-        <form onSubmit={submitSearch} className="flex-1 max-w-xl mx-auto">
-          <div className="relative">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search orders, products, customers…"
-              aria-label="Search"
-              className="w-full h-9 pl-9 pr-8 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
-            />
-            <kbd className="hidden sm:flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center px-1.5 py-0.5 rounded border border-slate-200 text-[9px] font-semibold text-slate-400 bg-white">
-              ⌘K
-            </kbd>
-          </div>
+        {/* CENTER — search bar (FLOW-EMP_HOME-03) */}
+        <form onSubmit={submitSearch} className="flex-1 max-w-lg mx-auto relative">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search orders, products, customers..."
+            aria-label="Search"
+            className="w-full h-9 pl-9 pr-8 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:bg-white transition-all"
+          />
+          <kbd className="hidden sm:flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center px-1.5 py-0.5 rounded border border-slate-200 text-[9px] font-semibold text-slate-400 bg-white">
+            ⌘K
+          </kbd>
         </form>
 
-        {/* RIGHT — exactly 5 icons: home, QR, notifications, dark mode, settings */}
+        {/* RIGHT — exactly 5 icons (FLOW-EMP_HOME-04) */}
         <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-          {/* 1 — home */}
-          <button
-            type="button"
-            onClick={() => navigate('/admin/dashboard')}
-            title="Home"
-            aria-label="Home"
-            className={iconBtn + (isHome ? ' text-brand-orange border-brand-orange/30 bg-orange-50' : '')}
-          >
+          {/* 1 — home (FLOW-EMP_HOME-06) */}
+          <RibbonIcon label="Home" onClick={() => navigate(homePath)} active={isHome}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
               <polyline points="9 22 9 12 15 12 15 22" />
             </svg>
-          </button>
+          </RibbonIcon>
 
-          {/* 2 — QR scanner */}
-          <button
-            type="button"
+          {/* 2 — QR scanner (FLOW-EMP_HOME-07) */}
+          <RibbonIcon
+            label="QR scanner"
             onClick={() => navigate('/admin/qr')}
-            title="QR scanner"
-            aria-label="QR scanner"
-            className={iconBtn + (location.pathname === '/admin/qr' ? ' text-brand-orange border-brand-orange/30 bg-orange-50' : '')}
+            active={location.pathname === '/admin/qr'}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
               <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -146,78 +239,31 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
               <path d="M14 21h1" />
               <path d="M18 18h3v3h-3z" />
             </svg>
-          </button>
+          </RibbonIcon>
 
-          {/* 3 — notifications */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowNotifications((prev) => !prev)}
-              title="Notifications"
-              aria-label="Notifications"
-              className={iconBtn}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              {alerts.length > 0 && (
-                <span className="absolute top-2 right-2 w-2 h-2 bg-brand-orange rounded-full ring-2 ring-white" />
-              )}
-            </button>
+          {/* 3 — notifications (FLOW-EMP_HOME-08: clicking the icon REDIRECTS
+              to the notification tab; the popover it used to toggle held no
+              notifications of its own.) */}
+          <RibbonIcon
+            label="Notifications"
+            onClick={() => {
+              refreshUnread()
+              navigate('/admin/notifications')
+            }}
+            active={location.pathname === '/admin/notifications'}
+            badge={unreadNotifCount}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          </RibbonIcon>
 
-            {showNotifications && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-lg border border-slate-200 p-3 z-50 animate-slide-up">
-                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                    <h3 className="text-xs font-semibold text-gray-900">Alerts &amp; notifications</h3>
-                    <span className="text-[10px] font-semibold bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md border border-rose-100">
-                      {alerts.length} Pending
-                    </span>
-                  </div>
-                  <div className="divide-y divide-slate-100 max-h-56 overflow-y-auto py-1.5 space-y-1.5">
-                    {alerts.length === 0 ? (
-                      <p className="text-xs text-gray-400 py-3 text-center">All systems operating normally.</p>
-                    ) : (
-                      alerts.map((alert) => (
-                        <div key={alert.id} className="pt-1.5 flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-semibold text-gray-900">{alert.title}</p>
-                            <p className="text-[11px] text-gray-500">{alert.description}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => resolveAlert(alert.id)}
-                            className="text-[10px] font-semibold text-slate-500 hover:text-slate-900 shrink-0 cursor-pointer"
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="pt-2 border-t border-slate-100 text-center">
-                    <Link
-                      to="/admin/dashboard"
-                      onClick={() => setShowNotifications(false)}
-                      className="text-xs font-semibold text-slate-500 hover:text-slate-900"
-                    >
-                      View alert center
-                    </Link>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* 4 — dark mode (flips to light-mode icon, REQ-EMP_HOME-09/10) */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-            aria-label={dark ? 'Light mode' : 'Dark mode'}
-            className={iconBtn}
+          {/* 4 — dark mode (FLOW-EMP_HOME-09/10, FLOW-EMP_SET-05) */}
+          <RibbonIcon
+            label={dark ? 'Light mode' : 'Dark mode'}
+            onClick={handleToggleTheme}
+            active={dark}
           >
             {dark ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
@@ -236,21 +282,19 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
               </svg>
             )}
-          </button>
+          </RibbonIcon>
 
-          {/* 5 — settings */}
-          <button
-            type="button"
+          {/* 5 — settings (FLOW-EMP_PROF-01 / FLOW-EMP_SET-01) */}
+          <RibbonIcon
+            label="Settings"
             onClick={() => navigate('/admin/settings')}
-            title="Settings"
-            aria-label="Settings"
-            className={iconBtn + (location.pathname.startsWith('/admin/settings') ? ' text-brand-orange border-brand-orange/30 bg-orange-50' : '')}
+            active={location.pathname.startsWith('/admin/settings')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
-          </button>
+          </RibbonIcon>
         </div>
       </div>
 
@@ -324,22 +368,7 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
               </div>
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => setConfirmExit((prev) => !prev)}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 h-7 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
-            title="Exit"
-            aria-label="Exit"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <span>Exit</span>
-          </button>
-
-          {/* Profile chip (opens profile/settings page) */}
+          {/* Profile chip (FLOW-EMP_PROF-01 — the settings screen holds the profile) */}
           <button
             type="button"
             onClick={() => navigate('/admin/account')}
@@ -355,8 +384,27 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
               userId={currentAdminUser?.id}
             />
           </button>
+
+          {/* Rule 70 — the exit button sits at the TOP RIGHT, i.e. it is the
+              last (rightmost) control of the ribbon, and rule 68 keeps it on
+              screen at every width (it used to vanish below `sm`). */}
+          <button
+            type="button"
+            onClick={() => setConfirmExit((prev) => !prev)}
+            className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+            title="Exit"
+            aria-label="Exit"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span className="hidden sm:inline">Exit</span>
+          </button>
         </div>
       </div>
+
     </header>
   )
 }

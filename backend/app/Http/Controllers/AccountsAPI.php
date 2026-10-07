@@ -668,6 +668,35 @@ class AccountsAPI extends Controller
             if ($error !== null) {
                 return $error;
             }
+
+            /*
+                REQ-EMP_PROF-01 - "Employee email addresses must not be
+                editable by regular staff members."
+
+                The form already renders the field read-only for a staff
+                member, but a crafted request must land on the same rule, so
+                the server checks the CALLER's category. Sending the address
+                back unchanged is treated as the no-op a round-tripped form
+                produces (the value is simply dropped), while an actual change
+                is refused. Admins and super admins keep the right.
+            */
+            if (! $isCustomer && array_key_exists('emp_email', $payload)) {
+                $requestedEmail = (string) $payload['emp_email'];
+                $currentEmail = mb_strtolower(trim((string) $user->emp_email));
+
+                if ($requestedEmail !== '' && $requestedEmail !== $currentEmail) {
+                    if (! $actor instanceof Employee || ! $actor->isAdmin()) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Regular staff members may not change an email address.',
+                            'code' => 'EMAIL_LOCKED',
+                        ], 403);
+                    }
+                } else {
+                    unset($payload['emp_email']);
+                }
+            }
+
             if ($payload === []) {
                 return response()->json([
                     'success' => false,
@@ -781,6 +810,12 @@ class AccountsAPI extends Controller
         'cust_notif_email' => 'sometimes|boolean',
         'cust_notif_prod' => 'sometimes|boolean',
     ];
+
+    /**
+     * REQ-EMP_PROF-03 / REQ-CUST_PROF-04: an avatar is at most 2 MB - the
+     * same ceiling UploadAPI::uploadImage enforces on a real file upload.
+     */
+    private const MAX_AVATAR_BYTES = 2048 * 1024;
 
     /** Validation for the mapped employee payload (new column names). */
     private const EMPLOYEE_PROFILE_RULES = [
@@ -974,10 +1009,38 @@ class AccountsAPI extends Controller
         }
 
         // emp_photo (legacy) -> emp_avatar (live)
-        if ($json->has('emp_avatar')) {
-            $payload['emp_avatar'] = $json->input('emp_avatar');
-        } elseif ($json->has('emp_photo')) {
-            $payload['emp_avatar'] = $json->input('emp_photo');
+        //
+        // REQ-EMP_PROF-03: "Employee avatars must be validated for format and
+        // file size before upload." The profile screen posts the picture
+        // straight to this endpoint as a data URL, bypassing UploadAPI, so the
+        // identical PNG/JPEG/GIF/WebP + 2 MB rules are applied here as well.
+        // A value that round-trips untouched from the stored row is a no-op
+        // and is never re-judged, so an already-saved avatar can never block
+        // an unrelated profile edit.
+        if ($json->has('emp_avatar') || $json->has('emp_photo')) {
+            $avatar = trim((string) ($json->input('emp_avatar') ?? $json->input('emp_photo')));
+            $storedAvatar = trim((string) ($user->emp_avatar ?? ''));
+
+            if ($avatar !== '' && $avatar !== $storedAvatar) {
+                if (! $this->avatarAllowed($avatar)) {
+                    return [$payload, response()->json([
+                        'success' => false,
+                        'message' => 'Profile avatars must be a PNG, JPEG, GIF or WebP image.',
+                        'code' => 'AVATAR_FORMAT',
+                    ], 422)];
+                }
+
+                $bytes = $this->avatarBytes($avatar);
+                if ($bytes !== null && $bytes > self::MAX_AVATAR_BYTES) {
+                    return [$payload, response()->json([
+                        'success' => false,
+                        'message' => 'Profile avatars must be 2 MB or smaller.',
+                        'code' => 'AVATAR_TOO_LARGE',
+                    ], 422)];
+                }
+            }
+
+            $payload['emp_avatar'] = $avatar !== '' ? $avatar : null;
         }
 
         // emp_instore (legacy) -> emp_present (live)
@@ -1069,6 +1132,26 @@ class AccountsAPI extends Controller
 
         return in_array($ext, ['png', 'jpg', 'jpeg', 'gif', 'webp'], true)
             || in_array(ltrim($avatar, '.'), ['png', 'jpg', 'jpeg', 'gif', 'webp'], true);
+    }
+
+    /**
+     * REQ-EMP_PROF-03: the decoded payload size of an avatar.
+     *
+     * A data URI carries the bytes directly, so they are decoded and counted;
+     * a hosted URL or an already-stored path has no bytes to measure here and
+     * returns null (the picture was sized when it was uploaded, and
+     * UploadAPI::uploadImage already held it to the same ceiling).
+     */
+    private function avatarBytes(string $avatar): ?int
+    {
+        if (! preg_match('#^data:image/[a-z0-9.+-]+;base64,#i', $avatar, $matches)) {
+            return null;
+        }
+
+        $encoded = substr($avatar, strlen($matches[0]));
+        $decoded = base64_decode($encoded, true);
+
+        return $decoded === false ? null : strlen($decoded);
     }
 
     // ==========================================

@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import AdminAccount from './AdminAccount.jsx'
+import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
-import { fetchSettings, updateSettings } from '../../services/settings.js'
+import { useTheme } from '../../context/ThemeContext.jsx'
+import { fetchSettings, updateSettings, fetchMyPreferences, updateMyPreferences } from '../../services/settings.js'
 
 // ── Reusable inline toggle ──────────────────────────────────────────────────
 function Toggle({ checked, onChange, size = 'md' }) {
@@ -28,38 +31,6 @@ function Toggle({ checked, onChange, size = 'md' }) {
     </button>
   )
 }
-
-// ── Secondary nav definition ────────────────────────────────────────────────
-const NAV_SECTIONS = [
-  {
-    group: 'Store',
-    items: [
-      { id: 'store-operations',  label: 'Store Operations'  },
-      { id: 'pickup-delivery',   label: 'Pickup & Delivery' },
-    ],
-  },
-  {
-    group: 'Orders',
-    items: [
-      { id: 'order-preferences',  label: 'Order Preferences'    },
-      { id: 'checkout-payments',  label: 'Checkout & Payments'  },
-    ],
-  },
-  {
-    group: 'Notifications',
-    items: [
-      { id: 'staff-notifications',    label: 'Staff Notifications'    },
-      { id: 'customer-notifications', label: 'Customer Notifications' },
-    ],
-  },
-  {
-    group: 'Security',
-    items: [
-      { id: 'access-permissions', label: 'Access & Permissions' },
-      { id: 'security',           label: 'Security'             },
-    ],
-  },
-]
 
 // ── Small chevron icon ──────────────────────────────────────────────────────
 function ChevronRight() {
@@ -123,11 +94,99 @@ function PreviewCard({ title, icon, rows, onNavigate }) {
   )
 }
 
-// ── Main Component ──────────────────────────────────────────────────────────
+/**
+ * A labelled numeric field used by both the preference and system panes.
+ *
+ * Rules 66 & 67 — the number is checked on every keystroke and the verdict is
+ * printed right under the control, instead of the old behaviour of silently
+ * throwing the typed value away on blur. An out-of-range value stays on
+ * screen so it can be corrected, and it is never committed.
+ */
+function NumberField({ label, hint, value, min, max, step = 1, suffix, onSave }) {
+  const [draft, setDraft] = useState(String(value ?? ''))
+  useEffect(() => {
+    setDraft(String(value ?? ''))
+  }, [value])
+
+  const text = String(draft).trim()
+  const parsed = Number(draft)
+  const error = !text
+    ? 'Enter a number.'
+    : Number.isNaN(parsed)
+      ? 'Enter a number.'
+      : parsed < min
+        ? `Must be ${min} or more.`
+        : parsed > max
+          ? `Must be ${max} or less.`
+          : ''
+
+  const commit = () => {
+    if (error) return
+    onSave(parsed)
+  }
+
+  return (
+    <div className="py-3 border-b border-slate-100 last:border-b-0">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-slate-900">{label}</p>
+          {hint && <p className="text-[11px] text-slate-400 mt-0.5">{hint}</p>}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <input
+            type="number"
+            value={draft}
+            min={min}
+            max={max}
+            step={step}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            aria-invalid={!!error}
+            aria-describedby={error ? `${label.replace(/\s+/g, '-').toLowerCase()}-error` : undefined}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+            }}
+            className={`w-24 bg-white border rounded-lg px-2.5 py-1.5 text-xs text-slate-900 text-right focus:outline-none focus:ring-1 transition-colors ${
+              error
+                ? 'border-rose-300 text-rose-700 focus:border-rose-500 focus:ring-rose-400'
+                : 'border-slate-200 focus:border-brand-orange focus:ring-brand-orange'
+            }`}
+          />
+          {suffix && <span className="text-[11px] text-slate-400 font-medium">{suffix}</span>}
+        </div>
+      </div>
+      {/* Rule 67 — the message sits below/beside the field it belongs to. */}
+      {error && (
+        <p
+          id={`${label.replace(/\s+/g, '-').toLowerCase()}-error`}
+          className="text-[11px] font-medium text-rose-600 mt-1.5"
+          role="alert"
+        >
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * DOMAIN 15 - EMPLOYEE SETTINGS.
+ *
+ * FLOW-EMP_SET-01 — every employee reaches this screen from the ribbon's
+ * "settings" icon, so it opens with the employee's own account (profile,
+ * password, backup contacts - DOMAIN 4 / FLOW-EMP_SET-02/03) and preferences
+ * (FLOW-EMP_SET-04 notification reminders, FLOW-EMP_SET-05 dark mode).
+ *
+ * FLOW-EMP_SET-06/07 — the store-wide half (appointment duration, timeslot
+ * capacity, minimum weekly hours, notification intervals) is shown only to a
+ * super admin; SettingsAPI refuses those keys for anybody else (rule 40).
+ */
 export default function AdminSettings() {
   const { showToast } = useToast()
+  const { isSuperAdmin } = useAdmin()
+  const { dark, set: setTheme } = useTheme()
 
-  const [activeSection, setActiveSection] = useState('store-operations')
+  const [activeSection, setActiveSection] = useState('account')
 
   // Real settings (GET /settings/display)
   const [settings, setSettings] = useState({})
@@ -136,11 +195,22 @@ export default function AdminSettings() {
   const [reloadKey, setReloadKey] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
 
+  // Personal preferences (the caller's own `emp_*` columns)
+  const [prefs, setPrefs] = useState({})
+
   // Store Operations
-  const [isStoreOpen, setIsStoreOpen]           = useState(true)
+  const [isStoreOpen, setIsStoreOpen] = useState(true)
   const [acceptOnlineOrders, setAcceptOnlineOrders] = useState(true)
   const [allowInStorePickup, setAllowInStorePickup] = useState(true)
-  const [allowDelivery, setAllowDelivery]       = useState(true)
+  const [allowDelivery, setAllowDelivery] = useState(true)
+
+  // FLOW-EMP_SET-07 - store-wide timing and notification parameters
+  const [slotMinutes, setSlotMinutes] = useState(10)
+  const [visitCapacity, setVisitCapacity] = useState(1)
+  const [pickupCapacity, setPickupCapacity] = useState(5)
+  const [weeklyHours, setWeeklyHours] = useState(3)
+  const [reminderMinutes, setReminderMinutes] = useState(10)
+  const [followupHours, setFollowupHours] = useState(2)
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -157,6 +227,12 @@ export default function AdminSettings() {
         setAcceptOnlineOrders(data.accept_online_orders ?? true)
         setAllowInStorePickup(data.allow_in_store_pickup ?? true)
         setAllowDelivery(data.allow_delivery ?? true)
+        setSlotMinutes(Number(data.slot_minutes ?? 10))
+        setVisitCapacity(Number(data.visit_slot_capacity ?? 1))
+        setPickupCapacity(Number(data.pickup_slot_capacity ?? 5))
+        setWeeklyHours(Number(data.min_weekly_minutes ?? 180) / 60)
+        setReminderMinutes(Number(data.appointment_reminder_minutes ?? 10))
+        setFollowupHours(Number(data.notif_followup_hours ?? 2))
         setHasUnsavedChanges(false)
         setIsLoading(false)
       })
@@ -169,6 +245,19 @@ export default function AdminSettings() {
       cancelled = true
     }
   }, [reloadKey])
+
+  // The employee's own preference columns (FLOW-EMP_SET-04 / 05).
+  useEffect(() => {
+    let cancelled = false
+    fetchMyPreferences()
+      .then((data) => {
+        if (!cancelled) setPrefs(data || {})
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const mark = () => setHasUnsavedChanges(true)
 
@@ -183,6 +272,12 @@ export default function AdminSettings() {
     setAcceptOnlineOrders(settings.accept_online_orders ?? true)
     setAllowInStorePickup(settings.allow_in_store_pickup ?? true)
     setAllowDelivery(settings.allow_delivery ?? true)
+    setSlotMinutes(Number(settings.slot_minutes ?? 10))
+    setVisitCapacity(Number(settings.visit_slot_capacity ?? 1))
+    setPickupCapacity(Number(settings.pickup_slot_capacity ?? 5))
+    setWeeklyHours(Number(settings.min_weekly_minutes ?? 180) / 60)
+    setReminderMinutes(Number(settings.appointment_reminder_minutes ?? 10))
+    setFollowupHours(Number(settings.notif_followup_hours ?? 2))
     setHasUnsavedChanges(false)
     showToast('Changes discarded.', 'info')
   }
@@ -190,23 +285,28 @@ export default function AdminSettings() {
   // Persist only this page's keys (maintenance_mode mirrors store_open so the
   // open/closed state round-trips through GET /settings/display).
   const handleSave = async () => {
+    const payload = {
+      store_open: isStoreOpen,
+      maintenance_mode: !isStoreOpen,
+      accept_online_orders: acceptOnlineOrders,
+      allow_in_store_pickup: allowInStorePickup,
+      allow_delivery: allowDelivery,
+      // FLOW-EMP_SET-07 - appointment duration, timeslot capacity, minimum
+      // weekly hours and the notification intervals.
+      slot_minutes: slotMinutes,
+      visit_slot_duration: slotMinutes,
+      pickup_slot_duration: slotMinutes,
+      visit_slot_capacity: visitCapacity,
+      pickup_slot_capacity: pickupCapacity,
+      min_weekly_minutes: Math.round(weeklyHours * 60),
+      appointment_reminder_minutes: reminderMinutes,
+      notif_followup_hours: followupHours,
+    }
+
     setIsSaving(true)
     try {
-      await updateSettings({
-        store_open: isStoreOpen,
-        maintenance_mode: !isStoreOpen,
-        accept_online_orders: acceptOnlineOrders,
-        allow_in_store_pickup: allowInStorePickup,
-        allow_delivery: allowDelivery,
-      })
-      setSettings((prev) => ({
-        ...prev,
-        store_open: isStoreOpen,
-        maintenance_mode: !isStoreOpen,
-        accept_online_orders: acceptOnlineOrders,
-        allow_in_store_pickup: allowInStorePickup,
-        allow_delivery: allowDelivery,
-      }))
+      await updateSettings(payload)
+      setSettings((prev) => ({ ...prev, ...payload }))
       setHasUnsavedChanges(false)
       showToast('Settings saved successfully!', 'success')
     } catch (err) {
@@ -216,20 +316,59 @@ export default function AdminSettings() {
     }
   }
 
+  /* ── FLOW-EMP_SET-04 / FLOW-EMP_SET-08: preference changes are written to
+        the employee's own row the moment they are made. ── */
+  const savePrefs = async (patch) => {
+    setPrefs((prev) => ({ ...prev, ...patch }))
+    try {
+      const data = await updateMyPreferences(patch)
+      setPrefs(data || {})
+    } catch (err) {
+      showToast(err?.message || 'Could not save that preference.', 'error')
+    }
+  }
+
+  const handleDarkMode = (next) => {
+    setTheme(next)
+    savePrefs({ darkmode: next })
+  }
+
+  const navSections = [
+    {
+      group: 'My Settings',
+      items: [
+        { id: 'account', label: 'Profile & Security' },
+        { id: 'preferences', label: 'Notifications & Theme' },
+      ],
+    },
+    ...(isSuperAdmin
+      ? [
+          {
+            group: 'Store',
+            items: [
+              { id: 'store-operations', label: 'Store Operations' },
+              { id: 'timing', label: 'Appointments & Scheduling' },
+            ],
+          },
+        ]
+      : []),
+  ]
+
+  const isSystemPane = activeSection === 'store-operations' || activeSection === 'timing'
+
   return (
     <AdminLayout>
       <div className="pb-28">
-
         {/* ── Page Header ── */}
         <div className="mb-6 pb-5 border-b border-slate-200">
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Settings</h1>
+          <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Settings</h1>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Manage your store, ordering preferences, notifications, and administrative settings.
+            Your account, your notification preferences, and (for super admins) the store itself.
           </p>
         </div>
 
         {/* ── Load states ── */}
-        {isLoading && (
+        {isLoading && isSystemPane && (
           <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
             <span className="spinner-circle !w-3.5 !h-3.5" /> Loading settings…
           </div>
@@ -249,10 +388,9 @@ export default function AdminSettings() {
 
         {/* ── Two-Column Layout ── */}
         <div className="flex gap-6 items-start">
-
           {/* LEFT: Secondary Settings Nav */}
           <aside className="w-52 flex-shrink-0 bg-white rounded-xl border border-slate-200 p-3 shadow-xs sticky top-6">
-            {NAV_SECTIONS.map((section) => (
+            {navSections.map((section) => (
               <div key={section.group} className="mb-4 last:mb-0">
                 <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                   {section.group}
@@ -272,193 +410,371 @@ export default function AdminSettings() {
                         }`}
                       >
                         <span>{item.label}</span>
-                        {active && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-brand-orange shrink-0" />
-                        )}
+                        {active && <span className="w-1.5 h-1.5 rounded-full bg-brand-orange shrink-0" />}
                       </button>
                     )
                   })}
                 </div>
               </div>
             ))}
+
+            {/* FLOW-EMP_PROF-01 - the profile itself lives one tap away. */}
+            <div className="pt-3 mt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setActiveSection('account')}
+                className="w-full text-left px-3 py-2 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              >
+                Signed in as {prefs.emp_email || 'employee'} →
+              </button>
+            </div>
           </aside>
 
           {/* RIGHT: Main Content */}
           <main className="flex-1 min-w-0 space-y-5">
+            {/* ── FLOW-EMP_PROF-01 / FLOW-EMP_SET-02/03 — the employee's own
+                  profile, password and backup contacts (DOMAIN 4 + DOMAIN 15). */}
+            {activeSection === 'account' && <AdminAccount embedded />}
 
-            {/* ── Store Operations ── */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-              <div className="px-6 py-5 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4.5 h-4.5 text-emerald-600">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
+            {/* ── FLOW-EMP_SET-04 / FLOW-EMP_SET-05 — personal preferences ── */}
+            {activeSection === 'preferences' && (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="px-6 py-5 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4.5 h-4.5 text-brand-orange">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-gray-900">Notifications &amp; theme</h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Saved to your account the moment you change them (REQ-EMP_SET-04).
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-gray-900">Store Operations</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Control when your store accepts orders and how customers can purchase items.
-                    </p>
+                </div>
+
+                <div className="px-6 py-4">
+                  <NumberField
+                    label="Appointment reminder"
+                    hint="How many minutes before an appointment you are reminded (0–1440)."
+                    value={prefs.emp_notif_appointremind ?? prefs.notif_appointremind ?? 10}
+                    min={0}
+                    max={1440}
+                    suffix="min before"
+                    onSave={(value) => savePrefs({ notif_appointremind: value })}
+                  />
+
+                  <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-100">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900">Email notifications</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Store announcements and system alerts sent to your Bicol University mailbox.
+                      </p>
+                    </div>
+                    <Toggle
+                      checked={Boolean(prefs.emp_notif_email ?? prefs.notif_email)}
+                      onChange={(next) => savePrefs({ notif_email: next })}
+                      size="md"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900">Dark mode</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        FLOW-EMP_SET-05 — the choice is stored with your account and restored on your next
+                        sign-in (REQ-EMP_SET-03).
+                      </p>
+                    </div>
+                    <Toggle checked={dark} onChange={handleDarkMode} size="md" />
                   </div>
                 </div>
               </div>
+            )}
 
-              <div className="px-6 py-6 space-y-4">
-                {/* Store Status — prominent row */}
-                <div className={`flex items-start justify-between gap-4 p-4 rounded-xl border ${
-                  isStoreOpen ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'
-                }`}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isStoreOpen ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                      <span className="text-sm font-bold text-slate-900">
-                        Store Status &mdash;{' '}
-                        <span className={isStoreOpen ? 'text-emerald-700' : 'text-slate-500'}>
-                          {isStoreOpen ? 'Store Open' : 'Store Closed'}
-                        </span>
-                      </span>
+            {/* ── FLOW-EMP_SET-06 — store-wide operations (super admin) ── */}
+            {isSuperAdmin && activeSection === 'store-operations' && (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="px-6 py-5 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4.5 h-4.5 text-emerald-600">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
                     </div>
-                    <p className="text-xs text-slate-500 ml-5">
-                      When turned off, customers cannot place new orders.
-                    </p>
+                    <div>
+                      <h2 className="text-sm font-bold text-gray-900">Store Operations</h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Control when your store accepts orders and how customers can purchase items.
+                      </p>
+                    </div>
                   </div>
-                  <Toggle
-                    checked={isStoreOpen}
-                    onChange={handleToggle(setIsStoreOpen, isStoreOpen, 'Store Status')}
-                    size="lg"
+                </div>
+
+                <div className="px-6 py-6 space-y-4">
+                  {/* Store Status — prominent row */}
+                  <div className={`flex items-start justify-between gap-4 p-4 rounded-xl border ${
+                    isStoreOpen ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isStoreOpen ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                        <span className="text-sm font-bold text-slate-900">
+                          Store Status &mdash;{' '}
+                          <span className={isStoreOpen ? 'text-emerald-700' : 'text-slate-500'}>
+                            {isStoreOpen ? 'Store Open' : 'Store Closed'}
+                          </span>
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 ml-5">
+                        When turned off, customers cannot place new orders.
+                      </p>
+                    </div>
+                    <Toggle
+                      checked={isStoreOpen}
+                      onChange={handleToggle(setIsStoreOpen, isStoreOpen, 'Store Status')}
+                      size="lg"
+                    />
+                  </div>
+
+                  {/* Three secondary toggles */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      {
+                        label: 'Accept Online Orders',
+                        desc: 'Bag checkout available',
+                        checked: acceptOnlineOrders,
+                        setter: setAcceptOnlineOrders,
+                        name: 'Online Orders',
+                      },
+                      {
+                        label: 'Allow In-Store Pickup',
+                        desc: 'Campus claim stations active',
+                        checked: allowInStorePickup,
+                        setter: setAllowInStorePickup,
+                        name: 'In-Store Pickup',
+                      },
+                      {
+                        label: 'Allow Delivery',
+                        desc: 'Courier dispatch enabled',
+                        checked: allowDelivery,
+                        setter: setAllowDelivery,
+                        name: 'Delivery',
+                      },
+                    ].map((t) => (
+                      <div
+                        key={t.label}
+                        className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-white"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 leading-snug">{t.label}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5 truncate">{t.desc}</p>
+                        </div>
+                        <Toggle
+                          checked={t.checked}
+                          onChange={handleToggle(t.setter, t.checked, t.name)}
+                          size="md"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── FLOW-EMP_SET-07 — appointment duration, timeslot capacity,
+                  minimum weekly hours, notification intervals (super admin) ── */}
+            {isSuperAdmin && activeSection === 'timing' && (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="px-6 py-5 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4.5 h-4.5 text-blue-600">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-gray-900">Appointments &amp; scheduling</h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Store-wide parameters from FLOW-EMP_SET-07. They apply to every user immediately
+                        (REQ-EMP_SET-05).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 py-2">
+                  <NumberField
+                    label="Appointment duration"
+                    hint="Length of one appointment timeslot (business rule 11: exactly 10 minutes)."
+                    value={slotMinutes}
+                    min={1}
+                    max={120}
+                    suffix="min"
+                    onSave={(value) => {
+                      setSlotMinutes(value)
+                      mark()
+                    }}
+                  />
+                  <NumberField
+                    label="Visit timeslot capacity"
+                    hint="How many visit appointments one timeslot may hold (business rule 12)."
+                    value={visitCapacity}
+                    min={1}
+                    max={20}
+                    suffix="visits"
+                    onSave={(value) => {
+                      setVisitCapacity(value)
+                      mark()
+                    }}
+                  />
+                  <NumberField
+                    label="Pickup timeslot capacity"
+                    hint="How many pickup appointments one timeslot may hold (business rule 12)."
+                    value={pickupCapacity}
+                    min={1}
+                    max={50}
+                    suffix="pickups"
+                    onSave={(value) => {
+                      setPickupCapacity(value)
+                      mark()
+                    }}
+                  />
+                  <NumberField
+                    label="Minimum weekly hours"
+                    hint="Every employee must be prescheduled for at least this long per week (business rule 46)."
+                    value={weeklyHours}
+                    min={0}
+                    max={80}
+                    step={0.5}
+                    suffix="hours"
+                    onSave={(value) => {
+                      setWeeklyHours(value)
+                      mark()
+                    }}
+                  />
+                  <NumberField
+                    label="Appointment reminder interval"
+                    hint="How many minutes before an appointment the reminder is sent."
+                    value={reminderMinutes}
+                    min={0}
+                    max={1440}
+                    suffix="min"
+                    onSave={(value) => {
+                      setReminderMinutes(value)
+                      mark()
+                    }}
+                  />
+                  <NumberField
+                    label="System notification follow-up"
+                    hint="How often pending system alerts are re-sent to staff."
+                    value={followupHours}
+                    min={1}
+                    max={168}
+                    suffix="hours"
+                    onSave={(value) => {
+                      setFollowupHours(value)
+                      mark()
+                    }}
                   />
                 </div>
-
-                {/* Three secondary toggles */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {[
-                    {
-                      label: 'Accept Online Orders',
-                      desc: 'Bag checkout available',
-                      checked: acceptOnlineOrders,
-                      setter: setAcceptOnlineOrders,
-                      name: 'Online Orders',
-                    },
-                    {
-                      label: 'Allow In-Store Pickup',
-                      desc: 'Campus claim stations active',
-                      checked: allowInStorePickup,
-                      setter: setAllowInStorePickup,
-                      name: 'In-Store Pickup',
-                    },
-                    {
-                      label: 'Allow Delivery',
-                      desc: 'Courier dispatch enabled',
-                      checked: allowDelivery,
-                      setter: setAllowDelivery,
-                      name: 'Delivery',
-                    },
-                  ].map((t) => (
-                    <div
-                      key={t.label}
-                      className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-white"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-900 leading-snug">{t.label}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">{t.desc}</p>
-                      </div>
-                      <Toggle
-                        checked={t.checked}
-                        onChange={handleToggle(t.setter, t.checked, t.name)}
-                        size="md"
-                      />
-                    </div>
-                  ))}
-                </div>
               </div>
-            </div>
+            )}
 
-            {/* ── Preview Cards ── */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <PreviewCard
-                title="Order Preferences"
-                onNavigate={() => setActiveSection('order-preferences')}
-                icon={
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <path d="M16 10a4 4 0 0 1-8 0" />
-                  </svg>
-                }
-                rows={[
-                  { label: 'Max orders per time slot', value: `${settings.max_claiming_slots ?? 10} orders` },
-                  { label: 'Order confirmation mode',  value: 'Automatic'  },
-                  { label: 'Cancellation policy',      value: 'Within 24h' },
-                ]}
-              />
+            {/* ── Preview Cards (super admin overview) ── */}
+            {isSuperAdmin && (activeSection === 'store-operations' || activeSection === 'timing') && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <PreviewCard
+                  title="Order Preferences"
+                  onNavigate={() => setActiveSection('store-operations')}
+                  icon={
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                      <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                      <line x1="3" y1="6" x2="21" y2="6" />
+                      <path d="M16 10a4 4 0 0 1-8 0" />
+                    </svg>
+                  }
+                  rows={[
+                    { label: 'Max orders per time slot', value: `${settings.max_claiming_slots ?? 10} orders` },
+                    { label: 'Order confirmation mode',  value: 'Automatic'  },
+                    { label: 'Cancellation policy',      value: 'Within 24h' },
+                  ]}
+                />
 
-              <PreviewCard
-                title="Notifications"
-                onNavigate={() => setActiveSection('staff-notifications')}
-                icon={
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                }
-                rows={[
-                  { label: 'New order notifications', value: 'Instant Push' },
-                  { label: 'Pickup reminders',        value: '2h Before'    },
-                  { label: 'Low-stock alerts',        value: `≤ ${settings.low_stock_threshold ?? 5} units` },
-                ]}
-              />
+                <PreviewCard
+                  title="Notifications"
+                  onNavigate={() => setActiveSection('timing')}
+                  icon={
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                  }
+                  rows={[
+                    { label: 'New order notifications', value: 'Instant Push' },
+                    { label: 'Pickup reminders',        value: `${reminderMinutes}m Before` },
+                    { label: 'Low-stock alerts',        value: `≤ ${settings.low_stock_threshold ?? 5} units` },
+                  ]}
+                />
 
-              <PreviewCard
-                title="Access & Permissions"
-                onNavigate={() => setActiveSection('access-permissions')}
-                icon={
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                }
-                rows={[
-                  { label: 'Staff access',          value: 'POS & Claims'      },
-                  { label: 'Manager permissions',   value: 'Catalog & Orders'  },
-                  { label: 'Administrator',         value: 'Full Access'       },
-                ]}
-              />
-            </div>
-
+                <PreviewCard
+                  title="Access & Permissions"
+                  onNavigate={() => setActiveSection('store-operations')}
+                  icon={
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  }
+                  rows={[
+                    { label: 'Staff access',          value: 'POS & Claims'      },
+                    { label: 'Manager permissions',   value: 'Catalog & Orders'  },
+                    { label: 'Administrator',         value: 'Full Access'       },
+                  ]}
+                />
+              </div>
+            )}
           </main>
         </div>
       </div>
 
-      {/* ── Sticky Bottom Bar ── */}
-      <div className="fixed bottom-0 right-0 left-0 md:left-64 bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-slate-400' : hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
-          <span className="text-xs font-semibold text-slate-600">
-            {isLoading ? 'Loading settings…' : hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
-          </span>
-        </div>
+      {/* ── Sticky Bottom Bar (system panes only) ── */}
+      {isSuperAdmin && isSystemPane && (
+        <div className="fixed bottom-0 right-0 left-0 md:left-60 bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-slate-400' : hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+            <span className="text-xs font-semibold text-slate-600">
+              {isLoading ? 'Loading settings…' : hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
+            </span>
+          </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            disabled={!hasUnsavedChanges || isLoading}
-            onClick={handleDiscard}
-            className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-xs font-semibold text-slate-700 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={isLoading || isSaving}
-            onClick={handleSave}
-            className="px-5 py-2 rounded-lg bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSaving ? 'Saving…' : 'Save Changes'}
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              disabled={!hasUnsavedChanges || isLoading}
+              onClick={handleDiscard}
+              className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-xs font-semibold text-slate-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={isLoading || isSaving}
+              onClick={handleSave}
+              className="px-5 py-2 rounded-lg bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </AdminLayout>
   )
 }

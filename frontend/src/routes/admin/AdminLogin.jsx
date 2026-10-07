@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { apiRequest, preconnectApi } from '../../services/api.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import { empHomePath } from '../../components/admin/schema.js'
 
 /* REQ-EMP_LOGIN-06: whatever is typed stays on screen - the draft lives in
    sessionStorage, which survives in-app navigation and switching back and
@@ -43,10 +44,11 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false)
   const checkSeq = useRef(0)
 
-  // Already authenticated → skip straight into the portal
+  // Already authenticated → skip straight into the portal (staff never land
+  // on the Dashboard: REQ-EMP_HOME-01 keeps it out of their portal entirely).
   useEffect(() => {
     if (currentAdminUser) {
-      navigate('/admin/dashboard', { replace: true })
+      navigate(empHomePath(currentAdminUser), { replace: true })
     }
   }, [currentAdminUser, navigate])
 
@@ -151,7 +153,7 @@ export default function AdminLogin() {
       if (res.user?.mustChangePassword) {
         navigate('/admin/account')
       } else {
-        navigate('/admin/dashboard')
+        navigate(empHomePath(res.user))
       }
       return
     }

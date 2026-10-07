@@ -845,6 +845,22 @@
                     $token = $employee->createToken('auth_token')->plainTextToken;
                 }
 
+                /*
+                    The failed-attempt stamp is only meaningful while the
+                    account is still locked out of a successful sign-in: the
+                    customer side clears `cust_login_failed` the same way, and
+                    leaving a stale mark on `emp_login_failed` would misreport
+                    every later audit of this account.
+                */
+                if ($employee->emp_login_failed !== null && \Schema::hasColumn('employee', 'emp_login_failed')) {
+                    try {
+                        $employee->emp_login_failed = null;
+                        $employee->save();
+                    } catch (\Throwable $e) {
+                        // Bookkeeping must never change the login answer.
+                    }
+                }
+
                 // FLOW-ACCESS_LOG-04: a successful employee login is logged.
                 $this->logEmployee((int) $employee->emp_id, 'auth', 'POST /api/auth/emp_login');
 
@@ -894,14 +910,16 @@
                 ? Employee::where('emp_email', $email)->first()
                 : null;
 
-            $passwordCorrect = false;
-
-            if ($employee && $password !== '') {
-                $passwordCorrect = EmployeePassword::verify(
-                    $password,
-                    (string) $employee->emp_password
-                )['valid'];
-            }
+            /*
+                One bcrypt comparison per keystroke batch, not two: the answer
+                `password_correct` (FLOW-EMP_LOGIN-07/08) and the flag
+                `must_change_password` (REQ-EMP_ENROLL-03) both come out of the
+                same verification, so a login form being typed into costs a
+                single ~100 ms comparison inside the one-second budget.
+            */
+            $verified = $employee && $password !== ''
+                ? EmployeePassword::verify($password, (string) $employee->emp_password)
+                : null;
 
             // JSON SUCCESS
             return response()->json([
@@ -910,10 +928,16 @@
                     // FLOW-EMP_LOGIN-02/03
                     'email_exists' => $employee !== null,
                     // FLOW-EMP_LOGIN-07/08
-                    'password_correct' => $passwordCorrect,
-                    // REQ-EMP_ENROLL-03: first sign-in must change the password
-                    'must_change_password' => (bool) ($passwordCorrect && $employee
-                        && EmployeePassword::verify($password, (string) $employee->emp_password)['temporary']),
+                    'password_correct' => (bool) ($verified['valid'] ?? false),
+                    // REQ-EMP_ENROLL-03: first sign-in must change the
+                    // password. `$verified` is null whenever there is no
+                    // account to compare against (FLOW-EMP_LOGIN-02) or no
+                    // password supplied yet, so both offsets are guarded the
+                    // same way as `password_correct` above - otherwise an
+                    // address that simply does not exist answers 500 instead
+                    // of `email_exists: false`, and the form could never
+                    // print its "User not found" line from this endpoint.
+                    'must_change_password' => (bool) (($verified['valid'] ?? false) && ($verified['temporary'] ?? false)),
                     'account_disabled' => (bool) ($employee
                         && ($employee->emp_suspended || $employee->emp_deleted || $employee->emp_disabled)),
                 ],
@@ -992,20 +1016,37 @@
                 'backupemail' => $json->input('backupemail'),
             ], static fn ($value) => $value !== null && $value !== '');
 
-            if ($user instanceof Customer) {
-                $user->update([
-                    'cust_backupcallcode' => $fields['backupcallcode'] ?? $user->cust_backupcallcode,
-                    'cust_backupphone' => $fields['backupphone'] ?? $user->cust_backupphone,
-                    'cust_backupemail' => $fields['backupemail'] ?? $user->cust_backupemail,
-                ]);
-            } elseif ($user instanceof Employee) {
-                $user->update([
-                    'emp_backupcallcode' => $fields['backupcallcode'] ?? $user->emp_backupcallcode,
-                    'emp_backupphone' => $fields['backupphone'] ?? $user->emp_backupphone,
-                    'emp_backupemail' => $fields['backupemail'] ?? $user->emp_backupemail,
-                ]);
-            } else {
+            if (! $user instanceof Customer && ! $user instanceof Employee) {
                 return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
+            }
+
+            /*
+                DOMAIN 15 / FLOW-EMP_SET-03 (and its DOMAIN 29 twin).
+
+                system-new.docx SCHEMA keeps backup contacts in the single
+                `*_backup_phone` / `*_backup_email` column pair - there is no
+                `*_backupcallcode` column any more - so the country code the
+                form still sends is folded into the stored number instead of
+                being written to a column that does not exist. An empty value
+                simply leaves the stored contact untouched, exactly as before.
+            */
+            $prefix = $user instanceof Employee ? 'emp' : 'cust';
+
+            $updates = [];
+
+            if (isset($fields['backupphone'])) {
+                $updates[$prefix . '_backup_phone'] = $this->normalizeBackupPhone(
+                    (string) $fields['backupphone'],
+                    (string) ($fields['backupcallcode'] ?? '')
+                );
+            }
+
+            if (isset($fields['backupemail'])) {
+                $updates[$prefix . '_backup_email'] = trim((string) $fields['backupemail']);
+            }
+
+            if ($updates !== []) {
+                $user->update($updates);
             }
 
             // REQ-EMP_SET-02 / REQ-CUST_SET-02: a settings change is logged
@@ -1023,6 +1064,36 @@
                 'message' => 'Backup credentials updated successfully',
                 'data' => $user,
             ]);
+        }
+
+        /**
+         * Folds a country code onto a backup phone number so the value that
+         * lands in `*_backup_phone` is one international number:
+         *   ("9123456789", "+63") -> "+639123456789"
+         *   ("09123456789", "+63") -> "+639123456789"
+         * An already international number (or one without a code) is kept as
+         * the caller wrote it.
+         */
+        private function normalizeBackupPhone(string $phone, string $callcode): string
+        {
+            $phone = trim($phone);
+
+            if ($phone === '' || $callcode === '' || str_starts_with($phone, '+')) {
+                return $phone;
+            }
+
+            $digits = preg_replace('/\D+/', '', $phone) ?? '';
+            $code = preg_replace('/\D+/', '', $callcode) ?? '';
+
+            if ($digits === '' || $code === '') {
+                return $phone;
+            }
+
+            if (str_starts_with($digits, '0')) {
+                $digits = substr($digits, 1);
+            }
+
+            return '+' . $code . $digits;
         }
 
         public function recoverCredentials(Request $json)
@@ -1047,11 +1118,12 @@
 
             // DOMAIN 29 / FLOW-CUST_SET-03: a customer always proves the
             // change with a phone OTP before anything is written.
-            $gate = $this->otpGate($json, 'password_change');
-            if ($gate) {
-                return $gate;
-            }
-
+            //
+            // REQ-EMP_SET-01 - FLOW-EMP_SET-02 orders the form as "current
+            // password, then new password twice", so the current password is
+            // answered FIRST: raising the OTP challenge before the password
+            // has even been compared would hide "Current password is
+            // incorrect." behind a verification the caller never asked for.
             $user = $json->user();
             $passwordField = $user instanceof Customer ? 'cust_password' : 'emp_password';
             $changedField = $user instanceof Customer ? 'cust_cred_changed' : 'emp_cred_changed';
@@ -1060,6 +1132,23 @@
                 return response()->json([
                     'success' => false,
                     'message' => 'Current password is incorrect.',
+                ], 422);
+            }
+
+            $gate = $this->otpGate($json, 'password_change');
+            if ($gate) {
+                return $gate;
+            }
+
+            // FLOW-EMP_SET-02 - the new password is entered twice. The form
+            // sends the second entry as `new_password_confirmation`; when it
+            // is present it must match exactly, so a mismatched pair can
+            // never reach the database.
+            if ($json->has('new_password_confirmation')
+                && (string) $json->input('new_password_confirmation') !== (string) $json->input('new_password')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'New password confirmation does not match.',
                 ], 422);
             }
 
@@ -1108,13 +1197,69 @@
                 if ($json->has('phone')) {
                     $update['emp_phone'] = $json->input('phone');
                 }
+                /*
+                    REQ-EMP_PROF-01 - "Employee email addresses must not be
+                    editable by regular staff members."
+
+                    This endpoint only ever rewrites the account that owns the
+                    bearer token, so the category of that account is the whole
+                    test: a staff member may change phone, pronoun and password
+                    here, but never the login identity itself. An admin or
+                    super admin keeps the right (rules 36-37 reserve the
+                    category itself for super admins).
+                */
                 if ($json->has('email')) {
-                    $update['emp_email'] = $json->input('email');
+                    $requested = mb_strtolower(trim((string) $json->input('email')));
+                    $current = mb_strtolower(trim((string) $user->emp_email));
+
+                    if ($requested !== '' && $requested !== $current) {
+                        if (! $user instanceof Employee || ! $user->isAdmin()) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Regular staff members may not change an email address.',
+                                'code' => 'EMAIL_LOCKED',
+                            ], 403);
+                        }
+
+                        // Rule 27: a Bicol University email belongs to only
+                        // one employee (and never to a customer either).
+                        $taken = Employee::where('emp_email', $requested)
+                            ->where('emp_id', '!=', $user->emp_id)
+                            ->exists()
+                            || Customer::where('cust_email', $requested)->exists();
+                        if ($taken) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Email already exists',
+                            ], 409);
+                        }
+
+                        $update['emp_email'] = $requested;
+                    }
                 }
             }
-            $update[$changedField] = now();
+            // The credential-changed stamp only exists where the schema has
+            // the column; writing it blindly would be dropped by mass
+            // assignment (or fail outright on a schema without it).
+            if (\Schema::hasColumn($user->getTable(), $changedField)) {
+                $update[$changedField] = now();
+            }
             $user->update($update);
-            $user->tokens()->delete();
+
+            if ($user instanceof Employee) {
+                /*
+                    FLOW-EMP_LOGOUT-06 / REQ-EMP_LOGOUT-03 - a password change
+                    ends every session of the account at once: employee tokens
+                    carry the `emp_login_active` nonce, so clearing it revokes
+                    the token that carried this request and every other device
+                    too (ApiToken::parse refuses a token whose nonce no longer
+                    matches the column).
+                */
+                $user->emp_login_active = null;
+                $user->save();
+            } else {
+                $user->tokens()->delete();
+            }
 
             // The verification covers exactly this one change (FLOW-CUST_SET-06).
             $this->consumeOtp($json, 'password_change');

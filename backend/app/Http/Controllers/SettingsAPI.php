@@ -46,9 +46,16 @@
         private function isPreferenceKey(string $key): bool
         {
             foreach ([self::CUSTOMER_PREFS, self::EMPLOYEE_PREFS] as $map) {
+                // Bare aliases the frontend sends: `darkmode`, `notif_email`,
+                // `notif_appointremind`, `backup_phone`, ...
+                if (array_key_exists($key, $map)) {
+                    return true;
+                }
+                // Canonical column names: `emp_darkmode`, `cust_backup_email`, ...
                 if (in_array($key, $map, true)) {
                     return true;
                 }
+                // Prefixed aliases: `cust_darkmode`, `emp_notif_email`, ...
                 foreach ($map as $bare => $column) {
                     if ($key === $column || str_ends_with($key, '_' . $bare)) {
                         return true;
@@ -274,10 +281,16 @@
                 $endpoint = 'PUT /api/settings/update';
 
                 // Personal preferences -> the caller's own row (D15/D29).
+                $appliedPreferences = [];
                 if (!empty($preferences)) {
                     $map    = $user instanceof Customer ? self::CUSTOMER_PREFS : self::EMPLOYEE_PREFS;
                     $table  = $user instanceof Customer ? 'customer' : 'employee';
                     $keyCol = $user instanceof Customer ? 'cust_id' : 'emp_id';
+
+                    $invalid = $this->invalidPreference($preferences);
+                    if ($invalid !== null) {
+                        return $invalid;
+                    }
 
                     $updates = [];
                     foreach ($preferences as $key => $value) {
@@ -292,13 +305,18 @@
                             }
                         }
                         if ($column !== null) {
+                            // A preference key whose column is not part of this
+                            // schema (e.g. `emp_notif_prod` on the employee row,
+                            // which system-new.docx SCHEMA does not list) is
+                            // skipped instead of producing invalid SQL - and it
+                            // is NOT counted as a change below, because nothing
+                            // was written for it.
+                            if (! \Schema::hasColumn($table, $column)) {
+                                continue;
+                            }
                             $updates[$column] = $this->castPreference($column, $value);
+                            $appliedPreferences[] = (string) $key;
                         }
-                    }
-
-                    $invalid = $this->invalidPreference($preferences);
-                    if ($invalid !== null) {
-                        return $invalid;
                     }
 
                     // FLOW-CUST_SET-06 / REQ-CUST_SET-02: backup contacts are
@@ -322,14 +340,30 @@
                     }
                 }
 
-                // System-wide values -> SystemSettings JSON document (D1).
+                /*
+                    System-wide values -> SystemSettings (D1).
+
+                    REQ-SETUP-01: every value is validated BEFORE it is saved,
+                    and a document that could not be written answers with a
+                    real error - a super admin must never be told "saved"
+                    while the change only ever lived in this one request.
+                */
                 foreach ($system as $key => $value) {
-                    SystemSettings::set((string) $key, $value);
+                    $problem = SystemSettings::invalid((string) $key, $value);
+                    if ($problem !== null) {
+                        return $this->fail($problem, 422);
+                    }
+                }
+                if (!empty($system) && ! SystemSettings::putMany($system)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'System settings could not be written to storage. Nothing was saved.',
+                    ], 500);
                 }
 
                 // D32 / REQ-CUST_SET-04 - changing settings is an 'edit' action,
                 // recorded with the preference that actually changed.
-                $changed = array_keys($preferences);
+                $changed = $appliedPreferences;
                 if (!empty($system)) {
                     $changed = array_merge($changed, array_keys($system));
                 }

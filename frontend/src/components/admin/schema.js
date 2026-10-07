@@ -38,6 +38,35 @@ export function isAdminRow(row) {
   return categ === 'admin' || categ === 'super admin' || categ === 'super_admin'
 }
 
+/**
+ * REQ-EMP_HOME-01 - is this employee a regular staff member?
+ *
+ * `roleKey` (set by mapEmployee) is authoritative when present; otherwise the
+ * category decides, defaulting to 'staff' so an unidentified employee is
+ * treated with the least privilege rather than the most.
+ */
+export function empIsStaff(row) {
+  if (!row) return true
+  const key = String(row.roleKey || '').toUpperCase()
+  if (key) return key === 'STAFF'
+  return empCateg(row) === 'staff'
+}
+
+/**
+ * Where the ribbon's "home" icon and the post-login redirect take this
+ * employee.
+ *
+ * FLOW-EMP_HOME-06 sends every employee to "the home page", but
+ * REQ-EMP_HOME-01 forbids the Dashboard icon/label from ever showing to
+ * staff - so a staff member's home is the first screen they are actually
+ * allowed to open: the Orders board. Keeping it in one helper is what stops
+ * the login screen, the ribbon, the route guard and the sidebar from
+ * disagreeing and bouncing staff back into the dashboard.
+ */
+export function empHomePath(row) {
+  return empIsStaff(row) ? '/admin/orders' : '/admin/dashboard'
+}
+
 export function empFullName(row) {
   const given = String(first(row, 'emp_givname') || '')
   const surname = String(first(row, 'emp_surname') || '')

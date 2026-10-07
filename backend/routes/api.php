@@ -39,8 +39,12 @@ Route::post('/auth/cust_login', [AuthAPI::class, 'customerLogin']);
 Route::post('/auth/emp_login', [AuthAPI::class, 'employeeLogin']);
 // DOMAIN 2 - realtime field checks for the staff login form. Public because
 // nobody owns a session yet, throttled because it answers "does this account
-// exist" and "is this the right password" without opening a session.
-Route::post('/auth/emp_login/check', [AuthAPI::class, 'employeeLoginCheck'])->middleware('throttle:60,1');
+// exist" and "is this the right password" without opening a session. The form
+// debounces at 400 ms and re-fires after every pause in typing, so the budget
+// has to cover a full minute of ordinary typing (FLOW-EMP_LOGIN-02..08 ask
+// for an answer "immediately") without leaving the window where the inline
+// messages would go silent.
+Route::post('/auth/emp_login/check', [AuthAPI::class, 'employeeLoginCheck'])->middleware('throttle:180,1');
 Route::post('/auth/recover_credentials', [AuthAPI::class, 'recoverCredentials']);
 
 // DOMAIN 17 / DOMAIN 18 - the phone OTP challenge that gates a signup

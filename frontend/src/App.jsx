@@ -56,7 +56,12 @@ import AdminEnroll from './routes/admin/AdminEnroll.jsx'
 import AdminAppointments from './routes/admin/AdminAppointments.jsx'
 import AdminAccount from './routes/admin/AdminAccount.jsx'
 import AdminSettings from './routes/admin/AdminSettings.jsx'
+import AdminQr from './routes/admin/AdminQr.jsx'
+import AdminNotifications from './routes/admin/AdminNotifications.jsx'
 import ScrollToTop from './components/layout/ScrollToTop.jsx'
+import { useAdmin } from './hooks/useAdmin.js'
+import { empHomePath } from './components/admin/schema.js'
+import { latestSessionKind } from './services/session.js'
 
 /**
  * Guards every customer account route. A guest who lands here (deep link or
@@ -73,13 +78,33 @@ function RequireAuth() {
 }
 
 /**
- * FLOW-CUST_LOGIN-01 - the bare "/" entry rule. A customer who was signed in
- * on this browser-device goes straight to the storefront; anyone else is sent
- * to the login form. Only "/" is gated: "/home" stays public so the
- * "Back to Homepage" links can never bounce back into the login screen.
+ * FLOW-EMP_HOME-06 - "/" of the employee portal. Each employee is taken to
+ * THEIR home page: the Dashboard for admins and super admins, Orders for
+ * staff, who may never be shown the Dashboard (REQ-EMP_HOME-01).
+ */
+function AdminEntryRoute() {
+  const { currentAdminUser } = useAdmin()
+  return <Navigate to={empHomePath(currentAdminUser)} replace />
+}
+
+/**
+ * FLOW-CUST_LOGIN-01 - the bare "/" entry rule, read through system rule 71
+ * ("the customer portal and the admin portal must be separate").
+ *
+ * The two portals keep their own session slots, so "/" has to pick one. An
+ * employee who still holds a staff session is served the EMPLOYEE portal -
+ * sending them to the customer login form would be exactly the cross-portal
+ * hop rule 71 forbids. When both slots are signed in, the one signed in last
+ * wins (services/session.js: latestSessionKind).
  */
 function EntryRoute() {
   const { currentUser } = useAuth()
+  const { currentAdminUser } = useAdmin()
+
+  if (currentAdminUser && latestSessionKind() !== 'customer') {
+    return <Navigate to="/admin" replace />
+  }
+
   return <Navigate to={currentUser ? '/home' : '/login'} replace />
 }
 
@@ -138,19 +163,35 @@ function App() {
                 {/* ── Admin & Staff Routes ── */}
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route element={<RequireAdmin />}>
-                  <Route path="/admin" element={<AdminDashboard />} />
-                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                  <Route path="/admin" element={<AdminEntryRoute />} />
+                  {/* REQ-EMP_HOME-01 — the Dashboard must never show to a
+                      'staff' employee, so the screen itself carries the role
+                      guard rather than only its sidebar entry. */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                    <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                  </Route>
                   <Route path="/admin/orders" element={<AdminOrders />} />
                   <Route path="/admin/inventory" element={<AdminInventory />} />
                   {/* /admin/fulfillment → redirect to the new Pickup module */}
                   <Route path="/admin/fulfillment" element={<Navigate to="/admin/pickup" replace />} />
                   <Route path="/admin/pickup" element={<AdminPickup />} />
                   <Route path="/admin/delivery" element={<AdminDelivery />} />
-                  <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                  {/* REQ-EMP_HOME-01 — same reasoning as the Dashboard above:
+                      "Sales" is never rendered for a 'staff' employee, so the
+                      screen behind it carries the guard too rather than only
+                      the sidebar entry. */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                    <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                  </Route>
                   <Route path="/admin/customization" element={<AdminStoreCustomization />} />
                   <Route path="/admin/schedule" element={<AdminSchedule />} />
                   <Route path="/admin/appointments" element={<AdminAppointments />} />
-                  <Route path="/admin/reviews" element={<AdminReviews />} />
+                  {/* REQ-EMP_HOME-01 — the Reviews entry never renders for a
+                      'staff' employee, so the screen behind it is guarded the
+                      same way the Dashboard is. */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                    <Route path="/admin/reviews" element={<AdminReviews />} />
+                  </Route>
                   <Route path="/admin/users" element={<AdminUsers />} />
                   {/* The staff directory link the sidebar and the enrollment
                       confirmation both point at. */}
@@ -158,10 +199,26 @@ function App() {
                   <Route path="/admin/account" element={<AdminAccount />} />
                   <Route path="/admin/profile" element={<AdminAccount />} />
 
-                  {/* POS and store settings write through admin-only endpoints */}
+                  {/* DOMAIN 3 - FLOW-EMP_HOME-07 / FLOW-EMP_HOME-08: the QR
+                      scanner and the notification tab are reachable from the
+                      ribbon by every employee (staff included). */}
+                  <Route path="/admin/qr" element={<AdminQr />} />
+                  <Route path="/admin/notifications" element={<AdminNotifications />} />
+
+                  {/* DOMAIN 15 - FLOW-EMP_SET-01: every employee opens the
+                      settings screen through the ribbon's "settings" icon.
+                      The store-wide half inside it stays super-admin only,
+                      which SettingsAPI enforces for every system key (rule 40). */}
+                  <Route path="/admin/settings" element={<AdminSettings />} />
+
+                  {/* POS is walked through by admins and super admins (rule 44).
+                      FLOW-EMP_HOME-05 lists "Walk-in Orders" as its own sidebar
+                      entry: it is the same register screen under the spec's URL.
+                      Without this route the link fell through the "*" rule and
+                      dropped the employee into the CUSTOMER portal. */}
                   <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
                     <Route path="/admin/pos" element={<AdminPos />} />
-                    <Route path="/admin/settings" element={<AdminSettings />} />
+                    <Route path="/admin/walkin" element={<AdminPos />} />
                   </Route>
 
                   {/* DOMAIN 6 / REQ-EMP_ENROLL-01: enrollment is a super
@@ -172,6 +229,13 @@ function App() {
                   </Route>
                 </Route>
 
+                {/* An unknown path must never cross the portal line (rule 71):
+                    /admin/anything stays inside the employee portal (and its
+                    own guard), everything else is the storefront's 404. */}
+                <Route
+                  path="/admin/*"
+                  element={<Navigate to="/admin" replace />}
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </ApiErrorBoundary>

@@ -12,7 +12,16 @@ export function ThemeProvider({ children }) {
     localStorage.setItem(STORAGE_KEY, dark ? 'dark' : 'light')
   }, [dark])
 
-  const value = useMemo(() => ({ dark, toggle: () => setDark((prev) => !prev) }), [dark])
+  const value = useMemo(
+    () => ({
+      dark,
+      set: setDark,
+      // FLOW-EMP_HOME-09/10 + FLOW-EMP_SET-05: the ribbon flips the theme and
+      // the account stores the preference (see AdminTopBar).
+      toggle: () => setDark((prev) => !prev),
+    }),
+    [dark]
+  )
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 

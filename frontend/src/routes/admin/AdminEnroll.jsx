@@ -4,7 +4,7 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { apiPost } from '../../services/api.js'
-import { empCateg } from '../../components/admin/schema.js'
+import { empCateg, empHomePath } from '../../components/admin/schema.js'
 
 const BICOL_DOMAIN = '@bicol-u.edu.ph'
 
@@ -305,7 +305,7 @@ export default function AdminEnroll() {
   const { currentAdminUser } = useAdmin()
   const categ = empCateg(currentAdminUser || {})
   const roleKey = currentAdminUser?.roleKey
-  if (roleKey && roleKey !== 'SUPER_ADMIN') return <Navigate to="/admin/dashboard" replace />
-  if (!roleKey && categ !== 'super admin') return <Navigate to="/admin/dashboard" replace />
+  if (roleKey && roleKey !== 'SUPER_ADMIN') return <Navigate to={empHomePath(currentAdminUser)} replace />
+  if (!roleKey && categ !== 'super admin') return <Navigate to={empHomePath(currentAdminUser)} replace />
   return <AdminEnrollForm />
 }

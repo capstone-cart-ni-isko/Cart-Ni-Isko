@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { mapOrderRows } from '../../services/dashboard.js'
-import { empCateg } from './schema.js'
+import { empCateg, empHomePath, empIsStaff } from './schema.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 const ICON = 'w-4 h-4'
@@ -116,32 +116,19 @@ function buildNavItems() {
   ]
 }
 
-/* Panel-style collapse toggle */
-function PanelIcon({ className = 'w-4 h-4' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <line x1="9" y1="4" x2="9" y2="20" />
-    </svg>
-  )
-}
-
-export default function AdminSidebar({
-  onCloseMobile,
-  isCollapsed: controlledIsCollapsed,
-  onToggleCollapse: controlledToggleCollapse,
-}) {
+export default function AdminSidebar({ onCloseMobile }) {
   const navigate = useNavigate()
   const { orders: rawOrders = [], products = [], currentAdminUser, logoutAdmin } = useAdmin()
   // Live rows for the ⌘K search palette (server-backed, refreshed by context).
   const liveOrders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
 
   const roleKey = currentAdminUser?.roleKey || (empCateg(currentAdminUser) === 'super admin' ? 'SUPER_ADMIN' : empCateg(currentAdminUser) === 'admin' ? 'ADMIN' : 'STAFF')
-  // REQ-EMP_HOME-01 — a 'staff' category employee is a regular staff member.
-  const isStaff =
-    roleKey === 'STAFF' ||
-    empCateg(currentAdminUser) === 'staff' ||
-    String(currentAdminUser?.role || '').toLowerCase() === 'staff'
+  // REQ-EMP_HOME-01 — a 'staff' category employee is a regular staff member,
+  // so the Dashboard / Walk-in / Reviews / Sales entries never render for them.
+  const isStaff = empIsStaff(currentAdminUser)
+  // Where this employee's "home" leads (Dashboard for admins, Orders for
+  // staff) - every logo/home link in the portal uses the same answer.
+  const homePath = empHomePath(currentAdminUser)
 
   // FLOW-EMP_HOME-05 + REQ-EMP_HOME-01
   const navItems = useMemo(() => {
@@ -153,18 +140,16 @@ export default function AdminSidebar({
     })
   }, [isStaff, roleKey])
 
-  const [internalCollapsed, setInternalCollapsed] = useState(false)
+  // FLOW-EMP_HOME-05 — the docked sidebar is always fully open: its labels
+  // (Dashboard … Logout) stay visible on every employee page, so there is no
+  // collapsed/icon-only state any more.
+  const isCollapsed = false
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [confirmLogout, setConfirmLogout] = useState(false)
   const searchInputRef = useRef(null)
-
-  const isCollapsed =
-    controlledIsCollapsed !== undefined ? controlledIsCollapsed : internalCollapsed
-  const onToggleCollapse =
-    controlledToggleCollapse || (() => setInternalCollapsed((prev) => !prev))
 
   const smallIcon = 'w-4 h-4'
 
@@ -285,90 +270,40 @@ export default function AdminSidebar({
     >
       <div className="flex flex-col flex-1 min-h-0">
         {/* Brand Header */}
-        <div
-          className={`p-3 border-b border-slate-100 flex items-center ${
-            isCollapsed ? 'flex-col gap-2 justify-center' : 'justify-between'
-          }`}
-        >
-          {!isCollapsed ? (
-            <div className="flex items-center justify-between w-full min-w-0">
-              <Link to="/admin/dashboard" className="flex items-center min-w-0">
-                <img src={brandLogo} alt="Tindahan ni Isko" className="h-8 w-auto object-contain" />
-              </Link>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={onToggleCollapse}
-                  title="Collapse sidebar"
-                  aria-label="Collapse sidebar"
-                  className="hidden md:flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-                >
-                  <PanelIcon />
-                </button>
-
-                {onCloseMobile && (
-                  <button
-                    type="button"
-                    onClick={onCloseMobile}
-                    className="md:hidden p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 py-0.5 w-full">
-              <Link
-                to="/admin/dashboard"
-                title="Tindahan ni Isko"
-                className="w-9 h-9 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center p-1 hover:bg-orange-100 transition-colors"
-              >
-                <img src={brandLogo} alt="Tindahan ni Isko" className="h-full w-auto object-contain" />
-              </Link>
+        <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center justify-between w-full min-w-0">
+            <Link to={homePath} className="flex items-center min-w-0" title="Tindahan ni Isko">
+              <img src={brandLogo} alt="Tindahan ni Isko" className="h-8 w-auto object-contain" />
+            </Link>
+            {onCloseMobile && (
               <button
                 type="button"
-                onClick={onToggleCollapse}
-                title="Expand sidebar"
-                aria-label="Expand sidebar"
-                className="hidden md:flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                onClick={onCloseMobile}
+                className="md:hidden p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                aria-label="Close menu"
               >
-                <PanelIcon />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Sidebar Search */}
         <div className="px-3 pt-3 pb-1">
-          {!isCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setIsSearchModalOpen(true)}
-              className="w-full h-8 flex items-center gap-2 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-400 hover:border-slate-300 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <span className="flex-1 text-left truncate">Search...</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsSearchModalOpen(true)}
-              title="Search"
-              className="w-8 h-8 mx-auto flex items-center justify-center rounded-md bg-slate-50 border border-slate-200 text-slate-400 hover:bg-slate-100 hover:border-slate-300 transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setIsSearchModalOpen(true)}
+            className="w-full h-8 flex items-center gap-2 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-400 hover:border-slate-300 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <span className="flex-1 text-left truncate">Search...</span>
+          </button>
         </div>
 
         {/* Search Command Palette Modal */}
@@ -462,7 +397,7 @@ export default function AdminSidebar({
         <nav className="p-2.5 space-y-3 overflow-y-auto flex-1 scrollbar-none">
           <div className="space-y-0.5">
             {!isCollapsed && (
-              <div className="px-2.5 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 select-none">
+              <div className="px-2.5 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 select-none">
                 Menu
               </div>
             )}
@@ -476,7 +411,7 @@ export default function AdminSidebar({
                   className={({ isActive }) =>
                     `flex items-center ${
                       isCollapsed ? 'justify-center px-2 py-2' : 'gap-2.5 px-2.5 py-1.5'
-                    } rounded-md text-xs font-medium transition-all duration-150 ${
+                    } rounded-md text-[13px] font-semibold transition-all duration-150 ${
                       isActive
                         ? 'bg-brand-orange/10 text-brand-orange'
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -495,7 +430,7 @@ export default function AdminSidebar({
                 type="button"
                 onClick={() => setConfirmLogout(true)}
                 title={isCollapsed ? 'Logout' : undefined}
-                className="flex items-center w-full gap-2.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-rose-600 hover:bg-rose-50 transition-all duration-150 cursor-pointer"
+                className="flex items-center w-full gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold text-rose-600 hover:bg-rose-50 transition-all duration-150 cursor-pointer"
               >
                 <span className="shrink-0 flex justify-center">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>

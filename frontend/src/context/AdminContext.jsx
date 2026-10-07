@@ -32,22 +32,30 @@ export function AdminProvider({ children }) {
   const { showToast } = useToast()
 
   // ── ADMIN SESSION ──
-  // Restored from the shared `isko_session` slot so the staff member who
-  // signed in last stays signed in across reloads (same slot as customers).
+  // Restored from the staff slot (`isko_staff_session`) so the employee who
+  // signed in stays signed in across reloads of the portal - and never from
+  // the customer's slot, which rule 71 keeps separate.
   const [currentAdminUser, setCurrentAdminUser] = useState(() => {
     const saved = loadSession('staff')
-    if (saved) setApiToken(saved.token)
+    if (saved) setApiToken(saved.token, 'staff')
     return saved?.user ?? null
   })
 
   useEffect(() => {
-    if (currentAdminUser) saveSession('staff', getApiToken(), currentAdminUser)
+    if (currentAdminUser) saveSession('staff', getApiToken('staff'), currentAdminUser)
     else clearSession('staff')
   }, [currentAdminUser])
 
-  // Token rejected server-side: end the staff session too.
+  // Token rejected server-side: end the staff session too. The event names
+  // the portal the rejected bearer belonged to (rule 71), so a customer
+  // session that 401s never signs the employee out, and an employee token
+  // that expires never drops the signed-in customer.
   useEffect(() => {
-    const handleExpired = () => setCurrentAdminUser(null)
+    const handleExpired = (event) => {
+      const kind = event?.detail?.kind
+      if (kind && kind !== 'staff') return
+      setCurrentAdminUser(null)
+    }
     window.addEventListener('auth-expired', handleExpired)
     return () => window.removeEventListener('auth-expired', handleExpired)
   }, [])
@@ -165,7 +173,7 @@ export function AdminProvider({ children }) {
     adminLogout().catch(() => null)
     clearSession('staff')
     setCurrentAdminUser(null)
-    setApiToken(null)
+    setApiToken(null, 'staff')
     setProducts([])
     setOrders([])
     posCartRef.current = []

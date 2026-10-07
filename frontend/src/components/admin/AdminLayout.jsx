@@ -2,40 +2,23 @@ import { useState } from 'react'
 import AdminSidebar from './AdminSidebar.jsx'
 import AdminTopBar from './AdminTopBar.jsx'
 
+/**
+ * FLOW-EMP_HOME-05 / REQ-EMP_HOME-02 — the employee sidebar is a vertical
+ * array docked at the LEFT of every employee page. It is always open (it can
+ * no longer be collapsed to icons), so the labelled entries stay readable on
+ * every screen, exactly like the customer portal's own docked account menu.
+ *
+ * The only drawer left is the small-screen one, where the sidebar cannot fit
+ * beside the content and therefore still opens on demand.
+ */
 export default function AdminLayout({ children, className = '' }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem('isko_admin_sidebar_collapsed') === 'true'
-    } catch {
-      return false
-    }
-  })
-
-  const handleToggleCollapse = () => {
-    setIsSidebarCollapsed((prev) => {
-      const next = !prev
-      try {
-        localStorage.setItem('isko_admin_sidebar_collapsed', String(next))
-      } catch (err) {
-        console.warn('Failed to save sidebar state to localStorage', err)
-      }
-      return next
-    })
-  }
 
   return (
     <div className="admin-portal min-h-screen bg-[#F8F9FA] flex flex-row w-full font-sans antialiased text-gray-900">
-      {/* Desktop Sidebar (Fixed Left) */}
-      <div
-        className={`hidden md:block shrink-0 h-screen sticky top-0 z-30 transition-[width] duration-300 ease-in-out [&>aside]:w-full ${
-          isSidebarCollapsed ? 'w-16' : 'w-56'
-        }`}
-      >
-        <AdminSidebar
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={handleToggleCollapse}
-        />
+      {/* Desktop Sidebar — always open, docked at the left edge */}
+      <div className="hidden md:block shrink-0 w-60 h-screen sticky top-0 z-30 [&>aside]:w-full">
+        <AdminSidebar onCloseMobile={() => setMobileMenuOpen(false)} />
       </div>
 
       {/* Mobile Drawer Backdrop & Sidebar */}
@@ -46,10 +29,7 @@ export default function AdminLayout({ children, className = '' }) {
             onClick={() => setMobileMenuOpen(false)}
           />
           <div className="fixed inset-y-0 left-0 w-72 bg-white border-r border-slate-200 z-50 animate-slide-right">
-            <AdminSidebar
-              isCollapsed={false}
-              onCloseMobile={() => setMobileMenuOpen(false)}
-            />
+            <AdminSidebar onCloseMobile={() => setMobileMenuOpen(false)} />
           </div>
         </div>
       )}

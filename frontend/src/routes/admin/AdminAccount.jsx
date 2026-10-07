@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, Fragment } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -11,13 +11,35 @@ import { first, empCateg, empFullName } from '../../components/admin/schema.js'
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024 // 2 MB
 const PRONOUNS = ['they/them', 'he/him', 'she/her', 'other']
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Digits in the E.164 range, optionally written with +, spaces, dashes or
+    parentheses. An empty value is allowed - the phone fields are optional. */
+function isValidPhone(value) {
+  const text = String(value || '').trim()
+  if (!text) return true
+  if (!/^[+\d][\d\s().-]*$/.test(text)) return false
+  const digits = text.replace(/\D/g, '')
+  return digits.length >= 7 && digits.length <= 15
+}
+
+/** Rule 67 - the message for a field sits directly beneath that field. */
+function FieldError({ message }) {
+  if (!message) return null
+  return (
+    <p className="text-[11px] font-medium text-rose-600 mt-1" role="alert">
+      {message}
+    </p>
+  )
+}
+
 const CATEGORY_LABEL = {
   staff: 'Staff',
   admin: 'Admin',
   'super admin': 'Super Admin',
 }
 
-export default function AdminAccount() {
+export default function AdminAccount({ embedded = false }) {
   const { showToast } = useToast()
   const { currentAdminUser, logoutAdmin, updateCurrentAdminProfile } = useAdmin()
 
@@ -34,6 +56,19 @@ export default function AdminAccount() {
   const [pronoun, setPronoun] = useState('they/them')
   const [category, setCategory] = useState('staff')
   const [avatarPreview, setAvatarPreview] = useState('')
+
+  /*
+      Rules 66 & 67 — validation is realtime and every message renders under
+      its own field. `touched` keeps a freshly opened, untouched form quiet;
+      from the first edit on, each field's verdict recomputes on every
+      keystroke, so an invalid value never has to wait for a submit (or a
+      toast) to be pointed out.
+  */
+  const [touched, setTouched] = useState({})
+  const touch = (name) =>
+    setTouched((prev) => (prev[name] ? prev : { ...prev, [name]: true }))
+  const touchAll = (names) =>
+    setTouched((prev) => names.reduce((acc, name) => ({ ...acc, [name]: true }), prev))
 
   // Password modal state (DOMAIN 15 — personal password change)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
@@ -114,6 +149,44 @@ export default function AdminAccount() {
   const isRegularStaff = empCateg(record || currentAdminUser || {}) === 'staff'
   const isEmailEditable = !isRegularStaff
 
+  /* Rule 66 — the verdict for every field, recomputed from the live values. */
+  const profileErrors = {
+    givenName: givenName.trim() ? '' : 'Provide a given name.',
+    surname: surname.trim() ? '' : 'Provide a surname.',
+    email: EMAIL_RE.test(email.trim()) ? '' : 'Provide a valid email address.',
+    phone: isValidPhone(phone) ? '' : 'Use a valid phone number, e.g. +63 912 345 6789.',
+  }
+  const passwordErrors = {
+    currentPassword: currentPassword ? '' : 'Enter your current password.',
+    newPassword:
+      newPassword.length >= 8 ? '' : 'The new password must be at least 8 characters.',
+    confirmPassword: !confirmPassword
+      ? 'Re-enter the new password.'
+      : confirmPassword === newPassword
+        ? ''
+        : 'The new passwords do not match.',
+  }
+  const backupErrors = {
+    backupPhone: isValidPhone(backupPhone)
+      ? ''
+      : 'Use a valid phone number, e.g. +63 912 345 6789.',
+    backupEmail:
+      !backupEmail.trim() || EMAIL_RE.test(backupEmail.trim())
+        ? ''
+        : 'Provide a valid backup email address.',
+  }
+
+  /**
+   * Rule 67 — only fields the employee has actually been into report back.
+   * A non-empty value that is already invalid counts as "been into" too, so
+   * "not-an-email" is called out on the keystroke that made it wrong rather
+   * than a blur later; a blank required field stays quiet until touched.
+   */
+  const liveError = (group, name, raw) =>
+    touched[name] || String(raw ?? '').trim() !== '' ? group[name] : ''
+  const hasProfileError = Object.values(profileErrors).some(Boolean)
+  const hasBackupError = Object.values(backupErrors).some(Boolean)
+
   // Avatar upload: jpg/png only, <= 2 MB, stored as a base64 data URL
   // in the emp_avatar column (no Supabase buckets exist).
   const handleFileChange = (e) => {
@@ -144,38 +217,17 @@ export default function AdminAccount() {
     showToast('Avatar removed. Click Save Profile to apply.', 'info')
   }
 
-  const loadRecord = useCallback(
-    (payload) => {
-      const rows = Array.isArray(payload)
-        ? payload.filter((r) => r.emp_id != null)
-        : Array.isArray(payload?.employees)
-          ? payload.employees
-          : []
-      const id = currentAdminUser?.id
-      return (
-        rows.find((r) => String(r.emp_id) === String(id)) ||
-        rows.find((r) => r.emp_email && r.emp_email === currentAdminUser?.email) ||
-        null
-      )
-    },
-    [currentAdminUser]
-  )
-
   // Save profile → PUT /accounts/update
   const handleSave = async () => {
+    // Rule 67: a failed check lights up the offending field itself, not just
+    // a toast that disappears.
+    touchAll(['givenName', 'surname', 'email', 'phone'])
+    if (hasProfileError) return
+
     const cleanGiven = givenName.trim()
     const cleanSurname = surname.trim()
     const cleanEmail = email.trim()
     const cleanPhone = phone.trim()
-
-    if (!cleanGiven || !cleanSurname) {
-      showToast('Please provide both the given name and surname.', 'error')
-      return
-    }
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      showToast('Please provide a valid email address.', 'error')
-      return
-    }
 
     const empId = record?.emp_id ?? currentAdminUser?.id
     if (empId == null) {
@@ -246,16 +298,15 @@ export default function AdminAccount() {
     e.preventDefault()
     setPasswordError('')
 
-    if (!currentPassword) {
-      setPasswordError('Please enter your current password.')
-      return
-    }
-    if (newPassword.length < 8) {
-      setPasswordError('The new password must be at least 8 characters.')
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError('The new passwords do not match.')
+    // Rules 66 & 67: every rule is checked continuously, so pressing
+    // "Update password" with a weak field simply reveals the message that
+    // field has been carrying.
+    touchAll(['currentPassword', 'newPassword', 'confirmPassword'])
+    if (
+      passwordErrors.currentPassword ||
+      passwordErrors.newPassword ||
+      passwordErrors.confirmPassword
+    ) {
       return
     }
 
@@ -309,12 +360,8 @@ export default function AdminAccount() {
 
   // FLOW-EMP_SET-03 - backup contact information used for account recovery.
   const handleSaveBackup = async () => {
-    const cleanEmail = backupEmail.trim()
-
-    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      showToast('Please provide a valid backup email address.', 'error')
-      return
-    }
+    touchAll(['backupPhone', 'backupEmail'])
+    if (hasBackupError) return
 
     // REQ-CUST_SET-02 / FLOW-EMP_SET-03: the emailed code comes first.
     setPendingAction('backup')
@@ -352,14 +399,19 @@ export default function AdminAccount() {
     else if (action === 'backup') await saveBackupContacts()
   }
 
-  const initials = `${givenName[0] || ''}${surname[0] || ''}`.toUpperCase() || '—'
+  /*
+      FLOW-EMP_PROF-01 / FLOW-EMP_SET-01 — the ribbon's "settings" icon opens
+      the settings screen, which embeds this very profile screen; "/admin/account"
+      renders it on its own with the layout around it.
+  */
+  const Wrapper = embedded ? Fragment : AdminLayout
 
   return (
-    <AdminLayout>
+    <Wrapper>
       <div className="max-w-4xl mx-auto space-y-5">
         {/* Header */}
         <div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
             Employee Profile
           </h1>
           <p className="text-sm text-slate-500 font-normal mt-1">
@@ -443,9 +495,12 @@ export default function AdminAccount() {
                     required
                     value={givenName}
                     onChange={(e) => setGivenName(e.target.value)}
+                    onBlur={() => touch('givenName')}
+                    aria-invalid={!!liveError(profileErrors, 'givenName', givenName)}
                     placeholder="e.g. Juan"
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
                   />
+                  <FieldError message={liveError(profileErrors, 'givenName', givenName)} />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -456,9 +511,12 @@ export default function AdminAccount() {
                     required
                     value={surname}
                     onChange={(e) => setSurname(e.target.value)}
+                    onBlur={() => touch('surname')}
+                    aria-invalid={!!liveError(profileErrors, 'surname', surname)}
                     placeholder="e.g. Dela Cruz"
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
                   />
+                  <FieldError message={liveError(profileErrors, 'surname', surname)} />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -469,15 +527,19 @@ export default function AdminAccount() {
                     required
                     value={email}
                     onChange={(e) => isEmailEditable && setEmail(e.target.value)}
+                    onBlur={() => touch('email')}
                     disabled={!isEmailEditable}
+                    aria-invalid={!!liveError(profileErrors, 'email', email)}
                     placeholder="name@bicol-u.edu.ph"
                     title={isEmailEditable ? undefined : 'Regular staff cannot change their email address (REQ-EMP_PROF-01)'}
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                   />
-                  {isRegularStaff && (
+                  {isRegularStaff ? (
                     <p className="text-[10px] text-slate-400 mt-1">
                       Locked — regular staff cannot change their email (REQ-EMP_PROF-01).
                     </p>
+                  ) : (
+                    <FieldError message={liveError(profileErrors, 'email', email)} />
                   )}
                 </div>
                 <div>
@@ -488,9 +550,12 @@ export default function AdminAccount() {
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    onBlur={() => touch('phone')}
+                    aria-invalid={!!liveError(profileErrors, 'phone', phone)}
                     placeholder="+63 912 345 6789"
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
                   />
+                  <FieldError message={liveError(profileErrors, 'phone', phone)} />
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -570,9 +635,12 @@ export default function AdminAccount() {
                       type="tel"
                       value={backupPhone}
                       onChange={(e) => setBackupPhone(e.target.value)}
+                      onBlur={() => touch('backupPhone')}
+                      aria-invalid={!!liveError(backupErrors, 'backupPhone', backupPhone)}
                       placeholder="+63 912 345 6789"
                       className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
                     />
+                    <FieldError message={liveError(backupErrors, 'backupPhone', backupPhone)} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -582,9 +650,12 @@ export default function AdminAccount() {
                       type="email"
                       value={backupEmail}
                       onChange={(e) => setBackupEmail(e.target.value)}
+                      onBlur={() => touch('backupEmail')}
+                      aria-invalid={!!liveError(backupErrors, 'backupEmail', backupEmail)}
                       placeholder="backup@bicol-u.edu.ph"
                       className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
                     />
+                    <FieldError message={liveError(backupErrors, 'backupEmail', backupEmail)} />
                   </div>
                 </div>
                 <div className="flex justify-end">
@@ -691,8 +762,11 @@ export default function AdminAccount() {
                   required
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
+                  onBlur={() => touch('currentPassword')}
+                  aria-invalid={!!liveError(passwordErrors, 'currentPassword', currentPassword)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
                 />
+                <FieldError message={liveError(passwordErrors, 'currentPassword', currentPassword)} />
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -704,8 +778,11 @@ export default function AdminAccount() {
                   minLength={8}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
+                  onBlur={() => touch('newPassword')}
+                  aria-invalid={!!liveError(passwordErrors, 'newPassword', newPassword)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
                 />
+                <FieldError message={liveError(passwordErrors, 'newPassword', newPassword)} />
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -716,8 +793,11 @@ export default function AdminAccount() {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  onBlur={() => touch('confirmPassword')}
+                  aria-invalid={!!liveError(passwordErrors, 'confirmPassword', confirmPassword)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
                 />
+                <FieldError message={liveError(passwordErrors, 'confirmPassword', confirmPassword)} />
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <button
@@ -739,6 +819,6 @@ export default function AdminAccount() {
           </div>
         </div>
       )}
-    </AdminLayout>
+    </Wrapper>
   )
 }

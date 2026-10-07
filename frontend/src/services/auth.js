@@ -280,6 +280,11 @@ export function mapEmployee(employeeData) {
     email,
     phone: employeeData.emp_phone || '',
     type: rawType || 'Staff',
+    // The raw category under its schema names: every portal helper reads the
+    // employee through empCateg() (schema.js), which looks for these first and
+    // otherwise falls back to 'staff' - hiding the admin-only nav from admins.
+    emp_categ: rawType,
+    emp_type: rawType,
     // emp_present (legacy alias emp_instore)
     instore: employeeData.emp_present ?? employeeData.emp_instore ?? false,
     role,

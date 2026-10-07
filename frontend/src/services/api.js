@@ -13,7 +13,15 @@ export const API_BASE_URL = configuredBaseUrl.replace(/\/$/, '')
 // and its answer is painted as soon as it lands.
 export const REQUEST_TIMEOUT_MS = 30000
 
-let authToken = null
+/*
+    One bearer per portal (system rule 71: "The customer portal and the admin
+    portal must be separate"). Holding a single shared token meant that
+    signing in on one portal silently re-pointed every request the other
+    portal made, and a 401 anywhere signed both out. Each portal keeps its own
+    token and every request sends the one belonging to the portal the browser
+    is currently showing.
+*/
+const tokens = { customer: null, staff: null }
 let preconnected = false
 const cache = new Map()
 const CACHE_TTL = 5 * 60 * 1000
@@ -44,14 +52,37 @@ export function cacheWrite(key, value) {
 const loadingListeners = new Set()
 let inFlight = 0
 
-export function setApiToken(token) {
-  const nextToken = token || null
-  if (nextToken !== authToken) cache.clear()
-  authToken = nextToken
+/**
+ * Which portal the browser is showing right now. The URL is the only thing
+ * that decides it, so the bearer always follows the screen - an employee deep
+ * in /admin/* never sends the customer's token, and a customer on the
+ * storefront never sends the employee's.
+ */
+export function activePortal() {
+  const path = typeof window !== 'undefined' ? window.location.pathname : ''
+  return path.startsWith('/admin') ? 'staff' : 'customer'
 }
 
-export function getApiToken() {
-  return authToken
+/**
+ * Install the bearer of one portal. `kind` is 'customer' or 'staff' and
+ * defaults to whatever portal is on screen; passing null clears that portal's
+ * token (used when its session ends).
+ */
+export function setApiToken(token, kind) {
+  const slot = kind || activePortal()
+  const next = token || null
+  if (tokens[slot] !== next) cache.clear()
+  tokens[slot] = next
+}
+
+/** The bearer of one portal (defaults to the portal on screen). */
+export function getApiToken(kind) {
+  return tokens[kind || activePortal()] || null
+}
+
+/** 'customer' | 'staff' - the portal whose bearer is on screen. */
+export function getApiTokenKind() {
+  return activePortal()
 }
 
 /** Subscribe to "is any API request running right now". Returns an unsubscribe. */
@@ -81,6 +112,12 @@ export async function apiRequest(path, { method = 'GET', body, headers, silent =
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   if (!silent) setLoading(1)
 
+  // The portal on screen decides which bearer goes out, and it is captured
+  // here so the answer (a renewal or a 401) is filed against the portal that
+  // actually sent the request, even if the user navigated mid-flight.
+  const sentKind = activePortal()
+  const sentToken = tokens[sentKind] || null
+
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method,
@@ -88,7 +125,7 @@ export async function apiRequest(path, { method = 'GET', body, headers, silent =
         Accept: 'application/json',
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(sentToken ? { Authorization: `Bearer ${sentToken}` } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
@@ -96,12 +133,13 @@ export async function apiRequest(path, { method = 'GET', body, headers, silent =
     // The sliding bearer: the server may rotate the token on any
     // authenticated response. The header must be read BEFORE the body
     // is consumed, and the renewed value is persisted through the
-    // shared session slot so the in-memory copy and the session stay
-    // in sync (employee tokens slide on a 60-second window).
+    // session slot of the portal it belongs to so the in-memory copy
+    // and the session stay in sync (employee tokens slide on a
+    // 60-second window).
     const renewedToken = response.headers.get('X-Renewed-Token')
-    if (renewedToken && renewedToken !== authToken) {
-      setApiToken(renewedToken)
-      const current = peekSession()
+    if (renewedToken && renewedToken !== sentToken) {
+      setApiToken(renewedToken, sentKind)
+      const current = peekSession(sentKind)
       if (current && current.token !== renewedToken) {
         saveSession(current.kind, renewedToken, current.user)
       }
@@ -110,13 +148,16 @@ export async function apiRequest(path, { method = 'GET', body, headers, silent =
     const data = await response.json().catch(() => null)
 
     if (!response.ok || data?.success === false) {
-      // A 401 on an authenticated call means the stored token is no longer
-      // valid: drop it and tell both contexts so the UI shows the guest state.
-      // /auth/* is skipped so a mistyped re-login never wipes a live session.
-      if (response.status === 401 && authToken && !path.startsWith('/auth/')) {
-        setApiToken(null)
-        clearSession()
-        window.dispatchEvent(new Event('auth-expired'))
+      /*
+        A 401 on an authenticated call means that portal's token is no longer
+        valid: drop IT and tell that portal only, so it shows the guest state
+        while the other session carries on untouched (rule 71). /auth/* is
+        skipped so a mistyped re-login never wipes a live session.
+      */
+      if (response.status === 401 && sentToken && !path.startsWith('/auth/')) {
+        setApiToken(null, sentKind)
+        clearSession(sentKind)
+        window.dispatchEvent(new CustomEvent('auth-expired', { detail: { kind: sentKind } }))
       }
       throw new ApiError(data?.message || 'Request failed', response.status, data)
     }
@@ -149,7 +190,9 @@ function withQuery(path, params) {
 
 export async function apiGet(path, params = {}, options = {}) {
   const url = withQuery(path, params)
-  if (authToken) return apiRequest(url, options)
+  // A signed-in portal always bypasses the shared anonymous cache, so one
+  // portal's read can never be replayed to the other (rule 71).
+  if (tokens[activePortal()]) return apiRequest(url, options)
 
   const cached = cache.get(url)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data

@@ -304,7 +304,18 @@ class InputValidatorAPI extends Controller
         ]);
         if ($requiredCheck) return $requiredCheck;
 
-        return $this->validateAllFormats($json);
+        /*
+            FLOW-EMP_LOGIN-02..08 own the vocabulary of this form, so the
+            generic `validateAllFormats()` runner is deliberately NOT applied
+            here. It would answer "Invalid email format." for a mistyped
+            address, and a mistyped address is simply one that does not exist
+            - AuthAPI::employeeLogin then returns `EMP_NOT_FOUND`, which the
+            form prints as "User not found" under the email field, exactly
+            where rule 67 wants it. The password is only ever compared, never
+            pattern-checked, so a wrong password still answers "Wrong
+            password" (FLOW-EMP_LOGIN-07) instead of a format complaint.
+        */
+        return null;
     }
 
     // Central runner for all format checks present in the request
@@ -754,11 +765,17 @@ class InputValidatorAPI extends Controller
         $credentials = $this->validateFields($json, [
             'current_password' => 'required|string',
             'new_password' => 'required|string|min:8|regex:/^[^\s\x00-\x1F\x7F]+$/',
+            // FLOW-EMP_SET-02 / FLOW-CUST_SET-02 - the new password is typed
+            // twice; the second entry must match before anything is checked
+            // further. Optional so a client that has not been rebuilt yet is
+            // not rejected, but enforced whenever it is sent.
+            'new_password_confirmation' => 'nullable|same:new_password',
         ], [
             'current_password.required' => 'Current password is required.',
             'new_password.required' => 'New password is required.',
             'new_password.min' => 'New password must be at least 8 characters.',
             'new_password.regex' => 'New password contains invalid characters.',
+            'new_password_confirmation.same' => 'New password confirmation does not match.',
         ]);
         if ($credentials) {
             return $credentials;

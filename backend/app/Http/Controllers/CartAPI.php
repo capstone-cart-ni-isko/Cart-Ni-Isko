@@ -176,18 +176,21 @@ class CartAPI extends Controller
     public function displayOrders(Request $json)
     {
         try {
-            $custId = $this->customerId($json);
-            if ($custId === null) {
+            $scope = $this->orderScope($json);
+            if ($scope === null) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Customer authentication is required.',
                 ], 403);
             }
+            $custId = $scope['custId'];
+            $employeeView = $scope['employee'];
 
             // REQ-ACCESS_LOG-01: reading the customer's cart/orders is logged.
             $this->logView($json, 'cart');
 
-            if ($this->wantsBagRows($json)) {
+            // A bag belongs to one customer, so an employee never asks for one.
+            if (!$employeeView && $this->wantsBagRows($json)) {
                 // Self-heal the badge counter while the bag is being read
                 // (legacy behaviour: the cart view refreshed cust_cart).
                 self::syncCartCounter($custId);
@@ -220,7 +223,7 @@ class CartAPI extends Controller
                 'success'    => true,
                 'message'    => 'Orders retrieved successfully',
                 'data'       => $orders->map(fn ($o) => $this->orderPayload($o))->values()->all(),
-                'cart_count' => self::cartCount($custId),
+                'cart_count' => $this->orderScopeCartCount($custId),
             ], 200);
 
         } catch (\Exception $e) {
@@ -239,17 +242,19 @@ class CartAPI extends Controller
     public function searchOrders(Request $json)
     {
         try {
-            $custId = $this->customerId($json);
-            if ($custId === null) {
+            $scope = $this->orderScope($json);
+            if ($scope === null) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Customer authentication is required.',
                 ], 403);
             }
+            $custId = $scope['custId'];
+            $employeeView = $scope['employee'];
 
             $q = trim((string) $json->input('q', ''));
 
-            if ($this->wantsBagRows($json)) {
+            if (!$employeeView && $this->wantsBagRows($json)) {
                 $bags = self::bagQuery($custId);
                 if ($q !== '') {
                     $bags->whereHas('prodvar.product', function ($pq) use ($q) {
@@ -297,7 +302,7 @@ class CartAPI extends Controller
                 'message'    => 'Orders search completed',
                 'data'       => $query->orderByDesc('ord_created')->get()
                     ->map(fn ($o) => $this->orderPayload($o))->values()->all(),
-                'cart_count' => self::cartCount($custId),
+                'cart_count' => $this->orderScopeCartCount($custId),
             ], 200);
 
         } catch (\Exception $e) {
@@ -316,13 +321,15 @@ class CartAPI extends Controller
     public function sortOrders(Request $json)
     {
         try {
-            $custId = $this->customerId($json);
-            if ($custId === null) {
+            $scope = $this->orderScope($json);
+            if ($scope === null) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Customer authentication is required.',
                 ], 403);
             }
+            $custId = $scope['custId'];
+            $employeeView = $scope['employee'];
 
             $sortBy   = $json->input('sort_by', 'date');
             $orderDir = strtolower($json->input('order', 'desc')) === 'asc' ? 'asc' : 'desc';
@@ -339,7 +346,7 @@ class CartAPI extends Controller
             ];
             $column = $columnMap[$sortBy] ?? 'ord_created';
 
-            if ($this->wantsBagRows($json)) {
+            if (!$employeeView && $this->wantsBagRows($json)) {
                 // The bag is always newest-first (FLOW-BAG-04); the legacy
                 // sort call cannot reorder it, it only filters + reports it.
                 $bags = self::bagQuery($custId)->orderByDesc('bag_created')->get();
@@ -366,7 +373,7 @@ class CartAPI extends Controller
                 'success'    => true,
                 'message'    => 'Orders sorted successfully',
                 'data'       => $orders->map(fn ($o) => $this->orderPayload($o))->values()->all(),
-                'cart_count' => self::cartCount($custId),
+                'cart_count' => $this->orderScopeCartCount($custId),
             ], 200);
 
         } catch (\Exception $e) {
@@ -866,6 +873,30 @@ class CartAPI extends Controller
     // ==========================================
 
     /**
+     * The rows an order-list caller is allowed to read.
+     *
+     * Returns `['custId' => int, 'employee' => false]` for a customer, whose
+     * list is always their own (FLOW-ORD_LIST-02); `['custId' => null,
+     * 'employee' => true]` for an authenticated employee, who reads the whole
+     * store's orders - DOMAIN 3's dashboard KPIs and DOMAIN 5's orders screen
+     * both come through here, and GET /products/orders (role:staff) already
+     * hands every employee that same list. Anything else is `null` and the
+     * caller keeps its original 403.
+     */
+    protected function orderScope(Request $json): ?array
+    {
+        $custId = $this->customerId($json);
+        if ($custId !== null) {
+            return ['custId' => $custId, 'employee' => false];
+        }
+        if ($this->isEmployee($json->user('api'))) {
+            return ['custId' => null, 'employee' => true];
+        }
+
+        return null;
+    }
+
+    /**
      * True when the caller asked for bag rows (scope=bag|cart, bag=1 or a
      * legacy CART-* tag_prefix).
      */
@@ -885,24 +916,37 @@ class CartAPI extends Controller
     }
 
     /**
-     * Every order the customer has (FLOW-ORD_LIST-02, ord_created DESC).
-     * There is no cart marker on `orders` any more - the bag table IS the
-     * cart - so nothing is excluded. Line detail is eager-loaded through
-     * items -> bag -> prodvar -> product (the items table has no quantity or
-     * product columns) and dispatch info through the live pickup/appointment
-     * and delivery/parcel columns. `pickup` is deliberately not joined to its
-     * payment: the live pickup table carries no payment key.
+     * Every order in scope (FLOW-ORD_LIST-02, ord_created DESC). A customer's
+     * scope is their own `cust_id`; an employee's scope is the whole store
+     * (`$custId === null` adds no constraint). There is no cart marker on
+     * `orders` any more - the bag table IS the cart - so nothing is excluded.
+     * Line detail is eager-loaded through items -> bag -> prodvar -> product
+     * (the items table has no quantity or product columns) and dispatch info
+     * through the live pickup/appointment and delivery/parcel columns.
+     * `pickup` is deliberately not joined to its payment: the live pickup
+     * table carries no payment key.
      */
-    protected function ordersQuery(int $custId)
+    protected function ordersQuery(?int $custId)
     {
-        return Order::with([
+        $query = Order::with([
                 'items.bag.prodvar.product',
                 'pickup.appointment',
                 'delivery',
                 'parcel.delivery',
                 'parcel.payment',
-            ])
-            ->where('cust_id', $custId);
+            ]);
+
+        if ($custId !== null) {
+            $query->where('cust_id', $custId);
+        }
+
+        return $query;
+    }
+
+    /** The bag badge an employee has no meaning for: no customer, no bag. */
+    protected function orderScopeCartCount(?int $custId): int
+    {
+        return $custId === null ? 0 : self::cartCount($custId);
     }
 
     /**

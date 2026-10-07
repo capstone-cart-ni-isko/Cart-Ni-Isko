@@ -99,7 +99,9 @@ export function AuthProvider({ children }) {
   // the browser was closed and sessionStorage went with it.
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = loadSession('customer')
-    if (saved) setApiToken(saved.token)
+    // Explicit kind: on a reload of /admin/* the URL default is 'staff', and
+    // this provider must never install a customer bearer in the staff slot.
+    if (saved) setApiToken(saved.token, 'customer')
     return saved?.user ?? null
   })
 
@@ -107,13 +109,18 @@ export function AuthProvider({ children }) {
 
   // Mirror every user change (login, edit, logout) into the shared slot.
   useEffect(() => {
-    if (currentUser) saveSession('customer', getApiToken(), currentUser)
+    if (currentUser) saveSession('customer', getApiToken('customer'), currentUser)
     else clearSession('customer')
   }, [currentUser])
 
   // Token rejected server-side: drop the in-memory user too.
   useEffect(() => {
-    const handleExpired = () => setCurrentUser(null)
+    // Rule 71: only the CUSTOMER portal's expiry may end a customer session -
+    // the staff portal dispatches the same event for its own 401s.
+    const handleExpired = (event) => {
+      if (event?.detail?.kind && event.detail.kind !== 'customer') return
+      setCurrentUser(null)
+    }
     window.addEventListener('auth-expired', handleExpired)
     return () => window.removeEventListener('auth-expired', handleExpired)
   }, [])
@@ -251,7 +258,7 @@ export function AuthProvider({ children }) {
       return { user: null, error: result.error || 'Unable to connect to server', requiresOtp: false }
     }
 
-    if (account.token) setApiToken(account.token)
+    if (account.token) setApiToken(account.token, 'customer')
     // Carry the schema-less signup fields across the signup -> signin hop,
     // but only when it is the same account.
     const prior = currentUser?.phone === (account.cust_phone || identifier) ? currentUser : {}
@@ -298,7 +305,7 @@ export function AuthProvider({ children }) {
     if (result.error || !account) {
       return { user: null, error: result.error || 'Unable to connect to server', requiresOtp: false }
     }
-    if (account.token) setApiToken(account.token)
+    if (account.token) setApiToken(account.token, 'customer')
     // cust_id is the key every backend endpoint keys off - it must come from
     // the API response, never from the signup form. The password is stripped
     // so it is never written to the persisted session slot.
@@ -320,7 +327,7 @@ export function AuthProvider({ children }) {
       return { user: null, error: error || 'Unable to verify the code' }
     }
 
-    setApiToken(data.token)
+    setApiToken(data.token, 'customer')
     const { password, token, ...account } = data
     void password
     void token
@@ -353,7 +360,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     const revocation = logoutSession().catch(() => null)
     clearSession('customer')
-    setApiToken(null)
+    setApiToken(null, 'customer')
     setCurrentUser(null)
     await revocation
     navigate('/login', { replace: true })
