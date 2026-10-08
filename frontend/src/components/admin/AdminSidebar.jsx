@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { mapOrderRows } from '../../services/dashboard.js'
 import { empCateg, empHomePath, empIsStaff } from './schema.js'
@@ -14,6 +15,10 @@ const ICON = 'w-4 h-4'
  *
  * REQ-EMP_HOME-01 — when emp_categ is 'staff', the Dashboard,
  * Walk-in Orders, Reviews and Sales entries must NOT render.
+ *
+ * REQ-EMP_HOME-01 also ensures only super admins can access
+ * the Staff management page, and only admins+super admins can
+ * access inventory, reviews, analytics, and appointments.
  */
 function buildNavItems() {
   return [
@@ -21,6 +26,8 @@ function buildNavItems() {
       to: '/admin/dashboard',
       label: 'Dashboard',
       hideForStaff: true,
+      // REQ-EMP_HOME-01: Dashboard only for admin and super admin
+      roles: ['ADMIN', 'SUPER_ADMIN'],
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
           <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -60,6 +67,8 @@ function buildNavItems() {
     {
       to: '/admin/orders',
       label: 'Orders',
+      // REQ-EMP_HOME-01: Orders only for admin and super admin
+      roles: ['ADMIN', 'SUPER_ADMIN'],
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
           <circle cx="9" cy="21" r="1" />
@@ -83,6 +92,8 @@ function buildNavItems() {
       to: '/admin/reviews',
       label: 'Reviews',
       hideForStaff: true,
+      // REQ-EMP_HOME-01: Reviews only for admin and super admin
+      roles: ['ADMIN', 'SUPER_ADMIN'],
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -93,6 +104,8 @@ function buildNavItems() {
       to: '/admin/analytics',
       label: 'Sales',
       hideForStaff: true,
+      // REQ-EMP_HOME-01: Sales only for admin and super admin
+      roles: ['ADMIN', 'SUPER_ADMIN'],
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
           <line x1="18" y1="20" x2="18" y2="10" />
@@ -104,6 +117,8 @@ function buildNavItems() {
     {
       to: '/admin/staff',
       label: 'Staff',
+      // REQ-EMP_HOME-01: Staff management only for super admin
+      roles: ['SUPER_ADMIN'],
       icon: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -118,6 +133,7 @@ function buildNavItems() {
 
 export default function AdminSidebar({ onCloseMobile }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { orders: rawOrders = [], products = [], currentAdminUser, logoutAdmin } = useAdmin()
   // Live rows for the ⌘K search palette (server-backed, refreshed by context).
   const liveOrders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
@@ -264,9 +280,7 @@ export default function AdminSidebar({ onCloseMobile }) {
 
   return (
     <aside
-      className={`${
-        isCollapsed ? 'w-20' : 'w-60'
-      } bg-white border-r border-slate-200 flex flex-col h-full select-none transition-[width] duration-300 ease-in-out`}
+      className={`${isCollapsed ? 'w-20' : 'w-60'} bg-gray-50 border-r border-slate-200 flex flex-col h-full select-none transition-[width] duration-300 ease-out`}
     >
       <div className="flex flex-col flex-1 min-h-0">
         {/* Brand Header */}
@@ -292,7 +306,7 @@ export default function AdminSidebar({ onCloseMobile }) {
         </div>
 
         {/* Sidebar Search */}
-        <div className="px-3 pt-3 pb-1">
+        <div className="p-3 pt-3 pb-1">
           <button
             type="button"
             onClick={() => setIsSearchModalOpen(true)}
@@ -402,26 +416,25 @@ export default function AdminSidebar({ onCloseMobile }) {
               </div>
             )}
             <div className="space-y-0.5">
-              {navItems.map(({ to, label, icon }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  onClick={onCloseMobile}
-                  title={isCollapsed ? label : undefined}
-                  className={({ isActive }) =>
-                    `flex items-center ${
-                      isCollapsed ? 'justify-center px-2 py-2' : 'gap-2.5 px-2.5 py-1.5'
-                    } rounded-md text-[13px] font-semibold transition-all duration-150 ${
-                      isActive
-                        ? 'bg-brand-orange/10 text-brand-orange'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                    }`
-                  }
-                >
-                  <span className="shrink-0">{icon}</span>
-                  {!isCollapsed && <span className="truncate">{label}</span>}
-                </NavLink>
-              ))}
+              {navItems.map(({ to, label, icon, hideForStaff, roles }) => {
+                const isStaff = empIsStaff(currentAdminUser)
+                const roleKey = currentAdminUser?.roleKey || (empCateg(currentAdminUser) === 'super admin' ? 'SUPER_ADMIN' : empCateg(currentAdminUser) === 'admin' ? 'ADMIN' : 'STAFF')
+                const isItemHidden = (hideForStaff && isStaff) || (roles && !roles.includes(roleKey))
+                const isActive = location.pathname === to || location.pathname.startsWith(to)
+                
+                if (isItemHidden) return null
+                return (
+                  <button
+                    type="button"
+                    onClick={() => navigate(to)}
+                    title={isCollapsed ? label : undefined}
+                    className={`flex items-center ${isCollapsed ? 'justify-center px-2 py-2' : 'gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-150 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-900 cursor-pointer'} ${isActive ? 'text-brand-orange' : ''}`}
+                  >
+                    <span className="shrink-0">{icon}</span>
+                    {!isCollapsed && <span className="truncate">{label}</span>}
+                  </button>
+                )
+              })}
             </div>
 
             {/* Logout — last entry, with confirmation (DOMAIN 16) */}

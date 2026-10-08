@@ -924,7 +924,13 @@ class CartAPI extends Controller
      * (the items table has no quantity or product columns) and dispatch info
      * through the live pickup/appointment and delivery/parcel columns.
      * `pickup` is deliberately not joined to its payment: the live pickup
-     * table carries no payment key.
+     * table carries no payment key. `customer` is eager-loaded because the
+     * admin list renders the nickname/email per row (D3 / REQ-SD-02).
+     *
+     * FLOW-MANAGE_PRE-02 / REQ-MANAGE_PRE-01: the employee view never shows a
+     * register draft - a walk-in order still `processing` whose bag rows are
+     * all unplaced is register state, not an order to fulfil, and it used to
+     * inflate the "processing" tab and every dashboard KPI.
      */
     protected function ordersQuery(?int $custId)
     {
@@ -934,10 +940,28 @@ class CartAPI extends Controller
                 'delivery',
                 'parcel.delivery',
                 'parcel.payment',
+                'customer',
             ]);
 
         if ($custId !== null) {
             $query->where('cust_id', $custId);
+        } else {
+            // A register draft is: no pickup row AND no delivery row (i.e.
+            // `Order::isWalkIn()`), still `processing`, and not one bag line
+            // placed yet. Everything else stays in the list, so a completed
+            // walk-in sale still shows.
+            $query->where(function ($builder) {
+                $builder->whereHas('pickup')
+                    ->orWhereHas('delivery')
+                    ->orWhere('ord_status', '!=', 'processing')
+                    ->orWhereExists(function ($q) {
+                        $q->select(DB::raw(1))
+                            ->from('items')
+                            ->join('bag', 'bag.bag_id', '=', 'items.bag_id')
+                            ->whereColumn('items.ord_id', 'orders.ord_id')
+                            ->where('bag.bag_placed', true);
+                    });
+            });
         }
 
         return $query;
@@ -950,22 +974,37 @@ class CartAPI extends Controller
     }
 
     /**
-     * FLOW-ORD_LIST-03: server-side tab buckets. Legacy status spellings are
-     * folded in with the DOMAIN 27 vocabulary (POS normalizeStatus) so rows
-     * written by older clients still land in a bucket. An unknown or absent
-     * filter changes nothing (backward compatible).
+     * FLOW-ORD_LIST-03 / FLOW-MANAGE_PRE-02: server-side tab buckets. Legacy
+     * status spellings are folded in with the DOMAIN 27 vocabulary (POS
+     * normalizeStatus) so rows written by older clients still land in a
+     * bucket. The spec-literal filter names ("to claim/receive",
+     * "claimed/received", "cancel requests") are accepted as aliases of the
+     * stored keys, so FLOW-MANAGE_PRE-02's filter list answers as written.
+     * An unknown or absent filter changes nothing (backward compatible).
      */
     protected function applyOrderFilter($query, string $filter): void
     {
         $buckets = [
-            'processing' => ['processing', 'to cancel', 'to process', 'cancel requested', 'cancelling', 'return requested'],
-            'to-claim'   => ['to claim', 'to receive', 'delivering', 'transit'],
-            'claimed'    => ['claimed', 'received', 'delivered', 'completed'],
-            'unclaimed'  => ['unclaimed'],
-            'cancelled'  => ['cancelled', 'cancel', 'canceled', 'returned', 'refunded'],
+            'processing'      => ['processing', 'to cancel', 'to process', 'cancel requested', 'cancelling', 'return requested'],
+            'to-claim'        => ['to claim', 'to receive', 'delivering', 'transit'],
+            'claimed'         => ['claimed', 'received', 'delivered', 'completed'],
+            'unclaimed'       => ['unclaimed'],
+            'cancelled'       => ['cancelled', 'cancel', 'canceled', 'returned', 'refunded'],
+            // FLOW-MANAGE_PRE-05: the "cancel requests" filter an employee
+            // approves/rejects preorder cancellations through.
+            'cancel requests' => ['to cancel', 'cancel requested', 'return requested'],
+        ];
+
+        $aliases = [
+            'all'              => 'all',
+            'to claim/receive' => 'to-claim',
+            'to-claim-receive' => 'to-claim',
+            'claimed/received' => 'claimed',
+            'claimed-received' => 'claimed',
         ];
 
         $key = strtolower(trim($filter));
+        $key = $aliases[$key] ?? $key;
         if ($key === 'all' || ! isset($buckets[$key])) {
             return;
         }
@@ -988,7 +1027,7 @@ class CartAPI extends Controller
     {
         $order->loadMissing([
             'items.bag.prodvar.product', 'pickup.appointment',
-            'delivery', 'parcel.delivery', 'parcel.payment',
+            'delivery', 'parcel.delivery', 'parcel.payment', 'customer',
         ]);
 
         $items   = $order->items->map(fn ($item) => $this->itemPayload($item))->values()->all();
@@ -997,6 +1036,25 @@ class CartAPI extends Controller
         $payload['status']   = $order->ord_status;
         $payload['claiming'] = $order->ord_claiming ?? null;
         $payload['created']  = $order->ord_created ?? null;
+
+        // REQ-MANAGE_PRE-01: preorder vs walk-in is a first-class field, so
+        // the admin list no longer has to infer it from a tag that live rows
+        // do not carry (the customer relation ships with it above).
+        $walkIn = $order->isWalkIn();
+        $payload['is_walk_in']  = $walkIn;
+        $payload['walk_in']     = $walkIn;
+        $payload['customer']    = $order->customer ? [
+            'cust_id'       => $order->customer->cust_id,
+            'cust_nickname' => $order->customer->cust_nickname,
+            'cust_email'    => $order->customer->cust_email,
+            'cust_phone'    => $order->customer->cust_phone,
+            'cust_givname'  => $order->customer->cust_givname,
+            'cust_surname'  => $order->customer->cust_surname,
+        ] : null;
+        $payload['customer_name'] = $payload['customer']
+            ? trim(($payload['customer']['cust_nickname'] ?: $payload['customer']['cust_givname'])
+                . ' ' . $payload['customer']['cust_surname'])
+            : null;
 
         // Totals: ord_amount is authoritative, the bag lines behind the items
         // are the fallback.

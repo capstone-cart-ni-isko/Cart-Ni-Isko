@@ -59,6 +59,8 @@ Route::post('/otp/challenge/inbox', [OtpAPI::class, 'challengeInbox']);
 
 // Public Products API Routes (guest catalog browsing)
 Route::get('/products/filter', [ProductsAPI::class, 'filterCatalog']);
+// REQ-ADD_PROD-04: the predefined category set the filters offer.
+Route::get('/products/categories', [ProductsAPI::class, 'productCategories']);
 Route::get('/products/search', [ProductsAPI::class, 'searchProducts']);
 Route::get('/products/sort', [ProductsAPI::class, 'sortProducts']);
 Route::get('/products/view', [ProductsAPI::class, 'viewProductDetails']);
@@ -154,12 +156,18 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/appoint/sort', [AppointAPI::class, 'sortAppointments']);
     Route::get('/appoint/slots', [AppointAPI::class, 'displaySlots']);
     Route::put('/appoint/update', [AppointAPI::class, 'updateAppointmentDetails']);
+    // FLOW-MANAGE_APP-09: the admin's reschedule-request queue, and the
+    // customer/employee action that opens a request on an open booking.
+    Route::get('/appoint/reschedule-requests', [AppointAPI::class, 'rescheduleRequests'])->middleware('role:admin');
+    Route::post('/appoint/reschedule-request', [AppointAPI::class, 'createRescheduleRequest']);
 
     // Uploads API Routes (real file uploads for product / profile photos)
     Route::post('/uploads', [UploadAPI::class, 'uploadImage']);
 
     // Products API Routes (staff management actions)
     Route::post('/products/add', [ProductsAPI::class, 'addProduct'])->middleware('role:admin');
+    // FLOW-MANAGE_INV-08: per-product daily sales history (admin only).
+    Route::get('/products/sales', [ProductsAPI::class, 'productSales'])->middleware('role:admin');
     Route::get('/products/orders', [ProductsAPI::class, 'displayOrders'])->middleware('role:staff');
     Route::delete('/products/remove', [ProductsAPI::class, 'removeProduct'])->middleware('role:admin');
     Route::put('/products/update', [ProductsAPI::class, 'updateProductDetails'])->middleware('role:admin');
@@ -168,7 +176,9 @@ Route::middleware('auth:api')->group(function () {
 
     // Reviews API Routes (creation/moderation require a token)
     Route::post('/reviews/create', [ReviewsAPI::class, 'createReview']);
-    Route::delete('/reviews/delete', [ReviewsAPI::class, 'deleteReview']);
+    // Rule 45 / REQ-MANAGE_REV-01: only admins and super admins delete reviews
+    // (the customer wall never offers a delete action).
+    Route::delete('/reviews/delete', [ReviewsAPI::class, 'deleteReview'])->middleware('role:admin');
     Route::post('/reviews/moderate', [ReviewsAPI::class, 'moderateReview'])->middleware('role:admin');
     Route::put('/reviews/update', [ReviewsAPI::class, 'updateReview']);
 

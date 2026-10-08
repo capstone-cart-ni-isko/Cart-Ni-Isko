@@ -69,9 +69,12 @@ class PosAPI extends Controller
                 ], 400);
             }
 
-            // The register adds a product, not a variation: ring it up on the
-            // main (otherwise first) live variation.
-            $prodvar = $this->defaultVariation($product);
+            // The register may name a variation (D11: the POS form offers a
+            // size/colour per product). `prodvar_id` is exact; `variant` /
+            // `prodvar_name` is matched by name, case-insensitively. When the
+            // caller sends neither, the main (else first) live variation is
+            // used, exactly as before.
+            $prodvar = $this->resolveVariation($product, $json);
             if (! $prodvar || $prodvar->prodvar_disabled) {
                 return response()->json([
                     'success' => false,
@@ -165,6 +168,12 @@ class PosAPI extends Controller
             $payload['item_id'] = $result['bag']->bag_id;
             $payload['item_created'] = $result['bag']->bag_created;
 
+            // REQ-WALKIN-04 / REQ-ACCESS_LOG-01: the register is a write
+            // surface, so every ring-up is attributed to the cashier.
+            $this->logPos($json, 'create', 'pos/add - "' . $product->prod_name
+                . '" (' . ($prodvar->prodvar_name ?: 'main') . ') x' . $qty
+                . ' - order #' . $result['order']->ord_id);
+
             return response()->json([
                 'success' => true,
                 'message' => $result['message'],
@@ -240,11 +249,21 @@ class PosAPI extends Controller
                 ], 400);
             }
 
-            $payRef = $json->input('pay_ref') ?: ('POS-PAY-' . strtoupper(Str::random(8)));
+            // FLOW-WALKIN-06 / REQ-WALKIN-02: the register records how the
+            // sale was tendered (cash or digital). No pay_method column
+            // exists on the live payment tables, so the tender is encoded
+            // in the payment reference: POS-CASH-<8> / POS-DIGITAL-<8>.
+            $payMethod = strtolower(trim((string) $json->input('pay_method')));
+            if (! in_array($payMethod, ['cash', 'digital'], true)) {
+                $payMethod = 'cash';
+            }
+
+            $payRef = $json->input('pay_ref')
+                ?: ('POS-' . strtoupper($payMethod) . '-' . strtoupper(Str::random(8)));
 
             // REQ-WALKIN-03 / REQ-OC-02: one transaction, so an out-of-stock
             // line rolls the whole register sale back to the draft.
-            $result = DB::transaction(function () use ($json, $order, $walkIn, $payGiven, $payRef) {
+            $result = DB::transaction(function () use ($json, $order, $walkIn, $payGiven, $payRef, $payMethod) {
                 $locked = Order::with(['items.bag.prodvar.product'])
                     ->where('ord_id', $order->ord_id)
                     ->lockForUpdate()
@@ -342,6 +361,7 @@ class PosAPI extends Controller
                     'payment' => [
                         'pay_ref'       => $payRef,
                         'pay_reference' => $payRef,
+                        'pay_method'    => $payMethod,
                         'pay_given'     => $payGiven,
                         'pay_due'       => $subtotal,
                         'pay_change'    => $payChange,
@@ -515,14 +535,23 @@ class PosAPI extends Controller
                 ? Prodvar::where('prod_id', $product->prod_id)->pluck('prodvar_id')->all()
                 : [];
 
+            // An explicit variation wins: with two sizes of the same product
+            // on one ticket, "remove" must take the line the cashier pointed
+            // at, not whichever variation row comes first.
+            $askedProdvar = $json->input('prodvar_id');
+
             $bag = Bag::with(['prodvar.product'])
                 ->whereIn('bag_id', $lineBagIds)
                 ->whereNull('bag_deleted')
-                ->where(function ($query) use ($prodKey, $prodvarIds) {
-                    $query->whereIn('prodvar_id', $prodvarIds);
-                    if (is_numeric($prodKey)) {
-                        $query->orWhere('prodvar_id', (int) $prodKey);
-                    }
+                ->when(filled($askedProdvar) && is_numeric($askedProdvar), function ($query) use ($askedProdvar) {
+                    $query->where('prodvar_id', (int) $askedProdvar);
+                }, function ($query) use ($prodKey, $prodvarIds) {
+                    $query->where(function ($query) use ($prodKey, $prodvarIds) {
+                        $query->whereIn('prodvar_id', $prodvarIds);
+                        if (is_numeric($prodKey)) {
+                            $query->orWhere('prodvar_id', (int) $prodKey);
+                        }
+                    });
                 })
                 ->first();
 
@@ -536,6 +565,9 @@ class PosAPI extends Controller
             Order::where('ord_id', $order->ord_id)
                 ->update(['ord_amount' => $this->orderTotal($order->ord_id)]);
             $this->syncBagCounter((int) $walkIn->cust_id);
+
+            $this->logPos($json, 'delete', 'pos/remove - "' . ($bag->prodvar->product->prod_name ?? 'product')
+                . '" - order #' . $order->ord_id);
 
             return response()->json([
                 'success' => true,
@@ -663,6 +695,53 @@ class PosAPI extends Controller
             ->first();
     }
 
+    /**
+     * The variation the register actually asked for, else the default.
+     *
+     * The POS form lets the cashier pick a size/colour and the cart line
+     * carries it, but /pos/add used to drop that choice on the floor - the
+     * sale was always rung up on the main variation, so the wrong stock
+     * bucket was decremented and the receipt named the wrong size.
+     */
+    private function resolveVariation(Product $product, Request $json): ?Prodvar
+    {
+        $live = fn () => Prodvar::where('prod_id', $product->prod_id)
+            ->whereNull('prodvar_deleted')
+            ->whereNull('prodvar_disabled');
+
+        $prodvarId = $json->input('prodvar_id');
+        if (filled($prodvarId) && is_numeric($prodvarId)) {
+            $found = $live()->where('prodvar_id', (int) $prodvarId)->first();
+            if ($found) {
+                return $found;
+            }
+        }
+
+        $label = trim((string) ($json->input('variant')
+            ?? $json->input('prodvar_name')
+            ?? ''));
+        if ($label !== '') {
+            // "Medium, Orange" -> match on the size first, then the full label.
+            foreach (array_filter(array_map('trim', explode(',', $label))) as $part) {
+                $found = $live()->whereRaw('LOWER(prodvar_name) = ?', [strtolower($part)])->first();
+                if ($found) {
+                    return $found;
+                }
+            }
+        }
+
+        return $this->defaultVariation($product);
+    }
+
+    /** REQ-ACCESS_LOG-01 / REQ-WALKIN-04: an employee action at the register. */
+    private function logPos(Request $json, string $access, string $what): void
+    {
+        $employee = $json->user('api');
+        if ($this->isEmployee($employee)) {
+            $this->logEmployee((int) $employee->emp_id, $access, $what);
+        }
+    }
+
     /** `prod_id` may also arrive as a `prod_tag`; a bad key never hits SQL. */
     private function resolveProduct($prodKey): ?Product
     {
@@ -745,6 +824,9 @@ class PosAPI extends Controller
         return [
             'pay_ref'       => $order->pay_reference,
             'pay_reference' => $order->pay_reference,
+            // FLOW-WALKIN-06: derived from the reference for legacy sales
+            // whose reference predates the tender encoding.
+            'pay_method'    => \App\Http\Controllers\OrdersAPI::payMethodFromReference($order->pay_reference),
             'pay_given'     => $given,
             'pay_due'       => (float) $order->ord_amount,
             'pay_change'    => $change,
@@ -830,6 +912,10 @@ class PosAPI extends Controller
 
             if (! $row) {
                 $row = new Prodsales();
+                // prodsales_id is bigint NOT NULL with no sequence (see
+                // IdAllocator): without this the insert dies on the live
+                // table and the metrics stay empty forever.
+                $row->prodsales_id = $this->nextId('prodsales', 'prodsales_id');
                 $row->prodvar_id = $prodvarId;
                 $row->prodsales_date = $date;
                 $row->prodsales_qty = 0;

@@ -166,8 +166,75 @@ class OrdersAPI extends Controller
             return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
         }
 
-        DB::transaction(function () use ($order, $status) {
+        // REQ-MANAGE_PRE-01: a walk-in (POS) sale is owned by the register,
+        // not by the orders list - its status moves through /pos/*, where the
+        // stock deduction, the prodsales row and the payment live together.
+        if ($order->isWalkIn()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Walk-in (POS) orders are managed from the point of sale, not the orders list.',
+                'code'    => 'WALK_IN_ORDER',
+            ], 409);
+        }
+
+        // DOMAIN 27 transition whitelist: the orders list may only walk the
+        // same edges TrackingAPI enforces on its own endpoints, so an admin
+        // call can never skip the fulfilment gates (e.g. processing ->
+        // to receive without ever passing to claim / delivering).
+        $tracking = app(\App\Http\Controllers\TrackingAPI::class);
+        $priorKey  = $tracking->normalizeStatus($priorStatus) ?? strtolower(trim($priorStatus));
+        $targetKey = $tracking->normalizeStatus($status);
+        $allowed   = $tracking->transitions()[$priorKey] ?? [];
+
+        if ($targetKey === null || ! in_array($targetKey, $allowed, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot move order from "'
+                    . trim($priorStatus) . '" to "' . trim($status) . '".',
+                'code'    => 'INVALID_TRANSITION',
+            ], 422);
+        }
+
+        // FLOW-MANAGE_PRE-04 / REQ-MANAGE_DEL-01: marking the order out for
+        // delivery may carry the customer's expected arrival date, stored on
+        // the live delivery row (the sweepUpcomingDeliveries timer reads it).
+        $deliverExpect = null;
+        if ($targetKey === 'delivering' && $json->filled('deliver_expect')) {
+            try {
+                $deliverExpect = \Carbon\Carbon::parse($json->input('deliver_expect'));
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A valid expected delivery date is required.',
+                ], 422);
+            }
+        }
+
+        // FLOW-MANAGE_PRE-03: a pre-order only becomes claimable once the
+        // in-store stock covers its bag_qty WITHOUT touching the units other
+        // pre-orders are waiting on. Same gate TrackingAPI applies when the
+        // fulfilment track moves, so the two paths can never disagree.
+        if ($priorStatus === 'processing' && in_array($status, ['to claim', 'delivering'], true)) {
+            $shortages = app(\App\Http\Controllers\TrackingAPI::class)->stockShortages($order);
+            if ($shortages !== []) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient stock for ' . implode(', ', $shortages)
+                        . ' - other pre-orders already hold the remaining units.',
+                    'code'    => 'INSUFFICIENT_STOCK',
+                ], 409);
+            }
+        }
+
+        DB::transaction(function () use ($order, $status, $deliverExpect) {
             $order->update(['ord_status' => $status]);
+
+            // The expected arrival is stamped on the delivery row that was
+            // opened at checkout (no new rows are ever created here).
+            if ($deliverExpect !== null) {
+                Delivery::where('ord_id', $order->ord_id)
+                    ->update(['deliver_expect' => $deliverExpect]);
+            }
 
             // FLOW-ORD_LIST-08/09: finalizing the cancellation closes the
             // pickup appointment or the delivery track.
@@ -325,6 +392,13 @@ class OrdersAPI extends Controller
             $payload['pay_ref'] = $order->pay_reference;
         }
 
+        // FLOW-WALKIN-06 / REQ-WALKIN-02: how the sale was tendered (cash or
+        // digital) - derived from the reference, since no pay_method column
+        // exists on the live tables.
+        $payload['pay_method'] = self::payMethodFromReference(
+            $payload['pay_ref'] ?? $order->pay_reference
+        );
+
         // Pickup: the claim appointment slot (start/end) - never a single date.
         $appointment = $order->pickup?->appointment ?? null;
 
@@ -395,5 +469,25 @@ class OrdersAPI extends Controller
         ];
 
         return $map[$status] ?? null;
+    }
+
+    /**
+     * FLOW-WALKIN-06 / REQ-WALKIN-02: the POS register stores the tender in
+     * the payment reference (POS-CASH-<8> / POS-DIGITAL-<8>), so the payload
+     * can report it without a schema change. Legacy POS-PAY-* references
+     * (and online checkouts) predate the encoding and report null.
+     */
+    public static function payMethodFromReference(?string $reference): ?string
+    {
+        $ref = strtoupper(trim((string) $reference));
+
+        if (str_starts_with($ref, 'POS-CASH-')) {
+            return 'cash';
+        }
+        if (str_starts_with($ref, 'POS-DIGITAL-') || str_starts_with($ref, 'POS-EWALLET-')) {
+            return 'digital';
+        }
+
+        return null;
     }
 }

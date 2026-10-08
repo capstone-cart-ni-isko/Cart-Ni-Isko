@@ -175,8 +175,8 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
-      <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.06)] border border-gray-100 space-y-7 animate-fade-in">
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
+      <div className="w-full max-w-md bg-white rounded-lg p-8 sm:p-10 border border-gray-100 space-y-7 animate-fade-in">
         {/* Brand Header */}
         <div className="text-center space-y-2">
           <div className="flex justify-center mb-1">
@@ -231,7 +231,7 @@ export default function AdminLogin() {
                   setEmail(e.target.value)
                   clearSubmitMsgs()
                 }}
-                className="w-full h-11 pl-10 pr-4 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all"
+                className="w-full h-12 px-4 border rounded-lg bg-gray-50 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all"
               />
             </div>
             {/* FLOW-EMP_LOGIN-02/03 - "User not found" under the email field */}
@@ -268,7 +268,7 @@ export default function AdminLogin() {
                   setPassword(e.target.value)
                   clearSubmitMsgs()
                 }}
-                className="w-full h-11 pl-10 pr-11 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all"
+                className="w-full h-12 px-4 border rounded-lg bg-gray-50 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all"
               />
               <button
                 type="button"
@@ -304,13 +304,13 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-11 bg-brand-orange hover:bg-brand-orange-dark text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
+            className="w-full h-11 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-lg transition-all shadow-md active:scale-98 cursor-pointer"
           >
             {loading ? (
               <span>Authenticating...</span>
             ) : (
               <>
-                <span>Sign In to Staff Console</span>
+                <span>Sign In</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
                   <line x1="5" y1="12" x2="19" y2="12" />
                   <polyline points="12 5 19 12 12 19" />

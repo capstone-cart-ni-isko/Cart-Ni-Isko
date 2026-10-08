@@ -114,6 +114,18 @@ return [
                 \PDO::ATTR_PERSISTENT => (bool) env('DB_PERSISTENT', true),
                 \PDO::ATTR_EMULATE_PREPARES => true,
                 \PDO::ATTR_STRINGIFY_FETCHES => false,
+                // Measured on this link: an unbounded connect to a dead route
+                // hangs 21 s (libpq default is "wait for the OS"), which is what
+                // produced the 30 s `Maximum execution time exceeded` fatal in
+                // Connection.php - the request never answered at all. With
+                // PDO::ATTR_TIMEOUT the same dead route fails in ~3 s, so the
+                // call returns an error instead of hanging, and the next attempt
+                // usually lands on a live pooler socket. NOTE: libpq's own
+                // `connect_timeout` in the DSN is silently ignored by pdo_pgsql,
+                // so this attribute is the only knob that actually bites.
+                // Deliberately generous: a slow-but-live Tokyo connect still has
+                // to be allowed to finish.
+                \PDO::ATTR_TIMEOUT => (int) env('DB_CONNECT_TIMEOUT', 8),
             ],
         ],
 

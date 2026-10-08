@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Support\ApiToken;
 use App\Support\BoolSafePostgresConnection;
+use App\Support\SupabaseLostConnectionDetector;
 use Illuminate\Auth\RequestGuard;
+use Illuminate\Contracts\Database\LostConnectionDetector as LostConnectionDetectorContract;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
@@ -29,6 +31,14 @@ class AppServiceProvider extends ServiceProvider
             $prefix,
             $config
         ));
+
+        /*
+         * A connect attempt that times out against the Tokyo pooler raises
+         * "timeout expired", which Laravel's stock detector does not match -
+         * so a transient blip became a 500 instead of a silent re-connect.
+         * This binding adds the two pgsql/pooler failures we actually see.
+         */
+        $this->app->singleton(LostConnectionDetectorContract::class, fn () => new SupabaseLostConnectionDetector());
     }
 
     /**

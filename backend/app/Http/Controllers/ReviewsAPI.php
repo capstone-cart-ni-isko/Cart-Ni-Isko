@@ -78,6 +78,11 @@
             // text stays available under `message` for audit.
             $legacyText = $status === 'rejected' ? '[REVIEW CENSORED]' : $decoded['text'];
 
+            // FLOW-MANAGE_REV-02: the admin list shows product name and
+            // customer name per row (eager-loaded by displayReviews).
+            $product  = $review->product;
+            $customer = $review->customer;
+
             return [
                 'rev_id'       => (int) $review->rev_id,
                 'cust_id'      => (int) $review->cust_id,
@@ -85,6 +90,11 @@
                 'rev_created'  => optional($review->rev_created)->toDateTimeString(),
                 'rev_approved' => optional($review->rev_approved)->toDateTimeString(),
 
+                // FLOW-MANAGE_REV-02 / FLOW-MANAGE_REV-04 display columns
+                'prod_name'    => $product?->prod_name,
+                'cust_name'    => $customer
+                    ? trim(($customer->cust_nickname ?: $customer->cust_givname) . ' ' . $customer->cust_surname)
+                    : null,
                 // Canonical read model
                 'rating'       => $decoded['rating'],
                 'message'      => $decoded['text'],
@@ -174,8 +184,16 @@
          * Resolves the review a payload points at. `rev_id` is canonical;
          * the legacy dialect sends `ord_id` (+ optional prod_id), which is
          * mapped back through items -> bag -> prodvar.
+         *
+         * The legacy handle is ambiguous by construction: one order buys
+         * several products, so without `prod_id` the newest row of ANY of
+         * them was silently picked - moderating (or deleting) the wrong
+         * review. When the order holds more than one product and no `prod_id`
+         * was sent, the caller is told to disambiguate instead of guessing.
+         *
+         * @return Review|\Illuminate\Http\JsonResponse|null
          */
-        protected function resolveReview(Request $json): ?Review
+        protected function resolveReview(Request $json)
         {
             $revId = $json->input('rev_id');
             if ($revId !== null && $revId !== '') {
@@ -201,10 +219,26 @@
                 return null;
             }
 
+            if (count($prodIds) > 1 && ! $prodId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This order holds ' . count($prodIds)
+                        . ' products. Send `prod_id` (or the rev_id of the review) so the right review is targeted.',
+                    'code'    => 'AMBIGUOUS_REVIEW',
+                    'prod_ids'=> $prodIds,
+                ], 409);
+            }
+
             return Review::where('cust_id', $order->cust_id)
                 ->whereIn('prod_id', $prodIds)
                 ->orderByDesc('rev_created')
                 ->first();
+        }
+
+        /** REQ-MANAGE_REV-03: rows deleted by moderation keep their text. */
+        protected function isDeleted(Review $review): bool
+        {
+            return str_starts_with((string) $review->rev_msg, '[DELETED]');
         }
 
         /**
@@ -216,6 +250,7 @@
         {
             $rows = Review::where('prod_id', $prodId)
                 ->whereNotNull('rev_approved')
+                ->whereRaw("rev_msg NOT LIKE '[DELETED]%'")
                 ->get(['rev_msg']);
 
             $count = $rows->count();
@@ -400,6 +435,9 @@
         {
             try {
                 $review = $this->resolveReview($json);
+                if ($review instanceof \Illuminate\Http\JsonResponse) {
+                    return $review; // ambiguous legacy handle (409)
+                }
                 if (! $review) {
                     return response()->json(['success' => false, 'message' => 'Review not found'], 404);
                 }
@@ -413,9 +451,30 @@
                     ], 403);
                 }
 
+                if ($this->isDeleted($review)) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Review deleted successfully',
+                    ], 200);
+                }
+
                 $prodId = (int) $review->prod_id;
-                $review->delete();
+
+                // REQ-MANAGE_REV-03: a moderation delete is a SOFT delete -
+                // the row stays in `reviews` (its text survives under a
+                // [DELETED] marker) so the audit trail the SRS asks for
+                // still exists, while every read below filters it out.
+                $review->rev_msg = '[DELETED] ' . (string) $review->rev_msg;
+                $review->rev_approved = null;
+                $review->save();
                 $this->recomputeProduct($prodId);
+
+                // REQ-MANAGE_REV-04: approve / reject / delete all land in emplog.
+                if ($this->isEmployee($user)) {
+                    $this->logEmployee((int) $user->emp_id, 'delete',
+                        'DELETE /api/reviews/delete - soft-deleted review #' . $review->rev_id
+                        . ' (product #' . $prodId . ')');
+                }
 
                 return response()->json([
                     'success' => true,
@@ -446,12 +505,29 @@
         {
             try {
                 $prodId = $json->input('prod_id');
-                $isEmployee = $this->isEmployee($json->user('api'));
+                $user = $json->user('api');
+                $isEmployee = $this->isEmployee($user);
+                $isAdmin = $this->isAdmin($user);
                 $statusFilter = strtolower(trim((string) $json->input('status', '')));
+                $q = trim((string) $json->input('q', ''));
 
-                $query = Review::query();
+                $query = Review::with(['product', 'customer']);
                 if ($prodId) {
                     $query->where('prod_id', $prodId);
+                }
+
+                // REQ-MANAGE_REV-03: a soft-deleted row is gone from every
+                // read - customer wall, admin queue and search alike.
+                $query->whereRaw("rev_msg NOT LIKE '[DELETED]%'");
+
+                /*
+                    FLOW-MANAGE_REV-01: the admin page opens on the whole
+                    queue. An empty `status` used to fall through to the
+                    customer branch (approved only), so the pending rows the
+                    page exists for never appeared until a filter was picked.
+                */
+                if ($isEmployee && $statusFilter === '' && $isAdmin) {
+                    $statusFilter = 'all';
                 }
 
                 $wantsQueue = $isEmployee
@@ -471,6 +547,23 @@
                     // REQ-MANAGE_REV-02: pending and rejected rows never reach
                     // a customer, whatever status they asked for.
                     $query->whereNotNull('rev_approved');
+                }
+
+                // FLOW-MANAGE_REV-04: search by product name or customer name
+                // (the admin page sends `q`; `search` is the older alias).
+                $needle = $q !== '' ? $q : trim((string) $json->input('search', ''));
+                if ($needle !== '') {
+                    $query->where(function ($builder) use ($needle) {
+                        $builder->whereHas('product', function ($pq) use ($needle) {
+                            $pq->where('prod_name', 'like', "%{$needle}%")
+                               ->orWhere('prod_tag', 'like', "%{$needle}%");
+                        })->orWhereHas('customer', function ($cq) use ($needle) {
+                            $cq->where('cust_nickname', 'like', "%{$needle}%")
+                               ->orWhere('cust_email', 'like', "%{$needle}%")
+                               ->orWhere('cust_givname', 'like', "%{$needle}%")
+                               ->orWhere('cust_surname', 'like', "%{$needle}%");
+                        });
+                    });
                 }
 
                 $query->orderByDesc('rev_created');
@@ -522,6 +615,9 @@
 
             try {
                 $review = $this->resolveReview($json);
+                if ($review instanceof \Illuminate\Http\JsonResponse) {
+                    return $review; // ambiguous legacy handle (409)
+                }
                 if (! $review) {
                     return response()->json(['success' => false, 'message' => 'Review not found'], 404);
                 }
@@ -596,7 +692,9 @@
             try {
                 $prodId = $json->input('prod_id');
 
-                $query = Review::whereNotNull('rev_approved');
+                $query = Review::whereNotNull('rev_approved')
+                    // REQ-MANAGE_REV-03: soft-deleted rows never score.
+                    ->whereRaw("rev_msg NOT LIKE '[DELETED]%'");
                 if ($prodId) {
                     $query->where('prod_id', $prodId);
                 }
@@ -653,6 +751,9 @@
         {
             try {
                 $review = $this->resolveReview($json);
+                if ($review instanceof \Illuminate\Http\JsonResponse) {
+                    return $review; // ambiguous legacy handle (409)
+                }
                 if (! $review) {
                     return response()->json(['success' => false, 'message' => 'Review not found'], 404);
                 }

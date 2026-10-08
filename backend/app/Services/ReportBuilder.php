@@ -132,6 +132,13 @@ class ReportBuilder
         ];
     }
 
+    /**
+     * REQ-MANAGE_INV-07: the inventory report is queryable by date range -
+     * the range narrows the SALES columns (units sold / revenue read from
+     * `prodsales`), while stock is always the live `prodvar` figure (the
+     * legacy `product.prod_qty` column is written by nobody, so every row used
+     * to read 0 stock / 0 low-stock).
+     */
     public function buildInventoryReport(array $filters): array
     {
         $query = Product::whereNull('prod_deleted');
@@ -141,42 +148,87 @@ class ReportBuilder
         }
 
         $products = $query->orderBy('prod_name')->get();
+        $prodIds  = $products->pluck('prod_id')->map(fn ($id) => (int) $id)->all();
 
-        $lowStockThreshold = (int) config('settings.low_stock_threshold', 5);
-        
-        $items = $products->map(function ($product) use ($lowStockThreshold) {
-            $stockValue = round((float) $product->prod_price * (int) $product->prod_qty, 2);
+        // One query per aggregate over the requested window.
+        $stockByProduct = [];
+        $soldByProduct  = [];
+        $revenueByProduct = [];
+
+        if ($prodIds !== []) {
+            $stockByProduct = \App\Models\Prodvar::whereIn('prod_id', $prodIds)
+                ->whereNull('prodvar_deleted')
+                ->groupBy('prod_id')
+                ->select('prod_id')
+                ->selectRaw('COALESCE(SUM(prodvar_stock), 0) as stock')
+                ->get()
+                ->keyBy('prod_id');
+
+            $sales = DB::table('prodsales')
+                ->join('prodvar', 'prodvar.prodvar_id', '=', 'prodsales.prodvar_id')
+                ->whereIn('prodvar.prod_id', $prodIds);
+
+            if (!empty($filters['date_from'])) {
+                $sales->where('prodsales.prodsales_date', '>=', $filters['date_from']);
+            }
+            if (!empty($filters['date_to'])) {
+                $sales->where('prodsales.prodsales_date', '<=', $filters['date_to']);
+            }
+
+            foreach ($sales->groupBy('prodvar.prod_id')
+                ->select('prodvar.prod_id as pid')
+                ->selectRaw('COALESCE(SUM(prodsales_qty), 0) as sold')
+                ->selectRaw('COALESCE(SUM(prodsales_amount), 0) as revenue')
+                ->get() as $row) {
+                $soldByProduct[(int) $row->pid]      = (int) $row->sold;
+                $revenueByProduct[(int) $row->pid]   = round((float) $row->revenue, 2);
+            }
+        }
+
+        $lowStockThreshold = (int) (\App\Support\SystemSettings::get('low_stock_threshold', 5));
+
+        $items = $products->map(function ($product) use ($stockByProduct, $soldByProduct, $revenueByProduct, $lowStockThreshold) {
+            $id   = (int) $product->prod_id;
+            $stock = (int) ($stockByProduct[$id]->stock ?? $product->totalStock());
+            $sold  = $soldByProduct[$id] ?? 0;
+
             return [
                 'prod_id' => $product->prod_id,
                 'prod_tag' => $product->prod_tag,
                 'prod_name' => $product->prod_name,
                 'prod_categ' => $product->prod_categ,
                 'prod_price' => (float) $product->prod_price,
-                'prod_qty' => (int) $product->prod_qty,
-                'stock_value' => $stockValue,
-                'is_low_stock' => (int) $product->prod_qty <= $lowStockThreshold,
+                'prod_qty' => $stock,
+                'stock' => $stock,
+                'stock_value' => round((float) $product->prod_price * $stock, 2),
+                'is_low_stock' => $stock <= $lowStockThreshold,
                 'low_stock_threshold' => $lowStockThreshold,
-                'prod_peakqty' => (int) $product->prod_peakqty,
-                'prod_peaksold' => (float) $product->prod_peaksold,
-                'prod_todayqty' => (int) $product->prod_todayqty,
-                'prod_todaysold' => (float) $product->prod_todaysold,
+                'prod_sold' => $sold,
+                'prod_revenue' => $revenueByProduct[$id] ?? 0.0,
+                // The legacy peak/today columns are never written; the
+                // prodsales aggregates above are their live successors.
+                'prod_peakqty' => $sold,
+                'prod_peaksold' => $revenueByProduct[$id] ?? 0.0,
+                'prod_todayqty' => 0,
+                'prod_todaysold' => 0.0,
             ];
         })->values()->all();
 
-        $totalProducts = $products->count();
-        $totalStockValue = round($products->sum(function ($p) {
-            return (float) $p->prod_price * (int) $p->prod_qty;
-        }), 2);
-        $lowStockCount = $products->where('prod_qty', '<=', $lowStockThreshold)->count();
-        $outOfStockCount = $products->where('prod_qty', '<=', 0)->count();
+        $stockOf = fn ($product) => (int) ($stockByProduct[(int) $product->prod_id]->stock ?? $product->totalStock());
 
         return [
             'summary' => [
-                'total_products' => $totalProducts,
-                'total_stock_value' => $totalStockValue,
-                'low_stock_count' => $lowStockCount,
-                'out_of_stock_count' => $outOfStockCount,
+                'total_products' => $products->count(),
+                'total_stock_value' => round($products->sum(fn ($p) => (float) $p->prod_price * $stockOf($p)), 2),
+                'low_stock_count' => $products->filter(fn ($p) => $stockOf($p) <= $lowStockThreshold)->count(),
+                'out_of_stock_count' => $products->filter(fn ($p) => $stockOf($p) <= 0)->count(),
                 'low_stock_threshold' => $lowStockThreshold,
+                'total_sold' => array_sum($soldByProduct),
+                'total_revenue' => round(array_sum($revenueByProduct), 2),
+                'date_range' => [
+                    'from' => $filters['date_from'] ?? 'All time',
+                    'to'   => $filters['date_to'] ?? 'All time',
+                ],
             ],
             'items' => $items,
         ];

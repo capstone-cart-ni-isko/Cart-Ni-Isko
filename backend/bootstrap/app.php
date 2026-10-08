@@ -12,6 +12,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // First in the stack: every later stage benefits from the wider clock.
+        $middleware->append(App\Http\Middleware\ApiTimeLimit::class);
         $middleware->append(App\Http\Middleware\CacheReads::class);
         $middleware->append(App\Http\Middleware\RenewApiToken::class);
 

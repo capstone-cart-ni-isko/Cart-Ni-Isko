@@ -506,18 +506,26 @@ class InputValidatorAPI extends Controller
         ]);
         if ($requiredCheck) return $requiredCheck;
 
+        // Live behaviour (ProductsAPI::addProduct): price must be greater
+        // than zero and "SHIRT" / "shirt" count as the same product.
         return $this->validateFields($json, [
-            'prod_name'  => 'string|max:255|unique:product,prod_name',
-            'prod_tag'   => 'string|max:255|unique:product,prod_tag',
+            'prod_name'  => ['string', 'max:255',
+                \Illuminate\Validation\Rule::unique('product', 'prod_name')
+                    ->whereRaw('lower(prod_name) = lower(?)',
+                        [trim((string) $json->input('prod_name'))])],
+            'prod_tag'   => ['string', 'max:255',
+                \Illuminate\Validation\Rule::unique('product', 'prod_tag')
+                    ->whereRaw('lower(prod_tag) = lower(?)',
+                        [trim((string) $json->input('prod_tag'))])],
             'prod_categ' => 'nullable|string|max:100',
-            'prod_price' => 'numeric|min:0',
+            'prod_price' => 'numeric|gt:0',
             'prod_qty'   => 'integer|min:0',
             'prod_desc'  => 'nullable|string',
         ], [
             'prod_name.unique'   => 'Product name already exists.',
             'prod_tag.unique'    => 'Product tag already exists.',
             'prod_price.numeric' => 'Product price must be a number.',
-            'prod_price.min'     => 'Product price cannot be negative.',
+            'prod_price.gt'      => 'Product price must be greater than zero.',
             'prod_qty.integer'   => 'Product quantity must be an integer.',
             'prod_qty.min'       => 'Product quantity cannot be negative.',
         ]);
@@ -1067,13 +1075,17 @@ class InputValidatorAPI extends Controller
     public function posCheckoutOrder(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id'    => 'required',
-            'pay_given' => 'required|numeric|min:0',
+            'ord_id'     => 'required',
+            'pay_given'  => 'required|numeric|min:0',
+            // FLOW-WALKIN-06: the tender is optional for legacy clients,
+            // but when sent it must be cash or digital.
+            'pay_method' => 'nullable|in:cash,digital',
         ], [
-            'ord_id.required'    => 'Order ID is required.',
-            'pay_given.required' => 'Payment given amount is required.',
-            'pay_given.numeric'  => 'Payment given must be a numeric amount.',
-            'pay_given.min'      => 'Payment given cannot be negative.',
+            'ord_id.required'     => 'Order ID is required.',
+            'pay_given.required'  => 'Payment given amount is required.',
+            'pay_given.numeric'   => 'Payment given must be a numeric amount.',
+            'pay_given.min'       => 'Payment given cannot be negative.',
+            'pay_method.in'       => 'Payment method must be cash or digital.',
         ]);
     }
 

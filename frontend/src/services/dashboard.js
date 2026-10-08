@@ -118,7 +118,28 @@ export function mapOrderRow(row) {
   const customer = row.customer || null
   const custId = row.cust_id ?? null
   const tag = String(row.ord_tag || `ORD-${row.ord_id}`)
-  const rawStatus = String(row.ord_status || '').trim().toUpperCase()
+  // Backend stores the DOMAIN 27 spec literals (`processing`, `to cancel`,
+  // …); the admin tables speak the display vocabulary. Mirrors the customer
+  // Orders.jsx STATUS_DISPLAY_MAP exactly, so a cancellation request shows as
+  // 'CANCEL REQUESTED' and the Approve/Reject buttons (FLOW-MANAGE_PRE-05)
+  // render for it.
+  const STATUS_DISPLAY_MAP = {
+    processing: 'TO PROCESS',
+    'to cancel': 'CANCEL REQUESTED',
+    'to claim': 'TO CLAIM',
+    delivering: 'TO RECEIVE',
+    'to receive': 'TO RECEIVE',
+    claimed: 'CLAIMED',
+    received: 'RECEIVED',
+    unclaimed: 'UNCLAIMED',
+    cancelled: 'CANCELLED',
+    returned: 'RETURNED',
+    refunded: 'REFUNDED',
+  }
+  const storedStatus = String(row.ord_status || '').trim()
+  const rawStatus = (
+    STATUS_DISPLAY_MAP[storedStatus.toLowerCase()] || storedStatus.toUpperCase()
+  ).trim()
   const isPos = custId === null || custId === undefined || tag.toUpperCase().startsWith('POS-')
   const preorder = /PRE/i.test(tag) || items.some((item) => item.preorder)
 

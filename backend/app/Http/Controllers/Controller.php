@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Customer;
 use App\Models\CustNotif;
+use App\Models\EmpLog;
 use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Schedule;
@@ -225,6 +226,10 @@ abstract class Controller
             'custnotif_created' => now(),
             'custnotif_read'    => null,
             'custnotif_msg'     => $message,
+            // FLOW-NOTIF-03: unread rows sort with `priority` on top, so the
+            // type has to be written explicitly - the column default alone
+            // would make every row priority and flatten that ordering.
+            'custnotif_type'    => str_starts_with($message, '[PRIORITY]') ? 'priority' : 'regular',
         ]);
     }
 
@@ -280,6 +285,8 @@ abstract class Controller
             'empnotif_created' => now(),
             'empnotif_read'    => null,
             'empnotif_msg'     => $message,
+            // FLOW-NOTIF-03: same priority / regular split as custnotif.
+            'empnotif_type'    => str_starts_with($message, '[PRIORITY]') ? 'priority' : 'regular',
         ]);
     }
 

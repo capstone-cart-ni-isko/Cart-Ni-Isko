@@ -70,4 +70,15 @@ Schedule::call(fn () => app(AppointAPI::class)->autoCloseExpired())
     ->name('auto-close-expired-visits')
     ->withoutOverlapping();
 
+/*
+    REQ-MANAGE_DEL-01: a paid delivery whose expected date/time is within the
+    next 24 hours flips `delivering` -> `to receive`, so the customer can mark
+    it received the moment it is due (FLOW-ORD_CLAIM-07) rather than waiting
+    for a tracking call that may never arrive.
+*/
+Schedule::call(fn () => app(TrackingAPI::class)->sweepUpcomingDeliveries())
+    ->everyThirtyMinutes()
+    ->name('sweep-upcoming-deliveries')
+    ->withoutOverlapping();
+
 

@@ -44,7 +44,7 @@ let themeHydratedFor = null
 
 // Same geometry as the customer ribbon: a 40px hit area, 20px glyph.
 const ICON_BTN =
-  'w-10 h-10 rounded-xl hover:bg-slate-100 text-gray-700 flex items-center justify-center relative transition-all cursor-pointer'
+  'p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center'
 
 /** One ribbon entry: hit area, active tint, hover chip and optional badge. */
 function RibbonIcon({ label, onClick, active, badge, children }) {
@@ -59,7 +59,7 @@ function RibbonIcon({ label, onClick, active, badge, children }) {
       >
         {children}
         {badge > 0 && (
-          <span className="absolute top-1 right-1 bg-brand-orange text-white text-[10px] font-black min-w-4 h-4 px-0.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
+          <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
             {badge > 99 ? '99+' : badge}
           </span>
         )}
@@ -207,7 +207,7 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search orders, products, customers..."
             aria-label="Search"
-            className="w-full h-9 pl-9 pr-8 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:bg-white transition-all"
+            className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-50 border border-slate-200 text-xs placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:bg-white transition-all shadow-2xs"
           />
           <kbd className="hidden sm:flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center px-1.5 py-0.5 rounded border border-slate-200 text-[9px] font-semibold text-slate-400 bg-white">
             ⌘K

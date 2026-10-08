@@ -300,13 +300,13 @@ class SrsRequirementsTest extends TestCase
         $claim = array_values(array_filter($slots, fn ($s) => $s['type'] === 'CLAIM'));
         $visit = array_values(array_filter($slots, fn ($s) => $s['type'] === 'VISIT'));
 
-        $this->assertCount(20, $claim);   // 08:00-18:00 in 30-minute blocks
+        $this->assertCount(60, $claim);   // 08:00-18:00 in 10-minute blocks (rule 11)
         $this->assertCount(60, $visit);   // 08:00-18:00 in 10-minute blocks
         $this->assertSame('08:00', substr($claim[0]['start'], 11));
-        $this->assertSame('08:30', substr($claim[0]['end'], 11));
+        $this->assertSame('08:10', substr($claim[0]['end'], 11));
         $this->assertSame('08:10', substr($visit[0]['end'], 11));
-        $this->assertSame(10, $claim[0]['capacity']);   // REQ-AB-01
-        $this->assertSame(1, $visit[0]['capacity']);     // REQ-AB-02
+        $this->assertSame(5, $claim[0]['capacity']);   // REQ-AB-01 / rule 12 (0-5 pickup)
+        $this->assertSame(1, $visit[0]['capacity']);     // REQ-AB-02 / rule 12 (1 visit)
 
         // --- REQ-AB-03: zero in-store employees => both types unavailable ---
         $this->assertFalse($claim[0]['available']);
@@ -346,8 +346,8 @@ class SrsRequirementsTest extends TestCase
             ->assertStatus(201);
         $this->assertEquals($customer->cust_id, $first->json('data.cust_id'));
 
-        // Fill the 10:00 CLAIM slot up to its capacity of ten (REQ-AB-01)
-        for ($i = 0; $i < 9; $i++) {
+        // Fill the 10:00 CLAIM slot up to its capacity of five (rule 12)
+        for ($i = 0; $i < 4; $i++) {
             // Every booking burns the verification it was made with
             $this->grantAppointmentOtp($customer);
             $this->json('POST', '/api/appoint/create', [
@@ -357,7 +357,7 @@ class SrsRequirementsTest extends TestCase
             ], $this->headers($customer))->assertStatus(201);
         }
 
-        // The eleventh booking is refused because the slot is full
+        // The sixth booking is refused because the slot is full
         $this->json('POST', '/api/appoint/create', [
             'cust_id'      => $customer->cust_id,
             'appoint_date' => $date . ' 10:00',
@@ -371,8 +371,8 @@ class SrsRequirementsTest extends TestCase
             ->assertStatus(200)
             ->json('data.slots');
         $full = $this->slotFor($slots, 'CLAIM', $date . ' 10:00');
-        $this->assertSame(10, $full['booked']);
-        $this->assertSame(10, $full['capacity']);
+        $this->assertSame(5, $full['booked']);
+        $this->assertSame(5, $full['capacity']);
         $this->assertFalse($full['available']);
         $this->assertSame('Slot fully booked', $full['reason']);
 

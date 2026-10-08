@@ -134,7 +134,7 @@ export default function AdminReviews() {
       rating: Number(item.rating) || 0,
       comment,
       title: '',
-      status: deriveStatus(comment),
+      status: item.status || deriveStatus(comment),
       timeAgo: item.date || 'Recently',
       postedAt: item.date || '',
       orderId: ordId ? `ORD-${ordId}` : '',

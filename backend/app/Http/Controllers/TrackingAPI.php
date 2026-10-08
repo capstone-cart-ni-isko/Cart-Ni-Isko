@@ -215,11 +215,33 @@ class TrackingAPI extends Controller
                 }
             }
 
-            DB::transaction(function () use ($order, $delivery, $status, $priorStatus) {
+            // REQ-MANAGE_DEL: the driver may state when the delivery is due;
+            // `deliver_expect` is what sweepUpcomingDeliveries reads to flip
+            // an upcoming delivery to `to receive` 24 hours out.
+            $deliverExpect = $json->input('deliver_expect');
+            if ($status === 'delivering' && $deliverExpect !== null) {
+                try {
+                    $expect = \Carbon\Carbon::parse($deliverExpect);
+                    if ($expect->isPast()) {
+                        $expect = null;
+                    }
+                } catch (\Throwable $e) {
+                    $expect = null;
+                }
+            } else {
+                $expect = null;
+            }
+
+            DB::transaction(function () use ($order, $delivery, $status, $priorStatus, $expect) {
                 $order->update(['ord_status' => $status]);
 
-                if ($status === 'delivering' && $delivery->deliver_pickedup === null) {
-                    $delivery->update(['deliver_pickedup' => now()]);
+                if ($status === 'delivering') {
+                    if ($delivery->deliver_pickedup === null) {
+                        $delivery->update(['deliver_pickedup' => now()]);
+                    }
+                    if ($expect !== null) {
+                        $delivery->update(['deliver_expect' => $expect]);
+                    }
                 }
 
                 if (in_array($status, ['claimed', 'received'], true)) {
@@ -415,6 +437,13 @@ class TrackingAPI extends Controller
                     $appointment = $candidateAppointment;
                     $candidatePickup = Pickup::where('appoint_id', $candidateAppointment->appoint_id)->first();
                     $order = $candidatePickup ? Order::find($candidatePickup->ord_id) : null;
+
+                    // FLOW-MANAGE_APP-06: a VISIT booking belongs to no order,
+                    // so its code is a pure check-in. Without this branch the
+                    // scan fell through to "does not match any active order".
+                    if (! $candidatePickup && ! $order) {
+                        return $this->completeVisit($json, $candidateAppointment, $byLabel, $isEmployee);
+                    }
                 }
             }
 
@@ -708,9 +737,101 @@ class TrackingAPI extends Controller
     }
 
     /**
+     * FLOW-MANAGE_APP-06: a VISIT appointment QR is a check-in, not an order
+     * claim - scanning it closes the booking. REQ-MANAGE_APP-07 gives the
+     * window a ten-minute grace: a scan on or before `appoint_end` completes
+     * the visit, one inside the grace period records the no-show instead
+     * (the same split FLOW-ORD_CLAIM-04/05 applies to pickups).
+     */
+    private function completeVisit(Request $json, Appointment $appointment, string $byLabel, bool $isEmployee)
+    {
+        $user = $json->user('api');
+        $ownsAppointment = $user instanceof Customer && (int) $appointment->cust_id === (int) $user->cust_id;
+
+        // REQ-ORD_CLAIM-02: employees hold the scanner; FLOW-MANAGE_BOOKED-03
+        // still lets the owning customer scan their own appointment code.
+        if (! $ownsAppointment && ! $isEmployee) {
+            $this->notifyAllEmployees('[PRIORITY] Failed QR scan' . $byLabel
+                . ': appointment #' . $appointment->appoint_id . ' was scanned by a non-owner.');
+            $this->logScanAttempt($user, (string) $json->input('code'), false, 'appointment code without owner match');
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Only store employees or the booking customer can check in with this code',
+            ], 403);
+        }
+
+        $final = (string) $appointment->appoint_status;
+        if ($appointment->appoint_closed !== null || in_array($final, ['done', 'absent', 'cancelled'], true)) {
+            $this->logScanAttempt($user, (string) $json->input('code'), false, 'appointment already ' . $final);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Appointment has already been ' . ($final !== '' ? $final : 'closed'),
+            ], 409);
+        }
+
+        $late = $appointment->appoint_end !== null && $appointment->appoint_end->isPast();
+        $status = $late ? 'absent' : 'done';
+
+        DB::transaction(function () use ($appointment, $status) {
+            $appointment->update([
+                'appoint_status' => $status,
+                'appoint_closed' => now(),
+                // FLOW-ORD_CLAIM-03: the code is spent with the check-in.
+                'appoint_qr'     => null,
+            ]);
+        });
+
+        $this->logScanAttempt($user, (string) $json->input('code'), true,
+            'appointment #' . $appointment->appoint_id . ' ' . $status);
+
+        // REQ-ORD_CLAIM-03 / REQ-MANAGE_APP-06: the check-in carries a
+        // timestamp, a method and the responsible account.
+        if ($isEmployee) {
+            $this->logEmployee((int) $user->emp_id, 'edit',
+                'tracking/scan appointment #' . $appointment->appoint_id . ' - ' . $status
+                . ($late ? ' (late)' : ''));
+        } elseif ((int) $appointment->cust_id > 0) {
+            $this->logCustomer((int) $appointment->cust_id, 'edit',
+                'tracking/scan appointment #' . $appointment->appoint_id . ' - ' . $status);
+        }
+
+        // REQ-MANAGE_APP-04: the customer is told how the visit ended.
+        try {
+            $this->notifyCustomer((int) $appointment->cust_id, $status === 'done'
+                ? '[PRIORITY] Your visit appointment #' . $appointment->appoint_id . ' was checked in. Thank you for coming!'
+                : '[PRIORITY] Your visit appointment #' . $appointment->appoint_id
+                    . ' was checked in after the slot ended and has been marked as a no-show.');
+        } catch (\Throwable $e) {
+            // A notification must never fail the scan.
+        }
+
+        $appointment->refresh();
+
+        return response()->json([
+            'success' => true,
+            'message' => $status === 'done'
+                ? 'Appointment checked in successfully'
+                : 'Appointment checked in late and marked as absent',
+            'data' => [
+                'track_type'  => 'APPOINTMENT',
+                'appointment' => $this->appointmentPayload($appointment),
+                'appoint_id'  => $appointment->appoint_id,
+                'appoint_status' => $appointment->appoint_status,
+                'status'      => $appointment->appoint_status,
+            ],
+        ], 200);
+    }
+
+    /**
      * FLOW-ORD_CLAIM-06 / D8: a pickup slot whose window passed with no scan
      * turns `absent`, the order turns `unclaimed`, and the code is cleared so
      * the sweep never fires twice.
+     *
+     * REQ-MANAGE_APP-07: the flip only happens once the window has been
+     * exceeded by ten minutes - inside that grace the late scan of
+     * FLOW-ORD_CLAIM-05 (absent + claimed) still has to work.
      *
      * Public because routes/console.php schedules it, so the flip happens on
      * time even when no tracking call ever arrives (REQ-ORD_LIST-02 polling).
@@ -720,7 +841,7 @@ class TrackingAPI extends Controller
         $appointments = Appointment::whereRaw('LOWER(appoint_type) IN (?, ?)', ['pickup', 'claim'])
             ->where('appoint_status', 'upcoming')
             ->whereNotNull('appoint_qr')
-            ->where('appoint_end', '<', now())
+            ->where('appoint_end', '<', now()->subMinutes(10))
             ->get();
 
         foreach ($appointments as $appointment) {
@@ -738,11 +859,53 @@ class TrackingAPI extends Controller
 
             $order->update(['ord_status' => 'unclaimed']);
 
+            // FLOW-ORD_LIST-10 / REQ-ACCESS_LOG: the automatic flip is
+            // attributed to the facilitating employee's activity log.
+            try {
+                if (! empty($appointment->emp_id)) {
+                    $this->logEmployee((int) $appointment->emp_id, 'auto-close',
+                        'Pickup window expired - order #' . $order->ord_id . ' marked unclaimed');
+                }
+            } catch (\Throwable $e) {
+                // An audit write must never stop the sweep.
+            }
+
             if ((int) $order->cust_id > 0) {
                 $this->notifyCustomer(
                     (int) $order->cust_id,
                     '[PRIORITY] Order #' . $order->ord_id
                         . ' was not claimed within its pickup window. Please contact the store.'
+                );
+            }
+        }
+    }
+
+    /**
+     * REQ-MANAGE_DEL-01: a paid delivery whose expected date/time falls within
+     * the next 24 hours moves from `delivering` to `to receive`, so the
+     * customer's "mark as received" action (FLOW-ORD_CLAIM-07) becomes
+     * available before the driver arrives instead of only after.
+     *
+     * Public because routes/console.php schedules it.
+     */
+    public function sweepUpcomingDeliveries(): void
+    {
+        $deliveries = Delivery::whereNotNull('deliver_expect')
+            ->where('deliver_expect', '<=', now()->addDay())
+            ->where('deliver_expect', '>=', now()->subDay())
+            ->get();
+
+        foreach ($deliveries as $delivery) {
+            $order = $this->resolveDeliveryOrder($delivery);
+            if (! $order || $order->ord_status !== 'delivering') continue;
+            if (! $order->ord_paidat) continue; // unpaid orders never flip
+
+            $order->update(['ord_status' => 'to receive']);
+
+            if ((int) $order->cust_id > 0) {
+                $this->notifyCustomer(
+                    (int) $order->cust_id,
+                    'Order #' . $order->ord_id . ' is arriving soon. Please prepare to receive it.'
                 );
             }
         }
@@ -845,9 +1008,13 @@ class TrackingAPI extends Controller
             // lines were already deducted at placement (CheckoutAPI), so the
             // claim must never deduct them a second time (D8 / REQ-CHECKOUT-06).
             if ($prodvar && (int) $prodvar->prodvar_preorder === 1) {
+                // Floor at zero: a restock that arrived late (or a second
+                // claim on the same units) must not push the shelf negative.
+                $take    = min((int) $prodvar->prodvar_stock, (int) $bag->bag_qty);
+                $newStock = (int) $prodvar->prodvar_stock - $take;
                 Prodvar::where('prodvar_id', $bag->prodvar_id)
-                    ->decrement('prodvar_stock', (int) $bag->bag_qty);
-                $prodvar->prodvar_stock = max(0, (int) $prodvar->prodvar_stock - (int) $bag->bag_qty);
+                    ->update(['prodvar_stock' => $newStock]);
+                $prodvar->prodvar_stock = $newStock;
             }
 
             if ($prodvar && (int) $prodvar->prodvar_stock <= $threshold) {
@@ -889,16 +1056,49 @@ class TrackingAPI extends Controller
         return Bag::whereIn('bag_id', $bagIds)->whereNull('bag_deleted')->get()->all();
     }
 
-    /** Product names whose stock no longer covers the order's bag quantities. */
-    private function stockShortages(Order $order): array
+    /**
+     * Product names whose pre-order lines are no longer coverable.
+     *
+     * An in-stock line is skipped: it left the shelf at placement
+     * (CheckoutAPI), so its units are already reserved and re-checking it
+     * against the current stock only produced false blocks whenever the
+     * customer had ordered more units than remained afterwards.
+     *
+     * A pre-order line was NOT deducted at placement - it only leaves the
+     * shelf at fulfilment - so other open pre-orders on the same variation
+     * hold a claim on the same units. The available figure is therefore
+     * `stock - other open pre-orders' qty`, otherwise the second customer of
+     * a 1-unit restock would pass this gate and take stock the first one is
+     * owed (D12 / FLOW-MANAGE_PRE-03).
+     *
+     * Public because OrdersAPI runs the same gate on the employee's
+     * `processing -> to claim/delivering` move (FLOW-MANAGE_PRE-03).
+     */
+    public function stockShortages(Order $order): array
     {
         $order->loadMissing('items.bag.prodvar.product');
+
+        $openStatuses = ['processing', 'to cancel', 'to claim', 'unclaimed', 'delivering', 'to receive'];
 
         $short = [];
         foreach ($order->items as $item) {
             $bag = $item->bag;
             if (! $bag || ! $bag->prodvar) continue;
-            if ((int) $bag->prodvar->prodvar_stock < (int) $bag->bag_qty) {
+            if ((int) $bag->prodvar->prodvar_preorder !== 1) continue;
+
+            $stock  = (int) $bag->prodvar->prodvar_stock;
+            $needed = (int) $bag->bag_qty;
+
+            $reserved = (int) DB::table('items')
+                ->join('orders', 'orders.ord_id', '=', 'items.ord_id')
+                ->join('bag', 'bag.bag_id', '=', 'items.bag_id')
+                ->where('bag.prodvar_id', $bag->prodvar_id)
+                ->whereNull('bag.bag_deleted')
+                ->where('items.ord_id', '!=', $order->ord_id)
+                ->whereIn('orders.ord_status', $openStatuses)
+                ->sum('bag.bag_qty');
+
+            if (max(0, $stock - $reserved) < $needed) {
                 $short[] = $bag->prodvar->product
                     ? $bag->prodvar->product->prod_name
                     : ('variation #' . $bag->prodvar_id);
@@ -935,6 +1135,10 @@ class TrackingAPI extends Controller
 
             if (! $row) {
                 $row = new Prodsales();
+                // prodsales_id is bigint NOT NULL with no sequence (see
+                // IdAllocator): without this the insert dies on the live
+                // table and the metrics stay empty forever.
+                $row->prodsales_id = $this->nextId('prodsales', 'prodsales_id');
                 $row->prodvar_id = $prodvarId;
                 $row->prodsales_date = $date;
                 $row->prodsales_qty = 0;
@@ -983,8 +1187,13 @@ class TrackingAPI extends Controller
     // STATUS + ACCESS LOG HELPERS
     // ==========================================
 
-    /** The DOMAIN 27 transition table (employee side). */
-    private function transitions(): array
+    /**
+     * The DOMAIN 27 transition table (employee side).
+     *
+     * Public because OrdersAPI::employeeStatusUpdate reuses it to gate
+     * employee-side status changes by the same whitelist.
+     */
+    public function transitions(): array
     {
         return [
             'processing' => ['to claim', 'delivering', 'to cancel', 'cancelled'],
@@ -999,8 +1208,9 @@ class TrackingAPI extends Controller
         ];
     }
 
-    /** Legacy and new status spellings -> the DOMAIN 27 vocabulary. */
-    private function normalizeStatus(?string $raw): ?string
+    /** Legacy and new status spellings -> the DOMAIN 27 vocabulary.
+     *  Public because OrdersAPI::employeeStatusUpdate normalises through it. */
+    public function normalizeStatus(?string $raw): ?string
     {
         if ($raw === null) return null;
 

@@ -17,12 +17,18 @@ class CacheReads
 
     // Public catalog reads: identical for every caller, so no account
     // scoping and no token lookup are needed for these paths.
+    //
+    // `api/reviews/display` is deliberately NOT here: the same URL answers
+    // the customer wall (approved only) and the employee moderation queue
+    // (pending rows included), so a shared key cached the first answer and
+    // served it to the other side for 30 s - the admin queue looked empty
+    // and a customer could be handed unmoderated text. It is cached
+    // per-account like every other token-dependent read.
     private const SHARED = [
         'api/products/filter',
         'api/products/search',
         'api/products/sort',
         'api/products/view',
-        'api/reviews/display',
         'api/reviews/score',
     ];
 

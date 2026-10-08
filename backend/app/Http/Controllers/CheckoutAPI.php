@@ -765,6 +765,13 @@ class CheckoutAPI extends Controller
      * FLOW-CHECKOUT-04..06: reuse the claim appointment the customer booked on
      * `/book`, otherwise create it right here - inside the checkout
      * transaction, so the appointment only exists once the order does.
+     *
+     * The slot the customer picks here is re-validated against the same
+     * capacity and staffing rules the booking calendar applies (REQ-AB-01/03),
+     * because this path may move an appointment onto a slot that filled up
+     * after `/book` loaded. Moving the slot also re-mints the QR: the old code
+     * kept the stale QR, so a customer who screenshot the first slot walked in
+     * with a code that no longer matched their appointment (FLOW-MANAGE_BOOKED).
      */
     protected function bookingAppointment(Request $json, int $custId): Appointment
     {
@@ -784,18 +791,30 @@ class CheckoutAPI extends Controller
             }
         }
 
+        $ignoreId = $existing ? (int) $existing->appoint_id : null;
+
+        if (! $this->slotHasCapacity($slotStart, $slotEnd, $ignoreId)) {
+            throw new \RuntimeException('The selected pickup slot is already full. Please pick another slot.');
+        }
+
+        $staffing = $this->slotStaffing($slotStart, $slotEnd);
+        if ($staffing !== null) {
+            throw new \RuntimeException($staffing);
+        }
+
         if ($existing) {
+            $moved = ! $existing->appoint_start->equalTo($slotStart)
+                || ! $existing->appoint_end->equalTo($slotEnd);
+
             $existing->update([
                 'appoint_start' => $slotStart,
                 'appoint_end'   => $slotEnd,
-                'appoint_qr'    => $existing->appoint_qr ?: ('APPT-' . strtoupper(Str::random(16))),
+                'appoint_qr'    => $moved || ! $existing->appoint_qr
+                    ? ('APPT-' . strtoupper(Str::random(16)))
+                    : $existing->appoint_qr,
             ]);
 
             return $existing->refresh();
-        }
-
-        if (! $this->slotHasCapacity($slotStart, $slotEnd)) {
-            throw new \RuntimeException('The selected pickup slot is already full. Please pick another slot.');
         }
 
         return Appointment::create([
@@ -843,6 +862,23 @@ class CheckoutAPI extends Controller
     }
 
     /**
+     * REQ-AB-03: at least one in-store employee must span the claim slot, the
+     * same rule the booking calendar applies. Returns the rejection message,
+     * or null when the slot is staffed (or the roster source is unknown, in
+     * which case only the capacity rule applies - see AppointAPI::rosterFor).
+     */
+    protected function slotStaffing(Carbon $start, Carbon $end): ?string
+    {
+        $inStore = (new AppointAPI())->rosterHeadcount($start, $end);
+
+        if ($inStore !== null && $inStore < 1) {
+            return 'Not enough in-store employees available for this slot. Please pick another slot.';
+        }
+
+        return null;
+    }
+
+    /**
      * `appointments.emp_id` is NOT NULL in the live schema, so every claim
      * appointment needs a staff owner: prefer an admin, else any active
      * employee (the restored database ships no roster rows yet).
@@ -875,10 +911,19 @@ class CheckoutAPI extends Controller
         }
     }
 
-    /** Slots snap to whole minutes; seconds/milliseconds never reach the DB. */
+    /**
+     * Slots snap to whole minutes; seconds/milliseconds never reach the DB.
+     * Rule 11: every slot starts on the 10-minute grid (:00, :10, ... :50),
+     * so an off-grid request is floored onto it rather than stored as-is -
+     * otherwise a 09:07 booking would produce a 09:07-09:17 block that never
+     * lines up with the calendar's slots.
+     */
     protected function normalizeSlotStart(Carbon $slot): Carbon
     {
-        return $slot->copy()->second(0)->millisecond(0);
+        $slot = $slot->copy()->second(0)->millisecond(0);
+        $grid = $this->slotMinutes();
+
+        return $slot->minute((int) floor($slot->minute / $grid) * $grid);
     }
 
     protected function defaultSlotStart(): Carbon
@@ -888,9 +933,14 @@ class CheckoutAPI extends Controller
         );
     }
 
+    /**
+     * Rule 11: a slot is exactly 10 minutes, whatever `slot_minutes` says -
+     * the setting band is only read elsewhere for display, and a stored value
+     * outside [1,10] must not silently produce 15- or 30-minute blocks.
+     */
     protected function slotMinutes(): int
     {
-        return max(1, (int) $this->settingValue('slot_minutes', 10));
+        return min(10, max(1, (int) $this->settingValue('slot_minutes', 10)));
     }
 
     /**

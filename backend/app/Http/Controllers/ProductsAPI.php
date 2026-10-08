@@ -33,8 +33,10 @@
          * @param \Illuminate\Support\Collection|array|null $variations already
          *        loaded prodvar rows (avoids an N+1 on list endpoints)
          * @param array|null $breakdown pre-computed approved rating breakdown
+         * @param array|null $metrics pre-computed prodsales aggregates
+         *        (['sold' => int]) so list endpoints stay at two queries
          */
-        public static function present(Product $product, $variations = null, ?array $breakdown = null): array
+        public static function present(Product $product, $variations = null, ?array $breakdown = null, ?array $metrics = null): array
         {
             $vars = $variations === null
                 ? Prodvar::where('prod_id', $product->prod_id)
@@ -98,6 +100,20 @@
                 ? (int) $product->prod_total_var
                 : $vars->count();
 
+            // REQ-MANAGE_INV-06: metrics come from `prodsales`, never from the
+            // legacy `prod_peaksold` column (a stored 0 that no writer touches).
+            // presentMany() passes the batched sum in via $metrics.
+            $sold = $metrics['sold'] ?? $product->totalSold();
+            $payload['stock']    = $stock;
+            $payload['prod_peaksold'] = $sold;
+            $payload['prod_sold']     = $sold;
+
+            // FLOW-MANAGE_INV-06 / REQ-MANAGE_INV-04: the automated
+            // low-stock alert as a per-row flag the admin list reads.
+            $threshold = (int) (\App\Support\SystemSettings::get('low_stock_threshold', 5));
+            $payload['low_stock'] = $stock <= $threshold;
+            $payload['low_stock_threshold'] = $threshold;
+
             // The breakdown is computed from approved reviews only, so a stale
             // column can never show a moderation-untouched number.
             if ($breakdown === null) {
@@ -132,12 +148,14 @@
                 ->get()
                 ->groupBy('prod_id');
             $breakdowns = self::ratingBreakdowns($ids);
+            $sold       = self::salesByProduct();
 
-            return $products->map(function (Product $product) use ($variations, $breakdowns) {
+            return $products->map(function (Product $product) use ($variations, $breakdowns, $sold) {
                 return self::present(
                     $product,
                     $variations->get($product->prod_id) ?? collect(),
-                    $breakdowns[(int) $product->prod_id] ?? null
+                    $breakdowns[(int) $product->prod_id] ?? null,
+                    ['sold' => $sold[(int) $product->prod_id] ?? 0]
                 );
             })->all();
         }
@@ -229,6 +247,92 @@
             return (bool) preg_match('/\.(jpe?g|png)$/i', $path);
         }
 
+        /**
+         * REQ-ADD_PROD-07: format AND file size are validated before an image
+         * is accepted. Uploaded paths are checked by the upload endpoint; this
+         * guards the inline base64 form the admin form still sends (a 2 MB
+         * decoded ceiling keeps one product row from bloating the table).
+         */
+        protected static function imageWithinSize($value): bool
+        {
+            $value = trim((string) $value);
+            if ($value === '' || ! preg_match('#^data:image/#i', $value)) {
+                return true; // an /uploads path carries no inline payload
+            }
+
+            return strlen($value) <= self::MAX_IMAGE_B64_CHARS;
+        }
+
+        /** 2 MB decoded ~= 2.7M base64 characters. */
+        protected const MAX_IMAGE_B64_CHARS = 2800000;
+
+        /**
+         * REQ-ADD_PROD-04: categories are predefined and system-wide. Every
+         * spelling the admin UI offers (singular, plural, legacy) folds onto
+         * one canonical value, and anything outside the list is rejected with
+         * the list itself, so `prod_categ` can never drift into free text.
+         */
+        protected static function categoryWhitelist(): array
+        {
+            return [
+                'Shirts', 'Hoodies', 'Jackets', 'Varsity Jacket', 'Caps',
+                'Lanyards', 'Pins', 'Stickers', 'Accessories', 'Windbreaker',
+                'Others',
+            ];
+        }
+
+        /** Alias -> canonical category name (lowercase keys). */
+        protected static function normalizeCategory(?string $raw): string
+        {
+            $value = trim((string) $raw);
+            if ($value === '') {
+                return 'Others';
+            }
+
+            $aliases = [
+                'shirt'        => 'Shirts',
+                'shirts'       => 'Shirts',
+                'hoodie'       => 'Hoodies',
+                'hoodies'      => 'Hoodies',
+                'jacket'       => 'Jackets',
+                'jackets'      => 'Jackets',
+                'varsity'      => 'Varsity Jacket',
+                'varsity jacket' => 'Varsity Jacket',
+                'cap'          => 'Caps',
+                'caps'         => 'Caps',
+                'lanyard'      => 'Lanyards',
+                'lanyards'     => 'Lanyards',
+                'pin'          => 'Pins',
+                'pins'         => 'Pins',
+                'sticker'      => 'Stickers',
+                'stickers'     => 'Stickers',
+                'accessory'    => 'Accessories',
+                'accessories'  => 'Accessories',
+                'windbreaker'  => 'Windbreaker',
+                'others'       => 'Others',
+            ];
+
+            return $aliases[strtolower($value)] ?? $value;
+        }
+
+        /**
+         * @return string|null the canonical category, or null (with $message
+         *         filled in) when the value is outside the whitelist.
+         */
+        protected static function validatedCategory($raw, ?string &$message = null): ?string
+        {
+            $categ = self::normalizeCategory($raw);
+
+            if (! in_array($categ, self::categoryWhitelist(), true)) {
+                $message = 'Unknown product category "' . $categ
+                    . '". Allowed categories: ' . implode(', ', self::categoryWhitelist()) . '.';
+
+                return null;
+            }
+
+            return $categ;
+        }
+
         // ==========================================
         // CATALOG / INVENTORY
         // ==========================================
@@ -291,12 +395,30 @@
                 return response()->json(['success' => false, 'message' => 'A product needs at least one variation.'], 422);
             }
 
+            // REQ-ADD_PROD-04: categories are a predefined, system-wide set.
+            $categError = null;
+            $categ = self::validatedCategory($json->input('prod_categ'), $categError);
+            if ($categ === null) {
+                return response()->json(['success' => false, 'message' => $categError], 422);
+            }
+
+            // REQ-ADD_PROD-07: format + size are validated before the row is
+            // written (format in parseVariations, size here).
+            foreach ((array) ($json->input('prod_images') ?: []) as $image) {
+                if (! self::imageWithinSize($image)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Product images must be 2 MB or smaller.',
+                    ], 422);
+                }
+            }
+
             try {
-                $product = DB::transaction(function () use ($json, $name, $tag, $price, $variations) {
+                $product = DB::transaction(function () use ($json, $name, $tag, $price, $variations, $categ) {
                     $product = Product::create([
                         'prod_name'     => $name,
                         'prod_tag'      => $tag,
-                        'prod_categ'    => $json->input('prod_categ') ?: 'others',
+                        'prod_categ'    => $categ,
                         'prod_price'    => $price,
                         'prod_desc'     => $json->input('prod_desc'),
                         'prod_rating'   => 0,
@@ -327,6 +449,8 @@
                         '[PRIORITY] Low stock: "' . $product->prod_name . '" is now down to ' . $totalStock . ' unit(s).'
                     );
                 }
+
+                $this->logInventory($json, 'add', 'products/add - "' . $product->prod_name . '" (#' . $product->prod_id . ')');
 
                 return response()->json([
                     'success' => true,
@@ -398,6 +522,110 @@
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to retrieve orders',
+                    'error'   => $e->getMessage(),
+                ], 500);
+            }
+        }
+
+        /*
+            FLOW-MANAGE_INV-08: sales history for each product - daily units,
+            revenue and a trend, aggregated from `prodsales` (REQ-MANAGE_INV-06:
+            metrics are NEVER read from the legacy peak/today columns).
+
+            GET /products/sales?prod_id=&days=&date_from=&date_to=
+
+            prod_id  - integer (opt: one product, else every product)
+            days     - integer (opt: window length ending today, default 30)
+            date_from/date_to - Y-m-d (opt: explicit window, overrides `days`)
+        */
+        public function productSales(Request $json)
+        {
+            try {
+                $prodId = (int) $json->input('prod_id', 0);
+
+                $from = filled($json->input('date_from'))
+                    ? (string) $json->input('date_from')
+                    : now()->subDays(max(1, (int) $json->input('days', 30)))->toDateString();
+                $to = filled($json->input('date_to'))
+                    ? (string) $json->input('date_to')
+                    : now()->toDateString();
+
+                $query = DB::table('prodsales')
+                    ->join('prodvar', 'prodvar.prodvar_id', '=', 'prodsales.prodvar_id')
+                    ->join('product', 'product.prod_id', '=', 'prodvar.prod_id')
+                    ->whereNull('product.prod_deleted')
+                    ->where('prodsales.prodsales_date', '>=', $from)
+                    ->where('prodsales.prodsales_date', '<=', $to);
+
+                if ($prodId > 0) {
+                    $query->where('prodvar.prod_id', $prodId);
+                }
+
+                $rows = $query
+                    ->select('prodvar.prod_id as pid')
+                    ->selectRaw('DATE(prodsales.prodsales_date) as day')
+                    ->selectRaw('COALESCE(SUM(prodsales_qty), 0) as qty')
+                    ->selectRaw('COALESCE(SUM(prodsales_amount), 0) as revenue')
+                    ->selectRaw('COALESCE(SUM(prodsales_bag), 0) as bags')
+                    ->selectRaw('COALESCE(SUM(prodsales_walkin), 0) as walkin')
+                    ->selectRaw('COALESCE(SUM(prodsales_preorder), 0) as preorder')
+                    ->selectRaw('COALESCE(SUM(prodsales_cancelled), 0) as cancelled')
+                    ->groupBy('prodvar.prod_id', 'DATE(prodsales.prodsales_date)')
+                    ->orderBy('day')
+                    ->get();
+
+                $byProduct = [];
+                foreach ($rows as $row) {
+                    $pid = (int) $row->pid;
+                    $byProduct[$pid] ??= [
+                        'prod_id'   => $pid,
+                        'prod_name' => Product::where('prod_id', $pid)->value('prod_name'),
+                        'total_qty' => 0,
+                        'total_revenue' => 0.0,
+                        'days'      => [],
+                    ];
+                    $byProduct[$pid]['total_qty']     += (int) $row->qty;
+                    $byProduct[$pid]['total_revenue']  = round($byProduct[$pid]['total_revenue'] + (float) $row->revenue, 2);
+                    $byProduct[$pid]['days'][] = [
+                        'date'     => (string) $row->day,
+                        'qty'      => (int) $row->qty,
+                        'revenue'  => round((float) $row->revenue, 2),
+                        'bags'     => (int) $row->bags,
+                        'walkin'   => (int) $row->walkin,
+                        'preorder' => (int) $row->preorder,
+                        'cancelled'=> (int) $row->cancelled,
+                    ];
+                }
+
+                // FLOW-MANAGE_INV-08 asks for trends: compare the second half
+                // of the window against the first half, per product.
+                foreach ($byProduct as &$entry) {
+                    $days = $entry['days'];
+                    $half = intdiv(count($days), 2);
+                    $early = array_sum(array_column(array_slice($days, 0, $half), 'qty'));
+                    $late  = array_sum(array_column(array_slice($days, $half), 'qty'));
+                    $entry['trend'] = [
+                        'early_qty' => $early,
+                        'late_qty'  => $late,
+                        'direction' => $late > $early ? 'up' : ($late < $early ? 'down' : 'flat'),
+                        'delta'     => $late - $early,
+                    ];
+                }
+                unset($entry);
+
+                $this->logInventory($json, 'view', 'products/sales - ' . $from . '..' . $to);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Product sales history retrieved successfully',
+                    'data'    => array_values($byProduct),
+                    'date_range' => ['from' => $from, 'to' => $to],
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to retrieve product sales history',
                     'error'   => $e->getMessage(),
                 ], 500);
             }
@@ -476,6 +704,48 @@
         }
 
         /*
+            Category list for the inventory / catalog filters
+            ----------
+            GET /products/categories - no body.
+
+            REQ-ADD_PROD-04: the predefined set, merged with any distinct
+            value already sitting on a live row (deduplicated
+            case-insensitively), so a filter can always match real data.
+        */
+        public function productCategories(Request $json)
+        {
+            try {
+                $inUse = Product::whereNull('prod_deleted')
+                    ->distinct()
+                    ->pluck('prod_categ')
+                    ->filter(fn ($c) => $c !== null && trim((string) $c) !== '')
+                    ->map(fn ($c) => trim((string) $c))
+                    ->all();
+
+                $merged = [];
+                foreach (array_merge(self::categoryWhitelist(), $inUse) as $categ) {
+                    $key = strtolower($categ);
+                    if (! isset($merged[$key])) {
+                        $merged[$key] = $categ;
+                    }
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Categories loaded successfully',
+                    'data'    => array_values($merged),
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to load categories',
+                    'error'   => $e->getMessage(),
+                ], 500);
+            }
+        }
+
+        /*
             Removing product from catalog/inventory
             ----------
             JSON REQUEST
@@ -496,6 +766,8 @@
                 }
 
                 $product->update(['prod_deleted' => now()]);
+
+                $this->logInventory($json, 'delete', 'products/remove - "' . $product->prod_name . '" (#' . $product->prod_id . ')');
 
                 return response()->json([
                     'success' => true,
@@ -685,6 +957,16 @@
                     }
                 }
 
+                if (array_key_exists('prod_categ', $updateData)) {
+                    // REQ-ADD_PROD-04: same predefined category set as add.
+                    $categError = null;
+                    $categ = self::validatedCategory($updateData['prod_categ'], $categError);
+                    if ($categ === null) {
+                        return response()->json(['success' => false, 'message' => $categError], 422);
+                    }
+                    $updateData['prod_categ'] = $categ;
+                }
+
                 if (array_key_exists('prod_price', $updateData)) {
                     if (! is_numeric($updateData['prod_price']) || (float) $updateData['prod_price'] <= 0) {
                         return response()->json([
@@ -714,6 +996,14 @@
                     if (filled($first) && ! self::imageAllowed($first)) {
                         return response()->json(['success' => false, 'message' => 'Images must be JPG or PNG files.'], 422);
                     }
+                    foreach ($images as $image) {
+                        if (! self::imageWithinSize($image)) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Product images must be 2 MB or smaller.',
+                            ], 422);
+                        }
+                    }
                     if (filled($first)) {
                         $this->applyMainImage($product, (string) $first);
                     }
@@ -741,6 +1031,19 @@
                         );
                     }
                 }
+
+                $changed = array_merge(
+                    array_keys($updateData),
+                    $stockChanged ? ['prod_qty'] : [],
+                    $json->has('variations') || $json->input('prodvar') !== null ? ['variations'] : [],
+                    $json->has('prod_images') ? ['prod_images'] : []
+                );
+                $this->logInventory(
+                    $json,
+                    'edit',
+                    'products/update - "' . $product->prod_name . '" (#' . $product->prod_id . ')'
+                        . ($changed !== [] ? ' [' . implode(', ', array_unique($changed)) . ']' : '')
+                );
 
                 return response()->json([
                     'success' => true,
@@ -838,6 +1141,8 @@
                 // customer catalog drops it on the next read.
                 $product->update(['prod_disabled' => now()]);
 
+                $this->logInventory($json, 'edit', 'products/unlist - "' . $product->prod_name . '" (#' . $product->prod_id . ')');
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Product unlisted successfully',
@@ -878,6 +1183,8 @@
                     'prod_deleted' => null
                 ]);
 
+                $this->logInventory($json, 'edit', 'products/sell - relisted "' . $product->prod_name . '" (#' . $product->prod_id . ')');
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Product listed for sale successfully',
@@ -896,6 +1203,20 @@
         // ==========================================
         // HELPERS
         // ==========================================
+
+        /**
+         * REQ-MANAGE_INV-05: every inventory change lands in `emplog`. The
+         * caller's employee id is optional (some legacy routes carry no
+         * token), in which case nothing is written rather than a row with a
+         * fabricated id.
+         */
+        protected function logInventory(Request $json, string $access, string $what): void
+        {
+            $user = $json->user('api');
+            if ($user instanceof \App\Models\Employee) {
+                $this->logEmployee((int) $user->emp_id, $access, $what);
+            }
+        }
 
         /**
          * Reads the variation rows out of a payload. When the caller only
@@ -935,6 +1256,9 @@
                 if (filled($pic) && ! self::imageAllowed($pic)) {
                     return response()->json(['success' => false, 'message' => 'Images must be JPG or PNG files.'], 422);
                 }
+                if (filled($pic) && ! self::imageWithinSize($pic)) {
+                    return response()->json(['success' => false, 'message' => 'Product images must be 2 MB or smaller.'], 422);
+                }
 
                 $rows[] = [
                     'prodvar_name'     => trim((string) ($row['prodvar_name'] ?? $row['name'] ?? ''))
@@ -954,6 +1278,9 @@
                 $pic = $images[0] ?? null;
                 if (filled($pic) && ! self::imageAllowed($pic)) {
                     return response()->json(['success' => false, 'message' => 'Images must be JPG or PNG files.'], 422);
+                }
+                if (filled($pic) && ! self::imageWithinSize($pic)) {
+                    return response()->json(['success' => false, 'message' => 'Product images must be 2 MB or smaller.'], 422);
                 }
 
                 $rows[] = [

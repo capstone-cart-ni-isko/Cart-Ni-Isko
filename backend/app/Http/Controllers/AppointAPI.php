@@ -3,6 +3,7 @@
     namespace App\Http\Controllers;
 
     use App\Models\Appointment;
+    use App\Models\CustNotif;
     use App\Models\Customer;
     use App\Models\DutyShift;
     use App\Models\Employee;
@@ -50,8 +51,16 @@
                     ], 409);
                 }
 
+                /*
+                    FLOW-MANAGE_APP-07: the admin "cancel" button is this call.
+                    The row must land on `cancelled` (so the cancelled pill on
+                    the admin list finds it) and the QR must die with the slot
+                    (FLOW-MANAGE_BOOKED-06).
+                */
                 $appointment->update([
-                    'appoint_closed' => now()
+                    'appoint_closed' => now(),
+                    'appoint_status' => 'cancelled',
+                    'appoint_qr'     => null,
                 ]);
 
                 // REQ-AB-04: the owning customer receives a priority
@@ -66,9 +75,9 @@
 
                 // REQ-AB-04 / REQ-SC-04: cancelling one booking also cancels the
                 // block it sits in, so every other open booking that overlaps the
-                // same block is told to reschedule. The block runs from the slot
-                // start to its live appoint_end (30 min CLAIM / 10 min VISIT).
-                $blockMinutes = $appointment->appoint_type === 'CLAIM' ? 30 : 10;
+                // same block is told to reschedule. The block is one timeslot
+                // (business rule 11: exactly 10 minutes) from the slot start.
+                $blockMinutes = $this->slotDuration((string) $appointment->appoint_type);
                 $blockEnd = $appointment->appoint_end;
                 if ($blockEnd === null && $start) {
                     $blockEnd = Carbon::parse($start)->addMinutes($blockMinutes);
@@ -384,7 +393,7 @@
                         'appoint_end' => $slotEnd,
                         'appoint_type' => $type,
                         'appoint_status' => 'upcoming',
-                        'appoint_qr' => 'APPT-' . strtoupper(Str::random(16)),
+                        'appoint_qr' => $this->uniqueAppointmentQr(),
                     ]);
                 });
 
@@ -455,15 +464,27 @@
 
             scope - string (opt: master for employees - REQ-SC-01)
             cust_id - integer (opt, employees only)
-            type - string (opt)
+            type - string (opt: visit | pickup)
             status - string (opt: today | upcoming | done | cancelled)
+            date - string (opt: Y-m-d) / from, to - string (opt: Y-m-d range)
         */
         public function displayAppointments(Request $json)
         {
             try {
-                $query = Appointment::query();
+                $query = Appointment::query()->with('customer');
                 $user = $json->user();
-                $isMaster = $json->input('scope') === 'master' && $this->isAdmin($user);
+                $wantsMaster = $json->input('scope') === 'master';
+                $isMaster = $wantsMaster && $this->isAdmin($user);
+
+                // FLOW-MANAGE_APP-01: the master appointment book belongs to
+                // administrators. An employee asking for it gets a real 403
+                // instead of the silent empty list it used to receive.
+                if ($wantsMaster && $this->isEmployee($user) && ! $isMaster) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Administrator access is required to view all appointments.',
+                    ], 403);
+                }
 
                 if ($this->isEmployee($user)) {
                     // REQ-SC-01: administrators receive the master calendar;
@@ -481,9 +502,22 @@
                     $query->where('cust_id', $user ? $user->getKey() : 0);
                 }
 
-                if ($json->has('type')) {
-                    $query->where('appoint_type', $json->input('type'));
+                // FLOW-MANAGE_APP-04: filter by type. The grid stores CLAIM /
+                // VISIT while the spec (and every filter on the admin page)
+                // speaks pickup / visit, so the input is folded first.
+                if ($json->has('type') && trim((string) $json->input('type')) !== '') {
+                    $type = strtoupper(trim((string) $json->input('type')));
+                    if (in_array($type, ['PICKUP', 'CLAIM', 'PREORDER'], true)) {
+                        $type = 'CLAIM';
+                    }
+                    if ($type === 'VISIT') {
+                        $type = 'VISIT';
+                    }
+                    $query->whereRaw('UPPER(appoint_type) = ?', [$type]);
                 }
+
+                // FLOW-MANAGE_APP-04: filter by date or date range.
+                $this->filterByDateRange($query, $json);
 
                 $this->filterByStatus($query, strtolower(trim((string) $json->input('status', ''))));
 
@@ -507,16 +541,28 @@
                 // change. One extra query for the whole page, never per row.
                 $orders = $this->ordersFor($appointments->pluck('appoint_id')->all());
 
+                // FLOW-MANAGE_APP-02: the admin list renders the booking date
+                // (`appoint_date`, the legacy alias of `appoint_start`) and the
+                // customer's name / email straight from the row.
                 $rows = $appointments->map(function (Appointment $appointment) use ($orders) {
                     $link = $orders[(int) $appointment->appoint_id] ?? null;
-                    if ($link === null) {
-                        return $appointment;
+                    $customer = $appointment->customer;
+                    $extra = [
+                        'appoint_date' => $appointment->appoint_start,
+                    ];
+                    if ($customer) {
+                        $extra['customer_name'] = trim(
+                            ($customer->cust_givname ?? '') . ' ' . ($customer->cust_surname ?? '')
+                        );
+                        $extra['cust_email'] = $customer->cust_email;
+                        $extra['cust_nickname'] = $customer->cust_nickname;
+                    }
+                    if ($link !== null) {
+                        $extra['ord_id'] = $link['ord_id'];
+                        $extra['ord_status'] = $link['ord_status'];
                     }
 
-                    return array_merge($appointment->toArray(), [
-                        'ord_id'     => $link['ord_id'],
-                        'ord_status' => $link['ord_status'],
-                    ]);
+                    return array_merge($appointment->toArray(), $extra);
                 });
 
                 return response()->json([
@@ -546,7 +592,7 @@
         {
             try {
                 $q = $json->input('q', '');
-                $query = Appointment::query();
+                $query = Appointment::query()->with('customer');
                 $customerId = $this->customerId($json);
                 $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('api'));
                 if ($customerId !== null) {
@@ -575,10 +621,33 @@
                             $builder->orWhere('appoint_id', (int) $q)
                                     ->orWhere('cust_id', (int) $q);
                         }
+
+                        // FLOW-MANAGE_APP-03: admins search by customer name
+                        // or email as well.
+                        $builder->orWhereHas('customer', function ($customer) use ($q) {
+                            $customer->where(function ($nested) use ($q) {
+                                $nested->where('cust_givname', 'like', "%{$q}%")
+                                    ->orWhere('cust_surname', 'like', "%{$q}%")
+                                    ->orWhere('cust_email', 'like', "%{$q}%");
+                            });
+                        });
                     });
                 }
 
-                $appointments = $query->get();
+                // FLOW-MANAGE_APP-02: same row shape as the list endpoint.
+                $appointments = $query->get()->map(function (Appointment $appointment) {
+                    $customer = $appointment->customer;
+                    $extra = ['appoint_date' => $appointment->appoint_start];
+                    if ($customer) {
+                        $extra['customer_name'] = trim(
+                            ($customer->cust_givname ?? '') . ' ' . ($customer->cust_surname ?? '')
+                        );
+                        $extra['cust_email'] = $customer->cust_email;
+                        $extra['cust_nickname'] = $customer->cust_nickname;
+                    }
+
+                    return array_merge($appointment->toArray(), $extra);
+                });
 
                 // REQ-ACCESS_LOG-01: reading the appointment search is logged.
                 $this->logAppointmentView($json);
@@ -735,6 +804,52 @@
                     ], 200);
                 }
 
+                /*
+                    FLOW-MANAGE_APP-06 / REQ-MANAGE_APP-05: an administrator
+                    confirms a booking by hand when the QR scan is not an
+                    option - `done` closes it, `absent` records the no-show.
+                    Only admins may use it: a customer can never mark his own
+                    appointment finished.
+                */
+                $requestedStatus = strtolower(trim((string) $json->input('appoint_status', '')));
+                if (in_array($requestedStatus, ['done', 'absent'], true)) {
+                    if (! $this->isAdmin($json->user('api'))) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Administrator access is required.'
+                        ], 403);
+                    }
+
+                    $appointment->update([
+                        'appoint_status' => $requestedStatus,
+                        'appoint_closed' => $appointment->appoint_closed ?? now(),
+                        'appoint_qr'     => null,
+                    ]);
+
+                    $this->notifyCustomer((int) $appointment->cust_id, $requestedStatus === 'done'
+                        ? 'Your appointment #' . $appointment->appoint_id
+                            . ' on ' . ($appointment->appoint_start ?? 'your booked slot')
+                            . ' was completed. Thank you for coming!'
+                        : 'Your appointment #' . $appointment->appoint_id
+                            . ' on ' . ($appointment->appoint_start ?? 'your booked slot')
+                            . ' was marked as a no-show.');
+
+                    $doneActor = $json->user('api');
+                    if ($this->isEmployee($doneActor)) {
+                        $this->logEmployee((int) $doneActor->emp_id, 'edit',
+                            'PUT /api/appoint/update - ' . $requestedStatus
+                            . ' appointment #' . $appointment->appoint_id);
+                    }
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => $requestedStatus === 'done'
+                            ? 'Appointment completed successfully'
+                            : 'Appointment marked as absent',
+                        'data' => $appointment->fresh()
+                    ], 200);
+                }
+
                 // Only live columns are ever written: the legacy description
                 // field has nowhere to go, so it is accepted and dropped.
                 $requested = $this->requestedStart($json);
@@ -744,6 +859,36 @@
                 }
                 if ($json->filled('appoint_type')) {
                     $updates['appoint_type'] = $json->input('appoint_type');
+                }
+
+                /*
+                    FLOW-MANAGE_APP-05: assigning the facilitating employee is
+                    what mints the booking's QR code, so an admin can point an
+                    appointment at a different employee and the code is issued
+                    for the new assignment. (REQ-MANAGE_APP-02: exactly one.)
+                */
+                if ($json->filled('emp_id')) {
+                    if (! $this->isAdmin($json->user('api'))) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Administrator access is required.'
+                        ], 403);
+                    }
+
+                    $assigned = (int) $json->input('emp_id');
+                    $employee = Employee::where('emp_id', $assigned)
+                        ->whereNull('emp_deleted')
+                        ->first();
+
+                    if (! $employee) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Employee not found.'
+                        ], 422);
+                    }
+
+                    $updates['emp_id'] = $assigned;
+                    $updates['appoint_qr'] = $this->uniqueAppointmentQr((int) $appointment->appoint_id);
                 }
 
                 $rescheduled = false;
@@ -797,11 +942,26 @@
                     $updates['appoint_type'] = $type;
                     // REQ-MANAGE_APP-03: a rescheduled appointment gets a
                     // fresh QR code - the old one pointed at the old slot.
-                    $updates['appoint_qr'] = 'APPT-' . strtoupper(Str::random(16));
+                    $updates['appoint_qr'] = $this->uniqueAppointmentQr((int) $appointment->appoint_id);
                     $rescheduled = true;
                 }
 
                 $appointment->update($updates);
+
+                // REQ-MANAGE_APP-04 / FLOW-MANAGE_APP-08: assigning the
+                // facilitating employee confirms the booking to the customer
+                // (with the QR code they will present at the counter).
+                if (isset($updates['emp_id'])) {
+                    try {
+                        $this->notifyCustomer((int) $appointment->cust_id,
+                            '[PRIORITY] Employee #'. $updates['emp_id']
+                                . ' will facilitate your appointment #'. $appointment->appoint_id
+                                . ' on ' . ($appointment->appoint_start ?? 'your booked slot')
+                                . '. Present QR code ' . ($appointment->fresh()->appoint_qr ?? '') . ' on arrival.');
+                    } catch (\Throwable $e) {
+                        // A notification must never fail the update.
+                    }
+                }
 
                 // REQ-MANAGE_APP-04: the customer is told the slot moved.
                 if ($rescheduled) {
@@ -834,6 +994,154 @@
                     'success' => false,
                     'message' => 'Failed to update appointment details',
                     'error' => $e->getMessage()
+                ], 500);
+            }
+        }
+
+        // ==========================================
+        // RESCHEDULE REQUESTS (FLOW-MANAGE_APP-09)
+        // ==========================================
+
+        /*
+            Opening a reschedule request
+            ----------
+            JSON REQUEST
+
+            appoint_id - integer (req)
+            reason - string (opt)
+        */
+        public function createRescheduleRequest(Request $json)
+        {
+            $appointId = (int) $json->input('appoint_id');
+            if ($appointId <= 0) {
+                return response()->json(['success' => false, 'message' => 'Appointment ID is required.'], 400);
+            }
+
+            $appointment = Appointment::where('appoint_id', $appointId)->first();
+            if (! $appointment) {
+                return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
+            }
+
+            if ($appointment->appoint_status !== 'upcoming' || $appointment->appoint_closed) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only an open appointment can be rescheduled.',
+                ], 409);
+            }
+
+            $reason = trim((string) $json->input('reason', ''));
+
+            /*
+                The request lives on the notification channel - the same
+                channel the staff-shortage rule (Rule 10) already uses - so no
+                reschedule table is needed. GET /appoint/reschedule-requests
+                reads these rows back for the admin queue.
+            */
+            try {
+                $this->notifyCustomer((int) $appointment->cust_id,
+                    '[PRIORITY] Reschedule requested for appointment #' . $appointment->appoint_id
+                        . ' on ' . ($appointment->appoint_start ?? 'your booked slot') . '.'
+                        . ($reason !== '' ? ' Reason: ' . $reason . '.' : '')
+                        . ' Please pick a new slot; the store will confirm the move.');
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Could not record the reschedule request.',
+                ], 500);
+            }
+
+            // REQ-MANAGE_APP-06: the request lands in the audit log.
+            $actor = $json->user('api');
+            if ($actor instanceof Customer) {
+                $this->logCustomer((int) $actor->getKey(), 'edit',
+                    'POST /api/appoint/reschedule-request - appointment #' . $appointment->appoint_id);
+            } elseif ($this->isEmployee($actor)) {
+                $this->logEmployee((int) $actor->emp_id, 'edit',
+                    'POST /api/appoint/reschedule-request - appointment #' . $appointment->appoint_id);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Reschedule request recorded',
+                'data'    => ['appoint_id' => (int) $appointment->appoint_id],
+            ], 201);
+        }
+
+        /*
+            FLOW-MANAGE_APP-09: the admin's reschedule-request queue - every
+            still-open appointment whose customer notice asks for a reschedule
+            (staff shortage or an explicit request), newest first. Derived
+            from the notification channel; a move already made ("was
+            rescheduled") or a closed appointment drops off the queue.
+        */
+        public function rescheduleRequests(Request $json)
+        {
+            try {
+                $notices = CustNotif::where('custnotif_msg', 'LIKE', '%reschedul%')
+                    ->orderByDesc('custnotif_created')
+                    ->limit(500)
+                    ->get();
+
+                $requests = [];
+                $resolved = [];
+
+                foreach ($notices as $notice) {
+                    $message = (string) $notice->custnotif_msg;
+
+                    if (! preg_match('/appointment #(\d+)/i', $message, $match)) {
+                        continue;
+                    }
+                    $appointId = (int) $match[1];
+
+                    // The newest notice decides: a completed move closes the
+                    // request that older notices may still describe.
+                    if (stripos($message, 'was rescheduled') !== false) {
+                        $resolved[$appointId] = true;
+                        continue;
+                    }
+                    if (isset($resolved[$appointId]) || isset($requests[$appointId])) {
+                        continue;
+                    }
+
+                    $appointment = Appointment::where('appoint_id', $appointId)->first();
+                    if (! $appointment
+                        || $appointment->appoint_closed
+                        || $appointment->appoint_status !== 'upcoming') {
+                        continue;
+                    }
+
+                    $customer = Customer::where('cust_id', $appointment->cust_id)->first();
+
+                    $requests[$appointId] = [
+                        'appoint_id'    => $appointId,
+                        'cust_id'       => (int) $appointment->cust_id,
+                        'customer'      => trim(
+                            ($customer->cust_givname ?? '') . ' ' . ($customer->cust_surname ?? '')
+                        ),
+                        'appoint_type'  => $appointment->appoint_type,
+                        'appoint_start' => $appointment->appoint_start,
+                        'appoint_end'   => $appointment->appoint_end,
+                        'appoint_status'=> $appointment->appoint_status,
+                        'appoint_qr'    => $appointment->appoint_qr,
+                        'emp_id'        => $appointment->emp_id !== null ? (int) $appointment->emp_id : null,
+                        'reason'        => $message,
+                        'requested_at'  => $notice->custnotif_created,
+                    ];
+                }
+
+                $this->logAppointmentView($json);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Reschedule requests loaded successfully',
+                    'data'    => array_values($requests),
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to load reschedule requests',
+                    'error'   => $e->getMessage(),
                 ], 500);
             }
         }
@@ -897,6 +1205,42 @@
                         });
                 }
             });
+        }
+
+        /*
+            FLOW-MANAGE_APP-04: the admin list can be narrowed to one day
+            (`date`) or to a date range (`date_from` / `from` and `date_to` /
+            `to`). Every filter runs on `appoint_start`, the column the slot
+            grid books against; with no date input nothing is applied, so the
+            existing callers keep their behaviour.
+        */
+        protected function filterByDateRange($query, Request $json): void
+        {
+            $date = trim((string) $json->input('date', ''));
+            $from = trim((string) $json->input('date_from', $json->input('from', '')));
+            $to = trim((string) $json->input('date_to', $json->input('to', '')));
+
+            if ($date !== '') {
+                try {
+                    $query->whereDate('appoint_start', Carbon::parse($date)->toDateString());
+                } catch (\Throwable $e) {
+                    // A malformed date must not take the whole list down.
+                    return;
+                }
+
+                return;
+            }
+
+            try {
+                if ($from !== '') {
+                    $query->where('appoint_start', '>=', Carbon::parse($from)->startOfDay());
+                }
+                if ($to !== '') {
+                    $query->where('appoint_start', '<=', Carbon::parse($to)->endOfDay());
+                }
+            } catch (\Throwable $e) {
+                // Ignore an unparseable bound rather than fail the read.
+            }
         }
 
         /*
@@ -1044,8 +1388,12 @@
             }
         }
 
-        /** In-store headcount for one block, or null when unknown. */
-        protected function rosterHeadcount(Carbon $start, Carbon $end): ?int
+        /** In-store headcount for one block, or null when unknown.
+         *
+         * Public because CheckoutAPI runs the same staffing rule (REQ-AB-03)
+         * when checkout books or moves a claim slot, so the calendar and the
+         * checkout path can never disagree. */
+        public function rosterHeadcount(Carbon $start, Carbon $end): ?int
         {
             $roster = $this->rosterFor($start);
 
@@ -1092,23 +1440,28 @@
         }
 
         /**
-         * Length of one slot block. Pickup (CLAIM) follows the checkout
-         * `slot_minutes` setting so /book and CheckoutAPI always agree;
-         * store visits are fixed 10-minute windows.
+         * Length of one slot block. Business rule 11: "An appointment timeslot
+         * must exactly be 10 minutes long" - the number is a hard rule, so the
+         * `slot_minutes` setting can never push a block away from ten minutes
+         * (the same clamp is applied where CheckoutAPI and the staff-shortage
+         * sweep read it).
          */
         protected function slotDuration(string $type): int
         {
-            return $type === 'CLAIM'
-                ? max(1, (int) $this->settingValue('slot_minutes', 10))
-                : 10;
+            return 10;
         }
 
-        /** How many open bookings a block holds before it is full. */
+        /**
+         * How many open bookings a block holds before it is full. Business
+         * rule 12: "A timeslot can have zero to 5 pickup appointments and only
+         * 1 visit appointment" - the configured caps are honoured only while
+         * they stay inside that ceiling.
+         */
         protected function slotCapacity(string $type): int
         {
             return $type === 'CLAIM'
-                ? max(1, (int) $this->settingValue('pickup_slot_capacity', 5))
-                : max(1, (int) $this->settingValue('max_visit_slots', 1));
+                ? max(1, min(5, (int) $this->settingValue('pickup_slot_capacity', 5)))
+                : max(1, min(1, (int) $this->settingValue('visit_slot_capacity', 1)));
         }
 
         /**
@@ -1132,10 +1485,33 @@
         }
 
         /**
+         * FLOW-BOOK_APP-06 / REQ-MANAGE_APP-02: the appointment QR must be
+         * unique. The live schema carries no unique index on `appoint_qr`,
+         * so uniqueness is enforced here by regenerating on the (vanishingly
+         * unlikely) collision before the code is persisted.
+         */
+        protected function uniqueAppointmentQr(?int $exceptId = null): string
+        {
+            do {
+                $qr = 'APPT-' . strtoupper(Str::random(16));
+                $clash = Appointment::where('appoint_qr', $qr);
+                if ($exceptId !== null) {
+                    $clash->where('appoint_id', '!=', $exceptId);
+                }
+            } while ($clash->exists());
+
+            return $qr;
+        }
+
+        /**
          * REQ-MANAGE_APP-07: an appointment that outlived its window by ten
-         * minutes auto-closes. Visit bookings have no QR scan to flip them, so
-         * the scheduler closes them here; pickup bookings are covered by
-         * TrackingAPI::sweepExpiredPickups (which marks them `absent`).
+         * minutes auto-closes. Visit bookings are closed by this sweep; a
+         * pickup booking that was never scanned is closed by
+         * TrackingAPI::sweepExpiredPickups on the same ten-minute rule.
+         *
+         * REQ-MANAGE_APP-05: a visit nobody ever scanned is a no-show, so it
+         * lands on `absent` - `done` is reserved for bookings that were
+         * actually confirmed (a QR scan or an admin's manual confirmation).
          *
          * Public because routes/console.php schedules it.
          */
@@ -1155,9 +1531,22 @@
 
                 foreach ($expired as $appointment) {
                     $appointment->update([
-                        'appoint_status' => 'done',
+                        'appoint_status' => 'absent',
                         'appoint_closed' => $appointment->appoint_closed ?? now(),
                     ]);
+
+                    // FLOW-MANAGE_APP-11 / REQ-ACCESS_LOG: the automatic
+                    // closure is attributed to the facilitating employee's
+                    // activity log. Best-effort - the sweep must not fail.
+                    try {
+                        if (! empty($appointment->emp_id)) {
+                            $this->logEmployee((int) $appointment->emp_id, 'auto-close',
+                                'Auto-closed visit appointment #'. $appointment->appoint_id
+                                . ' (no-show, window expired)');
+                        }
+                    } catch (\Throwable $e) {
+                        // An audit write must never stop the sweep.
+                    }
 
                     // REQ-MANAGE_APP-04: the window closing is a status change,
                     // so the customer hears about it.
@@ -1165,7 +1554,8 @@
                         $this->notifyCustomer((int) $appointment->cust_id,
                             '[PRIORITY] Your visit appointment #' . $appointment->appoint_id
                                 . ' on ' . ($appointment->appoint_start ?? 'your booked slot')
-                                . ' has ended.');
+                                . ' was not attended and has closed. '
+                                . 'Please book a new slot if you still need to visit the store.');
                     } catch (\Throwable $e) {
                         // A notification must never stop the sweep.
                     }
