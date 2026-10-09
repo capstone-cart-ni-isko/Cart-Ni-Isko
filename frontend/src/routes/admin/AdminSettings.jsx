@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import { useNavigate } from 'react-router-dom'
 import AdminAccount from './AdminAccount.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
@@ -56,6 +56,56 @@ function PreviewRow({ label, value, last = false, onClick }) {
         <span className="text-xs font-semibold text-slate-800">{value}</span>
         <ChevronRight />
       </div>
+    </button>
+  )
+}
+
+/* ── Settings rail icon ───────────────────────────────────────────────────────
+   Every rail entry carries BOTH an icon and a label, mirroring the docked
+   admin sidebar and the customer settings menu. */
+function railIcon(paths) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0">
+      {paths}
+    </svg>
+  )
+}
+
+/* ── Focused-page back / exit controls ──────────────────────────────────────
+   Rule 69 ("back" top-left) and rule 70 ("exit" top-right). Settings is its
+   own page, so it carries these two controls directly instead of borrowing the
+   portal ribbon's. */
+function BackButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Back"
+      aria-label="Back"
+      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+        <polyline points="15 18 9 12 15 6" />
+      </svg>
+    </button>
+  )
+}
+
+function ExitButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+      title="Exit"
+      aria-label="Exit"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
+      </svg>
+      <span className="hidden sm:inline">Exit</span>
     </button>
   )
 }
@@ -337,8 +387,26 @@ export default function AdminSettings() {
     {
       group: 'My Settings',
       items: [
-        { id: 'account', label: 'Profile & Security' },
-        { id: 'preferences', label: 'Notifications & Theme' },
+        {
+          id: 'account',
+          label: 'Profile & Security',
+          icon: railIcon(
+            <>
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </>
+          ),
+        },
+        {
+          id: 'preferences',
+          label: 'Notifications & Theme',
+          icon: railIcon(
+            <>
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </>
+          ),
+        },
       ],
     },
     ...(isSuperAdmin
@@ -346,8 +414,28 @@ export default function AdminSettings() {
           {
             group: 'Store',
             items: [
-              { id: 'store-operations', label: 'Store Operations' },
-              { id: 'timing', label: 'Appointments & Scheduling' },
+              {
+                id: 'store-operations',
+                label: 'Store Operations',
+                icon: railIcon(
+                  <>
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </>
+                ),
+              },
+              {
+                id: 'timing',
+                label: 'Appointments & Scheduling',
+                icon: railIcon(
+                  <>
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </>
+                ),
+              },
             ],
           },
         ]
@@ -356,40 +444,51 @@ export default function AdminSettings() {
 
   const isSystemPane = activeSection === 'store-operations' || activeSection === 'timing'
 
+  /* ── FLOW-EMP_SET-01 — Settings is its OWN page (system rule 65: the ribbon
+        belongs to the page it sits on). Nothing from the home page - no ribbon,
+        no docked menu sidebar, no home tabs - is rendered here: this focused
+        shell supplies its own back / exit controls and its own settings rail. ── */
+  const handleBack = () => navigate(-1)
+
+  const handleExit = () => {
+    logoutAdmin()
+    navigate('/admin/login')
+  }
+
+  const sectionTitle =
+    activeSection === 'preferences'
+      ? 'Notifications & Theme'
+      : activeSection === 'store-operations'
+        ? 'Store Operations'
+        : activeSection === 'timing'
+          ? 'Appointments & Scheduling'
+          : 'Profile & Security'
+
+  const sectionBlurb =
+    activeSection === 'preferences'
+      ? 'Your notification reminders and your theme, stored with your account the moment you change them.'
+      : activeSection === 'store-operations'
+        ? 'Control when your store accepts orders and how customers can purchase items.'
+        : activeSection === 'timing'
+          ? 'Store-wide timing parameters from FLOW-EMP_SET-07. They apply to every user immediately.'
+          : 'Your account, your password and your backup contacts.'
+
   return (
-    <AdminLayout>
-      <div className="pb-28">
-        {/* ── Page Header ── */}
-        <div className="mb-6 pb-5 border-b border-slate-200">
-          <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Settings</h1>
-          <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Your account, your notification preferences, and (for super admins) the store itself.
-          </p>
+    <div className="admin-portal h-screen bg-[#F8F9FA] flex flex-col w-full font-sans antialiased text-gray-900 overflow-hidden">
+      {/* ── Focused-page header: back (top-left, rule 69) · exit (top-right, rule 70) ── */}
+      <header className="h-14 shrink-0 z-30 select-none bg-white border-b border-gray-100 w-full px-4 md:px-6 flex items-center gap-3">
+        <BackButton onClick={handleBack} />
+        <h1 className="text-base font-extrabold text-gray-900 tracking-tight truncate">Settings</h1>
+        <div className="ml-auto flex items-center gap-2">
+          <ExitButton onClick={handleExit} />
         </div>
+      </header>
 
-        {/* ── Load states ── */}
-        {isLoading && isSystemPane && (
-          <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
-            <span className="spinner-circle !w-3.5 !h-3.5" /> Loading settings…
-          </div>
-        )}
-        {loadError && (
-          <div className="mb-4 flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-            <p className="text-xs font-semibold text-red-700">{loadError}</p>
-            <button
-              type="button"
-              onClick={() => setReloadKey((k) => k + 1)}
-              className="text-xs font-bold text-red-700 border border-red-300 rounded-md px-2 py-1 hover:bg-red-100 cursor-pointer"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
-        {/* ── Two-Column Layout ── */}
-        <div className="flex gap-6 items-start">
-          {/* LEFT: Secondary Settings Nav */}
-          <aside className="w-52 flex-shrink-0 bg-white rounded-xl border border-slate-200 p-3 shadow-xs sticky top-6">
+      <div className="flex flex-1 min-h-0 w-full">
+        {/* LEFT — the docked settings card, the same left-docked card language
+            the menu sidebar uses */}
+        <aside className="hidden md:block shrink-0 w-72 h-full min-h-0 p-3 z-20">
+          <div className="w-full h-full bg-white rounded-xl border border-slate-200 flex flex-col min-h-0 p-3 overflow-hidden">
             {navSections.map((section) => (
               <div key={section.group} className="mb-4 last:mb-0">
                 <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -403,14 +502,15 @@ export default function AdminSettings() {
                         key={item.id}
                         type="button"
                         onClick={() => setActiveSection(item.id)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all text-left ${
+                        aria-current={active ? 'page' : undefined}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-150 cursor-pointer text-left ${
                           active
-                            ? 'bg-orange-50 text-brand-orange border border-orange-200/70 shadow-xs'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                            ? 'bg-brand-orange/10 text-brand-orange'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
                       >
-                        <span>{item.label}</span>
-                        {active && <span className="w-1.5 h-1.5 rounded-full bg-brand-orange shrink-0" />}
+                        <span className="shrink-0">{item.icon}</span>
+                        <span className="truncate">{item.label}</span>
                       </button>
                     )
                   })}
@@ -418,20 +518,78 @@ export default function AdminSettings() {
               </div>
             ))}
 
-            {/* FLOW-EMP_PROF-01 - the profile itself lives one tap away. */}
             <div className="pt-3 mt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setActiveSection('account')}
-                className="w-full text-left px-3 py-2 rounded-lg text-[11px] font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-              >
-                Signed in as {prefs.emp_email || 'employee'} →
-              </button>
+              <p className="px-2.5 text-[11px] font-semibold text-slate-400">
+                Signed in as <span className="text-slate-600 font-bold">{prefs.emp_email || 'employee'}</span>
+              </p>
             </div>
-          </aside>
+          </div>
+        </aside>
 
-          {/* RIGHT: Main Content */}
-          <main className="flex-1 min-w-0 space-y-5">
+        {/* RIGHT — the focused settings content */}
+        <main className="flex-1 min-w-0 overflow-y-auto p-4 md:p-5">
+          <div className="pb-28">
+            {/* ── Section header ── */}
+            <div className="mb-6 pb-5 border-b border-slate-200">
+              <h2 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">{sectionTitle}</h2>
+              <p className="text-sm text-slate-500 mt-1">{sectionBlurb}</p>
+            </div>
+
+            {/* Mobile settings rail — the same entries, stacked on a small screen */}
+            <div className="md:hidden mb-5 bg-white rounded-xl border border-slate-200 p-3 space-y-3">
+              {navSections.map((section) => (
+                <div key={section.group}>
+                  <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    {section.group}
+                  </p>
+                  <div className="space-y-0.5">
+                    {section.items.map((item) => {
+                      const active = activeSection === item.id
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setActiveSection(item.id)}
+                          aria-current={active ? 'page' : undefined}
+                          className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-semibold transition-all duration-150 cursor-pointer text-left ${
+                            active
+                              ? 'bg-brand-orange/10 text-brand-orange'
+                              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          }`}
+                        >
+                          <span className="shrink-0">{item.icon}</span>
+                          <span className="truncate">{item.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Load states ── */}
+            {isLoading && isSystemPane && (
+              <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
+                <span className="spinner-circle !w-3.5 !h-3.5" /> Loading settings…
+              </div>
+            )}
+            {loadError && (
+              <div className="mb-4 flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                <p className="text-xs font-semibold text-red-700">{loadError}</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  className="text-xs font-bold text-red-700 border border-red-300 rounded-md px-2 py-1 hover:bg-red-100 cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-5">
+            {/* ── FLOW-EMP_PROF-01 / FLOW-EMP_SET-02/03 — the employee's own
+                  profile, password and backup contacts (DOMAIN 4 + DOMAIN 15). */}
+            {activeSection === 'account' && <AdminAccount embedded />}
             {/* ── FLOW-EMP_PROF-01 / FLOW-EMP_SET-02/03 — the employee's own
                   profile, password and backup contacts (DOMAIN 4 + DOMAIN 15). */}
             {activeSection === 'account' && <AdminAccount embedded />}
@@ -741,13 +899,14 @@ export default function AdminSettings() {
                 />
               </div>
             )}
-          </main>
-        </div>
+          </div>
+          </div>
+        </main>
       </div>
 
       {/* ── Sticky Bottom Bar (system panes only) ── */}
       {isSuperAdmin && isSystemPane && (
-        <div className="fixed bottom-0 right-0 left-0 md:left-60 bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
+        <div className="fixed bottom-0 right-0 left-0 md:left-72 bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-slate-400' : hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
             <span className="text-xs font-semibold text-slate-600">
@@ -775,6 +934,6 @@ export default function AdminSettings() {
           </div>
         </div>
       )}
-    </AdminLayout>
+    </div>
   )
 }

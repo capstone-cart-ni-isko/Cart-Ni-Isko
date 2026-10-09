@@ -7,11 +7,45 @@ use Illuminate\Support\Facades\Schema;
 
 abstract class TestCase extends BaseTestCase
 {
+    /** Snapshot of storage/app/system-settings.json taken before each test. */
+    private ?string $settingsSnapshot = null;
+    private bool $settingsExisted = false;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->alignTestSchemaWithLiveSpec();
+        $this->snapshotSystemSettings();
+    }
+
+    /**
+     * Settings live in a JSON document under storage/app, not in a table, so a
+     * test that saves one would otherwise leak into every later run. The file
+     * is restored (and SystemSettings' static cache dropped) after each test.
+     */
+    private function snapshotSystemSettings(): void
+    {
+        $path = \App\Support\SystemSettings::path();
+        $this->settingsExisted = file_exists($path);
+        $this->settingsSnapshot = $this->settingsExisted ? file_get_contents($path) : null;
+    }
+
+    protected function tearDown(): void
+    {
+        $path = \App\Support\SystemSettings::path();
+        \App\Support\SystemSettings::flush();
+
+        if ($this->settingsExisted && $this->settingsSnapshot !== null) {
+            file_put_contents($path, $this->settingsSnapshot);
+        } elseif (file_exists($path)) {
+            @unlink($path);
+        }
+
+        $this->settingsSnapshot = null;
+        $this->settingsExisted = false;
+
+        parent::tearDown();
     }
 
     /**
@@ -56,6 +90,17 @@ abstract class TestCase extends BaseTestCase
         if (Schema::hasTable('product') && ! Schema::hasColumn('product', 'prod_total_var')) {
             Schema::table('product', function ($blueprint) {
                 $blueprint->integer('prod_total_var')->default(1);
+            });
+        }
+
+        // The live EMPLOYEE table names the category `emp_categ` (system-new,
+        // default 'staff'); the migration only ever created the legacy
+        // `emp_type`. Controller::notifyEmployeesByType() - the low-stock,
+        // roster and tracking alerts - filters on emp_categ, so without the
+        // column every one of those queries died on "no such column".
+        if (Schema::hasTable('employee') && ! Schema::hasColumn('employee', 'emp_categ')) {
+            Schema::table('employee', function ($blueprint) {
+                $blueprint->string('emp_categ')->nullable();
             });
         }
 
@@ -128,6 +173,9 @@ abstract class TestCase extends BaseTestCase
                 $blueprint->bigIncrements('ord_id');
                 $blueprint->bigInteger('cust_id');
                 $blueprint->decimal('ord_amount', 10, 2)->default(0);
+                // Register discount (orders.ord_discount): nullable on the
+                // live connection, so it is nullable here too.
+                $blueprint->decimal('ord_discount', 10, 2)->nullable();
                 $blueprint->string('ord_status')->default('processing');
                 $blueprint->string('ord_claiming')->default('pickup');
                 $blueprint->decimal('pay_received', 10, 2)->default(0);
@@ -153,6 +201,79 @@ abstract class TestCase extends BaseTestCase
                 $blueprint->bigInteger('prod_id')->nullable();
                 $blueprint->integer('item_qty')->nullable();
                 $blueprint->decimal('item_amount', 10, 2)->nullable();
+            });
+        }
+
+        // The customer migration froze the PRE-system-new shape (cust_nickname,
+        // cust_birthday, cust_brgy, cust_cart, ...) while the model and the live
+        // table speak system-new.docx (cust_givname, cust_surname, cust_bday,
+        // cust_bag, ...), so any live-shaped write - e.g. the walk-in customer
+        // POS checkout creates - died on "no column named cust_givname".
+        // Recreate it as the union: every live column plus the legacy ones the
+        // old fixtures still send, exactly like orders/items/pickup above.
+        if (Schema::hasTable('customer') && ! Schema::hasColumn('customer', 'cust_givname')) {
+            Schema::drop('customer');
+            Schema::create('customer', function ($blueprint) {
+                $blueprint->bigIncrements('cust_id');
+
+                // --- system-new.docx SCHEMA (live) ---
+                $blueprint->timestampTz('cust_created')->useCurrent();
+                $blueprint->timestamp('cust_deleted')->nullable();
+                $blueprint->string('cust_password');
+                $blueprint->string('cust_givname')->nullable();
+                $blueprint->string('cust_surname')->nullable();
+                $blueprint->string('cust_email')->nullable();
+                $blueprint->string('cust_phone');
+                $blueprint->string('cust_callcode')->default('+63');
+                $blueprint->string('cust_pronoun')->default('they/them');
+                $blueprint->string('cust_type')->default('guest');
+                $blueprint->string('cust_categ')->nullable();
+                $blueprint->string('cust_college')->nullable();
+                $blueprint->string('cust_dept')->nullable();
+                $blueprint->string('cust_address')->nullable();
+                $blueprint->date('cust_bday')->nullable();
+                $blueprint->string('cust_avatar')->nullable();
+                $blueprint->string('cust_backup_phone')->nullable();
+                $blueprint->string('cust_backup_email')->nullable();
+                $blueprint->string('cust_backup_ques')->nullable();
+                $blueprint->string('cust_backup_answer')->nullable();
+                $blueprint->string('cust_backup_code')->nullable();
+                $blueprint->boolean('cust_darkmode')->default(false);
+                $blueprint->timestamp('cust_suspended')->nullable();
+                $blueprint->string('cust_login_active')->nullable();
+                $blueprint->timestamp('cust_login_failed')->nullable();
+                $blueprint->timestamp('cust_last_logout')->nullable();
+                $blueprint->integer('cust_notif_appointremind')->default(10);
+                $blueprint->boolean('cust_notif_email')->default(false);
+                $blueprint->boolean('cust_notif_prod')->default(false);
+                $blueprint->integer('cust_appoint')->default(0);
+                $blueprint->integer('cust_orders')->default(0);
+                $blueprint->integer('cust_bag')->default(0);
+                $blueprint->integer('cust_wishlist')->default(0);
+                $blueprint->integer('cust_unread')->default(0);
+
+                // --- legacy generation, kept nullable for old fixtures ---
+                $blueprint->timestamp('cust_disabled')->nullable();
+                $blueprint->string('cust_nickname')->nullable();
+                $blueprint->date('cust_birthday')->nullable();
+                $blueprint->string('cust_brgy')->nullable();
+                $blueprint->string('cust_city')->nullable();
+                $blueprint->string('cust_province')->nullable();
+                $blueprint->string('cust_country')->nullable()->default('');
+                $blueprint->string('cust_username')->nullable();
+                $blueprint->string('cust_campus')->nullable();
+                $blueprint->string('cust_course')->nullable();
+                $blueprint->string('cust_year')->nullable();
+                $blueprint->timestamp('cust_cred_changed')->nullable();
+                $blueprint->string('cust_backupcallcode')->nullable();
+                $blueprint->string('cust_backupphone')->nullable();
+                $blueprint->string('cust_backupemail')->nullable();
+                $blueprint->integer('cust_cart')->default(0);
+                $blueprint->integer('cust_appoints')->default(0);
+                $blueprint->string('cust_photo')->nullable();
+
+                $blueprint->unique(['cust_email'], 'customer_cust_email_key');
+                $blueprint->unique(['cust_phone'], 'customer_cust_phone_key');
             });
         }
 
@@ -196,8 +317,11 @@ abstract class TestCase extends BaseTestCase
                 $blueprint->text('deliver_last_event')->nullable();
                 // legacy generation, kept nullable for old fixtures
                 $blueprint->string('delivery_ref')->nullable();
-                $blueprint->timestampTz('delivery_date')->nullable();
-                $blueprint->string('delivery_status')->nullable();
+                // `schema:align` renames the pre-SRS delivery_* spellings to the
+                // deliver_* names the model writes, so the fixture must carry the
+                // aligned names (delivery_date/delivery_status are dead).
+                $blueprint->timestamp('deliver_date')->nullable();
+                $blueprint->string('deliver_status')->nullable();
                 $blueprint->timestampTz('deliver_deleted')->nullable();
             });
         }

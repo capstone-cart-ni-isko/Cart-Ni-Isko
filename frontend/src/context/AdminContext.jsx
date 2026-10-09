@@ -337,11 +337,17 @@ export function AdminProvider({ children }) {
     }
   }, [refreshProducts, showToast])
 
-  const adjustStock = useCallback(async (productId, newStock) => {
+  // `prodvarId` (optional) targets ONE variation instead of the product
+  // total: the inventory stepper sits on a per-variation row, and the old
+  // product-level write only ever moved the delta onto the main variation.
+  const adjustStock = useCallback(async (productId, newStock, prodvarId = null) => {
     const numericId = toNumericProductId(productId)
     if (numericId === null) return
     try {
-      await updateAdminProductAPI(numericId, { prod_qty: Math.max(0, newStock) })
+      await updateAdminProductAPI(numericId, {
+        prod_qty: Math.max(0, newStock),
+        ...(prodvarId !== null && prodvarId !== undefined ? { prodvar_id: prodvarId } : {}),
+      })
       refreshProducts()
     } catch (e) {
       console.error('Failed to adjust stock:', e)
@@ -513,7 +519,7 @@ export function AdminProvider({ children }) {
    * { success: false, error } so the register can keep the modal open.
    */
   const posCheckout = useCallback(
-    async ({ paymentMethod = 'Cash', customerName = 'Walk-in Customer', studentId = 'N/A', amountTendered = 0 } = {}) => {
+    async ({ paymentMethod = 'Cash', customerName = 'Walk-in Customer', studentId = 'N/A', amountTendered = 0, discount = 0 } = {}) => {
       const snapshot = posCartRef.current
       const subtotal = snapshot.reduce((sum, line) => sum + line.price * line.qty, 0)
       const ordId = posOrderIdRef.current
@@ -522,12 +528,16 @@ export function AdminProvider({ children }) {
         return { success: false, error: 'The POS cart is empty.' }
       }
 
-      const tendered = Number(amountTendered) > 0 ? Number(amountTendered) : subtotal
+      // The cashier's discount: capped at the cart here, re-checked against the
+      // server-calculated total and stored on orders.ord_discount there.
+      const discountAmount = Math.max(0, Math.min(Number(discount) || 0, subtotal))
+      const due = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
+      const tendered = Number(amountTendered) > 0 ? Number(amountTendered) : due
 
       try {
         // Drain any pending cart edits first so the server total is final.
         await syncPosCart()
-        const res = await enqueuePosTask(() => checkoutPos({ ord_id: ordId, pay_given: tendered }))
+        const res = await enqueuePosTask(() => checkoutPos({ ord_id: ordId, pay_given: tendered, ord_discount: discountAmount }))
 
         const payment = res?.data?.payment || {}
         const order = res?.data?.order || {}
@@ -539,7 +549,11 @@ export function AdminProvider({ children }) {
           paymentMethod,
           studentId,
           fulfillment: 'Instant POS',
-          total: Number(payment.pay_due) || subtotal,
+          total:
+            payment.pay_due != null && Number.isFinite(Number(payment.pay_due))
+              ? Number(payment.pay_due)
+              : due,
+          discount: Number(payment.ord_discount) || discountAmount,
           amountTendered: Number(payment.pay_given) || tendered,
           change: Number(payment.pay_change) || 0,
           items: snapshot.map((line) => ({

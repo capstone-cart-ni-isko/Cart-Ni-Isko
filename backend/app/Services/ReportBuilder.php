@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\Product;
-use App\Models\Appointment;
+use App\Models\Visit;
 use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Item;
@@ -236,7 +236,7 @@ class ReportBuilder
 
     public function buildAppointmentsReport(array $filters): array
     {
-        $query = Appointment::with('customer')
+        $query = Visit::with('customer')
             ->whereNull('appoint_deleted');
 
         if (!empty($filters['date_from'])) {
@@ -355,21 +355,21 @@ class ReportBuilder
                 'emp_type' => $emp->emp_type,
                 'emp_email' => $emp->emp_email,
                 'emp_phone' => $emp->emp_phone,
-                'emp_instore' => (bool) $emp->emp_instore,
+                'emp_instore' => $emp->inStore(),
                 'total_shifts' => $shifts->count(),
                 'upcoming_shifts' => $upcomingShifts,
                 'total_hours' => $totalHours,
-                'availability' => $emp->emp_instore ? 'In-Store' : 'Available',
+                'availability' => $emp->inStore() ? 'In-Store' : 'Available',
             ];
         })->values()->all();
 
         $totalStaff = $employees->count();
-        $inStoreStaff = $employees->where('emp_instore', true)->count();
+        $inStoreStaff = $employees->filter(fn ($emp) => $emp->inStore())->count();
         $byType = $employees->groupBy('emp_type')->map(function ($group, $type) {
             return [
                 'type' => $type,
                 'count' => $group->count(),
-                'in_store' => $group->where('emp_instore', true)->count(),
+                'in_store' => $group->filter(fn ($emp) => $emp->inStore())->count(),
             ];
         })->values()->all();
 

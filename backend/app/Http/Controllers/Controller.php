@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Appointment;
+use App\Models\Visit;
 use App\Models\Customer;
 use App\Models\CustNotif;
 use App\Models\EmpLog;
 use App\Models\EmpNotif;
 use App\Models\Employee;
+use App\Models\Product;
 use App\Models\Schedule;
 use App\Models\Setting;
 use App\Support\IdAllocator;
@@ -47,6 +48,73 @@ abstract class Controller
     protected function nextId(string $table, string $pk): int
     {
         return IdAllocator::next($table, $pk);
+    }
+
+    /**
+     * Keeps the subset of $attributes whose columns exist on the connected
+     * schema. The system-new.docx SCHEMA (live) and the pre-migration
+     * fixture phpunit runs on do not carry the same names, and writing a
+     * column the connection does not have - or omitting one it requires -
+     * fails the whole statement.
+     *
+     * Shared by every controller that force-creates a legacy row
+     * (UserAPI::employeeSignup / customerSignup, SystemAPI::initialize).
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    protected function existingColumns(string $table, array $attributes): array
+    {
+        static $listing = [];
+
+        $columns = $listing[$table] ??= Schema::getColumnListing($table);
+
+        return array_filter(
+            $attributes,
+            // ARRAY_FILTER_USE_KEY hands the key - the column name - as
+            // the callback's only argument.
+            static fn (string $column) => in_array($column, $columns, true),
+            ARRAY_FILTER_USE_KEY
+        );
+    }
+
+    // ==========================================
+    // SHARED RESPONSE / LOOKUP HELPERS
+    // ==========================================
+
+    /**
+     * The one `{success:false, message}` error envelope every controller
+     * answers a rejected request with. Shared so the shape can never drift
+     * between modules (rule 76).
+     */
+    protected function fail(string $message, int $status = 400)
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+        ], $status);
+    }
+
+    /**
+     * Resolve a product reference. `prod_id` may also arrive as a `prod_tag`,
+     * so a numeric key is tried as an id first and anything else as a tag; a
+     * bad key never reaches SQL. Shared by the cart (UserAPI) and the register
+     * (OrdersAPI), which used to carry identical private copies (rule 76).
+     */
+    protected function resolveProduct($prodKey): ?Product
+    {
+        if ($prodKey === null || $prodKey === '') {
+            return null;
+        }
+
+        if (is_numeric($prodKey)) {
+            $product = Product::find((int) $prodKey);
+            if ($product) {
+                return $product;
+            }
+        }
+
+        return Product::where('prod_tag', (string) $prodKey)->first();
     }
 
     // ==========================================
@@ -166,13 +234,16 @@ abstract class Controller
         ], 403);
     }
 
-    // REQ-SS-02: the employee’s next prescheduled block (the one whose start
-    // decides the deadline), or null when they have none today or later.
+    // REQ-SS-02: the employee's current prescheduled block - the running one
+    // while a block is in progress, otherwise the next one from now on. It is
+    // the block whose start decides the deadline, so a block already under way
+    // has passed its deadline and locks the change. Null when the employee has
+    // no block left whose end is still ahead.
     protected function currentBlock(int $empId): ?Schedule
     {
         return Schedule::where('emp_id', $empId)
             ->whereNull('sched_disabled')
-            ->where('sched_time_start', '>=', now())
+            ->where('sched_time_end', '>=', now())
             ->orderBy('sched_time_start')
             ->first();
     }
@@ -191,12 +262,15 @@ abstract class Controller
             return null;
         }
 
-        // AppointAPI stores the type uppercase ('VISIT' / 'CLAIM') while the
+        // AppointmentsAPI stores the type uppercase ('VISIT' / 'CLAIM') while the
         // column default and older rows are lowercase, so the match is
-        // case-insensitive instead of assuming one spelling.
-        $hasOpenVisit = Appointment::where('cust_id', $customer->cust_id)
+        // case-insensitive instead of assuming one spelling. An appointment
+        // only backs the request while it is still open (Visit::isOpen(): an
+        // open status AND no closing timestamp).
+        $hasOpenVisit = Visit::where('cust_id', $customer->cust_id)
             ->whereRaw('UPPER(appoint_type) = ?', ['VISIT'])
             ->where('appoint_status', 'upcoming')
+            ->whereNull('appoint_closed')
             ->where('appoint_end', '>=', now())
             ->exists();
 
@@ -243,7 +317,7 @@ abstract class Controller
     {
         $slotMinutes = (int) SystemSettings::get('slot_minutes', 10);
 
-        foreach (Appointment::where('appoint_status', 'upcoming')
+        foreach (Visit::where('appoint_status', 'upcoming')
             ->whereNull('appoint_closed')
             ->where('appoint_start', '>=', now())
             ->get() as $appointment) {
@@ -251,12 +325,18 @@ abstract class Controller
             $start = $appointment->appoint_start;
             $end = $appointment->appoint_end ?? $start->copy()->addMinutes($slotMinutes);
 
-            $staffed = Schedule::whereNull('sched_disabled')
-                ->where('sched_time_start', '<=', $start)
-                ->where('sched_time_end', '>=', $end)
-                ->exists();
+            // The headcount is the one the calendar and the checkout gate
+            // already apply (REQ-AB-03): a VISIT needs two in-store
+            // employees, a CLAIM one. Reading it through the roster instead
+            // of raw blocks is what makes REQ-SS-03 work - a block whose
+            // assignee just logged off does not staff anything, even though
+            // the row is still there. A null count means the roster source is
+            // unavailable on this connection; the calendar skips the staffing
+            // rule then, so no shortage may be announced either.
+            $inStore   = (new AppointmentsAPI())->rosterHeadcount($start, $end);
+            $minStaff  = strtoupper((string) $appointment->appoint_type) === 'CLAIM' ? 1 : 2;
 
-            if ($staffed) continue;
+            if ($inStore === null || $inStore >= $minStaff) continue;
 
             $message = '[PRIORITY] Your appointment #' . $appointment->appoint_id
                 . ' on ' . $start->format('Y-m-d H:i')
@@ -338,18 +418,50 @@ abstract class Controller
 
     // Inserts a notification for active employees whose emp_categ is in $types
     // (case-insensitive, e.g. ['ADMIN', 'SUPER ADMIN'] for REQ-IM-03)
+    //
+    // Rule 32 spells the rank `emp_categ`, but the seeded super admin and
+    // older rows still carry it in the legacy `emp_type` column. EnsureRole
+    // and Employee::category() judge a rank from either spelling, so a
+    // broadcast has to reach exactly the accounts those guards would - a
+    // priority alert that skips the seeded super admin would never be seen.
     protected function notifyEmployeesByType(array $types, string $message): void
     {
         $upper = array_map('strtoupper', $types);
         $placeholders = implode(',', array_fill(0, count($upper), '?'));
+        $category = $this->employeeCategoryExpression();
 
         $employees = $this->activeEmployeeQuery()
-            ->whereRaw('UPPER(emp_categ) IN (' . $placeholders . ')', $upper)
+            ->whereRaw('UPPER(' . $category . ') IN (' . $placeholders . ')', $upper)
             ->get();
 
         foreach ($employees as $employee) {
             $this->notifyEmployee((int) $employee->emp_id, $message);
         }
+    }
+
+    /**
+     * The SQL expression that reads an employee's rank on this connection:
+     * `COALESCE(NULLIF(emp_categ, ''), emp_type)` when the legacy column still
+     * exists (test sqlite / pre-rename schemas), plain `emp_categ` on the live
+     * table. Same probe style as employeeDisabledColumnExists().
+     */
+    private static ?bool $employeeHasTypeColumn = null;
+
+    protected function employeeCategoryExpression(): string
+    {
+        if (self::$employeeHasTypeColumn === null) {
+            try {
+                self::$employeeHasTypeColumn = Schema::hasColumn('employee', 'emp_type');
+            } catch (\Throwable $e) {
+                // Schema not readable right now: answer with the live column
+                // and do not cache the guess.
+                return 'emp_categ';
+            }
+        }
+
+        return self::$employeeHasTypeColumn
+            ? "COALESCE(NULLIF(emp_categ, ''), emp_type)"
+            : 'emp_categ';
     }
 
     // ==========================================
@@ -360,7 +472,7 @@ abstract class Controller
     // account lands in custlog or emplog. Rows are append-only (REQ-ACCESS_LOG-01).
     //
     // The access vocabulary is the one the access-log screen filters on
-    // (auth | view | edit, see AccessAPI::accessValue): an authentication
+    // (auth | view | edit, see SystemAPI::accessValue): an authentication
     // action is written as `auth`, whatever the caller named it.
     private function normalizeAccess(string $access): string
     {
@@ -690,4 +802,100 @@ abstract class Controller
     {
         return SystemSettings::get($key, $default);
     }
+
+        /** 09171234567 -> 0917****567 (REQ-CUST_SIGNUP-04 delivery notice). */
+        protected function maskPhone(?string $phone): string
+        {
+            $phone = trim((string) $phone);
+            $length = strlen($phone);
+
+            if ($length < 7) {
+                return $phone;
+            }
+
+            return substr($phone, 0, 4) . str_repeat('*', $length - 7) . substr($phone, -3);
+        }
+
+
+        /**
+         * DOMAIN 32 - every auth/view/edit action taken through this controller
+         * leaves a custlog / emplog row for whoever performed it.
+         */
+        protected function logActor(Request $json, string $access, string $endpoint): void
+        {
+            $user = $json->user('api');
+            if ($user instanceof Employee) {
+                $this->logEmployee((int) $user->getKey(), $access, $endpoint);
+            } elseif ($user instanceof Customer) {
+                $this->logCustomer((int) $user->getKey(), $access, $endpoint);
+            }
+        }
+
+
+    // ==========================================
+    // LEGACY RESPONSE ALIASES (never read from the database)
+    // ==========================================
+
+    /** @see SecurityAPI::customerAliases() - same contract, kept in sync. */
+    protected function customerAliases(Customer $customer): array
+    {
+        $address = array_map('trim', explode(',', (string) $customer->cust_address));
+        // REQ-CUST_PROF-03: the same column also holds the ' | '-separated
+        // list of delivery addresses the customer maintains in Settings.
+        $addresses = array_values(array_filter(
+            array_map('trim', explode(' | ', (string) $customer->cust_address)),
+            fn (string $entry) => $entry !== ''
+        ));
+        [$backupCallcode, $backupPhone] = $this->splitBackupPhone($customer->cust_backup_phone);
+
+        return [
+            'cust_nickname' => trim($customer->cust_givname . ' ' . $customer->cust_surname),
+            'cust_birthday' => $customer->cust_bday?->format('Y-m-d'),
+            'cust_photo' => $customer->cust_avatar,
+            'cust_brgy' => $address[0] ?? '',
+            'cust_city' => $address[1] ?? '',
+            'cust_province' => $address[2] ?? '',
+            'cust_country' => $address[3] ?? '',
+            'cust_addresses' => $addresses,
+            'cust_backupcallcode' => $backupCallcode,
+            'cust_backupphone' => $backupPhone,
+            'cust_backupemail' => $customer->cust_backup_email,
+            'cust_cart' => $customer->cust_bag,
+            'cust_appoints' => $customer->cust_appoint,
+            'cust_disabled' => $customer->cust_suspended,
+        ];
+    }
+
+
+    /** @see SecurityAPI::employeeAliases() - same contract, kept in sync. */
+    protected function employeeAliases(Employee $employee): array
+    {
+        [$backupCallcode, $backupPhone] = $this->splitBackupPhone($employee->emp_backup_phone);
+
+        return [
+            'emp_type' => strtoupper((string) $employee->emp_categ),
+            'emp_instore' => $employee->inStore(),
+            'emp_disabled' => $employee->emp_suspended,
+            'emp_photo' => $employee->emp_avatar,
+            'emp_college' => null,
+            'emp_backupcallcode' => $backupCallcode !== '' ? $backupCallcode : $employee->emp_callcode,
+            'emp_backupphone' => $backupPhone,
+            'emp_backupemail' => $employee->emp_backup_email,
+        ];
+    }
+
+
+    protected function splitBackupPhone(?string $value): array
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return ['', ''];
+        }
+        if (preg_match('/^(\+\d{1,4})\s+(.+)$/', $value, $matches)) {
+            return [$matches[1], $matches[2]];
+        }
+
+        return ['', $value];
+    }
+
 }

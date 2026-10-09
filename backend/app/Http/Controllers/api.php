@@ -20,7 +20,7 @@ Route::get('/setup/status', [SystemAPI::class, 'status']);
 Route::post('/setup/initialize', [SystemAPI::class, 'initialize'])->middleware('throttle:10,1');
 
 // Public Auth API Routes (no token required, login/signup issue the Sanctum token)
-Route::post('/auth/cust_signup', [UserAPI::class, 'customerSignup']);
+Route::post('/auth/cust_signup', [SecurityAPI::class, 'customerSignup']);
 Route::post('/auth/cust_login', [SecurityAPI::class, 'customerLogin']);
 Route::post('/auth/emp_login', [SecurityAPI::class, 'employeeLogin']);
 // DOMAIN 2 - realtime field checks for the staff login form. Public because
@@ -62,9 +62,9 @@ Route::post('/checkout/payment/webhook', [OrdersAPI::class, 'paymentWebhook']);
 // Everything else requires a Sanctum bearer token
 Route::middleware('auth:api')->group(function () {
     Route::post('/auth/logout', [SecurityAPI::class, 'logout']);
-    Route::post('/auth/emp_signup', [UserAPI::class, 'employeeSignup'])->middleware('role:super_admin');
-    Route::post('/auth/backup_credentials', [UserAPI::class, 'backupCredentials']);
-    Route::put('/auth/update_credentials', [UserAPI::class, 'updateCredentials']);
+    Route::post('/auth/emp_signup', [SecurityAPI::class, 'employeeSignup'])->middleware('role:super_admin');
+    Route::post('/auth/backup_credentials', [SecurityAPI::class, 'backupCredentials']);
+    Route::put('/auth/update_credentials', [SecurityAPI::class, 'updateCredentials']);
 
     // DOMAIN 29 - REQ-CUST_SET-02: phone OTP before a sensitive change
     Route::post('/otp/issue', [SecurityAPI::class, 'issue']);
@@ -108,8 +108,8 @@ Route::middleware('auth:api')->group(function () {
     // Notif API Routes
     Route::post('/notif/create', [SystemAPI::class, 'createNotification'])->middleware('role:staff');
     Route::post('/notif/distribute', [SystemAPI::class, 'distributeNotifications'])->middleware('role:staff');
-    Route::put('/notif/update', [UserAPI::class, 'updateNotificationStatus']);
-    Route::get('/notif/display', [UserAPI::class, 'displayNotifications']);
+    Route::put('/notif/update', [SystemAPI::class, 'updateNotificationStatus']);
+    Route::get('/notif/display', [SystemAPI::class, 'displayNotifications']);
 
     // Tracking API Routes
     Route::post('/tracking/create', [OrdersAPI::class, 'createFulfillmentTrack']);
@@ -124,7 +124,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/access/logs', [SystemAPI::class, 'accessLog'])->middleware('role:super_admin');
 
     // Accounts API Routes
-    Route::get('/accounts/me', [UserAPI::class, 'displayMyAccount']);
+    Route::get('/accounts/me', [SystemAPI::class, 'displayMyAccount']);
     Route::put('/accounts/type', [SystemAPI::class, 'changeAccountType'])->middleware('role:super_admin');
     Route::delete('/accounts/delete', [SystemAPI::class, 'deleteAccount'])->middleware('role:super_admin');
     Route::post('/accounts/disable', [SystemAPI::class, 'disableAccount'])->middleware('role:super_admin');
@@ -132,7 +132,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/accounts/recover', [SystemAPI::class, 'recoverAccount'])->middleware('role:super_admin');
     Route::get('/accounts/search', [SystemAPI::class, 'searchAccounts'])->middleware('role:staff');
     Route::get('/accounts/sort', [SystemAPI::class, 'sortAccounts'])->middleware('role:staff');
-    Route::put('/accounts/update', [UserAPI::class, 'updateAccountDetails']);
+    Route::put('/accounts/update', [SystemAPI::class, 'updateAccountDetails']);
 
     // Appoint API Routes
     Route::post('/appoint/close', [AppointmentsAPI::class, 'closeAppointment'])->middleware('role:admin');
@@ -172,8 +172,8 @@ Route::middleware('auth:api')->group(function () {
     // DOMAIN 29 - customers read and write their OWN preference columns
     // through these two routes; the controller still restricts system-wide
     // keys to super admins (rule 40) and gates sensitive contacts with OTP.
-    Route::get('/settings/display', [UserAPI::class, 'displaySettings']);
-    Route::put('/settings/update', [UserAPI::class, 'updateSettings']);
+    Route::get('/settings/display', [SystemAPI::class, 'displaySettings']);
+    Route::put('/settings/update', [SystemAPI::class, 'updateSettings']);
 
     // Wishlist API Routes
     Route::post('/wishlist/add', [UserAPI::class, 'addWishlistItem']);

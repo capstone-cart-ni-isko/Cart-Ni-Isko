@@ -2,7 +2,13 @@
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
-class Appointment extends Model
+/**
+ * system-new.docx MODELS: `Visit.php` is the seventh model. It owns the
+ * `appointments` table (appoint_id) - both appointment categories of rule 7
+ * ("visit" and "pickup") live here, so the class keeps every appointment
+ * column and only the file/class name follows the spec's model list.
+ */
+class Visit extends Model
 {
     protected $table = 'appointments';
     protected $primaryKey = 'appoint_id';

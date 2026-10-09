@@ -5,6 +5,9 @@ import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { uploadImage } from '../../services/upload.js'
 
+// FLOW-MANAGE_INV-06 / REQ-MANAGE_INV-04 — the low-stock alert threshold.
+const LOW_STOCK_THRESHOLD = 10
+
 export default function AdminInventory() {
   const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, products: backendProducts } = useAdmin()
 
@@ -26,8 +29,10 @@ export default function AdminInventory() {
   const [filterPublication, setFilterPublication] = useState('All')
   const [sortBy, setSortBy] = useState('featured')
 
-  // Active tags (demonstrating the mockup tag chips)
-  const [activeTags, setActiveTags] = useState(['2026 Collection', 'Pre-order'])
+  // Pagination — real rows only. The footer used to print a fixed
+  // "Showing 1–10 of 195 items" while none of its page buttons had a handler.
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
 
   // Batch stock adjustment state
   const [batchActionType, setBatchActionType] = useState('add')
@@ -117,10 +122,25 @@ export default function AdminInventory() {
     )
   }
 
-  // Stock stepper increment / decrement (calls backend)
+  // Stock stepper increment / decrement (calls backend).
+  //
+  // The stepper sits on a per-variation row, so the new value targets THAT
+  // variation (prodvar_id). Sending the product total instead made the
+  // backend move the whole delta onto the main variation, leaving every other
+  // row's number unchanged on screen.
   const handleVariantStockChange = (prodId, varId, delta) => {
     const product = productsList.find((p) => p.id === prodId)
     if (!product) return
+
+    const variant = (product.variants || []).find((v) => v.id === varId)
+    const numericVarId = /^var-\d+$/.test(String(varId)) ? Number(String(varId).replace('var-', '')) : null
+    if (variant && numericVarId !== null) {
+      const next = Math.max(0, (Number(variant.stock) || 0) + delta)
+      adjustStock(prodId, next, numericVarId)
+      return
+    }
+
+    // Fallback for rows the mapper built without a real prodvar_id.
     const newTotal = Math.max(0, product.totalStock + delta)
     adjustStock(prodId, newTotal)
   }
@@ -151,12 +171,34 @@ export default function AdminInventory() {
     setBatchQtyInput('')
   }
 
-  // Clear active tags
-  const removeTag = (tag) => {
-    setActiveTags((prev) => prev.filter((t) => t !== tag))
+  // Chips are derived from the facet state instead of a hardcoded demo list
+  // ("2026 Collection", "Pre-order"), so × on a chip really clears the filter
+  // it names instead of just hiding itself.
+  const activeTags = useMemo(() => {
+    const tags = []
+    if (filterCollection !== 'All') tags.push({ key: 'collection', label: `Collection: ${filterCollection}` })
+    if (filterCategory !== 'All') tags.push({ key: 'category', label: `Category: ${filterCategory}` })
+    if (filterAvailability !== 'All') tags.push({ key: 'availability', label: `Availability: ${filterAvailability}` })
+    if (filterStockStatus !== 'All') tags.push({ key: 'stock', label: `Stock: ${filterStockStatus}` })
+    if (filterPublication !== 'All') tags.push({ key: 'publication', label: `Publication: ${filterPublication}` })
+    return tags
+  }, [filterCollection, filterCategory, filterAvailability, filterStockStatus, filterPublication])
+
+  const removeTag = (key) => {
+    if (key === 'collection') setFilterCollection('All')
+    if (key === 'category') setFilterCategory('All')
+    if (key === 'availability') setFilterAvailability('All')
+    if (key === 'stock') setFilterStockStatus('All')
+    if (key === 'publication') setFilterPublication('All')
+    setPage(1)
   }
   const clearAllTags = () => {
-    setActiveTags([])
+    setFilterCollection('All')
+    setFilterCategory('All')
+    setFilterAvailability('All')
+    setFilterStockStatus('All')
+    setFilterPublication('All')
+    setPage(1)
   }
 
   // Add Product Form submit (calls backend; keeps input on failure per REQ-IM-01)
@@ -218,17 +260,79 @@ export default function AdminInventory() {
     setDeleteTarget(null)
   }
 
-  // Filtered list
+  // Filtered + sorted list. Every facet select used to be decorative — only
+  // `searchQuery` was read, so choosing "Category: Hoodies" or any sort order
+  // left the table untouched (FLOW-MANAGE_INV-03/04).
   const filteredProducts = useMemo(() => {
-    return productsList.filter((p) => {
-      const matchSearch =
-        !searchQuery ||
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.categoryName.toLowerCase().includes(searchQuery.toLowerCase())
-      return matchSearch
+    const query = searchQuery.trim().toLowerCase()
+    // The select offers the plural display name, the mapper stores the
+    // singular category ('Hoodie', 'Cap', 'Lanyard').
+    const CATEGORY_ALIASES = { Hoodies: 'Hoodie', Lanyards: 'Lanyard', Caps: 'Cap' }
+    const wantedCategory = CATEGORY_ALIASES[filterCategory] || filterCategory
+
+    const rows = productsList.filter((p) => {
+      if (
+        query &&
+        !(
+          p.name.toLowerCase().includes(query) ||
+          p.sku.toLowerCase().includes(query) ||
+          p.categoryName.toLowerCase().includes(query)
+        )
+      )
+        return false
+      if (filterCollection !== 'All' && p.collectionName !== filterCollection) return false
+      if (filterCategory !== 'All' && p.categoryName !== wantedCategory) return false
+      if (filterAvailability !== 'All' && p.availability !== filterAvailability) return false
+      if (filterStockStatus !== 'All') {
+        const stock = Number(p.totalStock) || 0
+        if (filterStockStatus === 'Out of Stock' && stock !== 0) return false
+        if (filterStockStatus === 'In Stock' && stock <= 0) return false
+        if (filterStockStatus === 'Low Stock' && !(stock > 0 && stock <= LOW_STOCK_THRESHOLD)) return false
+      }
+      if (filterPublication !== 'All' && !!p.published !== (filterPublication === 'Published')) return false
+      return true
     })
-  }, [productsList, searchQuery])
+
+    // 'featured' keeps the order the backend returned.
+    if (sortBy === 'price-asc') rows.sort((a, b) => a.price - b.price)
+    else if (sortBy === 'price-desc') rows.sort((a, b) => b.price - a.price)
+    else if (sortBy === 'orders-desc') rows.sort((a, b) => (b.orders || 0) - (a.orders || 0))
+    else if (sortBy === 'name-asc') rows.sort((a, b) => a.name.localeCompare(b.name))
+    else if (sortBy === 'stock-asc') rows.sort((a, b) => (a.totalStock || 0) - (b.totalStock || 0))
+
+    return rows
+  }, [
+    productsList,
+    searchQuery,
+    filterCollection,
+    filterCategory,
+    filterAvailability,
+    filterStockStatus,
+    filterPublication,
+    sortBy,
+  ])
+
+  // FLOW-MANAGE_INV-06 — the three counters below were hardcoded ("12", "3",
+  // "45") no matter what the catalog held.
+  const inventoryStats = useMemo(() => {
+    const stats = { low: 0, out: 0, preorder: 0 }
+    productsList.forEach((p) => {
+      const stock = Number(p.totalStock) || 0
+      if (stock === 0) stats.out += 1
+      else if (stock <= LOW_STOCK_THRESHOLD) stats.low += 1
+      if (p.preorder) stats.preorder += 1
+    })
+    return stats
+  }, [productsList])
+
+  // Pagination over the filtered list, clamped so a shrinking result set can
+  // never leave the table on an empty page.
+  const pageCount = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const pagedProducts = filteredProducts.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+  const pageNumbers = Array.from({ length: pageCount }, (_, i) => i + 1).slice(0, 5)
+  // Select-all covers the rows on screen, not the unfiltered catalog.
+  const visibleProductIds = pagedProducts.map((p) => p.id)
 
   return (
     <AdminLayout>
@@ -290,7 +394,7 @@ export default function AdminInventory() {
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">LOW STOCK</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">12</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.low}</h3>
             </div>
           </div>
 
@@ -305,7 +409,7 @@ export default function AdminInventory() {
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">OUT OF STOCK</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">3</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.out}</h3>
             </div>
           </div>
 
@@ -319,7 +423,7 @@ export default function AdminInventory() {
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">PRE-ORDERS</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">45</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.preorder}</h3>
             </div>
           </div>
         </div>
@@ -435,6 +539,8 @@ export default function AdminInventory() {
                 className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="featured">Sort by ▾</option>
+                <option value="name-asc">Name: A to Z</option>
+                <option value="stock-asc">Stock: Low to High</option>
                 <option value="price-asc">Price: Low to High</option>
                 <option value="price-desc">Price: High to Low</option>
                 <option value="orders-desc">Most Orders</option>
@@ -447,13 +553,13 @@ export default function AdminInventory() {
             <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 flex-wrap">
               {activeTags.map((tag) => (
                 <span
-                  key={tag}
+                  key={tag.key}
                   className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200"
                 >
-                  <span>{tag}</span>
+                  <span>{tag.label}</span>
                   <button
                     type="button"
-                    onClick={() => removeTag(tag)}
+                    onClick={() => removeTag(tag.key)}
                     className="text-slate-400 hover:text-slate-700 cursor-pointer text-sm font-bold"
                   >
                     ×
@@ -483,12 +589,15 @@ export default function AdminInventory() {
                       className="rounded text-brand-orange focus:ring-0"
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedProductIds(productsList.map((p) => p.id))
+                          setSelectedProductIds((prev) => Array.from(new Set([...prev, ...visibleProductIds])))
                         } else {
-                          setSelectedProductIds([])
+                          setSelectedProductIds((prev) => prev.filter((id) => !visibleProductIds.includes(id)))
                         }
                       }}
-                      checked={selectedProductIds.length === productsList.length && productsList.length > 0}
+                      checked={
+                        visibleProductIds.length > 0 &&
+                        visibleProductIds.every((id) => selectedProductIds.includes(id))
+                      }
                     />
                   </th>
                   <th className="p-4">PRODUCT</th>
@@ -502,7 +611,7 @@ export default function AdminInventory() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredProducts.map((prod) => {
+                {pagedProducts.map((prod) => {
                   const isExpanded = !!expandedRows[prod.id]
                   const hasVariants = prod.variants && prod.variants.length > 0
 
@@ -860,44 +969,43 @@ export default function AdminInventory() {
             </table>
           </div>
 
-          {/* Pagination Footer (Photo 3) */}
+          {/* Pagination Footer — real rows and real handlers (the old footer
+              printed a fixed "1–10 of 195" and none of its buttons did
+              anything) */}
           <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <span className="text-gray-500 font-medium">Showing 1–10 of 195 items</span>
+            <span className="text-gray-500 font-medium">
+              {filteredProducts.length === 0
+                ? 'No products to show'
+                : `Showing ${(safePage - 1) * PAGE_SIZE + 1}\u2013${Math.min(safePage * PAGE_SIZE, filteredProducts.length)} of ${filteredProducts.length} items`}
+            </span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                className="w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100"
+                disabled={safePage <= 1}
+                onClick={() => setPage(safePage - 1)}
+                className="w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
               >
                 ‹
               </button>
+              {pageNumbers.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setPage(n)}
+                  className={`w-8 h-8 rounded-md flex items-center justify-center cursor-pointer ${
+                    n === safePage
+                      ? 'bg-brand-orange text-white font-bold shadow-2xs'
+                      : 'border border-gray-200 text-gray-700 hover:bg-gray-100 font-semibold'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
               <button
                 type="button"
-                className="w-8 h-8 rounded-md bg-brand-orange text-white font-bold flex items-center justify-center shadow-2xs"
-              >
-                1
-              </button>
-              <button
-                type="button"
-                className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
-              >
-                2
-              </button>
-              <button
-                type="button"
-                className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
-              >
-                3
-              </button>
-              <span className="px-1 text-gray-400">···</span>
-              <button
-                type="button"
-                className="w-8 h-8 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-100 flex items-center justify-center font-semibold"
-              >
-                20
-              </button>
-              <button
-                type="button"
-                className="w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100"
+                disabled={safePage >= pageCount}
+                onClick={() => setPage(safePage + 1)}
+                className="w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-default"
               >
                 ›
               </button>

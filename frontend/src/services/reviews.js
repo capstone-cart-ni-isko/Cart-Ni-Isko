@@ -24,7 +24,12 @@ export async function fetchProductReviews(prodId, status = null) {
         prodId: row.prod_id,
         custId: row.cust_id,
         status: row.status || 'APPROVED',
+        // FLOW-MANAGE_REV-02 / FLOW-MANAGE_REV-04: the employee queue shows
+        // (and searches by) the customer's name, which ReviewsAPI returns as
+        // cust_name. It is exposed additively so the customer-facing
+        // ProductReviews list keeps its generic "Verified Student" label.
         author: 'Verified Student',
+        custName: row.cust_name || null,
         rating: Number(row.ord_rating) || 0,
         date: row.ord_completed
           ? new Date(row.ord_completed).toLocaleDateString()

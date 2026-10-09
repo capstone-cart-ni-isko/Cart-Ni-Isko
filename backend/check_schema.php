@@ -1,14 +1,14 @@
 <?php
-
-require __DIR__.'/vendor/autoload.php';
-
-$app = require_once __DIR__.'/bootstrap/app.php';
-$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
-
-$tables = ["customer","employee","product","orders","items","payment","pickup","appointment","parcel","delivery","custnotif","empnotif","reports","custlog","emplog","duty_shift","settings"];
-
+$pdo = new PDO('pgsql:host=aws-0-ap-northeast-1.pooler.supabase.com;dbname=postgres;port=5432;client_encoding=utf8;sslmode=require', 'postgres.qxkxpyahmfdrhradnphw', 'cartniisko2026');
+$tables = ['customer', 'employee', 'product', 'prodvar', 'orders', 'delivery', 'pickup', 'prodsales', 'reviews', 'custnotif', 'empnotif', 'schedules', 'bag', 'wishlist', 'appointments'];
 foreach ($tables as $t) {
-    echo strtoupper($t) . " columns:\n";
-    print_r(\Illuminate\Support\Facades\Schema::getColumnListing($t));
-    echo "\n";
+    echo "\n=== $t ===\n";
+    try {
+        $cols = $pdo->query("SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_name = '$t' ORDER BY ordinal_position")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($cols as $c) {
+            echo "  " . $c['column_name'] . ' (' . $c['data_type'] . ') ' . ($c['column_default'] ?? 'null') . "\n";
+        }
+    } catch (Exception $e) {
+        echo "  ERROR: " . $e->getMessage() . "\n";
+    }
 }

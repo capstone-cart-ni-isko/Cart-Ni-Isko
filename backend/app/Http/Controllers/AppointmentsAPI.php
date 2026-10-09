@@ -1,21 +1,30 @@
 <?php
 
-    namespace App\Http\Controllers;
+namespace App\Http\Controllers;
 
-    use App\Models\Appointment;
-    use App\Models\CustNotif;
-    use App\Models\Customer;
-    use App\Models\DutyShift;
-    use App\Models\Employee;
-    use App\Models\Schedule;
-    use App\Support\DayRoster;
-    use Illuminate\Http\Request;
-    use Illuminate\Support\Carbon;
-    use Illuminate\Support\Facades\DB;
-    use Illuminate\Support\Str;
+use App\Models\Visit;
+use App\Models\CustNotif;
+use App\Models\Customer;
+use App\Models\Employee;
+use App\Models\Schedule;
+use App\Support\DayRoster;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
-    class AppointAPI extends Controller
-    {
+/**
+ * AppointmentsAPI
+ *
+ * DOMAIN 8 / DOMAIN 22 - appointment completion, tracking and the visits + preorder-pickup booking that a pickup appointment is (rule 54).
+ *
+ * Repackaged from: Appoint API.
+ */
+class AppointmentsAPI extends Controller
+{
+
+    // ===== from the Appoint API file =====
+
         // Standard operating hours used by the slot grid and booking rules
         protected const OPEN_MINUTES = 8 * 60;   // 08:00
         protected const CLOSE_MINUTES = 18 * 60; // 18:00
@@ -30,13 +39,13 @@
         */
         public function closeAppointment(Request $json)
         {
-            $validator = (new InputValidatorAPI())->closeAppointment($json);
+            $validator = (new DatabaseAPI())->closeAppointment($json);
             if ($validator) return $validator;
 
             try {
                 $appointId = $json->input('appoint_id');
                 $reason = trim((string) $json->input('reason', ''));
-                $appointment = Appointment::where('appoint_id', $appointId)->first();
+                $appointment = Visit::where('appoint_id', $appointId)->first();
 
                 if (!$appointment) {
                     return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
@@ -84,7 +93,7 @@
                 }
 
                 $others = ($start && $blockEnd)
-                    ? Appointment::whereNull('appoint_closed')
+                    ? Visit::whereNull('appoint_closed')
                         ->where('appoint_type', $appointment->appoint_type)
                         ->where('appoint_id', '!=', $appointment->appoint_id)
                         ->where('appoint_start', '>=', $start)
@@ -132,6 +141,9 @@
         */
         public function displaySlots(Request $json)
         {
+            $validator = (new DatabaseAPI())->displaySlots($json);
+            if ($validator) return $validator;
+
             try {
                 $date = $json->input('date');
                 if (!is_string($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
@@ -161,7 +173,7 @@
                 // REQ-SC-01: customers get a restricted view - they only see
                 // their own bookings, everyone else's stays anonymous.
                 $custId = $this->customerId($json);
-                $bookedRows = Appointment::whereNull('appoint_closed')
+                $bookedRows = Visit::whereNull('appoint_closed')
                     ->where('appoint_start', '>=', $open)
                     ->where('appoint_start', '<', $close)
                     ->get(['appoint_type', 'appoint_start', 'appoint_end', 'cust_id']);
@@ -185,7 +197,7 @@
                         $start = $base->copy()->addMinutes($minutes);
                         $end = $start->copy()->addMinutes($duration);
                         // A booking counts towards a block when its window
-                        // overlaps it (matching CheckoutAPI::slotHasCapacity),
+                        // overlaps it (matching OrdersAPI::slotHasCapacity),
                         // so a legacy 30-minute row still occupies every
                         // 10-minute block it spans.
                         $rows = $bookedRows->filter(function ($a) use ($type, $start, $end) {
@@ -276,12 +288,12 @@
         {
             // The shared validator still asks for the legacy slot field name;
             // mirroring the canonical one into it keeps every client booking
-            // until InputValidatorAPI is relaxed (backward-compat guard).
+            // until DatabaseAPI is relaxed (backward-compat guard).
             if (! $json->filled('appoint_date') && $json->filled('appoint_start')) {
                 $json->merge(['appoint_date' => $json->input('appoint_start')]);
             }
 
-            $validator = (new InputValidatorAPI())->createAppointment($json);
+            $validator = (new DatabaseAPI())->createAppointment($json);
             if ($validator) return $validator;
 
             try {
@@ -380,7 +392,7 @@
                     // FLOW-BOOK_APP-06: status `upcoming` + a unique QR code.
                     // emp_id is NOT NULL on the live table (FK -> employee),
                     // so the booking always names the employee taking it.
-                    return Appointment::create([
+                    return Visit::create([
                         // No sequence for appoint_id on the live `appointments`
                         // table; allocated inside this transaction, which is
                         // already serialised per slot by pg_advisory_xact_lock.
@@ -471,8 +483,13 @@
         public function displayAppointments(Request $json)
         {
             try {
-                $query = Appointment::query()->with('customer');
-                $user = $json->user();
+                $query = Visit::query()->with('customer');
+                // The bearer is resolved by the `api` guard (see the rest of
+                // this controller): the default guard is the session `web`
+                // one, which is always empty on a stateless API request, so
+                // `$json->user()` made the master book unreachable for admins
+                // AND pinned every customer to `cust_id = 0`.
+                $user = $json->user('api');
                 $wantsMaster = $json->input('scope') === 'master';
                 $isMaster = $wantsMaster && $this->isAdmin($user);
 
@@ -544,7 +561,7 @@
                 // FLOW-MANAGE_APP-02: the admin list renders the booking date
                 // (`appoint_date`, the legacy alias of `appoint_start`) and the
                 // customer's name / email straight from the row.
-                $rows = $appointments->map(function (Appointment $appointment) use ($orders) {
+                $rows = $appointments->map(function (Visit $appointment) use ($orders) {
                     $link = $orders[(int) $appointment->appoint_id] ?? null;
                     $customer = $appointment->customer;
                     $extra = [
@@ -592,7 +609,7 @@
         {
             try {
                 $q = $json->input('q', '');
-                $query = Appointment::query()->with('customer');
+                $query = Visit::query()->with('customer');
                 $customerId = $this->customerId($json);
                 $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('api'));
                 if ($customerId !== null) {
@@ -635,7 +652,7 @@
                 }
 
                 // FLOW-MANAGE_APP-02: same row shape as the list endpoint.
-                $appointments = $query->get()->map(function (Appointment $appointment) {
+                $appointments = $query->get()->map(function (Visit $appointment) {
                     $customer = $appointment->customer;
                     $extra = ['appoint_date' => $appointment->appoint_start];
                     if ($customer) {
@@ -681,7 +698,7 @@
                 $sortBy = $json->input('sort_by', 'date');
                 $order = strtolower($json->input('order', 'asc')) === 'desc' ? 'desc' : 'asc';
                 $col = $sortBy === 'created' ? 'appoint_created' : ($sortBy === 'type' ? 'appoint_type' : 'appoint_start');
-                $query = Appointment::query();
+                $query = Visit::query();
                 $customerId = $this->customerId($json);
                 $isMaster = $json->input('scope') === 'master' && $this->isAdmin($json->user('api'));
                 if ($customerId !== null) {
@@ -727,12 +744,12 @@
         */
         public function updateAppointmentDetails(Request $json)
         {
-            $validator = (new InputValidatorAPI())->updateAppointmentDetails($json);
+            $validator = (new DatabaseAPI())->updateAppointmentDetails($json);
             if ($validator) return $validator;
 
             try {
                 $appointId = $json->input('appoint_id');
-                $appointment = Appointment::where('appoint_id', $appointId)->first();
+                $appointment = Visit::where('appoint_id', $appointId)->first();
 
                 if (! $appointment) {
                     return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
@@ -1017,7 +1034,7 @@
                 return response()->json(['success' => false, 'message' => 'Appointment ID is required.'], 400);
             }
 
-            $appointment = Appointment::where('appoint_id', $appointId)->first();
+            $appointment = Visit::where('appoint_id', $appointId)->first();
             if (! $appointment) {
                 return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
             }
@@ -1103,7 +1120,7 @@
                         continue;
                     }
 
-                    $appointment = Appointment::where('appoint_id', $appointId)->first();
+                    $appointment = Visit::where('appoint_id', $appointId)->first();
                     if (! $appointment
                         || $appointment->appoint_closed
                         || $appointment->appoint_status !== 'upcoming') {
@@ -1284,13 +1301,13 @@
             // open bookings, a VISIT holds exactly one (REQ-AB-01 / REQ-AB-02).
             $capacity = $this->slotCapacity($type);
 
-            $bookedQuery = Appointment::where('appoint_type', $type)
+            $bookedQuery = Visit::where('appoint_type', $type)
                 ->whereNull('appoint_closed');
             if ($excludeId !== null) {
                 $bookedQuery->where('appoint_id', '!=', $excludeId);
             }
             // Overlap semantics (appoint_start < block end AND appoint_end >
-            // block start, like CheckoutAPI::slotHasCapacity) so a legacy
+            // block start, like OrdersAPI::slotHasCapacity) so a legacy
             // longer row still occupies every block it spans.
             $booked = $bookedQuery
                 ->where('appoint_start', '<', $end)
@@ -1371,30 +1388,37 @@
 
         /**
          * The roster used by the staffing rule (REQ-AB-03), or null when this
-         * connection has no roster source (the DutyShift model or its table
+         * connection has no roster source (the Schedule model or its table
          * may be absent). Callers then skip only the staffing rule; the
          * capacity and slot-window rules always apply.
          */
         protected function rosterFor(Carbon $day): ?DayRoster
         {
             try {
-                if (! class_exists(DutyShift::class)) {
-                    return null;
-                }
-
                 return DayRoster::for($day);
             } catch (\Throwable $e) {
                 return null;
             }
         }
 
-        /** In-store headcount for one block, or null when unknown.
+        /**
+         * In-store headcount for one block, or null when unknown.
          *
-         * Public because CheckoutAPI runs the same staffing rule (REQ-AB-03)
+         * Public because OrdersAPI runs the same staffing rule (REQ-AB-03)
          * when checkout books or moves a claim slot, so the calendar and the
-         * checkout path can never disagree. */
-        public function rosterHeadcount(Carbon $start, Carbon $end): ?int
+         * checkout path can never disagree.
+         *
+         * The arguments are typed as DateTimeInterface, not Illuminate's
+         * Carbon: the calendar builds its grid with Illuminate\Support\Carbon
+         * while the checkout slot parser returns Carbon\Carbon - a sibling
+         * class, not a subclass - so a hard Carbon hint made every pickup
+         * checkout that carried an explicit `appoint_start` die on a
+         * TypeError. Both are normalised here instead.
+         */
+        public function rosterHeadcount(\DateTimeInterface $start, \DateTimeInterface $end): ?int
         {
+            $start = Carbon::instance($start);
+            $end   = Carbon::instance($end);
             $roster = $this->rosterFor($start);
 
             return $roster ? $roster->headcount($start, $end) : null;
@@ -1404,11 +1428,7 @@
         protected function pendingReplacements(): int
         {
             try {
-                if (! class_exists(DutyShift::class)) {
-                    return 0;
-                }
-
-                return (int) DutyShift::pendingReplacements();
+                return (int) Schedule::pendingReplacements();
             } catch (\Throwable $e) {
                 return 0;
             }
@@ -1443,7 +1463,7 @@
          * Length of one slot block. Business rule 11: "An appointment timeslot
          * must exactly be 10 minutes long" - the number is a hard rule, so the
          * `slot_minutes` setting can never push a block away from ten minutes
-         * (the same clamp is applied where CheckoutAPI and the staff-shortage
+         * (the same clamp is applied where OrdersAPI and the staff-shortage
          * sweep read it).
          */
         protected function slotDuration(string $type): int
@@ -1494,7 +1514,7 @@
         {
             do {
                 $qr = 'APPT-' . strtoupper(Str::random(16));
-                $clash = Appointment::where('appoint_qr', $qr);
+                $clash = Visit::where('appoint_qr', $qr);
                 if ($exceptId !== null) {
                     $clash->where('appoint_id', '!=', $exceptId);
                 }
@@ -1507,7 +1527,7 @@
          * REQ-MANAGE_APP-07: an appointment that outlived its window by ten
          * minutes auto-closes. Visit bookings are closed by this sweep; a
          * pickup booking that was never scanned is closed by
-         * TrackingAPI::sweepExpiredPickups on the same ten-minute rule.
+         * OrdersAPI::sweepExpiredPickups on the same ten-minute rule.
          *
          * REQ-MANAGE_APP-05: a visit nobody ever scanned is a no-show, so it
          * lands on `absent` - `done` is reserved for bookings that were
@@ -1520,7 +1540,7 @@
             $cutoff = now()->subMinutes(10);
 
             try {
-                $expired = Appointment::where('appoint_type', 'VISIT')
+                $expired = Visit::where('appoint_type', 'VISIT')
                     ->where('appoint_status', 'upcoming')
                     ->whereNull('appoint_closed')
                     ->whereNotNull('appoint_end')
@@ -1564,4 +1584,4 @@
                 // The sweep must never take the scheduler down.
             }
         }
-    }
+}

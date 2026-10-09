@@ -93,7 +93,7 @@ export default function AdminOrders() {
       searchOrders(query)
         .then((res) => {
           if (cancelled) return
-          setSearchRows((res?.data || []).filter((row) => !isCartRow(row)))
+          setSearchRows(mapOrderRows((res?.data || []).filter((row) => !isCartRow(row))))
         })
         .catch(() => {
           if (!cancelled) setSearchRows([])
@@ -115,7 +115,7 @@ export default function AdminOrders() {
     let cancelled = false
     sortOrders(option.sortBy, option.dir)
       .then((res) => {
-        if (!cancelled) setSortedRows((res?.data || []).filter((row) => !isCartRow(row)))
+        if (!cancelled) setSortedRows(mapOrderRows((res?.data || []).filter((row) => !isCartRow(row))))
       })
       .catch(() => {
         if (!cancelled) setSortedRows(null)

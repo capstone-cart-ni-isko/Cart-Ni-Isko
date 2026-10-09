@@ -13,6 +13,8 @@ class Order extends Model
     // pay_reference, ord_created. Legacy keys (ord_tag/ord_completed/
     // ord_rating/ord_review) stay fillable for writers/tests that still send
     // them; they are simply absent from the live table.
+    // `ord_discount` is the register's discount (Apply Discount at the POS) -
+    // nullable, so orders written before it carry no discount.
     // `ord_id` is fillable because the live table has no sequence for it:
     // writers must pass the number from App\Support\IdAllocator::next().
     protected $fillable = [
@@ -25,6 +27,7 @@ class Order extends Model
         'ord_rating',
         'ord_review',
         'ord_amount',
+        'ord_discount',
         'ord_claiming',
         'pay_reference',
         'pay_received',
@@ -58,7 +61,7 @@ class Order extends Model
     }
 
     /**
-     * The legacy order -> delivery link (CartAPI/OrdersAPI/CheckoutAPI and
+     * The legacy order -> delivery link (UserAPI/OrdersAPI/OrdersAPI and
      * ReportBuilder all eager-load `parcel.delivery` / `parcel.payment`).
      * The relation used to be missing entirely, which made every one of those
      * queries die with RelationNotFoundException; the `parcel` table does exist

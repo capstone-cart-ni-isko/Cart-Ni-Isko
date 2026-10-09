@@ -478,8 +478,9 @@ export default function AdminUsers() {
                         <td className="py-4 px-5 text-right whitespace-nowrap">
                           {!emp.deleted && (
                             <>
+                              {/* FLOW-EMP_LIST-06 - open this employee's profile */}
                               <Link
-                                to={`/admin/account`}
+                                to={`/admin/account?emp=${emp.emp_id}`}
                                 className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 mr-3"
                               >
                                 View

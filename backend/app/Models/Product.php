@@ -54,6 +54,16 @@ class Product extends Model
     }
 
     /**
+     * system-new.docx MODELS: product variants aggregate onto Product
+     * (prodvar rows live in App\Support\DatabaseModels; only DatabaseAPI
+     * touches them, rule 80).
+     */
+    public function variations()
+    {
+        return $this->hasMany(Prodvar::class, 'prod_id', 'prod_id');
+    }
+
+    /**
      * Live stock = SUM(prodvar.prodvar_stock) over the non-deleted variations.
      *
      * `product.prod_qty` is a legacy column that no writer touches (every

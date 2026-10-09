@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { fetchSettings, updateSettings } from '../../services/settings.js'
+import { uploadImage } from '../../services/upload.js'
+
+const MAX_BANNER_BYTES = 2 * 1024 * 1024 // 2 MB (mirrors POST /uploads limit)
+const BANNER_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 /** Slides are persisted as a JSON string in settings.store_slides. */
 function parseSlides(raw) {
@@ -33,6 +37,11 @@ export default function AdminStoreCustomization() {
   const [isSavedToast, setIsSavedToast] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showPreviewDrawer, setShowPreviewDrawer] = useState(false)
+
+  // Replace-banner flow: one hidden file input shared by every slide row
+  const replaceInputRef = useRef(null)
+  const replaceTargetRef = useRef(null)
+  const [uploadingSlideId, setUploadingSlideId] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -108,6 +117,42 @@ export default function AdminStoreCustomization() {
     setSlides(parseSlides(settings?.store_slides))
     setHasUnsavedChanges(false)
     setEditingSlideId(null)
+  }
+
+  // ── Replace slide image: real file pick → POST /uploads → keep both fields ──
+  const handleReplaceImageClick = (slideId) => {
+    replaceTargetRef.current = slideId
+    replaceInputRef.current?.click()
+  }
+
+  const handleReplaceImageChange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-picking the same file
+    const slideId = replaceTargetRef.current
+    if (!file || !slideId) return
+    if (!BANNER_MIME_TYPES.includes(file.type)) {
+      showToast('Please choose a PNG, JPEG, or WebP image.', 'error')
+      return
+    }
+    if (file.size > MAX_BANNER_BYTES) {
+      showToast('Image size exceeds the 2MB limit.', 'error')
+      return
+    }
+    setUploadingSlideId(slideId)
+    try {
+      const url = await uploadImage(file, 'banner')
+      if (!url) throw new Error('Upload did not return an image URL.')
+      // imagePreview drives every render; bannerImage is the persisted field.
+      handleSlideChange(slideId, 'imagePreview', url)
+      handleSlideChange(slideId, 'bannerImage', url)
+      setHasUnsavedChanges(true)
+      showToast('Banner image replaced. Click Save Changes to publish it.', 'success')
+    } catch (err) {
+      // Uploads can fail for non-super-admin sessions — surface, don't crash.
+      showToast(err?.message || 'Unable to upload the image.', 'error')
+    } finally {
+      setUploadingSlideId(null)
+    }
   }
 
   const handleSaveChanges = async () => {
@@ -231,7 +276,7 @@ export default function AdminStoreCustomization() {
         </div>
 
         {/* Two-Column Layout */}
-        <div className="flex gap-6 items-start">
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* LEFT: Hero Banner & Slideshow */}
           <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             {/* Section Header */}
@@ -242,18 +287,40 @@ export default function AdminStoreCustomization() {
                   Edit the main banner and slideshow images shown on your storefront.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleAddNewSlide}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 font-semibold text-xs rounded-lg shadow-sm transition-colors flex-shrink-0"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-brand-orange">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>Add New Slide</span>
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowPreviewDrawer(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 font-semibold text-xs rounded-lg shadow-sm transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-brand-orange">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span>Preview</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddNewSlide}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 font-semibold text-xs rounded-lg shadow-sm transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-brand-orange">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  <span>Add New Slide</span>
+                </button>
+              </div>
             </div>
+
+            {/* Hidden picker shared by every slide's Replace button */}
+            <input
+              ref={replaceInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleReplaceImageChange}
+              className="hidden"
+            />
 
             {/* Slide Rows */}
             <div className="divide-y divide-gray-100">
@@ -409,10 +476,11 @@ export default function AdminStoreCustomization() {
                             </div>
                             <button
                               type="button"
-                              onClick={() => alert('Image selector: Selected default theme asset.')}
-                              className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-bold text-gray-700 flex-shrink-0 transition-colors"
+                              disabled={uploadingSlideId === slide.id}
+                              onClick={() => handleReplaceImageClick(slide.id)}
+                              className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-bold text-gray-700 flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              Replace
+                              {uploadingSlideId === slide.id ? 'Uploading…' : 'Replace'}
                             </button>
                           </div>
                         </div>
@@ -462,7 +530,7 @@ export default function AdminStoreCustomization() {
           </div>
 
           {/* RIGHT: Sidebar */}
-          <div className="w-64 flex-shrink-0 space-y-4">
+          <div className="w-full lg:w-64 flex-shrink-0 space-y-4">
             {/* How to Edit Card */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
               <h3 className="text-sm font-bold text-gray-900 mb-4">How to Edit</h3>
@@ -494,7 +562,11 @@ export default function AdminStoreCustomization() {
                 <li className="flex gap-3">
                   <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
                   <p className="text-xs text-gray-600 leading-relaxed">
-                    Drag and drop the items to rearrange the order of your slides.
+                    Open a slide's edit panel and use its{' '}
+                    <span className="inline-flex items-center gap-0.5 bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
+                      Reorder
+                    </span>{' '}
+                    buttons to move the slide up or down.
                   </p>
                 </li>
                 <li className="flex gap-3">
@@ -533,7 +605,7 @@ export default function AdminStoreCustomization() {
         </div>
 
         {/* Sticky Bottom Bar */}
-        <div className="fixed bottom-0 right-0 left-0 md:left-64 bg-white/95 backdrop-blur-md border-t border-gray-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
+        <div className="fixed bottom-0 right-0 left-0 md:left-60 bg-white/95 backdrop-blur-md border-t border-gray-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${

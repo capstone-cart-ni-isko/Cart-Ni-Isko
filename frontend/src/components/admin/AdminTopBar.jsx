@@ -26,6 +26,7 @@ const BREADCRUMB_MAP = {
   '/admin/customization': ['Store & Catalog', 'Storefront'],
   '/admin/analytics': ['Management', 'Sales'],
   '/admin/users': ['Management', 'Staff'],
+  '/admin/staff': ['Management', 'Staff'],
   '/admin/enroll': ['Management', 'Enroll Staff'],
   '/admin/settings': ['Management', 'Settings'],
   '/admin/settings/logs': ['Management', 'Access Logs'],
@@ -184,9 +185,11 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 select-none">
+    <header className="shrink-0 z-30 select-none">
       {/* ── Ribbon (DOMAIN 3) ── */}
-      <div className="h-14 bg-white border-b border-gray-100 px-4 md:px-6 flex items-center gap-4">
+      {/* Full page width: the ribbon is the top row of the portal (rule 72), so
+          it never starts after the docked sidebar. */}
+      <div className="h-14 bg-white border-b border-gray-100 w-full px-4 md:px-6 flex items-center gap-4">
         {/* LEFT — brand logo (FLOW-EMP_HOME-02) */}
         <Link to={homePath} className="flex items-center gap-2 shrink-0 min-w-0" title="Tindahan ni Isko">
           <img src={brandLogo} alt="Tindahan ni Isko" className="h-9 object-contain hover:opacity-90 transition-opacity" />
@@ -195,8 +198,9 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
           </span>
         </Link>
 
-        {/* CENTER — search bar (FLOW-EMP_HOME-03) */}
-        <form onSubmit={submitSearch} className="flex-1 max-w-lg mx-auto relative">
+        {/* CENTER — search bar (FLOW-EMP_HOME-03). min-w-0 lets it shrink on
+            narrow viewports instead of pushing the five ribbon icons out. */}
+        <form onSubmit={submitSearch} className="flex-1 max-w-lg mx-auto relative min-w-0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />

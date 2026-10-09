@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import QRScanner from '../../components/ui/QRScanner.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
+import { mapOrderRows } from '../../services/dashboard.js'
 
 const CATEGORIES = [
   'All Items',
@@ -14,7 +17,32 @@ const CATEGORIES = [
   'Pins',
 ]
 
+/**
+ * The mobile cart line used to print a fixed fake SKU ("CP-0003") for every
+ * item; look the real one up from the product instead. Kept at module scope
+ * so it does not capture component state.
+ */
+const cartSku = (products, item) => products.find((p) => p.id === item.id)?.sku || ''
+
+/**
+ * A held walk-in sale is only a LOCAL snapshot of the cart lines plus the
+ * customer fields — nothing is posted to the server — so localStorage is safe
+ * here and the register picks it back up after a reload. Returns `null` when
+ * there is nothing held or the stored JSON is unreadable.
+ */
+const HELD_STORAGE_KEY = 'isko_pos_held'
+const loadHeldSale = () => {
+  try {
+    const raw = localStorage.getItem(HELD_STORAGE_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    return Array.isArray(parsed?.items) && parsed.items.length > 0 ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 export default function AdminPos() {
+  const navigate = useNavigate()
   const {
     posCart,
     posAddToCart,
@@ -22,6 +50,7 @@ export default function AdminPos() {
     posRemoveItem,
     posClearCart,
     posCheckout,
+    orders: rawOrders = [],
     refreshOrders,
     products: backendProducts = [],
   } = useAdmin()
@@ -41,6 +70,16 @@ export default function AdminPos() {
   const [showCustomerInput, setShowCustomerInput] = useState(false)
   const [lastPlacedOrder, setLastPlacedOrder] = useState(null)
   const [showReceiptModal, setShowReceiptModal] = useState(false)
+
+  // Held walk-in sale — a local snapshot (see loadHeldSale above), never sent
+  // to the server. Its presence flips the "Hold Transaction" tile to "Resume".
+  const [heldSale, setHeldSale] = useState(loadHeldSale)
+  const [showRecentSalesModal, setShowRecentSalesModal] = useState(false) // walk-in sales list
+  const [showScanModal, setShowScanModal] = useState(false) // barcode scanner
+  const [scanError, setScanError] = useState('')
+  const [discount, setDiscount] = useState(0) // peso discount (orders.ord_discount)
+  const [showDiscountModal, setShowDiscountModal] = useState(false) // Apply Discount dialog
+  const [discountInput, setDiscountInput] = useState('') // amount being typed in
 
   /* ── Modals state ── */
   const [variantModalProduct, setVariantModalProduct] = useState(null) // product selected for variant picking
@@ -72,9 +111,15 @@ export default function AdminPos() {
     })
   }, [products, selectedCategory, searchQuery])
 
+  // Recent Sales list: the shared order rows mapped to display rows, keeping
+  // only walk-in/POS sales. The server already returns them newest-first.
+  const posSales = useMemo(() => mapOrderRows(rawOrders).filter((o) => o.isPos), [rawOrders])
+
   // Cart total calculations
   const subtotal = posCart.reduce((sum, item) => sum + item.price * item.qty, 0)
-  const total = subtotal
+  // The discount can never exceed the cart (the server re-checks it too).
+  const discountAmount = Math.min(Math.max(0, Number(discount) || 0), subtotal)
+  const total = Math.max(0, subtotal - discountAmount)
   const tenderedNum = parseFloat(amountTendered) || 0
   const changeDue = Math.max(0, tenderedNum - total)
   const cartCount = posCart.reduce((s, i) => s + i.qty, 0)
@@ -135,6 +180,7 @@ export default function AdminPos() {
         customerName: customerName.trim() || 'Walk-in',
         studentId: studentId.trim() || 'N/A',
         amountTendered: tenderedNum || total,
+        discount: discountAmount,
       })
 
       if (!result?.success) {
@@ -150,11 +196,138 @@ export default function AdminPos() {
       setCustomerName('')
       setStudentId('')
       setAmountTendered('')
+      // The discount belongs to the sale that just closed.
+      setDiscount(0)
+      setDiscountInput('')
       setShowCustomerInput(false)
       setMobileView('products')
       refreshOrders()
     } finally {
       setCheckoutBusy(false)
+    }
+  }
+
+  // ── HOLD TRANSACTION: snapshot the sale locally, then empty the register.
+  // There is no hold endpoint on the backend, so the copy never leaves the
+  // browser and resuming just replays the lines through the normal cart actions.
+  const handleHoldToggle = () => {
+    if (heldSale) {
+      // One sale at a time — restoring into a non-empty cart would merge lines.
+      if (posCart.length > 0) {
+        showToast('Hold or clear the current sale before resuming the held one.', 'error')
+        return
+      }
+      heldSale.items.forEach((item) => posAddToCart(item, item.variant, item.qty))
+      setCustomerName(heldSale.customerName || '')
+      setStudentId(heldSale.studentId || '')
+      setDiscount(Number(heldSale.discount) || 0)
+      setDiscountInput('')
+      if (heldSale.customerName || heldSale.studentId) setShowCustomerInput(true)
+      setHeldSale(null)
+      try {
+        localStorage.removeItem(HELD_STORAGE_KEY)
+      } catch {
+        /* storage unavailable: the in-memory copy is already cleared */
+      }
+      showToast('Held transaction resumed')
+      return
+    }
+
+    if (posCart.length === 0) {
+      showToast('Nothing to hold — the register is empty.', 'error')
+      return
+    }
+
+    const snapshot = { items: posCart.map((item) => ({ ...item })), customerName, studentId, discount: discountAmount }
+    setHeldSale(snapshot)
+    try {
+      localStorage.setItem(HELD_STORAGE_KEY, JSON.stringify(snapshot))
+    } catch {
+      /* storage unavailable: the hold still survives for this session */
+    }
+    posClearCart()
+    setCustomerName('')
+    setStudentId('')
+    setDiscount(0)
+    setDiscountInput('')
+    setShowCustomerInput(false)
+    showToast('Transaction held')
+  }
+
+  const handleOpenRecentSales = () => {
+    refreshOrders() // pull the freshest rows when the list is opened
+    setShowRecentSalesModal(true)
+  }
+
+  // ── APPLY DISCOUNT: a peso amount taken off the amount due. It is sent as
+  // ord_discount and stored on orders.ord_discount by POST /pos/checkout,
+  // which recomputes the total from the cart rows and rejects anything larger.
+  const handleOpenDiscount = () => {
+    setDiscountInput(discount > 0 ? discount.toFixed(2) : '')
+    setShowDiscountModal(true)
+  }
+
+  const handleApplyDiscount = () => {
+    const amount = Math.max(0, Math.round((parseFloat(discountInput) || 0) * 100) / 100)
+    if (amount <= 0) {
+      showToast('Enter a discount amount greater than zero.', 'error')
+      return
+    }
+    if (amount > subtotal) {
+      showToast('Discount cannot exceed the amount due.', 'error')
+      return
+    }
+    setDiscount(amount)
+    setShowDiscountModal(false)
+    setDiscountInput('')
+    showToast(`Discount of ₱${amount.toFixed(2)} applied`)
+  }
+
+  const handleClearDiscount = () => {
+    setDiscount(0)
+    setDiscountInput('')
+    setShowDiscountModal(false)
+    showToast('Discount removed')
+  }
+
+  // ── BARCODE SCAN: fill the search box (the catalog already matches on SKU)
+  // and auto-add the product when exactly one SKU matches the scanned code.
+  // Both callbacks are memoised: QRScanner restarts its camera whenever
+  // onScan/onError change identity, so they must stay stable across re-renders.
+  const handleBarcodeScan = useCallback(
+    (code) => {
+      const value = String(code || '').trim()
+      setShowScanModal(false)
+      setScanError('')
+      if (!value) return
+      setSearchQuery(value)
+      const hits = backendProducts.filter(
+        (p) => !p.disabled && String(p.sku || '').toLowerCase() === value.toLowerCase()
+      )
+      if (hits.length === 1) {
+        posAddToCart(hits[0], 'Standard')
+        showToast(`Added ${hits[0].name} to the sale`)
+      } else if (hits.length === 0) {
+        showToast(`No product matches barcode "${value}".`, 'error')
+      }
+      // Several exact matches: the search box narrows the catalog list.
+    },
+    [backendProducts, posAddToCart, showToast]
+  )
+
+  // Fullscreen toggle — browsers that do not support or deny it get a message
+  // instead of a silent no-op.
+  const handleToggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else if (typeof document.documentElement.requestFullscreen === 'function') {
+        await document.documentElement.requestFullscreen()
+      } else {
+        showToast('Fullscreen is not supported by this browser.', 'error')
+      }
+    } catch {
+      showToast('Fullscreen was blocked by the browser.', 'error')
     }
   }
 
@@ -361,10 +534,16 @@ export default function AdminPos() {
                   <span>Subtotal</span>
                   <span>₱{(Number(subtotal) || 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-gray-500 font-medium">
+                {/* Discount: a real discount (orders.ord_discount), applied
+                    through the dialog and re-checked by POST /pos/checkout. */}
+                <button
+                  type="button"
+                  onClick={handleOpenDiscount}
+                  className="flex justify-between w-full text-rose-500 font-medium text-left cursor-pointer hover:text-rose-600"
+                >
                   <span>Discount</span>
-                  <span>₱0.00</span>
-                </div>
+                  <span>{discountAmount > 0 ? `−₱${discountAmount.toFixed(2)}` : 'Apply +'}</span>
+                </button>
                 <div className="flex justify-between text-sm font-black text-gray-900 pt-1 border-t border-gray-200/80">
                   <span>Total</span>
                   <span className="text-base font-black">₱{(Number(total) || 0).toFixed(2)}</span>
@@ -454,7 +633,12 @@ export default function AdminPos() {
 
               {/* Mobile Top Header */}
               <div className="flex items-center gap-2 shrink-0 pt-1">
-                <button type="button" className="p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setProductViewMode(productViewMode === 'list' ? 'grid' : 'list')}
+                  title={productViewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+                  className="p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 cursor-pointer"
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                     <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
                   </svg>
@@ -472,22 +656,28 @@ export default function AdminPos() {
                     <p className="text-[10px] text-gray-400">In-store POS</p>
                   </div>
                 </div>
-                <button type="button" className="relative p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/notifications')}
+                  title="Notifications"
+                  className="relative p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 cursor-pointer"
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
                   </svg>
-                  <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-brand-orange text-white text-[8px] font-black rounded-full flex items-center justify-center">3</span>
                 </button>
-                <button type="button" className="p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={handleToggleFullscreen}
+                  title="Toggle fullscreen"
+                  className="p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 cursor-pointer"
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                     <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" />
                   </svg>
                 </button>
-                <button type="button" className="p-1.5 rounded-lg text-gray-700 hover:bg-gray-100 cursor-pointer">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                    <circle cx="12" cy="5" r="1.5" fill="currentColor" /><circle cx="12" cy="12" r="1.5" fill="currentColor" /><circle cx="12" cy="19" r="1.5" fill="currentColor" />
-                  </svg>
-                </button>
+                {/* Kebab menu removed: it only ever offered actions that already
+                    exist elsewhere on this screen, so it had nothing honest to do. */}
               </div>
 
               {/* Search Bar with Barcode Scanner Icon */}
@@ -502,7 +692,15 @@ export default function AdminPos() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full h-10 pl-9 pr-10 rounded-xl bg-white border border-gray-200 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-brand-orange"
                 />
-                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScanError('')
+                    setShowScanModal(true)
+                  }}
+                  title="Scan barcode"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 cursor-pointer"
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                     <rect x="3" y="4" width="3" height="16" /><rect x="8" y="4" width="2" height="16" />
                     <rect x="12" y="4" width="4" height="16" /><rect x="18" y="4" width="3" height="16" />
@@ -707,8 +905,12 @@ export default function AdminPos() {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <h4 className="text-xs font-bold text-gray-900 leading-tight">{item.name}</h4>
-                              <p className="text-[10px] text-gray-400 mt-0.5">{item.variant || 'One Size, Black'}</p>
-                              <p className="text-[10px] text-gray-400">SKU: CP-0003</p>
+                              {item.variant && (
+                                <p className="text-[10px] text-gray-400 mt-0.5">{item.variant}</p>
+                              )}
+                              {cartSku(products, item) && (
+                                <p className="text-[10px] text-gray-400">SKU: {cartSku(products, item)}</p>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-gray-900">₱{(Number(item.price) || 0).toFixed(2)}</span>
@@ -784,17 +986,20 @@ export default function AdminPos() {
                 )}
               </div>
 
-              {/* Subtotal, Discount, Total */}
+              {/* Subtotal, Total */}
               <div className="px-4 py-3 space-y-2 border-b border-gray-100">
                 <div className="flex justify-between text-xs text-gray-600 font-medium">
                   <span>Subtotal</span>
                   <span className="font-bold text-gray-900">₱{(Number(subtotal) || 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-xs text-gray-600 font-medium">
-                  <span>Discount</span>
-                  <button type="button" className="text-rose-500 font-bold flex items-center gap-0.5 cursor-pointer">
-                    −₱0.00
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><polyline points="9 18 15 12 9 6"/></svg>
+                <div className="flex justify-between text-xs text-rose-500 font-medium">
+                  <button
+                    type="button"
+                    onClick={handleOpenDiscount}
+                    className="flex justify-between w-full text-left cursor-pointer hover:text-rose-600"
+                  >
+                    <span>Discount</span>
+                    <span>{discountAmount > 0 ? `−₱${discountAmount.toFixed(2)}` : 'Apply +'}</span>
                   </button>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-100">
@@ -863,23 +1068,49 @@ export default function AdminPos() {
                 </div>
               )}
 
-              {/* More Actions 4-Grid */}
+              {/* More Actions Grid */}
               <div className="px-4 py-3 border-b border-gray-100">
                 <p className="text-xs font-bold text-gray-900 mb-2">More Actions</p>
-                <div className="grid grid-cols-4 gap-2">
-                  <button type="button" className="flex flex-col items-center justify-center p-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-500 mb-1"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    <span className="text-[9px] font-bold text-gray-600 text-center leading-tight">Hold Transaction</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleHoldToggle}
+                    title={heldSale ? 'Resume the held sale' : 'Hold this sale for later'}
+                    className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-colors cursor-pointer ${
+                      heldSale ? 'border-brand-orange bg-orange-50 hover:bg-orange-100' : 'border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 mb-1 ${heldSale ? 'text-brand-orange' : 'text-gray-500'}`}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span className={`text-[9px] font-bold text-center leading-tight ${heldSale ? 'text-brand-orange' : 'text-gray-600'}`}>
+                      {heldSale ? 'Resume Held' : 'Hold Transaction'}
+                    </span>
                   </button>
-                  <button type="button" className="flex flex-col items-center justify-center p-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-500 mb-1"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                    <span className="text-[9px] font-bold text-gray-600 text-center leading-tight">Apply Discount</span>
-                  </button>
-                  <button type="button" className="flex flex-col items-center justify-center p-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer">
+                  <button type="button" onClick={handleOpenRecentSales} className="flex flex-col items-center justify-center p-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-500 mb-1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     <span className="text-[9px] font-bold text-gray-600 text-center leading-tight">Recent Sales</span>
                   </button>
-                  <button type="button" onClick={posClearCart} className="flex flex-col items-center justify-center p-2 rounded-xl border border-rose-100 hover:bg-rose-50 transition-colors cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={handleOpenDiscount}
+                    title="Apply a discount to this sale"
+                    className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-colors cursor-pointer ${
+                      discountAmount > 0 ? 'border-rose-200 bg-rose-50 hover:bg-rose-100' : 'border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 mb-1 ${discountAmount > 0 ? 'text-rose-500' : 'text-gray-500'}`}><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    <span className={`text-[9px] font-bold text-center leading-tight ${discountAmount > 0 ? 'text-rose-600' : 'text-gray-600'}`}>
+                      {discountAmount > 0 ? `−₱${discountAmount.toFixed(2)}` : 'Apply Discount'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      posClearCart()
+                      setDiscount(0)
+                      setDiscountInput('')
+                    }}
+                    className="flex flex-col items-center justify-center p-2 rounded-xl border border-rose-100 hover:bg-rose-50 transition-colors cursor-pointer"
+                  >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-rose-500 mb-1"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     <span className="text-[9px] font-bold text-rose-600 text-center leading-tight">Clear Transaction</span>
                   </button>
@@ -1073,6 +1304,13 @@ export default function AdminPos() {
               </div>
             </div>
 
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-xs font-bold text-rose-500">
+                <span>Discount</span>
+                <span>−₱{discountAmount.toFixed(2)}</span>
+              </div>
+            )}
+
             <div className="flex justify-between items-center p-3 bg-orange-50/70 border border-orange-100 rounded-2xl">
               <span className="text-xs font-black text-gray-900">TOTAL SALE</span>
               <span className="text-lg font-black text-gray-900">₱{total.toFixed(2)}</span>
@@ -1104,8 +1342,67 @@ export default function AdminPos() {
       )}
 
       {/* ===================================================================
-          RECEIPT MODAL (Works on both desktop & mobile)
+          APPLY DISCOUNT DIALOG - writes orders.ord_discount at checkout
       =================================================================== */}
+      {showDiscountModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-xs w-full shadow-2xl border border-gray-100 space-y-4">
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-black text-gray-900">Apply Discount</h3>
+              <p className="text-xs text-gray-500">
+                Amount taken off this sale. Subtotal ₱{subtotal.toFixed(2)}.
+              </p>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Discount (₱)</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                autoFocus
+                value={discountInput}
+                onChange={(e) => setDiscountInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleApplyDiscount()
+                }}
+                placeholder="0.00"
+                className="w-full text-sm font-bold text-gray-900 p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-orange"
+              />
+            </label>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleApplyDiscount}
+                className="flex-1 py-2.5 bg-brand-orange hover:bg-orange-500 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Apply
+              </button>
+              {discountAmount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearDiscount}
+                  className="flex-1 py-2.5 border border-rose-200 text-rose-600 font-bold text-xs rounded-xl hover:bg-rose-50 transition-colors cursor-pointer"
+                >
+                  Remove
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDiscountModal(false)
+                  setDiscountInput('')
+                }}
+                className="px-3 py-2.5 border border-gray-200 text-gray-600 font-bold text-xs rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showReceiptModal && lastPlacedOrder && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 space-y-5 print:shadow-none print:border-none">
@@ -1147,6 +1444,12 @@ export default function AdminPos() {
                   </div>
                 ))}
               </div>
+              {lastPlacedOrder.discount > 0 && (
+                <div className="flex justify-between text-rose-500 font-bold text-xs">
+                  <span>Discount</span>
+                  <span>−₱{(Number(lastPlacedOrder.discount) || 0).toFixed(2)}</span>
+                </div>
+              )}
               <div className="pt-2 border-t border-gray-100 flex justify-between font-black text-sm text-gray-900">
                 <span>TOTAL PAID</span>
                 <span>₱{(Number(lastPlacedOrder.total) || 0).toFixed(2)}</span>
@@ -1181,6 +1484,92 @@ export default function AdminPos() {
                 Done
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================
+          5. RECENT WALK-IN (POS) SALES MODAL
+      =================================================================== */}
+      {showRecentSalesModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-black text-gray-900">Recent Walk-in Sales</h3>
+                <p className="text-xs text-gray-500">POS transactions from this register</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRecentSalesModal(false)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {posSales.length === 0 ? (
+              <p className="text-xs font-bold text-gray-400 text-center py-8">No walk-in sales yet.</p>
+            ) : (
+              <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 scrollbar-none">
+                {posSales.map((sale) => (
+                  <div key={sale.ordId} className="py-2.5 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-gray-900 truncate">{sale.id}</p>
+                      <p className="text-[10px] text-gray-400 truncate">
+                        {sale.customer} • {sale.date}
+                      </p>
+                    </div>
+                    <p className="text-xs font-black text-gray-900 shrink-0">
+                      ₱{(Number(sale.total) || 0).toFixed(2)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowRecentSalesModal(false)}
+              className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================
+          6. BARCODE SCANNER MODAL (fills the search box, auto-adds an
+             exact SKU match — QRScanner surfaces camera errors itself too)
+      =================================================================== */}
+      {showScanModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-black text-gray-900">Scan Barcode</h3>
+                <p className="text-xs text-gray-500">Point the camera at the product barcode</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScanModal(false)}
+                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <QRScanner onScan={handleBarcodeScan} onError={setScanError} className="w-full aspect-video" />
+            {scanError && <p className="text-[11px] font-semibold text-rose-600">{scanError}</p>}
+
+            <button
+              type="button"
+              onClick={() => setShowScanModal(false)}
+              className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

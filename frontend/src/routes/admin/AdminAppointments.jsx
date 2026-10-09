@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
@@ -72,6 +73,7 @@ function normalizeSlot(raw, idx) {
 const errMsg = (err, fallback) => err?.message || fallback
 
 export default function AdminAppointments() {
+  const navigate = useNavigate()
   const { currentAdminUser } = useAdmin() || {}
   const { showToast } = useToast()
 
@@ -727,8 +729,11 @@ export default function AdminAppointments() {
               </div>
             </div>
 
-            {/* 2. Want more hours? */}
-            <div className="bg-[#F0F7FF] border border-[#DCEBFE] rounded-3xl p-5 flex items-center justify-between gap-3 shadow-2xs hover:bg-blue-50/80 transition-colors cursor-pointer group">
+            {/* 2. Want more hours? — jumps to the scheduling/availability screen */}
+            <div
+              onClick={() => navigate('/admin/schedules')}
+              className="bg-[#F0F7FF] border border-[#DCEBFE] rounded-3xl p-5 flex items-center justify-between gap-3 shadow-2xs hover:bg-blue-50/80 transition-colors cursor-pointer group"
+            >
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#2563EB] flex items-center justify-center shrink-0 mt-0.5">
                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-[#2563EB]">
@@ -757,6 +762,7 @@ export default function AdminAppointments() {
                 {/* View Full Schedule */}
                 <button
                   type="button"
+                  onClick={() => navigate('/admin/schedules')}
                   className="bg-[#F8F9FA] hover:bg-gray-100/80 active:scale-95 transition-all p-4 rounded-2xl border border-gray-100 text-left space-y-2 cursor-pointer shadow-2xs group"
                 >
                   <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#2563EB] flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -778,6 +784,10 @@ export default function AdminAppointments() {
                 {/* Need Help? */}
                 <button
                   type="button"
+                  // Spec: support contact uses the shared support inbox (same as DesktopFooter)
+                  onClick={() => {
+                    window.location.href = 'mailto:support@tindahanniisko.com'
+                  }}
                   className="bg-[#F8F9FA] hover:bg-gray-100/80 active:scale-95 transition-all p-4 rounded-2xl border border-gray-100 text-left space-y-2 cursor-pointer shadow-2xs group"
                 >
                   <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -797,8 +807,11 @@ export default function AdminAppointments() {
               </div>
             </div>
 
-            {/* 4. Reminder */}
-            <div className="bg-white rounded-3xl p-5 border border-gray-100/90 shadow-xs flex items-center justify-between gap-3 hover:border-gray-200 transition-colors cursor-pointer group">
+            {/* 4. Reminder — opens the notifications screen */}
+            <div
+              onClick={() => navigate('/admin/notifications')}
+              className="bg-white rounded-3xl p-5 border border-gray-100/90 shadow-xs flex items-center justify-between gap-3 hover:border-gray-200 transition-colors cursor-pointer group"
+            >
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shrink-0 mt-0.5">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">

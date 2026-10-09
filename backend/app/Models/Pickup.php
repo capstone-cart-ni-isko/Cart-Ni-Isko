@@ -34,7 +34,7 @@ class Pickup extends Model
 
     public function appointment()
     {
-        return $this->belongsTo(Appointment::class, 'appoint_id', 'appoint_id');
+        return $this->belongsTo(Visit::class, 'appoint_id', 'appoint_id');
     }
 
     public function payment()

@@ -19,8 +19,17 @@ class SystemSettings
         'store_name' => 'Tindahan ni Isko',
         'store_location' => 'Bicol University, Legazpi City, Albay',
         'store_contact' => 'tindahan.ni.isko@bicol-u.edu.ph',
-        'operating_hours' => '08:00-18:00',
+        'operating_hours' => '08:00 - 18:00',
         'store_live' => false,
+        // The storefront's "open for online orders" switch. `maintenance_mode`
+        // is the stored spelling; the admin screens read `store_open` as its
+        // inverse, so it is deliberately never stored alongside it.
+        'maintenance_mode' => false,
+        // Orders list / slot calendar caps shown on the settings screens.
+        'max_claiming_slots' => 10,
+        'max_visit_slots' => 1,
+        // Dormant until a real term is configured (AcademicPeriodRoster).
+        'academic_period_start' => '2027-08-02',
         'slot_minutes' => 10,
         'visit_slot_capacity' => 1,
         'pickup_slot_capacity' => 5,

@@ -236,8 +236,10 @@ function Avatar({ initials, size = 'sm' }) {
 
 // ─── Right Sidebar Panel (shared by Scheduled & Overview) ─────────────────
 function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
+  // Below xl the fixed w-80 rail squeezed the KPI grid/table and pushed the
+  // page sideways; it stacks under the main column instead.
   return (
-    <div className="w-80 shrink-0 space-y-3">
+    <div className="w-full xl:w-80 shrink-0 space-y-3">
       {/* Schedule Panel */}
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
@@ -337,7 +339,7 @@ function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
 
 function OverviewTab({ kpis, scheduleRows, slots, onSchedule, onViewUnscheduled }) {
   return (
-    <div className="flex gap-4 min-h-0">
+    <div className="flex flex-col xl:flex-row gap-4 min-h-0">
       {/* Main content */}
       <div className="flex-1 space-y-4 min-w-0">
         {/* KPI Cards */}
@@ -524,7 +526,7 @@ function UnscheduledTab({ orders, onSchedule, onHandover, onOpenOrder, busyId })
 
 function ScheduledTab({ groups, slots, onSchedule, onViewUnscheduled, onHandover, onOpenOrder, busyId }) {
   return (
-    <div className="flex gap-4 min-h-0">
+    <div className="flex flex-col xl:flex-row gap-4 min-h-0">
       {/* Main area */}
       <div className="flex-1 space-y-3 min-w-0">
         {/* Date header */}

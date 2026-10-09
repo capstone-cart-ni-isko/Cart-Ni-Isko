@@ -6,16 +6,81 @@ use App\Models\Schedule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
-class InputValidatorAPI extends Controller
+/**
+ * DatabaseAPI
+ *
+ * SYSTEM RULE 80 - the ONE backend API that talks to the database. Every query built anywhere else in this app is passed to the database here, and it also owns input/query validation plus the 18-month purge of soft-deleted records (system rules 66, 78, 79).
+ *
+ * Repackaged from: InputValidator API.
+ */
+class DatabaseAPI extends Controller
 {
-    // JSON RESPONSE HELPER
-    protected function fail(string $message, int $status = 400)
+    // ===== SYSTEM RULE 80 - THE ONE DOOR TO THE DATABASE =====
+    //
+    // Every connection (sqlite, pgsql, mysql, mariadb, sqlsrv) is resolved as
+    // an ApiRouted*Connection (see AppServiceProvider::register()), and each
+    // of those overrides Connection::run() to hand the SQL here before PDO
+    // ever sees it. Queries are still written by the API that owns the
+    // feature - rule 76 keeps that - but this is the single place where a
+    // query is validated and passed to the database (rules 77 and 80).
+    //
+    // $execute runs the statement (Connection::run() inside the connection
+    // subclass); its return value and any query exception are passed straight
+    // back so callers see exactly what they saw before rule 80 was wired up.
+    public static function passToDatabase(string $query, array $bindings, callable $execute)
     {
-        return response()->json([
-            'success' => false,
-            'message' => $message
-        ], $status);
+        // Query validation (DatabaseAPI's own spec line): an empty statement
+        // or an array in the binding list is a programming error, not data, so
+        // it is rejected before it can reach the driver. Scalars, null,
+        // DateTimeInterface and BackedEnum are all values Laravel's
+        // prepareBindings() already knows how to flatten.
+        if (trim($query) === '') {
+            throw new \InvalidArgumentException('DatabaseAPI rejected an empty query.');
+        }
+
+        foreach ($bindings as $binding) {
+            if (is_array($binding)
+                || (is_object($binding)
+                    && ! $binding instanceof \DateTimeInterface
+                    && ! $binding instanceof \BackedEnum)) {
+                throw new \InvalidArgumentException('DatabaseAPI rejected a non-scalar query binding.');
+            }
+        }
+
+        // Rule 77: data fetching and storing must finish inside one second.
+        // The attempt is never cancelled when it does not - the row still has
+        // to be written - but a slow statement is recorded so it shows up in
+        // the query log instead of silently breaking the budget.
+        $startedAt = microtime(true);
+
+        try {
+            return $execute();
+        } finally {
+            $elapsed = microtime(true) - $startedAt;
+
+            if ($elapsed >= 1.0 && static::$slowestQuery < $elapsed) {
+                static::$slowestQuery = $elapsed;
+                static::$slowestSql = $query;
+            }
+        }
     }
+
+    /** Longest statement seen this request, in seconds (0 when none ran slow). */
+    public static function slowestQuerySeconds(): float
+    {
+        return static::$slowestQuery;
+    }
+
+    /** The statement that took that long, or null. */
+    public static function slowestQuerySql(): ?string
+    {
+        return static::$slowestSql;
+    }
+
+    private static float $slowestQuery = 0.0;
+    private static ?string $slowestSql = null;
+
+    // ===== from the InputValidator API file =====
 
     // ==========================================
     // ACTION VALIDATORS
@@ -309,7 +374,7 @@ class InputValidatorAPI extends Controller
             generic `validateAllFormats()` runner is deliberately NOT applied
             here. It would answer "Invalid email format." for a mistyped
             address, and a mistyped address is simply one that does not exist
-            - AuthAPI::employeeLogin then returns `EMP_NOT_FOUND`, which the
+            - SecurityAPI::employeeLogin then returns `EMP_NOT_FOUND`, which the
             form prints as "User not found" under the email field, exactly
             where rule 67 wants it. The password is only ever compared, never
             pattern-checked, so a wrong password still answers "Wrong
@@ -493,41 +558,24 @@ class InputValidatorAPI extends Controller
 
     public function addProduct(Request $json)
     {
-        $requiredCheck = $this->validateFields($json, [
-            'prod_name'  => 'required',
-            'prod_tag'   => 'required',
-            'prod_price' => 'required',
-            'prod_qty'   => 'required',
+        /*
+            Live behaviour (ProductsAPI::addProduct) mirrors this gate:
+            - `prod_name` is required (400 when empty);
+            - `prod_price` must be present and numeric (400 otherwise);
+            - `prod_tag`, `prod_qty` and `prod_categ` are optional - the tag is
+              generated when absent and a product without a `variations` list
+              falls back to one Standard variation stocked from prod_qty;
+            - name / tag uniqueness is a business rule the owning action
+              answers with 409, so it is deliberately not asserted here.
+        */
+        return $this->validateFields($json, [
+            'prod_name'  => 'required|string',
+            'prod_price' => 'required|numeric',
         ], [
             'prod_name.required'  => 'Product name is required.',
-            'prod_tag.required'   => 'Product tag is required.',
+            'prod_name.string'    => 'Product name must be text.',
             'prod_price.required' => 'Product price is required.',
-            'prod_qty.required'   => 'Product quantity is required.',
-        ]);
-        if ($requiredCheck) return $requiredCheck;
-
-        // Live behaviour (ProductsAPI::addProduct): price must be greater
-        // than zero and "SHIRT" / "shirt" count as the same product.
-        return $this->validateFields($json, [
-            'prod_name'  => ['string', 'max:255',
-                \Illuminate\Validation\Rule::unique('product', 'prod_name')
-                    ->whereRaw('lower(prod_name) = lower(?)',
-                        [trim((string) $json->input('prod_name'))])],
-            'prod_tag'   => ['string', 'max:255',
-                \Illuminate\Validation\Rule::unique('product', 'prod_tag')
-                    ->whereRaw('lower(prod_tag) = lower(?)',
-                        [trim((string) $json->input('prod_tag'))])],
-            'prod_categ' => 'nullable|string|max:100',
-            'prod_price' => 'numeric|gt:0',
-            'prod_qty'   => 'integer|min:0',
-            'prod_desc'  => 'nullable|string',
-        ], [
-            'prod_name.unique'   => 'Product name already exists.',
-            'prod_tag.unique'    => 'Product tag already exists.',
-            'prod_price.numeric' => 'Product price must be a number.',
-            'prod_price.gt'      => 'Product price must be greater than zero.',
-            'prod_qty.integer'   => 'Product quantity must be an integer.',
-            'prod_qty.min'       => 'Product quantity cannot be negative.',
+            'prod_price.numeric'  => 'Product price must be a number.',
         ]);
     }
 
@@ -549,9 +597,13 @@ class InputValidatorAPI extends Controller
             'prod_categ' => 'nullable|string|max:100',
             'prod_price' => 'nullable|numeric|min:0',
             'prod_qty'   => 'nullable|integer|min:0',
+            // Per-variation stock write (the inventory stepper targets ONE
+            // variation instead of shifting the product total).
+            'prodvar_id' => 'nullable|integer|exists:prodvar,prodvar_id',
             'prod_desc'  => 'nullable|string',
         ], [
             'prod_id.exists'     => 'Product not found.',
+            'prodvar_id.exists'  => 'Product variation not found.',
             'prod_name.unique'   => 'Product name already exists.',
             'prod_tag.unique'    => 'Product tag already exists.',
             'prod_price.numeric' => 'Product price must be a number.',
@@ -724,7 +776,7 @@ class InputValidatorAPI extends Controller
     public function createAppointment(Request $json)
     {
         // The live column is `appoint_start`; `appoint_date` is the legacy
-        // request spelling (AppointAPI aliases one onto the other before this
+        // request spelling (AppointmentsAPI aliases one onto the other before this
         // runs), so a booking may be expressed with EITHER key - requiring the
         // legacy one alone rejected every modern client that only sends
         // appoint_start.
@@ -803,44 +855,56 @@ class InputValidatorAPI extends Controller
 
     public function createReview(Request $json)
     {
+        // Live behaviour (ProductsAPI::createReview): a review is anchored to
+        // an order or a product, and the score arrives under either the live
+        // `ord_rating` key or its `rating` alias.
         return $this->validateFields($json, [
             'ord_id'     => 'required_without:prod_id',
             'prod_id'    => 'required_without:ord_id',
-            'ord_rating' => 'required|numeric|min:1|max:5',
+            'ord_rating' => 'required_without:rating|numeric|min:1|max:5',
+            'rating'     => 'sometimes|nullable|numeric|min:1|max:5',
         ], [
             'ord_id.required_without'     => 'Order ID or product ID is required.',
             'prod_id.required_without'    => 'Order ID or product ID is required.',
-            'ord_rating.required'         => 'Rating score is required.',
-            'ord_rating.numeric'          => 'Rating must be a number.',
-            'ord_rating.min'              => 'Rating score must be at least 1.',
-            'ord_rating.max'              => 'Rating score cannot exceed 5.',
+            'ord_rating.required_without' => 'Rating score is required.',
+            'ord_rating.numeric'          => 'Rating must be a number between 1 and 5.',
+            'ord_rating.min'              => 'Rating must be a number between 1 and 5.',
+            'ord_rating.max'              => 'Rating must be a number between 1 and 5.',
+            'rating.numeric'              => 'Rating must be a number between 1 and 5.',
+            'rating.min'                  => 'Rating must be a number between 1 and 5.',
+            'rating.max'                  => 'Rating must be a number between 1 and 5.',
         ]);
     }
 
     public function deleteReview(Request $json)
     {
+        // Live behaviour (ProductsAPI::deleteReview -> resolveReview): a review
+        // is targeted by its own `rev_id` or by the order it belongs to.
         return $this->validateFields($json, [
-            'ord_id' => 'required',
+            'ord_id' => 'required_without:rev_id',
+            'rev_id' => 'sometimes|nullable',
         ], [
-            'ord_id.required' => 'Order ID is required.',
+            'ord_id.required_without' => 'Order ID is required.',
         ]);
     }
 
     public function moderateReview(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id' => 'required',
+            'ord_id' => 'required_without:rev_id',
+            'rev_id' => 'sometimes|nullable',
         ], [
-            'ord_id.required' => 'Order ID is required.',
+            'ord_id.required_without' => 'Order ID is required.',
         ]);
     }
 
     public function updateReview(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id' => 'required',
+            'ord_id' => 'required_without:rev_id',
+            'rev_id' => 'sometimes|nullable',
         ], [
-            'ord_id.required' => 'Order ID is required.',
+            'ord_id.required_without' => 'Order ID is required.',
         ]);
     }
 
@@ -925,19 +989,31 @@ class InputValidatorAPI extends Controller
 
     public function addOrder(Request $json)
     {
+        // Live behaviour (UserAPI::addOrder): the customer is taken from the
+        // bearer token, so `cust_id` is optional and only checked for shape; a
+        // line is either a single `prod_id` or a non-empty `items` array.
         return $this->validateFields($json, [
-            'cust_id' => 'required',
+            'cust_id' => 'sometimes|nullable|integer',
+            'prod_id' => 'required_without:items',
+            'items'   => 'required_without:prod_id|array',
         ], [
-            'cust_id.required' => 'Customer ID is required.',
+            'cust_id.integer'          => 'Customer ID must be an integer.',
+            'prod_id.required_without' => 'prod_id or items array is required.',
+            'items.required_without'   => 'prod_id or items array is required.',
+            'items.array'              => 'items must be an array of order lines.',
         ]);
     }
 
     public function removeOrder(Request $json)
     {
+        // Live behaviour (UserAPI::removeOrder): the bag row may be named by
+        // `bag_id` or either legacy alias (`item_id` / `ord_id`).
         return $this->validateFields($json, [
-            'ord_id' => 'required',
+            'bag_id'  => 'required_without_all:item_id,ord_id',
+            'item_id' => 'sometimes|nullable',
+            'ord_id'  => 'sometimes|nullable',
         ], [
-            'ord_id.required' => 'Order ID is required.',
+            'bag_id.required_without_all' => 'bag_id is required.',
         ]);
     }
 
@@ -1030,12 +1106,20 @@ class InputValidatorAPI extends Controller
 
     public function addProductToOrder(Request $json)
     {
+        /*
+            Canonical validator for POST /pos/add (OrdersAPI::addProductToOrder).
+
+            Live behaviour: `prod_id` is the only hard requirement - the
+            register opens a fresh walk-in ticket when `ord_id` is absent and
+            appends to an existing one when it is sent. `posAddProductToOrder`
+            delegates here so the two names never drift (rule 76).
+        */
         return $this->validateFields($json, [
-            'ord_id'  => 'required',
             'prod_id' => 'required',
+            'ord_id'  => 'sometimes|nullable|integer',
         ], [
-            'ord_id.required'  => 'Order ID is required.',
             'prod_id.required' => 'Product ID is required.',
+            'ord_id.integer'   => 'Order ID must be an integer.',
         ]);
     }
 
@@ -1065,27 +1149,29 @@ class InputValidatorAPI extends Controller
 
     public function posAddProductToOrder(Request $json)
     {
-        return $this->validateFields($json, [
-            'prod_id' => 'required',
-        ], [
-            'prod_id.required' => 'Product ID is required.',
-        ]);
+        // Rule 76: one implementation - the canonical POS validator.
+        return $this->addProductToOrder($json);
     }
 
     public function posCheckoutOrder(Request $json)
     {
         return $this->validateFields($json, [
-            'ord_id'     => 'required',
-            'pay_given'  => 'required|numeric|min:0',
+            'ord_id'      => 'required',
+            'pay_given'   => 'required|numeric|min:0',
+            // The cashier's discount: an optional peso amount taken off the
+            // amount due (orders.ord_discount). Never more than the cart.
+            'ord_discount' => 'nullable|numeric|min:0',
             // FLOW-WALKIN-06: the tender is optional for legacy clients,
             // but when sent it must be cash or digital.
             'pay_method' => 'nullable|in:cash,digital',
         ], [
-            'ord_id.required'     => 'Order ID is required.',
-            'pay_given.required'  => 'Payment given amount is required.',
-            'pay_given.numeric'   => 'Payment given must be a numeric amount.',
-            'pay_given.min'       => 'Payment given cannot be negative.',
-            'pay_method.in'       => 'Payment method must be cash or digital.',
+            'ord_id.required'      => 'Order ID is required.',
+            'pay_given.required'   => 'Payment given amount is required.',
+            'pay_given.numeric'    => 'Payment given must be a numeric amount.',
+            'pay_given.min'        => 'Payment given cannot be negative.',
+            'ord_discount.numeric' => 'Discount must be a numeric amount.',
+            'ord_discount.min'     => 'Discount cannot be negative.',
+            'pay_method.in'        => 'Payment method must be cash or digital.',
         ]);
     }
 

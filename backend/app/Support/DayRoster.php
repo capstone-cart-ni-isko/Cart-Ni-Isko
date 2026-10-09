@@ -2,7 +2,7 @@
 
 namespace App\Support;
 
-use App\Models\DutyShift;
+use App\Models\Schedule;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -28,9 +28,9 @@ class DayRoster
     public static function for(Carbon $day): self
     {
         return new self(
-            DutyShift::rosterFor($day),
-            DutyShift::hasRosterFor($day),
-            DutyShift::availableEmployeeIds()->count(),
+            Schedule::rosterFor($day),
+            Schedule::hasRosterFor($day),
+            Schedule::availableEmployeeIds()->count(),
         );
     }
 
@@ -41,7 +41,7 @@ class DayRoster
         if (! $this->rostered) return $this->dayWide;
 
         return $this->blocks
-            ->filter(fn (DutyShift $block) => $block->covers($start, $end))
+            ->filter(fn (Schedule $block) => $block->covers($start, $end))
             ->count();
     }
 }

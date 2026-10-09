@@ -127,6 +127,14 @@ export default function AdminReviews() {
   const mapItem = useCallback((item, product) => {
     const ordId = Number(String(item.id || '').split('-')[1]) || 0
     const comment = item.comment || ''
+    const reviewer = item.custName || item.author || 'Verified Student'
+    const reviewerInitials = reviewer
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => word[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || 'VS'
     return {
       id: item.id,
       ordId,
@@ -138,8 +146,8 @@ export default function AdminReviews() {
       timeAgo: item.date || 'Recently',
       postedAt: item.date || '',
       orderId: ordId ? `ORD-${ordId}` : '',
-      reviewer: item.author || 'Verified Student',
-      reviewerInitials: 'VS',
+      reviewer,
+      reviewerInitials,
       verifiedPurchase: item.verified !== false,
       photos: [],
       deliveryStatus: null,

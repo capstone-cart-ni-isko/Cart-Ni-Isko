@@ -36,4 +36,31 @@ return Application::configure(basePath: dirname(__DIR__))
                 'message' => 'Unauthenticated. Please sign in again.'
             ], 401);
         });
+
+        // Fault-tolerance backstop (rule 76 / 80): whichever controller action
+        // an unexpected failure escapes from, an API caller still gets the one
+        // `{success:false, message}` envelope instead of an HTML error page or
+        // a stack trace. The kernel has already reported (logged) the
+        // exception by the time this runs, so nothing is duplicated here.
+        //
+        // Everything Laravel renders on its own keeps its own status and body:
+        // authentication (401), validation (422 with `errors`), and the HTTP
+        // exceptions behind 404 / 405 / 419 / 429 never reach the 500 branch.
+        $exceptions->render(function (\Throwable $e, $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            if ($e instanceof Illuminate\Auth\AuthenticationException
+                || $e instanceof Illuminate\Validation\ValidationException
+                || $e instanceof Illuminate\Http\Exceptions\HttpResponseException
+                || $e instanceof Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                return null;
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again.',
+            ], 500);
+        });
     })->create();

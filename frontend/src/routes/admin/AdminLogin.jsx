@@ -176,27 +176,27 @@ export default function AdminLogin() {
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
-      <div className="w-full max-w-md bg-white rounded-lg p-8 sm:p-10 border border-gray-100 space-y-7 animate-fade-in">
+      <div className="w-full max-w-xl bg-white rounded-lg p-8 sm:p-10 border border-gray-100 shadow-lg space-y-7 animate-fade-in">
         {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="flex justify-center mb-1">
+        <div className="text-center space-y-3">
+          <div className="flex justify-center mb-2">
             <img
               src={brandLogo}
               alt="Tindahan ni Isko"
-              className="h-16 w-auto object-contain"
+              className="h-20 w-auto object-contain"
             />
           </div>
-          <h1 className="text-xl font-black text-gray-900 tracking-tight">
-            Staff &amp; Admin Portal
+          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+            Staff & Admin Portal
           </h1>
-          <p className="text-xs text-gray-400 font-medium">
-            Authorized Bicol University Staff &amp; Officer Access Only
+          <p className="text-sm text-gray-500 font-medium">
+            Authorized Bicol University Staff & Officer Access Only
           </p>
         </div>
 
         {/* Error notification (account level, never a field message) */}
         {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl flex items-center gap-2 animate-slide-up">
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium rounded-xl flex items-center gap-2 animate-slide-up">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
@@ -231,7 +231,7 @@ export default function AdminLogin() {
                   setEmail(e.target.value)
                   clearSubmitMsgs()
                 }}
-                className="w-full h-12 px-4 border rounded-lg bg-gray-50 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all"
+                className="w-full h-14 pl-11 pr-4 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 transition-all"
               />
             </div>
             {/* FLOW-EMP_LOGIN-02/03 - "User not found" under the email field */}
@@ -268,7 +268,7 @@ export default function AdminLogin() {
                   setPassword(e.target.value)
                   clearSubmitMsgs()
                 }}
-                className="w-full h-12 px-4 border rounded-lg bg-gray-50 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all"
+                className="w-full h-14 pl-11 pr-11 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 transition-all"
               />
               <button
                 type="button"
@@ -304,7 +304,7 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-11 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-lg transition-all shadow-md active:scale-98 cursor-pointer"
+            className="w-full h-12 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-lg transition-all btn-press cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? (
               <span>Authenticating...</span>

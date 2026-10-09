@@ -183,13 +183,20 @@ function App() {
                   <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
                     <Route path="/admin/analytics" element={<AdminAnalytics />} />
                   </Route>
-                  <Route path="/admin/customization" element={<AdminStoreCustomization />} />
-                  {/* FLOW-EMP_SCHED-01: super admins reach the interface through
-              `/admin/schedules`. The singular spelling was the only one
-              registered, so the documented URL fell through to the dashboard;
-              it is kept as an alias so existing deep links still land. */}
-          <Route path="/admin/schedules" element={<AdminSchedule />} />
-          <Route path="/admin/schedule" element={<AdminSchedule />} />
+                  {/* Rule 40 / FLOW-EMP_SET-06 — store-wide customization is
+                      super-admin territory, and SettingsAPI answers 403 to
+                      anyone else, so gating the route stops a form whose
+                      Save button can never succeed. */}
+                  <Route element={<RequireRole roles={['SUPER_ADMIN']} />}>
+                    <Route path="/admin/customization" element={<AdminStoreCustomization />} />
+                  </Route>
+                  {/* FLOW-EMP_SCHED-01 — super admins preschedule from
+                      `/admin/schedules`; the singular spelling stays as an
+                      alias so existing deep links still land. The screen
+                      itself keeps a staff-accessible "my availability" half
+                      (FLOW-EMP_SCHED-04), so it is not role-gated here. */}
+                  <Route path="/admin/schedules" element={<AdminSchedule />} />
+                  <Route path="/admin/schedule" element={<AdminSchedule />} />
                   <Route path="/admin/appointments" element={<AdminAppointments />} />
                   {/* REQ-EMP_HOME-01 — the Reviews entry never renders for a
                       'staff' employee, so the screen behind it is guarded the
@@ -197,10 +204,15 @@ function App() {
                   <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
                     <Route path="/admin/reviews" element={<AdminReviews />} />
                   </Route>
-                  <Route path="/admin/users" element={<AdminUsers />} />
-                  {/* The staff directory link the sidebar and the enrollment
-                      confirmation both point at. */}
-                  <Route path="/admin/staff" element={<AdminUsers />} />
+                  {/* REQ-EMP_LIST-01 / REQ-EMP_LIST-05 — the employee directory
+                      is super-admin only, and typing the URL must not be a way
+                      around the sidebar entry that staff never see. */}
+                  <Route element={<RequireRole roles={['SUPER_ADMIN']} />}>
+                    <Route path="/admin/users" element={<AdminUsers />} />
+                    {/* The staff directory link the sidebar and the enrollment
+                        confirmation both point at. */}
+                    <Route path="/admin/staff" element={<AdminUsers />} />
+                  </Route>
                   <Route path="/admin/account" element={<AdminAccount />} />
                   <Route path="/admin/profile" element={<AdminAccount />} />
 

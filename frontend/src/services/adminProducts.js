@@ -58,7 +58,13 @@ export function mapAdminProduct(row) {
     : rawStatus === 'Out of Stock'
     ? 'Out of Stock'
     : rawStatus || (qty > 0 ? 'Published' : 'Out of Stock')
-  const availability = qty > 0 ? 'Regular' : 'Out of Stock'
+  // Same preorder rule the customer catalog applies in services/products.js,
+  // so "Availability: Pre-order" in the admin filters matches what customers
+  // actually see for the same row.
+  const preorder = hasVariations
+    ? variations.some((variant) => variant.prodvar_preorder)
+    : row.prod_preorder === true || (qty <= 0 && row.prod_preorder !== false)
+  const availability = preorder ? 'Pre-order' : qty > 0 ? 'Regular' : 'Out of Stock'
   const variants = hasVariations
     ? variations.map((variant, i) => ({
         id: `var-${variant.prodvar_id ?? `${row.prod_id}-${i}`}`,
@@ -87,6 +93,7 @@ export function mapAdminProduct(row) {
     categoryName: category,
     collectionName: 'Core Classics',
     availability,
+    preorder,
     totalStock: qty,
     price: Number(row.prod_price) || 0,
     // prod_peaksold is gone (aggregate from prodsales server-side);

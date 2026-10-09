@@ -2,24 +2,23 @@
 
 namespace Tests\Feature;
 
-use App\Models\Customer;
-use App\Models\DutyShift;
 use App\Models\EmpNotif;
 use App\Models\Employee;
+use App\Models\Schedule;
 use App\Models\Setting;
 use Carbon\Carbon;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * Duty shift API (REQ-SS-01 / REQ-SS-02 / REQ-SS-03).
+ * Duty shift API (REQ-EMP_SCHED / system-new rule 38).
  *
  * These tests run on phpunit's sqlite :memory: database, so no row in the
- * Supabase database is read or written from here. duty_shift has no status
- * column, so every status asserted here is the value the API derives.
+ * Supabase database is read or written from here. `schedules` stores one
+ * timestamp pair per block (system-new DOMAIN 7) instead of the retired
+ * duty_shift date + time columns, and it has no status column, so every
+ * status asserted here is the value the API derives.
  */
 class ShiftApiTest extends TestCase
 {
@@ -28,31 +27,10 @@ class ShiftApiTest extends TestCase
     private int $seq = 0;
     private array $tokens = [];
 
-    protected function setUp(): void
+    protected function tearDown(): void
     {
-        parent::setUp();
-
-        // duty_shift exists in Supabase but has no Laravel migration, so the
-        // sqlite test database needs the same structure. This stub only ever
-        // runs under phpunit: the column list is copied verbatim from the live
-        // table and the guarded migration convention is deliberately not used
-        // (G6a — no schema migration). The Supabase table is never touched.
-        if (! Schema::hasTable('duty_shift')) {
-            Schema::create('duty_shift', function (Blueprint $table) {
-                $table->bigIncrements('shift_id');
-                $table->unsignedBigInteger('emp_id');
-                $table->date('shift_date');
-                $table->string('shift_start');
-                $table->string('shift_end');
-                $table->string('shift_type')->default('DESK DUTY');
-                $table->string('shift_location')->nullable();
-                $table->timestamp('shift_created')->useCurrent();
-                $table->unsignedBigInteger('created_by')->nullable();
-
-                $table->foreign('emp_id')->references('emp_id')->on('employee')->cascadeOnDelete();
-                $table->index(['shift_date', 'emp_id']);
-            });
-        }
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     // ==========================================
@@ -83,8 +61,10 @@ class ShiftApiTest extends TestCase
 
         // emp_type is a legacy fixture column and is deliberately absent from
         // the model's fillable list (the live table spells it emp_categ), so
-        // the fixture writes it past mass assignment.
-        return Employee::forceCreate(array_merge([
+        // the fixture writes it past mass assignment. Both spellings are kept
+        // in step: EnsureRole reads either, notifyEmployeesByType reads
+        // emp_categ first and falls back to emp_type.
+        $data = array_merge([
             'emp_created'  => now(),
             'emp_password' => Hash::make('Password123!'),
             'emp_surname'  => 'Dela Cruz',
@@ -100,7 +80,11 @@ class ShiftApiTest extends TestCase
             'emp_email'    => 'emp' . $this->seq . uniqid() . '@bicol-u.edu.ph',
             'emp_type'     => 'STAFF',
             'emp_instore'  => 1,
-        ], $attributes));
+        ], $attributes);
+
+        $data['emp_categ'] = $data['emp_type'] ?? 'STAFF';
+
+        return Employee::forceCreate($data);
     }
 
     private function makeSuperAdmin(): Employee
@@ -108,17 +92,32 @@ class ShiftApiTest extends TestCase
         return $this->makeEmployee(['emp_type' => 'SUPER ADMIN']);
     }
 
-    private function makeShift(Employee $employee, array $attributes = []): DutyShift
+    /**
+     * One duty block. `schedules` keeps the window as a start/end timestamp
+     * pair, so the API's `shift_date` + `shift_start` / `shift_end` fields are
+     * folded into it here exactly as SystemAPI::windowStart()/windowEnd() do.
+     * `shift_type` / `shift_location` are validated but have no column to
+     * live on, so they are never stored.
+     */
+    private function makeShift(Employee $employee, array $attributes = []): Schedule
     {
-        return DutyShift::create(array_merge([
-            'emp_id'         => $employee->getKey(),
-            'shift_date'     => now()->addDay()->format('Y-m-d'),
-            'shift_start'    => '08:00',
-            'shift_end'      => '18:00',
-            'shift_type'     => 'DESK DUTY',
-            'shift_location' => 'Main Counter',
-            'shift_created'  => now(),
-            'created_by'     => null,
+        $date = $attributes['shift_date'] ?? now()->addDay()->format('Y-m-d');
+        $start = $attributes['shift_start'] ?? '08:00';
+        $end   = $attributes['shift_end'] ?? '18:00';
+
+        unset(
+            $attributes['shift_date'],
+            $attributes['shift_start'],
+            $attributes['shift_end'],
+            $attributes['shift_type'],
+            $attributes['shift_location']
+        );
+
+        return Schedule::create(array_merge([
+            'emp_id'           => $employee->getKey(),
+            'sched_time_start' => Carbon::parse($date . ' ' . $start),
+            'sched_time_end'   => Carbon::parse($date . ' ' . $end),
+            'sched_created'    => now(),
         ], $attributes));
     }
 
@@ -153,8 +152,8 @@ class ShiftApiTest extends TestCase
         $this->assertNotEmpty($response->json('data.shift_created'));
 
         // Exactly one block row now exists for that employee
-        $this->assertDatabaseCount('duty_shift', 1);
-        $this->assertDatabaseHas('duty_shift', ['emp_id' => $officer->getKey()]);
+        $this->assertDatabaseCount('schedules', 1);
+        $this->assertDatabaseHas('schedules', ['emp_id' => $officer->getKey()]);
     }
 
     public function test_create_shift_rejects_missing_fields_with_400()
@@ -165,7 +164,7 @@ class ShiftApiTest extends TestCase
             ->assertStatus(400)
             ->assertJsonPath('success', false);
 
-        $this->assertDatabaseCount('duty_shift', 0);
+        $this->assertDatabaseCount('schedules', 0);
     }
 
     public function test_create_shift_rejects_invalid_data_with_400()
@@ -187,7 +186,7 @@ class ShiftApiTest extends TestCase
                 ->assertStatus(400, $label . ' should be rejected');
         }
 
-        $this->assertDatabaseCount('duty_shift', 0);
+        $this->assertDatabaseCount('schedules', 0);
     }
 
     // ==========================================
@@ -201,18 +200,22 @@ class ShiftApiTest extends TestCase
         $shift = $this->makeShift($officer);
 
         $response = $this->putJson(
-            '/api/shifts/' . $shift->shift_id,
+            '/api/shifts/' . $shift->sched_id,
             ['shift_start' => '09:30', 'shift_end' => '17:30', 'shift_location' => 'Org Room'],
             $this->headers($admin)
         );
 
         $response->assertStatus(200)->assertJsonPath('success', true);
-        $this->assertDatabaseHas('duty_shift', [
-            'shift_id'       => $shift->shift_id,
-            'shift_start'    => '09:30',
-            'shift_end'      => '17:30',
-            'shift_location' => 'Org Room',
-        ]);
+
+        // The window is stored as one timestamp pair, so it is read back
+        // through the model rather than as two string columns.
+        $shift->refresh();
+        $this->assertSame('09:30', $shift->sched_time_start->format('H:i'));
+        $this->assertSame('17:30', $shift->sched_time_end->format('H:i'));
+
+        // shift_location is accepted and validated, but `schedules` has no
+        // column for it, so the API reports null instead of storing it.
+        $this->assertNull($response->json('data.shift_location'));
     }
 
     public function test_update_shift_rejects_invalid_data_with_400()
@@ -220,17 +223,16 @@ class ShiftApiTest extends TestCase
         $admin = $this->makeSuperAdmin();
         $shift = $this->makeShift($this->makeEmployee());
 
-        $this->putJson('/api/shifts/' . $shift->shift_id, ['shift_start' => '9 AM'], $this->headers($admin))
+        $this->putJson('/api/shifts/' . $shift->sched_id, ['shift_start' => '9 AM'], $this->headers($admin))
             ->assertStatus(400);
-        $this->putJson('/api/shifts/' . $shift->shift_id, ['shift_end' => '07:00'], $this->headers($admin))
+        $this->putJson('/api/shifts/' . $shift->sched_id, ['shift_end' => '07:00'], $this->headers($admin))
             ->assertStatus(400);
-        $this->putJson('/api/shifts/' . $shift->shift_id, ['emp_id' => 999999], $this->headers($admin))
+        $this->putJson('/api/shifts/' . $shift->sched_id, ['emp_id' => 999999], $this->headers($admin))
             ->assertStatus(400);
 
-        $this->assertDatabaseHas('duty_shift', [
-            'shift_id'    => $shift->shift_id,
-            'shift_start' => '08:00',
-        ]);
+        $shift->refresh();
+        $this->assertSame('08:00', $shift->sched_time_start->format('H:i'));
+        $this->assertSame('18:00', $shift->sched_time_end->format('H:i'));
     }
 
     public function test_update_unknown_shift_returns_404()
@@ -250,11 +252,11 @@ class ShiftApiTest extends TestCase
         $admin = $this->makeSuperAdmin();
         $shift = $this->makeShift($this->makeEmployee());
 
-        $this->deleteJson('/api/shifts/' . $shift->shift_id, [], $this->headers($admin))
+        $this->deleteJson('/api/shifts/' . $shift->sched_id, [], $this->headers($admin))
             ->assertStatus(200)
             ->assertJsonPath('success', true);
 
-        $this->assertDatabaseCount('duty_shift', 0);
+        $this->assertDatabaseCount('schedules', 0);
     }
 
     public function test_cancel_unknown_shift_returns_404()
@@ -302,7 +304,10 @@ class ShiftApiTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertCount(1, $response->json('data'));
-        $this->assertSame($inside->shift_date, $response->json('data.0.shift_date'));
+        $this->assertSame(
+            $inside->sched_time_start->toDateString(),
+            $response->json('data.0.shift_date')
+        );
     }
 
     public function test_list_shifts_filtered_by_single_date_and_status()
@@ -326,7 +331,12 @@ class ShiftApiTest extends TestCase
     {
         $admin = $this->makeSuperAdmin();
         $officer = $this->makeEmployee();
-        $today = now()->format('Y-m-d');
+
+        // Fixed clock: the derived status compares the block against now, so
+        // the "running" and "still ahead" cases must not depend on the hour
+        // this suite happens to run at.
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00:00'));
+        $today = '2026-10-05';
 
         $this->makeShift($officer, ['shift_date' => $today, 'shift_start' => '00:00', 'shift_end' => '23:59']);
         $this->makeShift($officer, ['shift_date' => $today, 'shift_start' => '20:00', 'shift_end' => '23:59']);
@@ -341,6 +351,8 @@ class ShiftApiTest extends TestCase
 
         $this->getJson('/api/shifts?date=2020-01-01', $this->headers($admin))
             ->assertJsonPath('data.0.status', 'COMPLETED');
+
+        Carbon::setTestNow();
     }
 
     // ==========================================
@@ -362,7 +374,7 @@ class ShiftApiTest extends TestCase
         ]);
 
         $response = $this->putJson(
-            '/api/shifts/' . $shift->shift_id,
+            '/api/shifts/' . $shift->sched_id,
             ['emp_instore' => false],
             $this->headers($admin)
         );
@@ -386,7 +398,7 @@ class ShiftApiTest extends TestCase
         ]);
 
         $this->putJson(
-            '/api/shifts/' . $shift->shift_id,
+            '/api/shifts/' . $shift->sched_id,
             ['emp_instore' => false],
             $this->headers($admin)
         )->assertStatus(200);
@@ -409,7 +421,7 @@ class ShiftApiTest extends TestCase
         ]);
 
         $this->putJson(
-            '/api/shifts/' . $shift->shift_id,
+            '/api/shifts/' . $shift->sched_id,
             ['emp_instore' => false],
             $this->headers($superAdmin)
         )->assertStatus(200);
@@ -437,17 +449,17 @@ class ShiftApiTest extends TestCase
         ]);
 
         $this->putJson(
-            '/api/shifts/' . $shift->shift_id,
+            '/api/shifts/' . $shift->sched_id,
             ['emp_instore' => false],
             $this->headers($superAdmin)
         )->assertStatus(200);
 
         // The block now reads as PENDING REPLACEMENT without any status column
         $this->getJson('/api/shifts?status=PENDING REPLACEMENT', $this->headers($superAdmin))
-            ->assertJsonPath('data.0.shift_id', $shift->shift_id);
+            ->assertJsonPath('data.0.shift_id', $shift->sched_id);
 
         // Every super admin is alerted, naming the block, employee and time
-        $alert = EmpNotif::where('empnotif_msg', 'like', '%block #' . $shift->shift_id . '%')->first();
+        $alert = EmpNotif::where('empnotif_msg', 'like', '%block #' . $shift->sched_id . '%')->first();
         $this->assertNotNull($alert, 'The super admin alert was not created.');
         $this->assertStringContainsString('PENDING REPLACEMENT', $alert->empnotif_msg);
         $this->assertStringContainsString('Juan Dela Cruz', $alert->empnotif_msg);
@@ -456,9 +468,10 @@ class ShiftApiTest extends TestCase
         // Every super admin is alerted exactly once, and nobody else is. The
         // assertion counts the super admins present rather than a fixed number,
         // so the seeded super admin (super@super.com, from seed_super_admin)
-        // is covered too.
+        // is covered too - it carries its rank as emp_type, which is exactly
+        // what Controller::notifyEmployeesByType() falls back to.
         $superAdminIds = Employee::where('emp_type', 'SUPER ADMIN')->pluck('emp_id');
-        $alerts = EmpNotif::where('empnotif_msg', 'like', '%block #' . $shift->shift_id . '%');
+        $alerts = EmpNotif::where('empnotif_msg', 'like', '%block #' . $shift->sched_id . '%');
 
         $this->assertCount($superAdminIds->count(), $alerts->get());
         $this->assertTrue($alerts->get()->contains('emp_id', $superAdmin->getKey()));
@@ -499,10 +512,10 @@ class ShiftApiTest extends TestCase
         $shift = $this->makeShift($this->makeEmployee());
 
         $this->postJson('/api/shifts', $this->shiftPayload($staff), $this->headers($staff))->assertStatus(403);
-        $this->putJson('/api/shifts/' . $shift->shift_id, ['shift_type' => 'EVENT PREP'], $this->headers($staff))->assertStatus(403);
-        $this->deleteJson('/api/shifts/' . $shift->shift_id, [], $this->headers($staff))->assertStatus(403);
+        $this->putJson('/api/shifts/' . $shift->sched_id, ['shift_type' => 'EVENT PREP'], $this->headers($staff))->assertStatus(403);
+        $this->deleteJson('/api/shifts/' . $shift->sched_id, [], $this->headers($staff))->assertStatus(403);
 
-        $this->assertDatabaseHas('duty_shift', ['shift_id' => $shift->shift_id]);
+        $this->assertDatabaseHas('schedules', ['sched_id' => $shift->sched_id]);
     }
 
     public function test_ten_shift_operations_leave_no_unintended_rows()
@@ -522,8 +535,8 @@ class ShiftApiTest extends TestCase
         $this->deleteJson('/api/shifts/' . $shiftId, [], $headers)->assertStatus(200);
 
         // 1 created + 4 more created - 1 cancelled = 4 blocks, and nothing else
-        $this->assertDatabaseCount('duty_shift', 4);
-        $this->assertDatabaseMissing('duty_shift', ['shift_id' => $shiftId]);
+        $this->assertDatabaseCount('schedules', 4);
+        $this->assertDatabaseMissing('schedules', ['sched_id' => $shiftId]);
         $this->assertDatabaseCount('customer', 0);
         $this->assertDatabaseCount('orders', 0);
         $this->assertDatabaseCount('appointment', 0);
@@ -556,11 +569,19 @@ class ShiftApiTest extends TestCase
         $shiftOne = $this->makeShift($this->makeEmployee());
         $shiftTwo = $this->makeShift($this->makeEmployee());
 
-        $this->putJson('/api/shifts/' . $shiftOne->shift_id, ['shift_location' => 'Counter A'], $this->headers($adminOne))->assertStatus(200);
-        $this->putJson('/api/shifts/' . $shiftTwo->shift_id, ['shift_location' => 'Counter B'], $this->headers($adminTwo))->assertStatus(200);
+        // Two concurrent writers move two different blocks: neither write may
+        // land on the other's row.
+        $this->putJson('/api/shifts/' . $shiftOne->sched_id, ['shift_start' => '09:30'], $this->headers($adminOne))->assertStatus(200);
+        $this->putJson('/api/shifts/' . $shiftTwo->sched_id, ['shift_start' => '10:30'], $this->headers($adminTwo))->assertStatus(200);
 
-        $this->assertDatabaseHas('duty_shift', ['shift_id' => $shiftOne->shift_id, 'shift_location' => 'Counter A']);
-        $this->assertDatabaseHas('duty_shift', ['shift_id' => $shiftTwo->shift_id, 'shift_location' => 'Counter B']);
+        $shiftOne->refresh();
+        $shiftTwo->refresh();
+        $this->assertSame('09:30', $shiftOne->sched_time_start->format('H:i'));
+        $this->assertSame('10:30', $shiftTwo->sched_time_start->format('H:i'));
+        $this->assertSame(
+            $shiftOne->sched_time_start->toDateString(),
+            $shiftTwo->sched_time_start->toDateString()
+        );
     }
 
     // ==========================================

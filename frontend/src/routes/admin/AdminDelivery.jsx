@@ -385,8 +385,10 @@ function InTransitTab({ orders, onOpenOrder }) {
                 </div>
                 <p className="text-[10px] text-slate-400 mt-0.5 truncate">{order.address}</p>
               </div>
-              <div className="shrink-0 text-right space-y-0.5">
-                <p className="text-[11px] font-semibold text-slate-700">{order.items} · {order.itemLabel}</p>
+              {/* Allowed to shrink: a shrink-0 right rail overflowed the
+                  overflow-hidden card and clipped long item lists. */}
+              <div className="text-right space-y-0.5 max-w-[45%] min-w-0">
+                <p className="text-[11px] font-semibold text-slate-700 truncate">{order.items} · {order.itemLabel}</p>
                 <div className="flex items-center justify-end gap-2">
                   <span className="text-[10px] text-slate-400">Courier ref: <span className="font-semibold text-slate-600">{order.ref}</span></span>
                   <span className="text-[10px] text-slate-300">·</span>

@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\AppointAPI;
-use App\Http\Controllers\TrackingAPI;
+use App\Http\Controllers\AppointmentsAPI;
+use App\Http\Controllers\OrdersAPI;
 use App\Jobs\NotificationFollowUpJob;
 use App\Support\AcademicPeriodRoster;
 use Illuminate\Foundation\Inspiring;
@@ -49,12 +49,12 @@ Schedule::call(fn () => AcademicPeriodRoster::apply())
 /*
     FLOW-ORD_CLAIM-06: a pickup appointment that passes appoint_end with no
     QR scan turns `absent` and its order turns `unclaimed` on schedule, so the
-    flip no longer depends on a tracking call arriving (TrackingAPI still runs
+    flip no longer depends on a tracking call arriving (OrdersAPI still runs
     the same sweep at the top of tracking/create and tracking/scan).
     Checked every minute - claim slots are 10 minutes long - and the sweep
     clears the QR, so an appointment is only ever flipped once.
 */
-Schedule::call(fn () => app(TrackingAPI::class)->sweepExpiredPickups())
+Schedule::call(fn () => app(OrdersAPI::class)->sweepExpiredPickups())
     ->everyMinute()
     ->name('sweep-expired-pickups')
     ->withoutOverlapping();
@@ -65,7 +65,7 @@ Schedule::call(fn () => app(TrackingAPI::class)->sweepExpiredPickups())
     bookings are handled by the sweep above (sweep-expired-pickups marks them
     `absent`); visits have no QR scan to flip them, so the scheduler does it.
 */
-Schedule::call(fn () => app(AppointAPI::class)->autoCloseExpired())
+Schedule::call(fn () => app(AppointmentsAPI::class)->autoCloseExpired())
     ->everyMinute()
     ->name('auto-close-expired-visits')
     ->withoutOverlapping();
@@ -76,7 +76,7 @@ Schedule::call(fn () => app(AppointAPI::class)->autoCloseExpired())
     it received the moment it is due (FLOW-ORD_CLAIM-07) rather than waiting
     for a tracking call that may never arrive.
 */
-Schedule::call(fn () => app(TrackingAPI::class)->sweepUpcomingDeliveries())
+Schedule::call(fn () => app(OrdersAPI::class)->sweepUpcomingDeliveries())
     ->everyThirtyMinutes()
     ->name('sweep-upcoming-deliveries')
     ->withoutOverlapping();

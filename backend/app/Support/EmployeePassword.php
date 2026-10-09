@@ -21,7 +21,7 @@ use Illuminate\Support\Str;
  * system generated.
  *
  * Everything in this class is employee-only; customer credentials are handled
- * by AuthAPI and are untouched here.
+ * by SecurityAPI and are untouched here.
  */
 final class EmployeePassword
 {

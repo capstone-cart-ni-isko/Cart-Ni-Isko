@@ -39,6 +39,25 @@ export function isAdminRow(row) {
 }
 
 /**
+ * REQ-EMP_HOME-01 - the role a route guard should enforce.
+ *
+ * `roleKey` (set by mapEmployee at login) is authoritative when present;
+ * otherwise the employee category decides, defaulting to 'STAFF' so an
+ * unidentified employee is always treated with the least privilege. The
+ * sidebar and RequireRole used to compute this twice with two different
+ * fallbacks, so a session persisted without `roleKey` was hidden from the
+ * Staff entry but still bounced off every role-gated route.
+ */
+export function empRoleKey(row) {
+  const key = String(row?.roleKey || '').toUpperCase()
+  if (key) return key
+  const categ = empCateg(row)
+  if (categ === 'super admin' || categ === 'super_admin') return 'SUPER_ADMIN'
+  if (categ === 'admin') return 'ADMIN'
+  return 'STAFF'
+}
+
+/**
  * REQ-EMP_HOME-01 - is this employee a regular staff member?
  *
  * `roleKey` (set by mapEmployee) is authoritative when present; otherwise the
@@ -46,10 +65,7 @@ export function isAdminRow(row) {
  * treated with the least privilege rather than the most.
  */
 export function empIsStaff(row) {
-  if (!row) return true
-  const key = String(row.roleKey || '').toUpperCase()
-  if (key) return key === 'STAFF'
-  return empCateg(row) === 'staff'
+  return empRoleKey(row) === 'STAFF'
 }
 
 /**

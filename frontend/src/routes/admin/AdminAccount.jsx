@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, Fragment } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -41,11 +42,23 @@ const CATEGORY_LABEL = {
 
 export default function AdminAccount({ embedded = false }) {
   const { showToast } = useToast()
-  const { currentAdminUser, logoutAdmin, updateCurrentAdminProfile } = useAdmin()
+  const { currentAdminUser, logoutAdmin, updateCurrentAdminProfile, isSuperAdmin } = useAdmin()
+
+  /*
+      FLOW-EMP_LIST-06 — the staff directory's "View" opens another employee's
+      record with `?emp=<id>`. Without the param nothing changes: this stays
+      the signed-in employee's own account page (embedded settings included).
+  */
+  const [searchParams] = useSearchParams()
+  const empParam = searchParams.get('emp') || null
+  const viewingOther = empParam != null && String(empParam) !== String(currentAdminUser?.id)
 
   // The signed-in employee's own record (authoritative emp_id / field values)
   const [record, setRecord] = useState(null)
   const [isLoadingRecord, setIsLoadingRecord] = useState(true)
+  // FLOW-EMP_LIST-06 - a `?emp=` id with no matching row gets its own state
+  // rather than silently falling back to the signed-in employee's data.
+  const [recordNotFound, setRecordNotFound] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   // Form state
@@ -95,10 +108,12 @@ export default function AdminAccount({ embedded = false }) {
 
   const fileInputRef = useRef(null)
 
-  // Load the backend row for the signed-in employee
+  // Load the backend row for the signed-in employee (FLOW-EMP_LIST-06: or
+  // the `?emp=<id>` target opened from the staff directory)
   useEffect(() => {
     let cancelled = false
     setIsLoadingRecord(true)
+    setRecordNotFound(false)
     fetchAccounts({ account_type: 'employee' })
       .then((payload) => {
         if (cancelled) return
@@ -107,10 +122,12 @@ export default function AdminAccount({ embedded = false }) {
           : Array.isArray(payload?.employees)
             ? payload.employees
             : []
-        const id = currentAdminUser?.id
+        const id = viewingOther ? empParam : currentAdminUser?.id
         const found =
           rows.find((r) => String(r.emp_id) === String(id)) ||
-          rows.find((r) => r.emp_email && r.emp_email === currentAdminUser?.email) ||
+          (viewingOther
+            ? null
+            : rows.find((r) => r.emp_email && r.emp_email === currentAdminUser?.email)) ||
           null
         if (found) {
           setRecord(found)
@@ -123,6 +140,11 @@ export default function AdminAccount({ embedded = false }) {
           setAvatarPreview(String(first(found, 'emp_avatar', 'emp_photo') || ''))
           setBackupPhone(String(first(found, 'emp_backupphone') || ''))
           setBackupEmail(String(first(found, 'emp_backupemail') || ''))
+        } else if (viewingOther) {
+          // FLOW-EMP_LIST-06: never fall back to the signed-in employee's
+          // own record when the requested id has no row.
+          setRecord(null)
+          setRecordNotFound(true)
         } else {
           setGivenName(currentAdminUser?.firstName || '')
           setSurname(currentAdminUser?.lastName || currentAdminUser?.surname || '')
@@ -137,13 +159,18 @@ export default function AdminAccount({ embedded = false }) {
         setIsLoadingRecord(false)
       })
       .catch(() => {
-        if (!cancelled) setIsLoadingRecord(false)
+        if (cancelled) return
+        if (viewingOther) {
+          setRecord(null)
+          setRecordNotFound(true)
+        }
+        setIsLoadingRecord(false)
       })
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [empParam])
 
   // REQ-EMP_PROF-01 — regular staff may not edit their email address.
   const isRegularStaff = empCateg(record || currentAdminUser || {}) === 'staff'
@@ -229,7 +256,9 @@ export default function AdminAccount({ embedded = false }) {
     const cleanEmail = email.trim()
     const cleanPhone = phone.trim()
 
-    const empId = record?.emp_id ?? currentAdminUser?.id
+    // FLOW-EMP_LIST-06: while another employee's profile is open there is no
+    // fallback to the signed-in admin's own record.
+    const empId = record?.emp_id ?? (viewingOther ? null : currentAdminUser?.id)
     if (empId == null) {
       showToast('Unable to resolve your account record. Please reload.', 'error')
       return
@@ -249,17 +278,21 @@ export default function AdminAccount({ embedded = false }) {
       const fullName = `${cleanGiven} ${cleanSurname}`
       const initials = `${cleanGiven[0] || ''}${cleanSurname[0] || ''}`.toUpperCase()
 
-      updateCurrentAdminProfile({
-        firstName: cleanGiven,
-        lastName: cleanSurname,
-        surname: cleanSurname,
-        name: fullName,
-        email: cleanEmail,
-        phone: cleanPhone,
-        pronoun,
-        avatar: initials,
-        avatarImage: avatarPreview,
-      })
+      // FLOW-EMP_LIST-06: the signed-in session may only mirror the
+      // signed-in employee's own edits, never another person's data.
+      if (!viewingOther) {
+        updateCurrentAdminProfile({
+          firstName: cleanGiven,
+          lastName: cleanSurname,
+          surname: cleanSurname,
+          name: fullName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          pronoun,
+          avatar: initials,
+          avatarImage: avatarPreview,
+        })
+      }
 
       setRecord((prev) => ({
         ...(prev || {}),
@@ -271,7 +304,14 @@ export default function AdminAccount({ embedded = false }) {
         emp_pronoun: pronoun,
         emp_avatar: avatarPreview || null,
       }))
-      showToast('Account profile updated successfully!', 'success')
+      // FLOW-EMP_LIST-06: a save on someone else's profile never ends the
+      // session - it just reports the update.
+      showToast(
+        viewingOther
+          ? `${fullName}'s profile was updated successfully!`
+          : 'Account profile updated successfully!',
+        'success'
+      )
     } catch (err) {
       // Inputs stay as typed so the employee can correct and retry.
       showToast(err?.message || 'Failed to update the account profile.', 'error')
@@ -406,17 +446,42 @@ export default function AdminAccount({ embedded = false }) {
   */
   const Wrapper = embedded ? Fragment : AdminLayout
 
+  // FLOW-EMP_LIST-06 - the subtitle while another employee's record is open.
+  const viewingName = record
+    ? empFullName(record)
+    : `${givenName} ${surname}`.trim() || (empParam ? `Employee #${empParam}` : 'Employee')
+
   return (
     <Wrapper>
       <div className="max-w-4xl mx-auto space-y-5">
-        {/* Header */}
+        {/* Header - FLOW-EMP_LIST-06: while another employee's record is
+            open, name it and link back to the staff directory. */}
         <div>
-          <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
-            Employee Profile
-          </h1>
-          <p className="text-sm text-slate-500 font-normal mt-1">
-            Your staff identity and how you appear across the portal.
-          </p>
+          {viewingOther ? (
+            <>
+              <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+                Employee profile
+              </h1>
+              <p className="text-sm text-slate-500 font-normal mt-1">
+                {viewingName}
+              </p>
+              <Link
+                to="/admin/staff"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-brand-orange hover:underline mt-2"
+              >
+                <span aria-hidden="true">←</span> Back to staff directory
+              </Link>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+                Employee Profile
+              </h1>
+              <p className="text-sm text-slate-500 font-normal mt-1">
+                Your staff identity and how you appear across the portal.
+              </p>
+            </>
+          )}
         </div>
 
         {isLoadingRecord ? (
@@ -425,6 +490,22 @@ export default function AdminAccount({ embedded = false }) {
               <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-brand-orange animate-spin" />
               Loading profile…
             </span>
+          </div>
+        ) : recordNotFound ? (
+          /* FLOW-EMP_LIST-06 - an unknown `?emp=` id is reported, never
+             silently swapped for the signed-in employee's own record. */
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-8 text-center space-y-2">
+            <p className="text-sm font-bold text-slate-900">Employee not found</p>
+            <p className="text-xs text-slate-500">
+              No employee record matches <span className="font-mono font-semibold">#{empParam}</span>.
+              It may have been removed.
+            </p>
+            <Link
+              to="/admin/staff"
+              className="inline-block text-xs font-semibold text-brand-orange hover:underline"
+            >
+              Back to staff directory
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -587,103 +668,123 @@ export default function AdminAccount({ embedded = false }) {
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="h-9 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="h-9 px-4 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {isSaving ? 'Saving…' : 'Save profile'}
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
-                <div>
-                  <p className="text-xs font-semibold text-slate-900">Password</p>
-                  <p className="text-[11px] text-slate-400">Last changed keeps your account secure.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordModal(true)}
-                  className="h-8 px-3 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
-                >
-                  Change password
-                </button>
-              </div>
-
-              {/* FLOW-EMP_SET-03 - backup contacts for account recovery */}
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-3">
-                <div>
-                  <p className="text-xs font-semibold text-slate-900">Backup contacts</p>
-                  <p className="text-[11px] text-slate-400">
-                    Used to reach you if you lose access to your account.
+                {/* REQ-EMP_LIST-01 / rule 36 - another employee's profile is
+                    read-only unless the viewer is a super admin. */}
+                {viewingOther && !isSuperAdmin ? (
+                  <p className="text-[11px] font-medium text-slate-500">
+                    Only super admins can edit another employee's profile.
                   </p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="h-9 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="h-9 px-4 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {isSaving ? 'Saving…' : 'Save profile'}
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Password change is self-scoped - hidden while another
+                  employee's profile is open (FLOW-EMP_LIST-06). */}
+              {!viewingOther && (
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      Backup phone number
-                    </label>
-                    <input
-                      type="tel"
-                      value={backupPhone}
-                      onChange={(e) => setBackupPhone(e.target.value)}
-                      onBlur={() => touch('backupPhone')}
-                      aria-invalid={!!liveError(backupErrors, 'backupPhone', backupPhone)}
-                      placeholder="+63 912 345 6789"
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
-                    />
-                    <FieldError message={liveError(backupErrors, 'backupPhone', backupPhone)} />
+                    <p className="text-xs font-semibold text-slate-900">Password</p>
+                    <p className="text-[11px] text-slate-400">Last changed keeps your account secure.</p>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      Backup email address
-                    </label>
-                    <input
-                      type="email"
-                      value={backupEmail}
-                      onChange={(e) => setBackupEmail(e.target.value)}
-                      onBlur={() => touch('backupEmail')}
-                      aria-invalid={!!liveError(backupErrors, 'backupEmail', backupEmail)}
-                      placeholder="backup@bicol-u.edu.ph"
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
-                    />
-                    <FieldError message={liveError(backupErrors, 'backupEmail', backupEmail)} />
-                  </div>
-                </div>
-                <div className="flex justify-end">
                   <button
                     type="button"
-                    onClick={handleSaveBackup}
-                    disabled={isSavingBackup}
-                    className="h-8 px-3 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer transition-colors disabled:opacity-50"
+                    onClick={() => setShowPasswordModal(true)}
+                    className="h-8 px-3 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
                   >
-                    {isSavingBackup ? 'Saving…' : 'Save backup contacts'}
+                    Change password
                   </button>
                 </div>
-              </div>
+              )}
+
+              {/* FLOW-EMP_SET-03 - backup contacts for account recovery.
+                  Self-scoped, so hidden while viewing another employee. */}
+              {!viewingOther && (
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-900">Backup contacts</p>
+                    <p className="text-[11px] text-slate-400">
+                      Used to reach you if you lose access to your account.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Backup phone number
+                      </label>
+                      <input
+                        type="tel"
+                        value={backupPhone}
+                        onChange={(e) => setBackupPhone(e.target.value)}
+                        onBlur={() => touch('backupPhone')}
+                        aria-invalid={!!liveError(backupErrors, 'backupPhone', backupPhone)}
+                        placeholder="+63 912 345 6789"
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
+                      />
+                      <FieldError message={liveError(backupErrors, 'backupPhone', backupPhone)} />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Backup email address
+                      </label>
+                      <input
+                        type="email"
+                        value={backupEmail}
+                        onChange={(e) => setBackupEmail(e.target.value)}
+                        onBlur={() => touch('backupEmail')}
+                        aria-invalid={!!liveError(backupErrors, 'backupEmail', backupEmail)}
+                        placeholder="backup@bicol-u.edu.ph"
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
+                      />
+                      <FieldError message={liveError(backupErrors, 'backupEmail', backupEmail)} />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSaveBackup}
+                      disabled={isSavingBackup}
+                      className="h-8 px-3 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer transition-colors disabled:opacity-50"
+                    >
+                      {isSavingBackup ? 'Saving…' : 'Save backup contacts'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
           </div>
         )}
 
         {/* Sign-out shortcut - FLOW-EMP_LOGOUT-01/02: the confirmation
-            dialog comes before the session is terminated. */}
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setConfirmLogout(true)}
-            className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
-          >
-            Sign out of the admin portal
-          </button>
-        </div>
+            dialog comes before the session is terminated. Hidden while
+            another employee's profile is open (FLOW-EMP_LIST-06). */}
+        {!viewingOther && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setConfirmLogout(true)}
+              className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
+            >
+              Sign out of the admin portal
+            </button>
+          </div>
+        )}
 
         {confirmLogout && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">

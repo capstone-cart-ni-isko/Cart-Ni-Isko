@@ -2,8 +2,8 @@
 
 namespace App\Support;
 
-use App\Models\DutyShift;
 use App\Models\Employee;
+use App\Models\Schedule;
 use App\Models\Setting;
 use Carbon\Carbon;
 
@@ -11,15 +11,16 @@ use Carbon\Carbon;
  * REQ-SS-01: rebuild the shop's baseline duty roster when an academic period
  * opens.
  *
- * Every active employee is set back to Available and given one duty_shift block
+ * Every active employee is set back to Available and given one schedules block
  * per day covering the shop's standard operating hours, so the schedule
  * calendar opens up all timeslots by default.
  *
  * Two guards stop it from ever firing by accident. The period start comes from
- * the settings table and falls back to a code default that sits in the future,
- * so nothing happens until a real term is configured. A marker file then
- * records the period it already applied, so the job runs once per term and the
- * settings table keeps its zero-row baseline (no row is inserted here).
+ * the settings document and falls back to a code default that sits in the
+ * future, so nothing happens until a real term is configured. A marker file
+ * then records the period it already applied, so the job runs once per term
+ * and no row is inserted into any settings table (system-new.docx SCHEMA has
+ * no SETTINGS table).
  *
  * An employee who logged an unavailability keeps it: a block whose assignee is
  * not emp_instore is that employee's explicit exception, so both the block and
@@ -65,31 +66,27 @@ class AcademicPeriodRoster
     // An active employee keeps an unavailability only when a block records it
     private static function rosterEmployee(Employee $employee, array $summary): array
     {
-        if (DutyShift::hasException($employee->emp_id)) {
+        if (Schedule::hasException($employee->emp_id)) {
             return ['excepted' => $summary['excepted'] + 1] + $summary;
         }
 
-        $employee->update(['emp_instore' => true]);
+        $employee->setInStore(true);
         $summary['reset']++;
 
         [$open, $close] = self::operatingHours();
 
         foreach (self::rosterDays() as $day) {
-            $exists = DutyShift::where('emp_id', $employee->emp_id)
-                ->where('shift_date', $day)
+            $exists = Schedule::where('emp_id', $employee->emp_id)
+                ->whereDate('sched_time_start', $day)
                 ->exists();
 
             if ($exists) continue;
 
-            DutyShift::create([
-                'emp_id'         => $employee->emp_id,
-                'shift_date'     => $day,
-                'shift_start'    => $open,
-                'shift_end'      => $close,
-                'shift_type'     => 'DESK DUTY',
-                'shift_location' => 'Main Counter',
-                'shift_created'  => now(),
-                'created_by'     => null,
+            Schedule::create([
+                'emp_id'           => $employee->emp_id,
+                'sched_time_start' => Carbon::parse($day . ' ' . $open),
+                'sched_time_end'   => Carbon::parse($day . ' ' . $close),
+                'sched_created'    => now(),
             ]);
             $summary['created']++;
         }
@@ -100,9 +97,7 @@ class AcademicPeriodRoster
     // Nobody disabled and nobody soft-deleted (REQ-UM-03 keeps the row)
     private static function activeEmployees()
     {
-        return Employee::whereNull('emp_disabled')
-            ->whereNull('emp_deleted')
-            ->get();
+        return Schedule::activeEmployeeQuery()->get();
     }
 
     // Today's dates as 'Y-m-d' strings, for the rolling roster window

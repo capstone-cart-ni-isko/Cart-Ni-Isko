@@ -2,19 +2,17 @@
 
 namespace Tests\Feature;
 
-use App\Models\Appointment;
+use App\Models\Visit;
 use App\Models\CustNotif;
 use App\Models\Customer;
-use App\Models\DutyShift;
 use App\Models\EmpLog;
 use App\Models\Employee;
+use App\Models\Schedule;
 use App\Models\Setting;
 use App\Support\AcademicPeriodRoster;
 use Carbon\Carbon;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
@@ -22,7 +20,9 @@ use Tests\TestCase;
  * rebuild (REQ-SS-01) and the registration audit row (REQ-UM-04).
  *
  * These run on phpunit's sqlite :memory: database, so no row in the Supabase
- * database is read or written from here.
+ * database is read or written from here. Duty blocks live in `schedules`
+ * (system-new DOMAIN 7) as a start/end timestamp pair - the retired
+ * duty_shift table keeps its migration but is no longer written to.
  */
 class StaffingRosterTest extends TestCase
 {
@@ -36,26 +36,6 @@ class StaffingRosterTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-
-        // duty_shift exists in Supabase and now has its migration file, so a
-        // fresh test database builds it. Older schemas that predate that file
-        // still need the stub.
-        if (! Schema::hasTable('duty_shift')) {
-            Schema::create('duty_shift', function (Blueprint $table) {
-                $table->bigIncrements('shift_id');
-                $table->unsignedBigInteger('emp_id');
-                $table->date('shift_date');
-                $table->string('shift_start');
-                $table->string('shift_end');
-                $table->string('shift_type')->default('DESK DUTY');
-                $table->string('shift_location')->nullable();
-                $table->timestamp('shift_created')->useCurrent();
-                $table->unsignedBigInteger('created_by')->nullable();
-
-                $table->foreign('emp_id')->references('emp_id')->on('employee')->cascadeOnDelete();
-                $table->index(['shift_date', 'emp_id']);
-            });
-        }
 
         // The roster job writes a marker file next to the application's own
         // state. It is saved and put back so a test run never leaves the
@@ -105,8 +85,9 @@ class StaffingRosterTest extends TestCase
 
         // emp_type is a legacy fixture column and is deliberately absent from
         // the model's fillable list (the live table spells it emp_categ), so
-        // the fixture writes it past mass assignment.
-        return Employee::forceCreate(array_merge([
+        // the fixture writes it past mass assignment. Both spellings are kept
+        // in step so EnsureRole and notifyEmployeesByType agree on the rank.
+        $data = array_merge([
             'emp_created'  => now(),
             'emp_password' => Hash::make('Password123!'),
             'emp_surname'  => 'Dela Cruz',
@@ -123,7 +104,11 @@ class StaffingRosterTest extends TestCase
             'emp_phone'    => '+639' . str_pad((string) ($this->seq + 500), 9, '0', STR_PAD_LEFT),
             'emp_type'     => 'STAFF',
             'emp_instore'  => 0,
-        ], $attributes));
+        ], $attributes);
+
+        $data['emp_categ'] = $data['emp_type'] ?? 'STAFF';
+
+        return Employee::forceCreate($data);
     }
 
     private function makeSuperAdmin(): Employee
@@ -157,27 +142,41 @@ class StaffingRosterTest extends TestCase
         ]);
     }
 
-    private function makeShift(Employee $employee, array $attributes = []): DutyShift
+    /**
+     * One duty block: `schedules` holds the window as a start/end timestamp
+     * pair, so the API's `shift_date` + `shift_start` / `shift_end` fields are
+     * folded into it here exactly as SystemAPI does on write.
+     */
+    private function makeShift(Employee $employee, array $attributes = []): Schedule
     {
-        return DutyShift::create(array_merge([
-            'emp_id'         => $employee->getKey(),
-            'shift_date'     => now()->format('Y-m-d'),
-            'shift_start'    => '08:00',
-            'shift_end'      => '18:00',
-            'shift_type'     => 'DESK DUTY',
-            'shift_location' => 'Main Counter',
-            'shift_created'  => now(),
-            'created_by'     => null,
+        $date = $attributes['shift_date'] ?? now()->format('Y-m-d');
+        $start = $attributes['shift_start'] ?? '08:00';
+        $end   = $attributes['shift_end'] ?? '18:00';
+
+        unset($attributes['shift_date'], $attributes['shift_start'], $attributes['shift_end']);
+
+        return Schedule::create(array_merge([
+            'emp_id'           => $employee->getKey(),
+            'sched_time_start' => Carbon::parse($date . ' ' . $start),
+            'sched_time_end'   => Carbon::parse($date . ' ' . $end),
+            'sched_created'    => now(),
         ], $attributes));
     }
 
-    private function makeAppointment(Customer $customer, string $type, string $date, string $time): Appointment
+    private function makeAppointment(Customer $customer, string $type, string $date, string $time): Visit
     {
-        return Appointment::create([
-            'cust_id'      => $customer->getKey(),
-            'appoint_type' => $type,
-            'appoint_date' => Carbon::parse($date . ' ' . $time),
-            'appoint_qr'   => 'QR' . str_pad((string) ++$this->seq, 10, '0', STR_PAD_LEFT),
+        $start = Carbon::parse($date . ' ' . $time);
+
+        // Live `appointments` columns: status + start/end window (the legacy
+        // appoint_date / appoint_desc keys are request aliases only and are
+        // dropped by mass assignment).
+        return Visit::create([
+            'cust_id'        => $customer->getKey(),
+            'appoint_type'   => $type,
+            'appoint_status' => 'upcoming',
+            'appoint_start'  => $start,
+            'appoint_end'    => $start->copy()->addMinutes(10),
+            'appoint_qr'     => 'QR' . str_pad((string) ++$this->seq, 10, '0', STR_PAD_LEFT),
         ]);
     }
 
@@ -267,9 +266,9 @@ class StaffingRosterTest extends TestCase
         $this->makeShift($officer);
 
         // Flip the single officer out twice; the notice must not double up.
-        $this->putJson('/api/shifts/' . $this->shiftOf($officer)->shift_id, ['emp_instore' => false], $this->headers($admin))
+        $this->putJson('/api/shifts/' . $this->shiftOf($officer)->sched_id, ['emp_instore' => false], $this->headers($admin))
             ->assertStatus(200);
-        $this->putJson('/api/shifts/' . $this->shiftOf($officer)->shift_id, ['emp_instore' => false], $this->headers($admin))
+        $this->putJson('/api/shifts/' . $this->shiftOf($officer)->sched_id, ['emp_instore' => false], $this->headers($admin))
             ->assertStatus(200);
 
         $notices = CustNotif::where('cust_id', $customer->getKey())
@@ -295,7 +294,7 @@ class StaffingRosterTest extends TestCase
         $this->makeShift($first);
         $this->makeShift($second);
 
-        $this->putJson('/api/shifts/' . $this->shiftOf($first)->shift_id, ['emp_instore' => false], $this->headers($admin))
+        $this->putJson('/api/shifts/' . $this->shiftOf($first)->sched_id, ['emp_instore' => false], $this->headers($admin))
             ->assertStatus(200);
 
         $this->assertSame(
@@ -318,14 +317,14 @@ class StaffingRosterTest extends TestCase
         $this->assertFalse($summary['applied']);
         $this->assertSame('the term has not opened yet', $summary['reason']);
         $this->assertSame(0, $summary['reset']);
-        $this->assertDatabaseCount('duty_shift', 0);
+        $this->assertDatabaseCount('schedules', 0);
         $this->assertSame(0, (int) Employee::first()->fresh()->emp_instore);
     }
 
     public function test_the_roster_runs_once_per_term()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
-        Setting::create(['key' => 'academic_period_start', 'value' => '"2026-08-04"']);
+        Setting::setValue('academic_period_start', '2026-08-04');
         $officer = $this->makeEmployee();
 
         $first = AcademicPeriodRoster::apply();
@@ -334,7 +333,7 @@ class StaffingRosterTest extends TestCase
         $this->assertSame(1, (int) $officer->fresh()->emp_instore);
         $this->assertSame(
             AcademicPeriodRoster::DAYS,
-            DutyShift::where('emp_id', $officer->getKey())->count()
+            Schedule::where('emp_id', $officer->getKey())->count()
         );
 
         // A second run in the same term is a no-op, so nothing is doubled up
@@ -344,14 +343,14 @@ class StaffingRosterTest extends TestCase
         $this->assertSame('this term is already applied', $second['reason']);
         $this->assertSame(
             AcademicPeriodRoster::DAYS,
-            DutyShift::where('emp_id', $officer->getKey())->count()
+            Schedule::where('emp_id', $officer->getKey())->count()
         );
     }
 
     public function test_the_roster_never_overwrites_a_block_an_admin_already_created()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
-        Setting::create(['key' => 'academic_period_start', 'value' => '"2026-08-04"']);
+        Setting::setValue('academic_period_start', '2026-08-04');
         // The officer is available, so the exception rule does not apply and
         // the rebuild reaches its gap-filling step.
         $officer = $this->makeEmployee(['emp_instore' => 1]);
@@ -363,38 +362,40 @@ class StaffingRosterTest extends TestCase
         // Every remaining day is filled, and today keeps the admin's own block
         $this->assertSame(
             AcademicPeriodRoster::DAYS,
-            DutyShift::where('emp_id', $officer->getKey())->count()
+            Schedule::where('emp_id', $officer->getKey())->count()
         );
 
-        $mine = DutyShift::where('emp_id', $officer->getKey())
-            ->where('shift_date', '2026-10-05')
+        $mine = Schedule::where('emp_id', $officer->getKey())
+            ->whereDate('sched_time_start', '2026-10-05')
             ->first();
 
-        $this->assertSame('13:00', $mine->shift_start);
-        $this->assertSame('17:00', $mine->shift_end);
+        $this->assertNotNull($mine);
+        $this->assertSame('13:00', $mine->sched_time_start->format('H:i'));
+        $this->assertSame('17:00', $mine->sched_time_end->format('H:i'));
     }
 
     public function test_the_roster_uses_the_store_operating_hours()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
-        Setting::create(['key' => 'academic_period_start', 'value' => '"2026-08-04"']);
-        Setting::create(['key' => 'operating_hours', 'value' => '"09:00 - 21:00"']);
+        Setting::setValue('academic_period_start', '2026-08-04');
+        Setting::setValue('operating_hours', '09:00 - 21:00');
         $officer = $this->makeEmployee();
 
         AcademicPeriodRoster::apply();
 
-        $block = DutyShift::where('emp_id', $officer->getKey())
-            ->where('shift_date', '2026-10-05')
+        $block = Schedule::where('emp_id', $officer->getKey())
+            ->whereDate('sched_time_start', '2026-10-05')
             ->first();
 
-        $this->assertSame('09:00', $block->shift_start);
-        $this->assertSame('21:00', $block->shift_end);
+        $this->assertNotNull($block);
+        $this->assertSame('09:00', $block->sched_time_start->format('H:i'));
+        $this->assertSame('21:00', $block->sched_time_end->format('H:i'));
     }
 
     public function test_a_logged_unavailability_survives_the_roster_rebuild()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
-        Setting::create(['key' => 'academic_period_start', 'value' => '"2026-08-04"']);
+        Setting::setValue('academic_period_start', '2026-08-04');
 
         $excepted = $this->makeEmployee(['emp_instore' => 0]);
         $normal = $this->makeEmployee(['emp_instore' => 0]);
@@ -410,29 +411,32 @@ class StaffingRosterTest extends TestCase
 
         // The excepted employee keeps the block that recorded the exception,
         // and gains no baseline block on top of it for that day.
-        $this->assertDatabaseHas('duty_shift', [
-            'emp_id'     => $excepted->getKey(),
-            'shift_date' => '2026-10-05',
-            'shift_start'=> '08:00',
-        ]);
+        $kept = Schedule::where('emp_id', $excepted->getKey())
+            ->whereDate('sched_time_start', '2026-10-05')
+            ->first();
+
+        $this->assertNotNull($kept);
+        $this->assertSame('08:00', $kept->sched_time_start->format('H:i'));
         $this->assertSame(
             1,
-            DutyShift::where('emp_id', $excepted->getKey())->where('shift_date', '2026-10-05')->count()
+            Schedule::where('emp_id', $excepted->getKey())
+                ->whereDate('sched_time_start', '2026-10-05')
+                ->count()
         );
     }
 
     public function test_a_disabled_or_deleted_employee_is_left_out_of_the_roster()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
-        Setting::create(['key' => 'academic_period_start', 'value' => '"2026-08-04"']);
+        Setting::setValue('academic_period_start', '2026-08-04');
 
         $disabled = $this->makeEmployee(['emp_disabled' => now()]);
         $deleted = $this->makeEmployee(['emp_deleted' => now()]);
 
         AcademicPeriodRoster::apply();
 
-        $this->assertSame(0, DutyShift::where('emp_id', $disabled->getKey())->count());
-        $this->assertSame(0, DutyShift::where('emp_id', $deleted->getKey())->count());
+        $this->assertSame(0, Schedule::where('emp_id', $disabled->getKey())->count());
+        $this->assertSame(0, Schedule::where('emp_id', $deleted->getKey())->count());
         $this->assertSame(0, (int) $disabled->fresh()->emp_instore);
         $this->assertSame(0, (int) $deleted->fresh()->emp_instore);
     }
@@ -485,8 +489,8 @@ class StaffingRosterTest extends TestCase
         $this->fail('No ' . $type . ' slot at ' . $time);
     }
 
-    private function shiftOf(Employee $employee): DutyShift
+    private function shiftOf(Employee $employee): Schedule
     {
-        return DutyShift::where('emp_id', $employee->getKey())->orderBy('shift_id')->first();
+        return Schedule::where('emp_id', $employee->getKey())->orderBy('sched_id')->first();
     }
 }
