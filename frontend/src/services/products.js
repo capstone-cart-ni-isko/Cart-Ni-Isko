@@ -91,6 +91,22 @@ export function variationStock(variations) {
   return variations.reduce((total, variant) => total + (Number(variant.prodvar_stock) || 0), 0)
 }
 
+/**
+ * The axes a product varies along, in first-seen order: ["Color","Size"], or
+ * ["Color","Material"] for a shirt that comes in colour and material. Derived
+ * from the variation rows themselves, so the shape a product has is whatever
+ * its rows say - it is never fixed in the schema.
+ */
+export function variationAxes(variations) {
+  const axes = []
+  ;(Array.isArray(variations) ? variations : []).forEach((variant) => {
+    Object.keys(variant.prodvar_options || {}).forEach((axis) => {
+      if (!axes.includes(axis)) axes.push(axis)
+    })
+  })
+  return axes
+}
+
 /** The main image: the prodvar flagged main, else the first with a pic. */
 export function mainVariationImage(variations) {
   const main = variations.find((variant) => variant.prodvar_main && variant.prodvar_pic)
@@ -98,12 +114,21 @@ export function mainVariationImage(variations) {
   return main ? main.prodvar_pic : ''
 }
 
-/** Distinct size labels derived from prodvar_options / prodvar_name. */
-export function variationSizes(variations) {
+/**
+ * The values of the SECOND axis a product varies along, in first-seen order.
+ *
+ * A shirt that variates by colour and size answers ["S","M","L"]; one that
+ * variates by colour and material answers ["Regular","Metallic"]. A product
+ * with no second axis falls back to its variation labels, which for a
+ * single-axis product are exactly the values of that one axis.
+ */
+export function variationSizes(variations, secondAxis = null) {
   const sizes = []
   variations.forEach((variant) => {
     const options = variant.prodvar_options || {}
-    const candidate = options.size || options.sizes || variant.prodvar_name
+    const axisKey = secondAxis
+      && Object.keys(options).find((key) => key.toLowerCase() === String(secondAxis).toLowerCase())
+    const candidate = (axisKey && options[axisKey]) || options.size || options.sizes || variant.prodvar_name
     if (candidate && !sizes.includes(candidate)) sizes.push(candidate)
   })
   return sizes
@@ -128,14 +153,18 @@ export function variationColors(variations, fallbackImage) {
 
 /**
  * Stock matrix in the legacy shape stockMatrix[colorName][size] = stock,
- * rebuilt from the variation rows.
+ * rebuilt from the variation rows. The second axis supplies the column key, so
+ * a product that variates by colour and material still resolves
+ * [colour][material] rather than [colour]["Black / Metallic"].
  */
-export function variationStockMatrix(variations) {
+export function variationStockMatrix(variations, secondAxis = null) {
   const matrix = {}
   variations.forEach((variant) => {
     const options = variant.prodvar_options || {}
     const color = options.color || options.colour || 'Standard'
-    const size = options.size || variant.prodvar_name
+    const axisKey = secondAxis
+      && Object.keys(options).find((key) => key.toLowerCase() === String(secondAxis).toLowerCase())
+    const size = (axisKey && options[axisKey]) || options.size || variant.prodvar_name
     if (!matrix[color]) matrix[color] = {}
     matrix[color][size] = (matrix[color][size] || 0) + (Number(variant.prodvar_stock) || 0)
   })
@@ -190,12 +219,20 @@ export function mapProduct(row) {
   const qty = Number(
     hasVariations ? variationStock(variations) : (row.prod_qty ?? 0)
   )
+  // A product may variate along several axes at the same time - colour and
+  // size, or colour and material - so the picker headings come from the axes
+  // the product's own rows carry rather than from a fixed pair.
+  const axes = Array.isArray(row.option_axes) && row.option_axes.length > 0
+    ? row.option_axes
+    : variationAxes(variations)
+  const colorAxis = axes.find((axis) => /colou?r/i.test(axis)) || axes[0] || null
+  const secondAxis = axes.find((axis) => axis !== colorAxis) || null
   const preOrder = hasVariations
     ? variations.some((variant) => variant.prodvar_preorder)
     : row.prod_preorder === true || (qty <= 0 && row.prod_preorder !== false)
   const mainImage = hasVariations ? mainVariationImage(variations) : ''
-  const sizes = hasVariations && variationSizes(variations).length > 0
-    ? variationSizes(variations)
+  const sizes = hasVariations && variationSizes(variations, secondAxis).length > 0
+    ? variationSizes(variations, secondAxis)
     : (row.prod_sizes || fallback.sizes)
   const colors = hasVariations && variationColors(variations, mainImage || fallback.images[0]).length > 0
     ? variationColors(variations, mainImage || fallback.images[0])
@@ -206,7 +243,7 @@ export function mapProduct(row) {
       ? row.prod_images
       : fallback.images)
   const stockMatrix = hasVariations
-    ? variationStockMatrix(variations)
+    ? variationStockMatrix(variations, secondAxis)
     : (row.prod_stock_matrix || fallback.stockMatrix)
   const rating = Number(row.prod_rating ?? 0)
   // prod_reviews is an int count now; a legacy backend may still
@@ -233,6 +270,9 @@ export function mapProduct(row) {
     stockMatrix,
     // Canonical variation rows, exposed for the detail/Cart screens.
     variations: hasVariations ? variations : [],
+    axes,
+    colorAxis,
+    secondAxis,
     id: tag,
     prodId: row.prod_id,
     name: row.prod_name || tag,
@@ -259,10 +299,4 @@ export async function fetchProduct(id) {
   const isNumeric = /^\d+$/.test(String(id))
   const data = await apiGet('/products/view', isNumeric ? { prod_id: id } : { prod_tag: id })
   return mapProduct(data.data)
-}
-
-export async function fetchProductReviews(prodId) {
-  if (!prodId) return []
-  const data = await apiGet('/reviews/display', { prod_id: prodId })
-  return data.data || []
 }

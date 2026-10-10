@@ -115,16 +115,51 @@ function lineFor(item, qty) {
   if (item?.prodvarId) line.prodvar_id = item.prodvarId
   if (item?.size) line.size = item.size
   if (item?.color?.name) line.color = { name: item.color.name, image: item.color.image || item.color.value }
+  if (item?.options && Object.keys(item.options).length > 0) {
+    line.options = item.options
+  }
   return line
 }
 
 const lower = (value) => String(value ?? '').trim().toLowerCase()
 
 /**
+ * The {axis: value} map of what the customer picked, built from the product's
+ * own axes. A product that variates by colour and size answers
+ * {Color:'Cream', Size:'Medium'}; one that variates by colour and material
+ * answers {Color:'Cream', Material:'Metallic'}.
+ */
+function pickedOptions(product, size, color) {
+  const axes = Array.isArray(product?.axes) ? product.axes : []
+  const sizeLabel = lower(size)
+  const colorLabel = lower(color?.name)
+  const options = {}
+
+  axes.forEach((axis) => {
+    const key = String(axis).toLowerCase()
+    if (/colou?r/.test(key) && colorLabel) options[axis] = String(color.name).trim()
+    else if (sizeLabel) options[axis] = String(size).trim()
+  })
+
+  // No declared axes: fall back to the two labels the pickers have always used.
+  if (Object.keys(options).length === 0) {
+    if (colorLabel) options.Color = String(color.name).trim()
+    if (sizeLabel) options.Size = String(size).trim()
+  }
+
+  return options
+}
+
+/**
  * Pin a bag line to the variation the customer actually picked so two
  * variations of one product can never collapse into a single row. Only an
  * unambiguous match (or a single-variation product) is sent; otherwise the
  * server derives it from size/color exactly like the catalog does.
+ *
+ * A product can variate along several axes at the same time, so the match is
+ * against EVERY axis value - not only against keys literally called "size" and
+ * "color". Without that a colour × material shirt matched its colour on four
+ * rows and the bag line landed on whichever of them came first.
  */
 function resolveProdvarId(product, size, color) {
   const variations = product?.variations || []
@@ -138,15 +173,22 @@ function resolveProdvarId(product, size, color) {
   const hits = variations.filter((variant) => {
     const opts = variant.prodvar_options || {}
     const name = lower(variant.prodvar_name)
+    const values = Object.values(opts).map(lower)
     const sizes = [opts.size, opts.sizes].flat().filter(Boolean).map(lower)
     const colors = [opts.color, opts.colour].filter(Boolean).map(lower)
 
     const sizeOk = !sizeLabel
       ? false
-      : name === sizeLabel || sizes.includes(sizeLabel) || (sizeLabel === 'one size' && sizes.length === 0)
+      : name === sizeLabel
+        || sizes.includes(sizeLabel)
+        || values.includes(sizeLabel)
+        || (sizeLabel === 'one size' && values.length === 0)
     const colorOk = !colorLabel
       ? false
-      : name === colorLabel || colors.includes(colorLabel) || colors.length === 0
+      : name === colorLabel
+        || colors.includes(colorLabel)
+        || values.includes(colorLabel)
+        || values.length === 0
 
     return sizeOk && colorOk
   })
@@ -363,6 +405,11 @@ export function CartProvider({ children }) {
           ...target,
           prodId: prodIdOf(target) ?? product.prodId ?? product.id,
           prodvarId,
+          // The combination the customer picked, so a product that variates
+          // along several axes at once (colour × material) still resolves to
+          // its exact variation server-side even when the labels alone are
+          // ambiguous.
+          options: pickedOptions(product, size, color),
         },
         qty
       )

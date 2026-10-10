@@ -2,15 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
-import { getImageUrl } from '../../utils/imageUtils.js'
 import { fetchAdminProducts } from '../../services/adminProducts.js'
 import { fetchProductReviews, moderateReview, deleteReview } from '../../services/reviews.js'
-
-const REPLY_TEMPLATES = [
-  { label: 'Thank you', text: 'Thank you for your feedback! We are glad you enjoyed your purchase.' },
-  { label: 'Apology', text: "We're sorry to hear this. Please contact our support team so we can make it right." },
-  { label: 'Suggestion noted', text: "Thanks for the suggestion! We have shared it with our product team." },
-]
 
 const STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending' },
@@ -25,11 +18,6 @@ const RATING_OPTIONS = [
   { value: '3', label: '3 Stars' },
   { value: '2', label: '2 Stars' },
   { value: '1', label: '1 Star' },
-]
-const MEDIA_OPTIONS = [
-  { value: 'all', label: 'All Reviews' },
-  { value: 'media', label: 'Has Photos/Videos' },
-  { value: 'text', label: 'Text Only' },
 ]
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest First' },
@@ -69,24 +57,16 @@ function Stars({ rating, className }) {
 
 // Status indicator: soft dot + label
 function getStatusMeta(review) {
-  if (review.status === 'assigned_support') return { dot: 'bg-rose-500', label: 'Support alert' }
-  if (review.status === 'pending' && review.flagged) return { dot: 'bg-rose-500', label: 'Support alert' }
   if (review.status === 'pending') return { dot: 'bg-orange-400', label: 'Pending' }
   if (review.status === 'approved') return { dot: 'bg-emerald-500', label: 'Approved' }
   return { dot: 'bg-slate-400', label: 'Rejected' }
 }
 
 /**
- * The reviews service strips the backend's [PENDING]/[APPROVED]/CENSORED
- * markers from ord_review, so status is derived from what survives:
- * empty body → pending, censored marker → rejected, otherwise approved.
+ * The API returns the moderation state of a row directly (pending | approved |
+ * rejected). Nothing here has to infer it from the review text any more, which
+ * used to be how a censored row was recognised.
  */
-function deriveStatus(comment) {
-  if (!comment) return 'pending'
-  if (comment === '[REVIEW CENSORED]') return 'rejected'
-  return 'approved'
-}
-
 function buildTimestamp(review) {
   return review.postedAt || review.date || 'Recently'
 }
@@ -103,14 +83,15 @@ export default function AdminReviews() {
   const [reloadKey, setReloadKey] = useState(0)
   const [isModerating, setIsModerating] = useState(false)
 
-  // Show the whole queue by default — pending rows may not be visible yet
-  // through the service (see contract notes), so 'pending' would look empty.
+  // Show the whole queue by default. The server honours `status` only for
+  // employee tokens and defaults an admin's empty filter to the whole queue
+  // (ProductsAPI::displayReviews), so one request per product already carries
+  // pending, approved and rejected rows; the select then filters in memory.
   const [statusFilter, setStatusFilter] = useState('all')
   const [ratingFilter, setRatingFilter] = useState('all')
-  const [mediaFilter, setMediaFilter] = useState('all')
   const [sortBy, setSortBy] = useState('newest')
-  // Rating and Media are secondary to status and sort; folded so the default
-  // toolbar stays four controls wide.
+  // Rating is secondary to status and sort; folded so the default toolbar
+  // stays three controls wide.
   const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -119,13 +100,17 @@ export default function AdminReviews() {
   const [checkedIds, setCheckedIds] = useState([])
   const [bulkOpen, setBulkOpen] = useState(false)
 
-  const [replyText, setReplyText] = useState('')
-  const [previewSrc, setPreviewSrc] = useState(null)
-  const [escalateReview, setEscalateReview] = useState(null)
-  const [escalateNote, setEscalateNote] = useState('')
-
   const mapItem = useCallback((item, product) => {
-    const ordId = Number(String(item.id || '').split('-')[1]) || 0
+    // FLOW-MANAGE_REV-05: the canonical review handle travels with the row, so
+    // a click on a review of a multi-product order targets that exact review
+    // instead of an ambiguous order (ProductsAPI::resolveReview answers 409
+    // AMBIGUOUS_REVIEW for a multi-product order without prod_id).
+    const revId = item.revId ?? null
+    const prodIdBackend = item.prodId ?? null
+    // ord_id comes from the payload, never from the row id: ids are now
+    // `rev-<rev_id>`, so parsing the old `ord-<ord_id>` shape would read a
+    // review id as an order id.
+    const ordId = Number(item.ordId) || 0
     const comment = item.comment || ''
     const reviewer = item.custName || item.author || 'Verified Student'
     const reviewerInitials = reviewer
@@ -137,22 +122,20 @@ export default function AdminReviews() {
       .toUpperCase() || 'VS'
     return {
       id: item.id,
+      revId,
+      prodId: prodIdBackend,
       ordId,
-      productName: product?.name || 'Unnamed Product',
+      productName: product?.name || item.prodName || 'Unnamed Product',
       rating: Number(item.rating) || 0,
       comment,
       title: '',
-      status: item.status || deriveStatus(comment),
+      status: item.status || 'pending',
       timeAgo: item.date || 'Recently',
       postedAt: item.date || '',
       orderId: ordId ? `ORD-${ordId}` : '',
       reviewer,
       reviewerInitials,
       verifiedPurchase: item.verified !== false,
-      photos: [],
-      deliveryStatus: null,
-      reply: '',
-      flagged: false,
     }
   }, [])
 
@@ -160,35 +143,27 @@ export default function AdminReviews() {
     setIsLoading(true)
     setLoadError('')
     try {
-      const products = await fetchAdminProducts()
-      const perProduct = await Promise.all(
-        products.map(async (product) => {
-          const prodId = String(product.id || '').replace('prod-', '')
-          const res = await fetchProductReviews(prodId)
-          if (!res?.success) {
-            return { items: [], error: res?.error || 'Unable to load reviews.' }
-          }
-          return { items: (res.items || []).map((item) => mapItem(item, product)), error: null }
-        })
+      // FLOW-MANAGE_REV-01: ONE request for the whole queue. The backend
+      // answers an employee token without a product id with every pending,
+      // approved and rejected row (ProductsAPI::displayReviews), so the page
+      // no longer fires one request per product - a load that scaled with the
+      // catalog instead of with the reviews. The catalog is still read so a
+      // row whose product was since removed keeps its name.
+      const [queue, products] = await Promise.all([
+        fetchProductReviews(),
+        fetchAdminProducts().catch(() => []),
+      ])
+      const byProdId = new Map(
+        (products || []).map((product) => [String(product.prodId), product])
       )
-      // One order row can appear under several products it contains — dedupe by order.
-      const seen = new Set()
-      const merged = []
-      let firstError = null
-      perProduct.forEach(({ items, error }) => {
-        if (error && !firstError) firstError = error
-        items.forEach((r) => {
-          const key = r.ordId || r.id
-          if (seen.has(key)) return
-          seen.add(key)
-          merged.push(r)
-        })
-      })
+      const merged = (queue.items || []).map((item) =>
+        mapItem(item, byProdId.get(String(item.prodId)) || null)
+      )
       setReviews(merged)
       // Partial failures still show data, with the reason surfaced inline.
-      setLoadError(firstError && merged.length === 0 ? firstError : '')
-      if (firstError && merged.length > 0) {
-        showToast(`Some reviews could not be loaded: ${firstError}`, 'info')
+      setLoadError(!queue.success && merged.length === 0 ? queue.error || 'Unable to load reviews.' : '')
+      if (!queue.success && merged.length > 0) {
+        showToast(`Some reviews could not be loaded: ${queue.error}`, 'info')
       }
     } catch (err) {
       setReviews([])
@@ -211,17 +186,14 @@ export default function AdminReviews() {
           statusFilter === 'all' ||
           (statusFilter === 'pending' && r.status === 'pending') ||
           (statusFilter === 'approved' && r.status === 'approved') ||
-          (statusFilter === 'rejected' && (r.status === 'rejected' || r.status === 'assigned_support'))
+          (statusFilter === 'rejected' && r.status === 'rejected')
         const matchRating = ratingFilter === 'all' || r.rating === parseInt(ratingFilter, 10)
-        const hasMedia = (r.photos || []).length > 0
-        const matchMedia =
-          mediaFilter === 'all' || (mediaFilter === 'media' ? hasMedia : !hasMedia)
         const matchSearch =
           !q ||
           [r.productName, r.reviewer, r.title, r.comment]
             .filter(Boolean)
             .some((v) => v.toLowerCase().includes(q))
-        return matchStatus && matchRating && matchMedia && matchSearch
+        return matchStatus && matchRating && matchSearch
       })
 
     list.sort((a, b) => {
@@ -231,7 +203,7 @@ export default function AdminReviews() {
       return a.index - b.index // newest first (data is stored newest first)
     })
     return list.map(({ r }) => r)
-  }, [reviews, statusFilter, ratingFilter, mediaFilter, sortBy, searchQuery])
+  }, [reviews, statusFilter, ratingFilter, sortBy, searchQuery])
 
   const selected = filteredReviews.find((r) => r.id === selectedId) || filteredReviews[0] || null
   const allChecked =
@@ -246,12 +218,19 @@ export default function AdminReviews() {
   const openReview = (id) => {
     setSelectedId(id)
     setDetailOpen(true)
-    setReplyText('')
   }
 
-  // POST /reviews/moderate — approve=true publishes, false censors (REQ-APC-1)
+  // POST /reviews/moderate — approve=true publishes, false rejects
+  // (FLOW-MANAGE_REV-05 / FLOW-MANAGE_REV-07)
   const applyModeration = async (review, approve) => {
-    await moderateReview({ ord_id: review.ordId, approve })
+    // rev_id first: the canonical handle. prod_id is sent alongside so a legacy
+    // caller that still resolves by order is never ambiguous.
+    await moderateReview({
+      rev_id: review.revId ?? undefined,
+      prod_id: review.prodId ?? undefined,
+      ord_id: review.ordId || undefined,
+      approve,
+    })
     setReviews((list) =>
       list.map((r) =>
         r.id === review.id ? { ...r, status: approve ? 'approved' : 'rejected' } : r
@@ -265,7 +244,6 @@ export default function AdminReviews() {
     try {
       await applyModeration(review, true)
       setDetailOpen(false)
-      setReplyText('')
       showToast('Review approved and published.', 'success')
     } catch (err) {
       showToast(errMsg(err, 'Failed to approve the review.'), 'error')
@@ -280,8 +258,7 @@ export default function AdminReviews() {
     try {
       await applyModeration(review, false)
       setDetailOpen(false)
-      setReplyText('')
-      showToast('Review rejected and censored.', 'success')
+      showToast('Review rejected.', 'success')
     } catch (err) {
       showToast(errMsg(err, 'Failed to reject the review.'), 'error')
     } finally {
@@ -294,7 +271,13 @@ export default function AdminReviews() {
     if (!window.confirm(`Delete the review for ${review.productName}? This cannot be undone.`)) return
     setIsModerating(true)
     try {
-      await deleteReview({ ord_id: review.ordId })
+      // REQ-MANAGE_REV-03: the row is soft-deleted and kept for audit, so the
+      // same canonical handle the moderation call uses identifies it.
+      await deleteReview({
+        rev_id: review.revId ?? undefined,
+        prod_id: review.prodId ?? undefined,
+        ord_id: review.ordId || undefined,
+      })
       setReviews((list) => list.filter((r) => r.id !== review.id))
       setDetailOpen(false)
       showToast('Review deleted.', 'success')
@@ -332,32 +315,6 @@ export default function AdminReviews() {
     }
   }
 
-  // No reply endpoint exists — replies are kept for this session only.
-  const handleSendReply = (review) => {
-    if (!replyText.trim()) return
-    setReviews((list) =>
-      list.map((r) => (r.id === review.id ? { ...r, reply: replyText.trim() } : r))
-    )
-    setReplyText('')
-    showToast('Reply saved for this session (the API has no reply endpoint yet).', 'info')
-  }
-
-  // No escalation endpoint exists — the escalation is session-local only.
-  const handleEscalate = (e) => {
-    e.preventDefault()
-    if (!escalateReview) return
-    const targetId = escalateReview.id
-    const note = escalateNote.trim()
-    setReviews((list) =>
-      list.map((r) =>
-        r.id === targetId ? { ...r, status: 'assigned_support', supportNote: note } : r
-      )
-    )
-    setEscalateReview(null)
-    setEscalateNote('')
-    showToast('Escalated to support for this session (no API endpoint yet).', 'info')
-  }
-
   return (
     <AdminLayout>
       <div className="space-y-3 animate-fade-in">
@@ -366,7 +323,7 @@ export default function AdminReviews() {
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Reviews Moderation</h1>
             <p className="text-xs text-slate-500 font-normal mt-0.5">
-              Review customer feedback, respond to inquiries, and escalate quality issues.
+              Review customer feedback and moderate published ratings for the storefront.
             </p>
           </div>
 
@@ -465,25 +422,18 @@ export default function AdminReviews() {
               onClick={() => setShowMoreFilters((open) => !open)}
               aria-expanded={showMoreFilters}
               className={`h-8 px-2.5 rounded-md border text-xs font-semibold whitespace-nowrap cursor-pointer focus:outline-none ${
-                showMoreFilters || ratingFilter !== 'all' || mediaFilter !== 'all'
+                showMoreFilters || ratingFilter !== 'all'
                   ? 'bg-brand-orange text-white border-brand-orange'
                   : SELECT_CLASS
               }`}
             >
               Filters
-              {[ratingFilter, mediaFilter].filter((v) => v !== 'all').length
-                ? ` · ${[ratingFilter, mediaFilter].filter((v) => v !== 'all').length}`
-                : ''}
+              {ratingFilter !== 'all' ? ' · 1' : ''}
             </button>
             {showMoreFilters && (
             <>
             <select value={ratingFilter} onChange={(e) => setRatingFilter(e.target.value)} className={SELECT_CLASS} aria-label="Rating">
               {RATING_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            <select value={mediaFilter} onChange={(e) => setMediaFilter(e.target.value)} className={SELECT_CLASS} aria-label="Media">
-              {MEDIA_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
@@ -552,6 +502,9 @@ export default function AdminReviews() {
                           <p className="text-xs font-bold text-slate-900 truncate">{r.productName}</p>
                           <span className="text-[11px] text-slate-400 shrink-0">{r.timeAgo}</span>
                         </div>
+                        {/* FLOW-MANAGE_REV-02: the queue lists the customer
+                            name per review, not only the product. */}
+                        <p className="text-[11px] text-slate-500 mt-0.5 truncate">by {r.reviewer}</p>
                         <div className="mt-0.5">
                           <Stars rating={r.rating} className="w-3 h-3" />
                         </div>
@@ -641,62 +594,16 @@ export default function AdminReviews() {
 
                 {/* Scrollable body */}
                 <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-                  {/* Support alert banner */}
-                  {selected.flagged && selected.status !== 'assigned_support' && (
-                    <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-md px-3 py-2.5">
-                      <p className="text-xs font-medium text-amber-900">
-                        {selected.flagReason || 'Support alert'}: this review reports a possible product or delivery issue.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setEscalateReview(selected)}
-                        className="h-8 px-3 rounded-md border border-amber-300 bg-white hover:bg-amber-100 text-amber-900 text-xs font-semibold shrink-0 cursor-pointer"
-                      >
-                        Escalate to Support Ticket
-                      </button>
-                    </div>
-                  )}
-                  {selected.status === 'assigned_support' && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2.5 text-xs text-slate-700">
-                      <span className="font-semibold">Escalated to support.</span>{' '}
-                      {selected.supportNote}
-                    </div>
-                  )}
-
-                  {/* Review content */}
+                  {/* Review content (FLOW-MANAGE_REV-05: the full text) */}
                   <div className="space-y-1.5">
                     {selected.title && <h2 className="text-base font-bold text-slate-900">{selected.title}</h2>}
                     <p className="text-sm text-slate-600 leading-relaxed">{selected.comment}</p>
                   </div>
 
-                  {/* Media gallery */}
-                  {(selected.photos || []).length > 0 && (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                      {selected.photos.map((src, i) => (
-                        <button
-                          key={`${src}-${i}`}
-                          type="button"
-                          onClick={() => setPreviewSrc(src)}
-                          className="aspect-square rounded-md bg-slate-50 border border-slate-200 overflow-hidden cursor-zoom-in"
-                        >
-                          <img
-                            src={getImageUrl(src)}
-                            alt={`Review attachment ${i + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Customer + order context */}
+                  {/* Reviewer + order context (FLOW-MANAGE_REV-02) */}
                   <div className="bg-slate-50 border border-slate-200 rounded-md p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
                     <div className="flex items-center gap-2.5 sm:col-span-2">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
-                          selected.reviewerColor || 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 bg-slate-200 text-slate-600">
                         {selected.reviewerInitials}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -713,60 +620,8 @@ export default function AdminReviews() {
                       <p className="text-xs font-semibold text-slate-800 mt-0.5">{selected.orderId || '—'}</p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium text-slate-400">Delivery status</p>
-                      <p className="text-xs font-semibold text-slate-800 mt-0.5">
-                        {selected.deliveryStatus || '—'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Public reply */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-xs font-bold text-slate-900">Public reply</h3>
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          const tpl = REPLY_TEMPLATES.find((t) => t.label === e.target.value)
-                          if (tpl) setReplyText(tpl.text)
-                        }}
-                        className={SELECT_CLASS}
-                        aria-label="Insert template reply"
-                      >
-                        <option value="">Insert Template Reply</option>
-                        {REPLY_TEMPLATES.map((t) => (
-                          <option key={t.label} value={t.label}>{t.label}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {selected.reply && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-600">
-                        <span className="block text-[11px] font-medium text-slate-400 mb-0.5">Current reply</span>
-                        {selected.reply}
-                      </div>
-                    )}
-
-                    <textarea
-                      rows={3}
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      placeholder="Write a public response..."
-                      className="w-full px-3 py-2 rounded-md border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-300 resize-none"
-                    />
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        disabled={!replyText.trim()}
-                        onClick={() => handleSendReply(selected)}
-                        className={`h-8 px-4 rounded-md text-xs font-bold transition-colors ${
-                          replyText.trim()
-                            ? 'bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer'
-                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                        }`}
-                      >
-                        Send Reply
-                      </button>
+                      <p className="text-[11px] font-medium text-slate-400">Status</p>
+                      <p className="text-xs font-semibold text-slate-800 mt-0.5 capitalize">{selected.status}</p>
                     </div>
                   </div>
                 </div>
@@ -775,62 +630,6 @@ export default function AdminReviews() {
           </div>
         </div>
       </div>
-
-      {/* Media preview */}
-      {previewSrc && (
-        <div
-          className="fixed inset-0 z-[99999] bg-black/70 flex items-center justify-center p-4 animate-fade-in cursor-zoom-out"
-          onClick={() => setPreviewSrc(null)}
-        >
-          <img
-            src={getImageUrl(previewSrc)}
-            alt="Review attachment preview"
-            className="max-w-full max-h-full rounded-md object-contain"
-          />
-        </div>
-      )}
-
-      {/* Escalate to support */}
-      {escalateReview && (
-        <div className="fixed inset-0 z-[99999] bg-black/50 flex items-center justify-center p-4 animate-fade-in">
-          <form
-            onSubmit={handleEscalate}
-            className="bg-white rounded-lg border border-slate-200 w-full max-w-sm overflow-hidden animate-scale-in"
-          >
-            <div className="px-5 py-4 space-y-2">
-              <h3 className="text-sm font-bold text-slate-900">Escalate to support ticket</h3>
-              <p className="text-xs text-slate-500">
-                {escalateReview.productName} · {escalateReview.reviewer}
-              </p>
-              <textarea
-                rows={3}
-                value={escalateNote}
-                onChange={(e) => setEscalateNote(e.target.value)}
-                placeholder="Add a note for the support team (optional)"
-                className="w-full px-3 py-2 rounded-md border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-300 resize-none"
-              />
-            </div>
-            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setEscalateReview(null)
-                  setEscalateNote('')
-                }}
-                className="h-8 px-3 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="h-8 px-4 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold cursor-pointer"
-              >
-                Escalate
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </AdminLayout>
   )
 }

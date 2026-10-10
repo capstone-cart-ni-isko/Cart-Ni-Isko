@@ -140,7 +140,12 @@ export function mapOrderRow(row) {
   const rawStatus = (
     STATUS_DISPLAY_MAP[storedStatus.toLowerCase()] || storedStatus.toUpperCase()
   ).trim()
-  const isPos = custId === null || custId === undefined || tag.toUpperCase().startsWith('POS-')
+  const isPos =
+    row.is_walk_in === true ||
+    row.is_preorder === false ||
+    custId === null ||
+    custId === undefined ||
+    tag.toUpperCase().startsWith('POS-')
   const preorder = /PRE/i.test(tag) || items.some((item) => item.preorder)
 
   return {

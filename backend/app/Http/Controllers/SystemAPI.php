@@ -1763,10 +1763,10 @@ class SystemAPI extends Controller
 
         $search = trim((string) $json->input('q', ''));
         $access = strtolower(trim((string) $json->input('access', '')));
-        if ($access !== '' && ! in_array($access, ['auth', 'view', 'edit'], true)) {
+        if ($access !== '' && ! in_array($access, ['auth', 'view', 'edit', 'delete'], true)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Access must be auth, view or edit.',
+                'message' => 'Access must be auth, view, edit or delete.',
             ], 422);
         }
 
@@ -1923,12 +1923,16 @@ class SystemAPI extends Controller
     // HELPERS
     // ==========================================
 
-    /** auth | view | edit, falling back to $default for anything else. */
+    /**
+     * auth | view | edit | delete, falling back to $default for anything else.
+     * `delete` is in the set because REQ-MANAGE_REV-04 asks for a review
+     * deletion to be distinguishable from a read in the access log.
+     */
     private function accessValue($value, string $default): string
     {
         $value = strtolower(trim((string) $value));
 
-        return in_array($value, ['auth', 'view', 'edit'], true) ? $value : $default;
+        return in_array($value, ['auth', 'view', 'edit', 'delete'], true) ? $value : $default;
     }
 
     /** "<endpoint> - <action>: <desc>", cut to the column width. */

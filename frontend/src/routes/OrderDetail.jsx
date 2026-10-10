@@ -28,6 +28,24 @@ import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
 const CAN_CANCEL = ['TO PROCESS']
 
+/** LalaMove booking states the order carries, in the customer's own words. */
+const COURIER_STATUS_LABELS = {
+  ASSIGNING_DRIVER: 'Finding a driver',
+  ON_GOING: 'Driver on the way',
+  PICKED_UP: 'Picked up',
+  COMPLETED: 'Arrived',
+  CANCELED: 'Courier unavailable — the store is re-arranging',
+  REJECTED: 'Courier unavailable — the store is re-arranging',
+  EXPIRED: 'Courier unavailable — the store is re-arranging',
+}
+
+/** Human label for `courier.status` (unknown states fall back to the raw value). */
+function courierLabel(status) {
+  const key = String(status || '').trim().toUpperCase()
+  if (COURIER_STATUS_LABELS[key]) return COURIER_STATUS_LABELS[key]
+  return key ? key.replace(/_/g, ' ') : 'Courier assigned'
+}
+
 /** "Jan 5, 2026, 9:00 AM" for the live appointment / delivery stamps. */
 function formatStamp(value) {
   if (!value) return null
@@ -273,6 +291,10 @@ function OrderDetail() {
     phone: order.raw?.deliver_phone || null,
     recipient: order.raw?.deliver_recipient || null,
   }
+  // Courier booking carried by a delivery order payload: `share_url` is the
+  // customer's LalaMove tracking link, `status` the live booking state.
+  const courier = isDelivery ? order.raw?.courier || null : null
+  const courierTrackUrl = courier?.share_url || order.raw?.deliver_share_link || null
 
   return (
     <AccountLayout>
@@ -504,6 +526,36 @@ function OrderDetail() {
                   <span className="font-semibold text-gray-800 text-right">{row.value}</span>
                 </div>
               ))}
+
+            {/* Live courier booking: status in plain words + the LalaMove
+                tracking link the customer can follow. */}
+            {courier && (courierTrackUrl || courier.order_id || courier.status) && (
+              <div className="p-3 rounded-xl border border-slate-100 bg-white flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                    Courier
+                  </p>
+                  <p className="text-xs font-semibold text-gray-800">
+                    {courierLabel(courier.status)}
+                  </p>
+                  {courier.order_id && (
+                    <p className="text-[11px] text-gray-500 font-mono truncate">
+                      {courier.order_id}
+                    </p>
+                  )}
+                </div>
+                {courierTrackUrl && (
+                  <a
+                    href={courierTrackUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-brand-orange hover:bg-orange-50 transition-colors"
+                  >
+                    Track parcel
+                  </a>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Items Ordered Card */}
@@ -602,6 +654,11 @@ function OrderDetail() {
                   : 'Included'}
               </span>
             </div>
+            {isDelivery && deliveryFee > 0 && (
+              <p className="text-[10px] text-gray-400 text-right -mt-1">
+                The fee charged for the courier was paid online with this order.
+              </p>
+            )}
             <div className="h-px bg-slate-200 my-1" />
             <div className="flex justify-between items-baseline">
               <span className="font-bold text-gray-900 text-xs">Order Total</span>

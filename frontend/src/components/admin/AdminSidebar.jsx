@@ -115,6 +115,10 @@ const NAV_GROUPS = [
       {
         to: '/admin/inventory',
         label: 'Products',
+        hideForStaff: true,
+        // Rule 41 / REQ-MANAGE_INV-01: only admins and super admins manage the
+        // inventory, so a 'staff' employee never sees the Products entry.
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -189,8 +193,6 @@ export default function AdminSidebar({ onCloseMobile }) {
       }),
     })).filter((section) => section.items.length > 0)
   }, [isStaff, roleKey])
-
-  const navItems = useMemo(() => navGroups.flatMap((section) => section.items), [navGroups])
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')

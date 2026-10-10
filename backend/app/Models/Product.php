@@ -10,6 +10,13 @@ class Product extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `prod_id` is a bare bigint NOT NULL with no sequence on the live
+        // table, so writers allocate it themselves (App\Support\IdAllocator)
+        // and hand it to the model. It has to be MASS-ASSIGNABLE for that to
+        // survive: without it the key was silently dropped and every INSERT
+        // died on a NOT NULL violation - which is why "Add product" always
+        // answered "Failed to add product".
+        'prod_id',
         'prod_name',
         'prod_categ',
         'prod_desc',
@@ -87,6 +94,23 @@ class Product extends Model
         }
 
         return (int) ($this->prod_qty ?? 0);
+    }
+
+    /**
+     * How many live variations the product has. A product with more than one
+     * is one that variates - by one axis or by several at once - and its
+     * low-stock alerts belong to the individual combinations rather than to the
+     * product as a whole (REQ-IM-03).
+     */
+    public function totalVariationCount(): int
+    {
+        try {
+            return (int) Prodvar::where('prod_id', $this->prod_id)
+                ->whereNull('prodvar_deleted')
+                ->count();
+        } catch (\Throwable $e) {
+            return 0;
+        }
     }
 
     /** REQ-MANAGE_INV-06: total units ever sold, aggregated from prodsales. */

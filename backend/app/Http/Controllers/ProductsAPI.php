@@ -80,27 +80,39 @@ class ProductsAPI extends Controller
                 $row['unit_price'] = round((float) $product->prod_price + (float) ($variation->prodvar_markup ?? 0), 2);
                 $row['available'] = $variation->prodvar_disabled === null;
 
+                // A product may variate along several axes at once, so each row
+                // also answers with the combination it stands for and its
+                // human label: {"Color":"Cream","Size":"Medium"} -> "Cream / Medium".
+                $options = self::decodeOptions($variation->prodvar_options);
+                $row['options'] = $options;
+                $row['option_label'] = self::optionLabel($options, (string) $variation->prodvar_name);
+                $row['option_axes'] = array_keys($options);
+
                 return $row;
             })->values()->all();
 
             $payload['variations'] = $variationsPayload;
             $payload['prodvar'] = $variationsPayload;
 
+            // The axes this product varies along, derived from its own rows:
+            // ["Color","Size"]. A one-axis product answers with one, a plain
+            // product with none - and nothing about the shape is fixed in the
+            // schema, so a third axis is just more rows.
+            $payload['option_axes'] = self::optionAxes($vars);
+
             // Legacy JSON shape, derived from the variation rows.
             $payload['prod_qty'] = $stock;
             $payload['prod_status'] = $stock > 0 ? 'In Stock' : 'Out of Stock';
             $payload['prod_images'] = $images->all() ?: null;
-            $payload['prod_sizes'] = $vars->pluck('prodvar_name')->filter()->unique()->values()->all() ?: null;
-            $payload['prod_colors'] = $images->isEmpty() ? null : $vars
-                ->filter(fn (Prodvar $v) => filled($v->prodvar_pic))
-                ->map(fn (Prodvar $v) => [
-                    'name'    => $v->prodvar_name,
-                    'value'   => '#FF6A00',
-                    'image'   => $v->prodvar_pic,
-                    'gallery' => [$v->prodvar_pic],
-                ])
-                ->values()
-                ->all();
+            // The size list is the size axis when the product has one (so a
+            // colour x size shirt lists its sizes, not its combinations), and
+            // the plain labels otherwise.
+            $sizeAxis = self::optionAxisNamed($payload['option_axes'], self::SIZE_KEYS);
+            $payload['prod_sizes'] = ($sizeAxis
+                ? $vars->map(fn (Prodvar $v) => self::decodeOptions($v->prodvar_options)[$sizeAxis] ?? null)
+                    ->filter()->unique()->values()->all()
+                : $vars->pluck('prodvar_name')->filter()->unique()->values()->all()) ?: null;
+            $payload['prod_colors'] = self::colorSwatches($vars, $payload['option_axes']);
             $payload['prod_stock_matrix'] = $vars->mapWithKeys(
                 fn (Prodvar $v) => [$v->prodvar_name => (int) $v->prodvar_stock]
             )->all();
@@ -350,6 +362,333 @@ class ProductsAPI extends Controller
         }
 
         // ==========================================
+        // MULTI-AXIS VARIATION OPTIONS
+        // ==========================================
+
+        /**
+         * A product can variate along SEVERAL axes at the same time - a shirt
+         * can be (cream, medium) or (black, metallic) - so ONE `prodvar` row is
+         * one full combination and `prodvar_options` carries the {axis: value}
+         * pairs that produced it: {"Color":"Cream","Size":"Medium"}.
+         *
+         * The schema already ships `prodvar_options` (varchar, nullable) for
+         * exactly this, so nothing here needs a new table or column (rule 80
+         * still routes every read/write through DatabaseAPI). The axes of a
+         * product are derived from the union of the keys its variations carry,
+         * which is why the shape can grow from one axis to two without a
+         * migration. Unknown axes work too - "Material", "Edition", "Fit".
+         *
+         * Legacy rows (no options at all) keep falling back to their variation
+         * name everywhere, so a single-axis or plain product renders unchanged.
+         */
+
+        /** A shirt with 2 colours in 5 sizes is 10 rows; the ceiling keeps one
+         *  product from bloating a single response. */
+        protected const MAX_VARIATIONS = 500;
+
+        /** Colour × size × material is already exotic; four is plenty. */
+        protected const MAX_OPTION_AXES = 4;
+
+        protected const MAX_OPTION_CHARS = 40;
+
+        /** Axis spellings the storefront's colour and size pickers look for. */
+        protected const SIZE_KEYS = ['size', 'sizes'];
+        protected const COLOR_KEYS = ['color', 'colour', 'colors', 'colours'];
+
+        /** One axis value, trimmed and with whitespace runs collapsed. */
+        public static function optionValue($raw): string
+        {
+            return trim((string) preg_replace('/\s+/u', ' ', (string) $raw));
+        }
+
+        /**
+         * Accepts everything a caller may reasonably send as an option set and
+         * returns an ordered {axis: value} map, or null when the payload is not
+         * a usable option set at all.
+         *
+         * object  {"Color":"Cream","Size":"Medium"}
+         * list    [{"name":"Color","value":"Cream"}, {"axis":"Size","value":"M"}]
+         * string  '{"Color":"Cream"}' | 'Color=Cream; Size=Medium' | 'Color: Cream'
+         */
+        public static function normalizeOptions($raw): ?array
+        {
+            if ($raw === null || $raw === '') {
+                return null;
+            }
+
+            $pairs = [];
+
+            if (is_string($raw)) {
+                $trimmed = trim($raw);
+                if ($trimmed === '') {
+                    return null;
+                }
+
+                $decoded = json_decode($trimmed, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $raw = $decoded;
+                } else {
+                    foreach (preg_split('/[;,]/', $trimmed) as $chunk) {
+                        if (! str_contains($chunk, '=') && ! str_contains($chunk, ':')) {
+                            return null;
+                        }
+                        [$axis, $value] = array_pad(preg_split('/=|:/', $chunk, 2), 2, '');
+                        $pairs[self::optionValue($axis)] = self::optionValue($value);
+                    }
+                    $raw = $pairs;
+                }
+            }
+
+            if (! is_array($raw)) {
+                return null;
+            }
+
+            $isList = array_keys($raw) === range(0, count($raw) - 1);
+
+            foreach ($raw as $axis => $value) {
+                if ($isList) {
+                    if (is_array($value)) {
+                        $axis  = $value['name'] ?? $value['axis'] ?? $value['key'] ?? null;
+                        $value = $value['value'] ?? $value['option'] ?? $value['val'] ?? null;
+                    } elseif (is_string($value) && str_contains($value, '=')) {
+                        [$axis, $value] = explode('=', $value, 2);
+                    } else {
+                        return null;
+                    }
+                    if ($axis === null || $value === null) {
+                        return null;
+                    }
+                }
+
+                $pairs[self::optionValue($axis)] = self::optionValue($value);
+            }
+
+            return self::collectOptions($pairs);
+        }
+
+        /**
+         * Folds the collected pairs onto one spelling per axis: the first
+         * spelling wins and a repeated axis updates its value, so "color" and
+         * "Color" can never both end up on the same row.
+         */
+        public static function collectOptions(array $pairs): array
+        {
+            $out = [];
+            $spelling = [];
+
+            foreach ($pairs as $axis => $value) {
+                $key = strtolower((string) $axis);
+                if ($key === '') {
+                    continue;
+                }
+                $out[$spelling[$key] ?? (string) $axis] = self::optionValue($value);
+                $spelling[$key] ??= (string) $axis;
+            }
+
+            return $out;
+        }
+
+        /**
+         * Validates and normalises the option set of ONE variation.
+         *
+         * @return array{0: array, 1: string|null} the ordered {axis: value} map
+         *         (empty when none was sent) and the rejection message.
+         */
+        public static function variationOptions($raw): array
+        {
+            if ($raw === null || $raw === '' || $raw === []) {
+                return [[], null];
+            }
+
+            $options = self::normalizeOptions($raw);
+
+            if ($options === null) {
+                return [[], 'Variation options must be a map such as {"Color":"Cream","Size":"Medium"}.'];
+            }
+
+            if ($options === []) {
+                return [[], 'Every variation option needs both an axis name and a value.'];
+            }
+
+            if (count($options) > self::MAX_OPTION_AXES) {
+                return [[], 'A variation can vary along at most ' . self::MAX_OPTION_AXES . ' axes at once.'];
+            }
+
+            foreach ($options as $axis => $value) {
+                if (mb_strlen($axis) > self::MAX_OPTION_CHARS
+                    || mb_strlen((string) $value) > self::MAX_OPTION_CHARS) {
+                    return [[], 'A variation option axis and value must be '
+                        . self::MAX_OPTION_CHARS . ' characters or fewer.'];
+                }
+
+                if (preg_match('/[\x00-\x1f\x7f]/', $axis . (string) $value)) {
+                    return [[], 'A variation option cannot contain control characters.'];
+                }
+            }
+
+            return [$options, null];
+        }
+
+        /** The JSON cell written to `prodvar_options` (axes sorted, stable). */
+        public static function encodeOptions(array $options): ?string
+        {
+            if ($options === []) {
+                return null;
+            }
+
+            ksort($options, SORT_NATURAL | SORT_FLAG_CASE);
+
+            return json_encode($options, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        /** The {axis: value} map a `prodvar_options` cell carries. */
+        public static function decodeOptions($raw): array
+        {
+            if ($raw === null || $raw === '') {
+                return [];
+            }
+            if (is_array($raw)) {
+                return $raw;
+            }
+
+            $decoded = json_decode((string) $raw, true);
+
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        /** "Cream / Medium" - the human label of one combination. */
+        public static function optionLabel(array $options, string $fallback = ''): string
+        {
+            $values = array_values($options);
+
+            return $values === [] ? $fallback : implode(' / ', $values);
+        }
+
+        /**
+         * The identity of a variation INSIDE one product. Two rows are the same
+         * variation only when this matches (case-insensitively), so a shirt can
+         * never be minted twice as (cream, medium) - and a legacy row with no
+         * options still falls back to its name, exactly as before.
+         */
+        public static function optionSignature(array $options, string $name = ''): string
+        {
+            if ($options !== []) {
+                $parts = [];
+                foreach ($options as $axis => $value) {
+                    $parts[] = strtolower((string) $axis) . '=' . strtolower((string) $value);
+                }
+                sort($parts, SORT_STRING);
+
+                return implode('|', $parts);
+            }
+
+            return 'name=' . strtolower(trim($name));
+        }
+
+        /**
+         * The axes a product varies along, in first-seen order. Derived from
+         * the variations themselves, so adding a second axis to a product is a
+         * data change rather than a schema change.
+         */
+        public static function optionAxes($variations): array
+        {
+            $axes = [];
+
+            foreach ($variations as $variation) {
+                $raw = is_array($variation)
+                    ? ($variation['prodvar_options'] ?? null)
+                    : ($variation->prodvar_options ?? null);
+
+                foreach (array_keys(self::decodeOptions($raw)) as $axis) {
+                    if (! in_array($axis, $axes, true)) {
+                        $axes[] = $axis;
+                    }
+                }
+            }
+
+            return $axes;
+        }
+
+        /** The axis whose (case-insensitive) name is in $keys, else null. */
+        public static function optionAxisNamed(array $axes, array $keys): ?string
+        {
+            foreach ($axes as $axis) {
+                if (in_array(strtolower((string) $axis), $keys, true)) {
+                    return (string) $axis;
+                }
+            }
+
+            return null;
+        }
+
+        /**
+         * The legacy `prod_colors` swatch list, derived from the variation rows.
+         *
+         * A product with a colour axis answers with one swatch per distinct
+         * colour value - (cream, medium) and (cream, large) are the SAME cream,
+         * not two colours. A single-axis product keeps the old
+         * one-swatch-per-variation behaviour, and a product with no options at
+         * all answers with null exactly as before.
+         */
+        public static function colorSwatches($vars, array $axes): ?array
+        {
+            $axis = self::optionAxisNamed($axes, self::COLOR_KEYS);
+
+            if ($axis === null) {
+                // No colour axis: with several axes the combination itself is
+                // what the picker offers, otherwise fall back to the old
+                // one-swatch-per-variation list.
+                if ($axes !== []) {
+                    return $vars
+                        ->map(fn (Prodvar $v) => [
+                            'name'    => (string) $v->prodvar_name,
+                            'value'   => '#FF6A00',
+                            'image'   => $v->prodvar_pic,
+                            'gallery' => $v->prodvar_pic ? [$v->prodvar_pic] : [],
+                        ])
+                        ->values()
+                        ->all();
+                }
+
+                $pictured = $vars->filter(fn (Prodvar $v) => filled($v->prodvar_pic));
+
+                return $pictured->isEmpty() ? null : $pictured
+                    ->map(fn (Prodvar $v) => [
+                        'name'    => $v->prodvar_name,
+                        'value'   => '#FF6A00',
+                        'image'   => $v->prodvar_pic,
+                        'gallery' => [$v->prodvar_pic],
+                    ])
+                    ->values()
+                    ->all();
+            }
+
+            $swatches = [];
+            foreach ($vars as $variation) {
+                $name = (string) (self::decodeOptions($variation->prodvar_options)[$axis] ?? '');
+                if ($name === '' || isset($swatches[$name])) {
+                    continue;
+                }
+                $gallery = $vars
+                    ->filter(fn (Prodvar $v) => (string) (self::decodeOptions($v->prodvar_options)[$axis] ?? '') === $name)
+                    ->pluck('prodvar_pic')
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                $swatches[$name] = [
+                    'name'    => $name,
+                    'value'   => '#FF6A00',
+                    'image'   => $gallery[0] ?? $variation->prodvar_pic,
+                    'gallery' => $gallery,
+                ];
+            }
+
+            return $swatches === [] ? null : array_values($swatches);
+        }
+
+        // ==========================================
         // CATALOG / INVENTORY
         // ==========================================
 
@@ -435,6 +774,13 @@ class ProductsAPI extends Controller
             try {
                 $product = DB::transaction(function () use ($json, $name, $tag, $price, $variations, $categ) {
                     $product = Product::create([
+                        // SYSTEM RULE / App\Support\IdAllocator: the live
+                        // `product.prod_id` is a bare bigint NOT NULL with no
+                        // sequence, identity or default, so an insert that
+                        // omits it dies on a NOT NULL violation. The key is
+                        // allocated here - INSIDE this transaction, so the
+                        // MAX(pk)+1 read sits next to the write.
+                        'prod_id'       => $this->nextId('product', 'prod_id'),
                         'prod_name'     => $name,
                         'prod_tag'      => $tag,
                         'prod_categ'    => $categ,
@@ -449,7 +795,11 @@ class ProductsAPI extends Controller
                     ]);
 
                     foreach ($variations as $variation) {
+                        // Same story for `prodvar.prodvar_id`: no sequence on
+                        // the live table, so every variation row carries its
+                        // own allocated key.
                         Prodvar::create($variation + [
+                            'prodvar_id'      => $this->nextId('prodvar', 'prodvar_id'),
                             'prod_id'          => $product->prod_id,
                             'prodvar_created'  => now(),
                             'prodvar_disabled' => null,
@@ -462,11 +812,22 @@ class ProductsAPI extends Controller
 
                 $totalStock = (int) Prodvar::where('prod_id', $product->prod_id)->sum('prodvar_stock');
                 $threshold = (int) SystemSettings::get('low_stock_threshold', 5);
-                if ($totalStock <= $threshold) {
+                $variationCount = (int) Prodvar::where('prod_id', $product->prod_id)->count();
+
+                if ($totalStock <= $threshold && $variationCount <= 1) {
                     $this->notifyEmployeesByType(
                         ['ADMIN', 'SUPER ADMIN'],
                         '[PRIORITY] Low stock: "' . $product->prod_name . '" is now down to ' . $totalStock . ' unit(s).'
                     );
+                }
+
+                // REQ-IM-03: the alert is per VARIATION, not per product - a
+                // shirt that is out of cream/medium while black/large is full
+                // has a shortage wherever the shirt is rarely checked. With more
+                // than one variation these rows say strictly more than the
+                // product-level line above, so only one of the two fires.
+                if ($variationCount > 1) {
+                    $this->notifyLowStockVariations($product->fresh(), null);
                 }
 
                 $this->logInventory($json, 'add', 'products/add - "' . $product->prod_name . '" (#' . $product->prod_id . ')');
@@ -681,7 +1042,12 @@ class ProductsAPI extends Controller
                 }
 
                 if ($status === 'disabled') {
-                    $query->whereNotNull('prod_disabled');
+                    // A soft-deleted row is gone from every admin list (the
+                    // `active` branch already excludes it), so it must not
+                    // reappear here either - otherwise a product that was
+                    // unlisted and then deleted came back as a duplicate row
+                    // in the inventory table, which fetches active + disabled.
+                    $query->whereNotNull('prod_disabled')->whereNull('prod_deleted');
                 } elseif ($status === 'deleted') {
                     $query->whereNotNull('prod_deleted');
                 } elseif ($status === 'active' || !$status) {
@@ -998,8 +1364,19 @@ class ProductsAPI extends Controller
 
                 $product->update($updateData);
 
+                // Every variation that existed before this request, by
+                // prodvar_id -> stock. REQ-IM-03 alerts on the variations that
+                // CROSSED the threshold, so the "before" side has to be read
+                // before any stock write below.
+                $stockBefore = Prodvar::where('prod_id', $product->prod_id)
+                    ->whereNull('prodvar_deleted')
+                    ->pluck('prodvar_stock', 'prodvar_id')
+                    ->map(fn ($stock) => (int) $stock)
+                    ->all();
+
                 // Legacy stock / photo edits are redirected onto the variations.
                 $stockChanged = false;
+                $variantNote = null;
                 if ($json->has('prodvar_id') && $json->has('prod_qty')) {
                     // The inventory stepper points at ONE variation, so the
                     // absolute value lands on that row instead of being spread
@@ -1044,12 +1421,30 @@ class ProductsAPI extends Controller
                     }
                 }
 
+                if ($json->has('variant')) {
+                    // REQ-MANAGE_INV-01 / "Product variant addition, editing, &
+                    // removal": ONE variation may be added, edited or removed
+                    // on its own. The bulk path below reconciles a whole set,
+                    // which is only right when the admin is re-defining the
+                    // product from scratch.
+                    $variantInput = $json->input('variant');
+                    if (! is_array($variantInput)) {
+                        return response()->json(['success' => false, 'message' => 'variant must be an object.'], 422);
+                    }
+                    $applied = $this->applyVariant($product, $variantInput);
+                    if ($applied instanceof \Illuminate\Http\JsonResponse) {
+                        return $applied;
+                    }
+                    $stockChanged = true;
+                    $variantNote = $applied;
+                }
+
                 if ($json->has('variations') || $json->input('prodvar') !== null) {
                     $variations = $this->parseVariations($json);
                     if ($variations instanceof \Illuminate\Http\JsonResponse) {
                         return $variations;
                     }
-                    $this->replaceVariations($product, $variations);
+                    $this->syncVariations($product, $variations);
                     $stockChanged = true;
                 }
 
@@ -1065,12 +1460,23 @@ class ProductsAPI extends Controller
                             '[PRIORITY] Low stock: "' . $product->prod_name . '" is now down to ' . $stock . ' unit(s).'
                         );
                     }
+
+                    // REQ-IM-03 is per variation: "every time the quantity of a
+                    // certain product variation falls behind a preconfigured
+                    // number". Comparing against the pre-edit snapshot is what
+                    // keeps this from firing on every save of an unchanged row.
+                    // A single-variation product is already covered word for
+                    // word by the product-level line above.
+                    if ($product->totalVariationCount() > 1) {
+                        $this->notifyLowStockVariations($product, $stockBefore);
+                    }
                 }
 
                 $changed = array_merge(
                     array_keys($updateData),
                     $stockChanged ? ['prod_qty'] : [],
                     $json->has('variations') || $json->input('prodvar') !== null ? ['variations'] : [],
+                    $json->has('variant') ? ['variant'] : [],
                     $json->has('prod_images') ? ['prod_images'] : []
                 );
                 $this->logInventory(
@@ -1082,7 +1488,8 @@ class ProductsAPI extends Controller
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Product details updated successfully',
+                    'message' => $variantNote
+                        ?? 'Product details updated successfully',
                     'data'    => self::present($product->fresh()),
                 ], 200);
 
@@ -1258,6 +1665,12 @@ class ProductsAPI extends Controller
          * speaks the legacy dialect (prod_qty + prod_images) a single default
          * variation is synthesised, so "at least one variation" always holds.
          *
+         * Each row carries its own {axis: value} option set, which is what lets
+         * one product variate along several axes at once: the caller may send
+         * the whole cartesian product ({"Color":"Cream","Size":"Medium"}), or
+         * one axis per row and let the client explode it. Either way every
+         * combination ends up as its own `prodvar` row with its own stock.
+         *
          * @return array|\Illuminate\Http\JsonResponse
          */
         protected function parseVariations(Request $json)
@@ -1295,16 +1708,62 @@ class ProductsAPI extends Controller
                     return response()->json(['success' => false, 'message' => 'Product images must be 2 MB or smaller.'], 422);
                 }
 
+                [$options, $optionError] = self::variationOptions(
+                    $row['prodvar_options'] ?? $row['options'] ?? null
+                );
+                if ($optionError !== null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Variation ' . ($index + 1) . ': ' . $optionError,
+                    ], 422);
+                }
+
+                // A combination is its own label: "Cream / Medium". The caller
+                // may still override it when it wants a shorter name on the
+                // shelf, but it never has to invent one by hand.
+                $name = trim((string) ($row['prodvar_name'] ?? $row['name'] ?? ''));
+                if ($name === '') {
+                    $name = self::optionLabel($options, 'Variation ' . ($index + 1));
+                }
+
                 $rows[] = [
-                    'prodvar_name'     => trim((string) ($row['prodvar_name'] ?? $row['name'] ?? ''))
-                        ?: ('Variation ' . ($index + 1)),
+                    'prodvar_name'     => $name,
                     'prodvar_pic'      => filled($pic) ? $pic : null,
                     'prodvar_stock'    => (int) $stock,
                     'prodvar_main'     => (bool) ($row['prodvar_main'] ?? $row['main'] ?? false),
                     'prodvar_markup'   => ($markup === null || $markup === '') ? 0.0 : round((float) $markup, 2),
-                    'prodvar_options'  => $row['prodvar_options'] ?? $row['options'] ?? null,
+                    'prodvar_options'  => self::encodeOptions($options),
                     'prodvar_preorder' => (bool) ($row['prodvar_preorder'] ?? $row['preorder'] ?? false),
                 ];
+            }
+
+            if (count($rows) > self::MAX_VARIATIONS) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A product can have at most ' . self::MAX_VARIATIONS . ' variations.',
+                ], 422);
+            }
+
+            // One row per combination: (cream, medium) and (cream, large) are
+            // two variations of the same shirt, (cream, medium) twice is one
+            // variation sent twice, which would silently split its stock.
+            $seen = [];
+            foreach ($rows as $index => $row) {
+                $signature = self::optionSignature(
+                    self::decodeOptions($row['prodvar_options']),
+                    (string) $row['prodvar_name']
+                );
+
+                if (isset($seen[$signature])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Variation ' . ($index + 1) . ' ("' . $row['prodvar_name'] . '"'
+                            . ') is the same combination as variation ' . ($seen[$signature] + 1)
+                            . '. Send one row per combination so its stock stays on one line.',
+                    ], 409);
+                }
+
+                $seen[$signature] = $index;
             }
 
             if ($rows === []) {
@@ -1437,18 +1896,343 @@ class ProductsAPI extends Controller
         }
 
         /** Full variation replacement when the payload carries `variations`. */
-        protected function replaceVariations(Product $product, array $variations): void
+        protected function syncVariations(Product $product, array $incoming): void
         {
-            Prodvar::where('prod_id', $product->prod_id)->whereNull('prodvar_deleted')
-                ->update(['prodvar_deleted' => now()]);
+            /*
+                Reconciles the variation rows of a product with an incoming set.
 
-            foreach ($variations as $variation) {
-                Prodvar::create($variation + [
+                A combination that already exists is updated IN PLACE, so its
+                `prodvar_id` survives - and with it every bag row, item row and
+                prodsales row that hangs off that variation. A brand-new
+                combination is created, and one that disappeared from the set is
+                retired. The old `replaceVariations()` soft-deleted every row of
+                the product and minted fresh ones, which orphaned the bags of
+                customers already holding those variations and detached their
+                sales history - so the whole set had become un-editable from the
+                inventory UI.
+             */
+            $existing = Prodvar::where('prod_id', $product->prod_id)
+                ->whereNull('prodvar_deleted')
+                ->get();
+
+            $index = [];
+            foreach ($existing as $variation) {
+                $index[self::optionSignature(
+                    self::decodeOptions($variation->prodvar_options),
+                    (string) $variation->prodvar_name
+                )] = $variation;
+            }
+
+            foreach ($incoming as $row) {
+                $signature = self::optionSignature(
+                    self::decodeOptions($row['prodvar_options']),
+                    (string) $row['prodvar_name']
+                );
+
+                $attributes = [
+                    'prodvar_name'     => $row['prodvar_name'],
+                    'prodvar_pic'      => $row['prodvar_pic'],
+                    'prodvar_stock'    => $row['prodvar_stock'],
+                    'prodvar_main'     => $row['prodvar_main'],
+                    'prodvar_markup'   => $row['prodvar_markup'],
+                    'prodvar_options'  => $row['prodvar_options'],
+                    'prodvar_preorder' => $row['prodvar_preorder'],
+                ];
+
+                $match = $index[$signature] ?? null;
+
+                if ($match) {
+                    unset($index[$signature]);
+                    // Re-listing a retired combination brings it back.
+                    $match->update($attributes + ['prodvar_disabled' => null]);
+                    continue;
+                }
+
+                Prodvar::create($attributes + [
+                    // No sequence on the live `prodvar` table either
+                    // (App\Support\IdAllocator): allocate the key before insert.
+                    'prodvar_id'      => $this->nextId('prodvar', 'prodvar_id'),
                     'prod_id'          => $product->prod_id,
                     'prodvar_created'  => now(),
                     'prodvar_disabled' => null,
                     'prodvar_deleted'  => null,
                 ]);
+            }
+
+            foreach ($index as $variation) {
+                $this->retireVariation($product, $variation);
+            }
+        }
+
+        /**
+         * Adds, edits or removes ONE variation of a product.
+         *
+         * JSON REQUEST (`variant`)
+         *
+         * prodvar_id     - integer (opt: omit to ADD a new variation)
+         * prodvar_name   - string  (opt: derived from the options when omitted)
+         * prodvar_stock  - integer (opt)
+         * prodvar_markup - numeric (opt)
+         * prodvar_pic    - string  (opt: /uploads path or data URL)
+         * prodvar_options- object  (opt: {"Color":"Cream","Size":"Medium"})
+         * prodvar_preorder / prodvar_disabled / prodvar_main - bool (opt)
+         * remove         - boolean (opt: retire the variation instead of editing)
+         *
+         * @return string|null|\Illuminate\Http\JsonResponse the note to surface
+         *         as the response message, a rejection response, or null.
+         */
+        protected function applyVariant(Product $product, array $input)
+        {
+            $prodvarId = $input['prodvar_id'] ?? $input['id'] ?? null;
+            $remove = (bool) ($input['remove'] ?? $input['delete'] ?? $input['_destroy'] ?? false);
+
+            $existing = null;
+            if (filled($prodvarId)) {
+                if (! is_numeric($prodvarId)) {
+                    return response()->json(['success' => false, 'message' => 'variant.prodvar_id must be a number.'], 422);
+                }
+                $existing = Prodvar::where('prod_id', $product->prod_id)
+                    ->where('prodvar_id', (int) $prodvarId)
+                    ->first();
+                if (! $existing) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Product variation not found for this product.',
+                    ], 422);
+                }
+            }
+
+            if ($remove) {
+                if (! $existing) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A variation can only be removed with its prodvar_id.',
+                    ], 422);
+                }
+
+                return $this->retireVariation($product, $existing);
+            }
+
+            $optionsSent = array_key_exists('prodvar_options', $input)
+                || array_key_exists('options', $input);
+            [$options, $optionError] = self::variationOptions(
+                $input['prodvar_options'] ?? $input['options'] ?? null
+            );
+            if ($optionError !== null) {
+                return response()->json(['success' => false, 'message' => $optionError], 422);
+            }
+
+            $name = array_key_exists('prodvar_name', $input) || array_key_exists('name', $input)
+                ? trim((string) ($input['prodvar_name'] ?? $input['name'] ?? ''))
+                : null;
+            if ($name === null || $name === '') {
+                $name = self::optionLabel(
+                    $optionsSent ? $options : self::decodeOptions($existing?->prodvar_options),
+                    (string) ($existing->prodvar_name ?? 'Variation')
+                );
+            }
+
+            $attributes = ['prodvar_name' => $name];
+
+            $stock = $input['prodvar_stock'] ?? $input['stock'] ?? null;
+            if ($stock !== null) {
+                if (! is_numeric($stock) || (int) $stock < 0) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Variation stock must be a non-negative number.',
+                    ], 422);
+                }
+                $attributes['prodvar_stock'] = (int) $stock;
+            }
+
+            $markup = array_key_exists('prodvar_markup', $input) || array_key_exists('markup', $input)
+                ? ($input['prodvar_markup'] ?? $input['markup'] ?? 0)
+                : null;
+            if ($markup !== null) {
+                if ($markup !== '' && ! is_numeric($markup)) {
+                    return response()->json(['success' => false, 'message' => 'Variation markup must be a number.'], 422);
+                }
+                $attributes['prodvar_markup'] = ($markup === '' ? 0.0 : round((float) $markup, 2));
+            }
+
+            $pic = array_key_exists('prodvar_pic', $input) || array_key_exists('pic', $input)
+                ? ($input['prodvar_pic'] ?? $input['pic'] ?? null)
+                : null;
+            if (filled($pic) && ! self::imageAllowed($pic)) {
+                return response()->json(['success' => false, 'message' => 'Images must be JPG or PNG files.'], 422);
+            }
+            if (filled($pic) && ! self::imageWithinSize($pic)) {
+                return response()->json(['success' => false, 'message' => 'Product images must be 2 MB or smaller.'], 422);
+            }
+            if (array_key_exists('prodvar_pic', $input) || array_key_exists('pic', $input)) {
+                $attributes['prodvar_pic'] = filled($pic) ? $pic : null;
+            }
+
+            if (array_key_exists('prodvar_preorder', $input)) {
+                $attributes['prodvar_preorder'] = (bool) $input['prodvar_preorder'];
+            }
+
+            // A boolean field is read as a boolean, never through `filled()`:
+            // Laravel 11+ defines filled() as ! blank(), and blank() returns
+            // FALSE for every bool (including `false` itself), so
+            // filled(false) === true. Using it here stamped a disable on the
+            // row for every ENABLE request too, which is what made a disabled
+            // product or combination impossible to bring back.
+            if (array_key_exists('prodvar_disabled', $input)) {
+                $attributes['prodvar_disabled'] = filter_var(
+                    $input['prodvar_disabled'],
+                    FILTER_VALIDATE_BOOLEAN
+                ) ? now() : null;
+            }
+
+            if (array_key_exists('prodvar_main', $input)) {
+                $attributes['prodvar_main'] = (bool) $input['prodvar_main'];
+            }
+
+            if ($optionsSent) {
+                $attributes['prodvar_options'] = self::encodeOptions($options);
+            }
+
+            // A combination is one row: editing a variation onto an option set
+            // another row of the same product already carries is refused rather
+            // than silently splitting the stock of that combination in two.
+            $resulting = $optionsSent ? $options : self::decodeOptions($existing?->prodvar_options);
+            $signature = self::optionSignature($resulting, (string) ($attributes['prodvar_name'] ?? ''));
+
+            $clash = Prodvar::where('prod_id', $product->prod_id)
+                ->whereNull('prodvar_deleted')
+                ->when($existing, fn ($query) => $query->where('prodvar_id', '!=', $existing->prodvar_id))
+                ->get(['prodvar_id', 'prodvar_name', 'prodvar_options'])
+                ->first(fn (Prodvar $variation) => self::optionSignature(
+                    self::decodeOptions($variation->prodvar_options),
+                    (string) $variation->prodvar_name
+                ) === $signature);
+
+            if ($clash) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Variation "' . $clash->prodvar_name . '" already varates this product'
+                        . ' the same way. Edit that row instead of adding a second one.',
+                ], 409);
+            }
+
+            if ($existing) {
+                $existing->update($attributes);
+                $note = 'Variation "' . $existing->prodvar_name . '" updated successfully';
+            } else {
+                $created = Prodvar::create($attributes + [
+                    // `prodvar_id` has no sequence on the live table, so a new
+                    // combination allocates its own key (App\Support\IdAllocator)
+                    // - without it the insert dies on a NOT NULL violation and
+                    // "add combination" reports a generic failure.
+                    'prodvar_id'      => $this->nextId('prodvar', 'prodvar_id'),
+                    'prod_id'          => $product->prod_id,
+                    'prodvar_created'  => now(),
+                    'prodvar_disabled' => null,
+                    'prodvar_deleted'  => null,
+                ]);
+                $note = 'Variation "' . $created->prodvar_name . '" added to the product';
+            }
+
+            // Exactly one variation carries the main image: a newly flagged row
+            // takes the flag off the others.
+            if (! empty($attributes['prodvar_main'])) {
+                Prodvar::where('prod_id', $product->prod_id)
+                    ->whereNull('prodvar_deleted')
+                    ->when($existing, fn ($query) => $query->where('prodvar_id', '!=', $existing->prodvar_id))
+                    ->update(['prodvar_main' => false]);
+            }
+
+            return $note;
+        }
+
+        /**
+         * Retires one variation: a soft delete when nothing holds it, and a
+         * disable when it does.
+         *
+         * REQ-CW-02 / REQ-BAG-01: a variation a customer is already holding in
+         * a bag must not vanish from that bag, so it can no longer be ordered
+         * but the cart line still resolves. Only an unreferenced variation is
+         * deleted outright, which keeps the bag rows and prodsales history of
+         * every retired variation intact either way.
+         *
+         * @return string|\Illuminate\Http\JsonResponse
+         */
+        protected function retireVariation(Product $product, Prodvar $variation)
+        {
+            $live = Prodvar::where('prod_id', $product->prod_id)
+                ->whereNull('prodvar_deleted')
+                ->count();
+
+            if ($live <= 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A product needs at least one variation. Edit this one instead of removing it.',
+                ], 422);
+            }
+
+            $heldInBag = DB::table('bag')
+                ->where('prodvar_id', $variation->prodvar_id)
+                ->whereNull('bag_deleted')
+                ->where('bag_placed', false)
+                ->exists();
+
+            if ($heldInBag) {
+                $variation->update(['prodvar_disabled' => now()]);
+
+                return 'Variation "' . $variation->prodvar_name . '" is held in a customer bag,'
+                    . ' so it was disabled instead of removed.';
+            }
+
+            $variation->update([
+                'prodvar_disabled' => now(),
+                'prodvar_deleted'  => now(),
+            ]);
+
+            self::syncTotals($product);
+
+            return 'Variation "' . $variation->prodvar_name . '" removed successfully';
+        }
+
+        /**
+         * REQ-IM-03: a priority notification to every admin and super admin the
+         * moment a VARIATION falls behind the configured threshold. Only the
+         * variations that crossed it are named, so restocking one shirt size
+         * does not re-alert the whole product.
+         *
+         * @param array<int,int>|null $before prodvar_id => stock before the edit
+         */
+        protected function notifyLowStockVariations(Product $product, ?array $before): void
+        {
+            $threshold = (int) SystemSettings::get('low_stock_threshold', 5);
+
+            $now = Prodvar::where('prod_id', $product->prod_id)
+                ->whereNull('prodvar_deleted')
+                ->get(['prodvar_id', 'prodvar_name', 'prodvar_stock', 'prodvar_options']);
+
+            foreach ($now as $variation) {
+                $stock = (int) $variation->prodvar_stock;
+                $previous = $before[$variation->prodvar_id] ?? null;
+
+                // $before === null is the "just created" path, where every
+                // variation under the threshold is worth an alert.
+                if ($previous !== null && $previous <= $threshold) {
+                    continue;
+                }
+                if ($stock > $threshold) {
+                    continue;
+                }
+
+                $label = self::optionLabel(
+                    self::decodeOptions($variation->prodvar_options),
+                    (string) $variation->prodvar_name
+                );
+
+                $this->notifyEmployeesByType(
+                    ['ADMIN', 'SUPER ADMIN'],
+                    '[PRIORITY] Low stock: "' . $product->prod_name . '" (' . $label . ')'
+                        . ' is now down to ' . $stock . ' unit(s).'
+                );
             }
         }
 
@@ -1874,13 +2658,16 @@ class ProductsAPI extends Controller
 
                 // REQ-APC-2 / Domain 13: only one review per customer per
                 // product. A rejected row keeps its audit trail but does not
-                // block a fresh submission.
+                // block a fresh submission, and a review an employee deleted
+                // (REQ-MANAGE_REV-03 soft-deletes it for audit) has to leave
+                // the customer free to write another one - otherwise the one
+                // moderation delete would silence them for good.
                 $existing = Review::where('cust_id', $customer->getKey())
                     ->where('prod_id', $prodId)
                     ->orderByDesc('rev_created')
                     ->first();
 
-                if ($existing && ! $existing->isRejected()) {
+                if ($existing && ! $existing->isRejected() && ! $this->isDeleted($existing)) {
                     return response()->json([
                         'success' => false,
                         'message' => 'You have already reviewed this product. Please edit your existing review instead.',
@@ -1894,6 +2681,11 @@ class ProductsAPI extends Controller
                     'rev_created' => now(),
                     'rev_approved' => null,
                 ]);
+
+                // FLOW-ACCESS_LOG-01: a customer write is an append-only edit on
+                // the account, the same as every other customer surface.
+                $this->logCustomer((int) $customer->getKey(), 'edit',
+                    'POST /api/reviews/create - review #' . $review->rev_id . ' (product #' . $prodId . ')');
 
                 $map = $this->orderMap([$review]);
 
@@ -2120,6 +2912,14 @@ class ProductsAPI extends Controller
                     return response()->json(['success' => false, 'message' => 'Review not found'], 404);
                 }
 
+                // REQ-MANAGE_REV-03: a review an employee already deleted stays
+                // in the table for audit, and every read filters it out - a
+                // second moderation decision on it would only rewrite the audit
+                // row, so it is answered as gone.
+                if ($this->isDeleted($review)) {
+                    return response()->json(['success' => false, 'message' => 'Review not found'], 404);
+                }
+
                 $approve = $json->boolean('approve', true);
                 $decoded = $this->decode($review->rev_msg);
                 $censored = $json->input('censored_review');
@@ -2301,6 +3101,11 @@ class ProductsAPI extends Controller
                 $review->rev_msg = Review::compose((int) $rating, (string) $text);
                 $review->rev_approved = null; // an edit always re-enters the queue
                 $review->save();
+
+                // FLOW-ACCESS_LOG-01: editing a review is an append-only edit on
+                // the customer's own account.
+                $this->logCustomer((int) $user->getKey(), 'edit',
+                    'PUT /api/reviews/update - review #' . $review->rev_id . ' (product #' . $review->prod_id . ')');
 
                 $this->recomputeProduct((int) $review->prod_id);
 

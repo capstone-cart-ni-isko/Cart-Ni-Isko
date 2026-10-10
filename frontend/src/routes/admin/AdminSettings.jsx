@@ -232,8 +232,9 @@ function NumberField({ label, hint, value, min, max, step = 1, suffix, onSave })
  * super admin; SettingsAPI refuses those keys for anybody else (rule 40).
  */
 export default function AdminSettings() {
+  const navigate = useNavigate()
   const { showToast } = useToast()
-  const { isSuperAdmin } = useAdmin()
+  const { isSuperAdmin, logoutAdmin } = useAdmin()
   const { dark, set: setTheme } = useTheme()
 
   const [activeSection, setActiveSection] = useState('account')

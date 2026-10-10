@@ -17,8 +17,8 @@ import {
   clearCheckoutSlot,
   createPaymentIntent,
   getDispatch,
-  payOrder,
   readCheckoutSlot,
+  verifyPaymentStatus,
 } from '../services/checkout.js'
 
 /* Delivery tiers previewed through POST /checkout/dispatch (SRS shipping fees). */
@@ -48,6 +48,21 @@ function todayISO() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
+/**
+ * Arrival copy under the delivery date. When the server quoted a live courier
+ * the local tier row is not the store's to promise on its own, so the server's
+ * own estimate (dispatch_details / dispatch) is quoted instead - never the
+ * local table's day range.
+ */
+function etaNote(feeSource, serverEta) {
+  if (feeSource === 'lalamove') {
+    return serverEta
+      ? `Live courier quote — estimated arrival ${String(serverEta).replace('T', ' ')}.`
+      : 'Live courier quote — the courier confirms the arrival window after booking.'
+  }
+  return 'Earliest possible arrival for the selected speed.'
+}
+
 /** The exact body every checkout endpoint receives for this form. */
 function buildCheckoutPayload(form) {
   const { dispatchType, tier, deliveryAddress, deliverExpect, slot, bagIds } = form
@@ -74,16 +89,22 @@ function buildCheckoutPayload(form) {
  * (REQ-CHECKOUT-01). Nothing is written until the final placement call:
  *
  *   POST /checkout/dispatch        quote (fees, ETA, total due)
- *   POST /checkout/payment         place it - cash / pay-at-store
+ *   POST /checkout/payment         refused - 409 ONLINE_PAYMENT_REQUIRED
  *   POST /checkout/payment/intent  place it - PayMongo, then redirect to
  *                                  data.checkout_url (REQ-CHECKOUT-03)
  *
  * Flow: claim details (FLOW-CHECKOUT-03) -> phone OTP (FLOW-CHECKOUT-08) ->
  * 5-second "Looks good / Go back" dialog (FLOW-CHECKOUT-09) -> placement ->
- * navigate('/bag') (FLOW-CHECKOUT-10). Pickup slots are collected on
+ * redirect to data.checkout_url -> back through ?status=/&order= which is
+ * confirmed with POST /checkout/payment/status (the webhook may still be in
+ * flight) -> navigate('/bag') (FLOW-CHECKOUT-10). Pickup slots are collected on
  * /book?return=/checkout and only ever sent to the server as
  * `appoint_start`: the appointment row is created inside the checkout
  * transaction (FLOW-CHECKOUT-06).
+ *
+ * Rule 55: every preorder - pickup OR delivery, delivery fee included - is
+ * paid online here, so the gateway is fixed to `paymongo` and the customer is
+ * never offered a pay-at-store tender. The POS register keeps its cash.
  */
 function CheckoutPlaceholder() {
   const navigate = useNavigate()
@@ -98,7 +119,6 @@ function CheckoutPlaceholder() {
   const { showToast } = useToast()
 
   const [dispatchType, setDispatchType] = useState('pickup')
-  const [gateway, setGateway] = useState('manual') // 'manual' | 'paymongo'
 
   // Pickup: the slot is COLLECTED on /book (FLOW-CHECKOUT-04) and parked in
   // sessionStorage; no appointment row exists client-side (FLOW-CHECKOUT-06).
@@ -155,6 +175,26 @@ function CheckoutPlaceholder() {
     serverPreview?.total_due ?? serverPreview?.total ?? null
   const totalDue = serverDue != null ? Number(serverDue) : orderSubtotal + clientFee
 
+  /* The server's quote outranks the local tier table: a live courier quote
+     (dispatch_fee_source 'lalamove') can differ from the store's rows and it
+     carries the courier's own arrival estimate, so the tier ETA is not
+     promised when the fee came from the courier. */
+  const dispatchInfo = serverPreview?.dispatch_details ?? serverPreview?.dispatch ?? null
+  const feeSource =
+    serverPreview?.dispatch_fee_source ??
+    serverPreview?.dispatch_quote?.source ??
+    dispatchInfo?.fee_source ??
+    dispatchInfo?.dispatch_fee_source ??
+    null
+  const serverEta =
+    dispatchInfo?.estimated_delivery ?? dispatchInfo?.deliver_expect ?? null
+  const feeRowLabel =
+    dispatchType === 'pickup'
+      ? 'Fulfillment Fee'
+      : feeSource === 'lalamove'
+      ? 'Delivery Fee (live courier quote)'
+      : `Delivery Fee (${tierInfo.label})`
+
   const touch = (key) => setTouched((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
 
   /* REQ-CHECKOUT-04: every field validates as the customer types. */
@@ -205,15 +245,20 @@ function CheckoutPlaceholder() {
     }
   }, [bagIdsKey, dispatchType, tier, deliveryAddress, deliverExpect, slot, itemsToCheckout.length])
 
-  /* Returning from the PayMongo checkout: the order was already created by
-     the intent call, so only the bag is re-read and FLOW-CHECKOUT-10 sends
-     the customer to /bag. */
+  /* Returning from the PayMongo hosted checkout. The order already exists
+     (the intent call created it), so nothing here places anything: the
+     redirect carries ?status=&order=, and POST /checkout/payment/status is
+     asked because the webhook may still be in flight. The params are stripped
+     first so a refresh never replays the handler. */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const status = params.get('status') || params.get('payment_status')
+    const orderId = params.get('order')
     const intentId = params.get('payment_intent_id')
-    if (!status && !intentId) return undefined
-    if (!sessionStorage.getItem(PENDING_KEY)) return undefined
+    if (!status && !orderId && !intentId) return undefined
+    // The gateway return URL always names the order; the pending marker only
+    // guards the legacy intent redirect that arrives without one.
+    if (!orderId && !sessionStorage.getItem(PENDING_KEY)) return undefined
 
     window.history.replaceState({}, document.title, window.location.pathname)
     try {
@@ -224,6 +269,66 @@ function CheckoutPlaceholder() {
 
     let cancelled = false
     ;(async () => {
+      if (orderId) {
+        let res = null
+        let failure = null
+        try {
+          res = await verifyPaymentStatus({ ord_id: Number(orderId) })
+        } catch (err) {
+          failure = err
+        }
+        if (cancelled) return
+
+        if (failure) {
+          // 503 PAYMENT_GATEWAY_UNAVAILABLE: say what the server said, plainly,
+          // and leave the bag exactly as it was (REQ-CHECKOUT-02).
+          if (failure.status === 503) {
+            showToast(
+              failure.message ||
+                'Online payment is not configured yet. Your bag is unchanged.',
+              'error'
+            )
+          } else if (status === 'cancelled') {
+            showToast(
+              'Payment was cancelled. Your order was not completed and your bag is unchanged.',
+              'info'
+            )
+          } else {
+            showToast(
+              failure.message || 'We could not confirm your payment yet. Please check your orders.',
+              'error'
+            )
+          }
+          return
+        }
+
+        if (status === 'cancelled') {
+          showToast(
+            'Payment was cancelled. Your order was not completed and your bag is unchanged.',
+            'info'
+          )
+          return
+        }
+
+        if (res?.data?.paid === true) {
+          clearCheckoutSlot()
+          clearSelectedItems()
+          await refreshCart()
+          if (cancelled) return
+          showToast('Payment received. Your order is now being processed!', 'success')
+          navigate('/bag', { replace: true })
+          return
+        }
+
+        // The redirect says paid but the server has not settled it yet: never
+        // claim success while the confirmation is still outstanding.
+        showToast(
+          'Your payment is still being confirmed. We will update this order as soon as it lands.',
+          'info'
+        )
+        return
+      }
+
       await refreshCart()
       if (cancelled) return
       if (status === 'paid' || status === 'succeeded') {
@@ -237,7 +342,7 @@ function CheckoutPlaceholder() {
     return () => {
       cancelled = true
     }
-  }, [refreshCart, navigate, showToast])
+  }, [refreshCart, navigate, showToast, clearSelectedItems])
 
   // Coming back from /book with a freshly collected slot.
   useEffect(() => {
@@ -265,17 +370,6 @@ function CheckoutPlaceholder() {
     return () => clearTimeout(timer)
   }, [confirmOpen, confirmSeconds, showToast])
 
-  const finishOrder = async (payRef) => {
-    clearCheckoutSlot()
-    clearSelectedItems()
-    await refreshCart()
-    showToast(
-      payRef ? `Order placed! Payment reference ${payRef}` : 'Your order has been placed!',
-      'success'
-    )
-    navigate('/bag', { replace: true })
-  }
-
   const runPlacement = async () => {
     if (busyRef.current) return
     busyRef.current = true
@@ -291,27 +385,23 @@ function CheckoutPlaceholder() {
       bagIds: bagIdsKey ? bagIdsKey.split(',').map(Number) : [],
     })
     try {
-      if (gateway === 'paymongo') {
-        // REQ-CHECKOUT-03: the intent endpoint places the order first so its
-        // metadata can carry `order:<ord_id>`, then hands back the gateway URL.
-        const res = await createPaymentIntent({ ...payload, gateway: 'paymongo' })
-        const checkoutUrl = res?.data?.checkout_url
-        if (!checkoutUrl) throw new Error('Failed to create a payment session. Please try again.')
-        try {
-          sessionStorage.setItem(
-            PENDING_KEY,
-            JSON.stringify({ ord_id: res?.data?.ord_id ?? null, at: Date.now() })
-          )
-        } catch {
-          /* storage blocked: the return handler simply stays quiet */
-        }
-        window.location.href = checkoutUrl
-        return
+      // Rule 55: the gateway is fixed - there is no offline tender left for a
+      // preorder, so the intent endpoint is the only placement call.
+      // REQ-CHECKOUT-03: it places the order first so its metadata can carry
+      // `order:<ord_id>`, then hands back the hosted-checkout URL.
+      const res = await createPaymentIntent({ ...payload, gateway: 'paymongo' })
+      const checkoutUrl = res?.data?.checkout_url
+      if (!checkoutUrl) throw new Error('Failed to create a payment session. Please try again.')
+      try {
+        sessionStorage.setItem(
+          PENDING_KEY,
+          JSON.stringify({ ord_id: res?.data?.ord_id ?? null, at: Date.now() })
+        )
+      } catch {
+        /* storage blocked: the return handler simply stays quiet */
       }
-
-      const payRes = await payOrder({ ...payload, pay_given: Number(totalDue.toFixed(2)) })
-      const payRef = payRes?.data?.payment?.pay_ref ?? ''
-      await finishOrder(payRef)
+      window.location.href = checkoutUrl
+      return
     } catch (err) {
       if (err?.status === 428) {
         // FLOW-CHECKOUT-08: the server asked for a phone code - verify, retry.
@@ -320,6 +410,7 @@ function CheckoutPlaceholder() {
         return
       }
       // REQ-CHECKOUT-02: nothing local was cleared, the bag stays as it was.
+      // 503 PAYMENT_GATEWAY_UNAVAILABLE carries the server's own sentence.
       setError(err?.message || 'Payment failed. Your bag was not changed. Please try again.')
     } finally {
       busyRef.current = false
@@ -571,9 +662,7 @@ function CheckoutPlaceholder() {
                 {showError('date') ? (
                   <p className="text-xs font-semibold text-red-500 mt-1">{errors.date}</p>
                 ) : (
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Earliest possible arrival for the selected speed.
-                  </p>
+                  <p className="text-[11px] text-gray-400 mt-1">{etaNote(feeSource, serverEta)}</p>
                 )}
               </div>
 
@@ -653,9 +742,7 @@ function CheckoutPlaceholder() {
               <span>₱{(serverPreview?.subtotal ?? orderSubtotal).toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-gray-600 font-medium">
-              <span>
-                {dispatchType === 'pickup' ? 'Fulfillment Fee' : `Delivery Fee (${tierInfo.label})`}
-              </span>
+              <span>{feeRowLabel}</span>
               <span>
                 {serverPreview?.dispatch_fee != null
                   ? `₱${Number(serverPreview.dispatch_fee).toFixed(2)}`
@@ -664,6 +751,12 @@ function CheckoutPlaceholder() {
                   : 'FREE (Pickup)'}
               </span>
             </div>
+            {feeSource === 'lalamove' && (
+              <p className="text-[11px] text-gray-400">
+                Live courier quote — this is the delivery fee charged with your order, not the
+                store's tier price.
+              </p>
+            )}
             <div className="flex justify-between items-baseline text-sm font-bold text-gray-900 pt-2 border-t border-orange-200/60">
               <span>Total Due</span>
               <span className="text-lg font-bold text-brand-orange">
@@ -672,51 +765,25 @@ function CheckoutPlaceholder() {
             </div>
           </div>
 
-          {/* Payment Gateway Selector */}
+          {/* Payment: preorders settle online (rule 55) - pickup AND delivery,
+              delivery fee included. There is no pay-at-store tender left, so
+              the gateway is not a choice. */}
           <div className="space-y-2 pt-2 border-t border-slate-100">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
               Payment Details
             </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setGateway('manual')}
-                className={`py-2.5 rounded-lg font-semibold text-sm border transition-colors cursor-pointer ${
-                  gateway === 'manual'
-                    ? 'bg-brand-orange text-white border-brand-orange'
-                    : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
-                }`}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-                    <line x1="1" y1="10" x2="23" y2="10" />
-                  </svg>
-                  Pay at Store / Manual
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setGateway('paymongo')}
-                className={`py-2.5 rounded-lg font-semibold text-sm border transition-colors cursor-pointer ${
-                  gateway === 'paymongo'
-                    ? 'bg-brand-orange text-white border-brand-orange'
-                    : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
-                }`}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M21 12V7H5V7M21 17V7M3 17H21M5 17V12M19 17V12" />
-                  </svg>
-                  PayMongo (Online)
-                </span>
-              </button>
+            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-slate-50/60">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange shrink-0 mt-0.5">
+                <path d="M21 12V7H5V7M21 17V7M3 17H21M5 17V12M19 17V12" />
+              </svg>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800">PayMongo (Online)</p>
+                <p className="text-xs text-gray-500">
+                  You will be redirected to PayMongo to complete payment securely. Pickup and
+                  courier delivery are both paid online with the order.
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-gray-500">
-              {gateway === 'paymongo'
-                ? 'You will be redirected to PayMongo to complete payment securely.'
-                : 'Pay in person at the store or via manual payment reference.'}
-            </p>
             <p className="text-[11px] text-gray-400">
               Amount due: <span className="font-bold text-gray-600">₱{totalDue.toFixed(2)}</span> —
               a one-time phone code is required before the order is saved.
@@ -740,10 +807,8 @@ function CheckoutPlaceholder() {
                 <>
                   <LoadingSpinner size={18} /> Processing…
                 </>
-              ) : gateway === 'paymongo' ? (
-                `Proceed to PayMongo • ₱${totalDue.toFixed(2)}`
               ) : (
-                `Place Order • ₱${totalDue.toFixed(2)}`
+                `Proceed to PayMongo • ₱${totalDue.toFixed(2)}`
               )}
             </Button>
             <button

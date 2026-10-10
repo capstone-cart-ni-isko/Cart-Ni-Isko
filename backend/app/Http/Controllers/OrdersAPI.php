@@ -16,6 +16,9 @@ use App\Models\Pickup;
 use App\Models\Prodsales;
 use App\Models\Product;
 use App\Models\Prodvar;
+use App\Http\Controllers\ProductsAPI;
+use App\Services\LalamoveService;
+use App\Services\LalamoveUnavailableException;
 use App\Services\PayMongoService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -467,14 +470,51 @@ class OrdersAPI extends Controller
             $payload['deliver_completed']  = $delivery->deliver_completed;
             $payload['deliver_notes']      = $delivery->deliver_notes;
             $payload['deliver_service']    = $delivery->deliver_service;
-            $payload['deliver_share_link'] = $delivery->deliver_share_link;
+            $payload['deliver_share_link'] = $delivery->shareUrl();
             $payload['deliver_last_event'] = $delivery->deliver_last_event;
+
+            // What the customer actually paid for the courier, and what the
+            // store will settle with the rider (rule 55: the delivery fee is
+            // always collected online, at checkout, never on handover).
+            $payload['deliver_fee_charged'] = $delivery->deliver_fee_charged !== null
+                ? (float) $delivery->deliver_fee_charged : null;
+            $payload['deliver_fee_actual']  = $delivery->deliver_fee_actual !== null
+                ? (float) $delivery->deliver_fee_actual : null;
+            $payload['deliver_fee']         = $payload['deliver_fee_charged'];
+            $payload['deliver_env']         = $delivery->deliver_env;
+            $payload['deliver_lat']         = $delivery->deliver_lat;
+            $payload['deliver_lng']         = $delivery->deliver_lng;
+
+            // `deliver_env` is only stamped when a real LalaMove booking is
+            // behind the row, so it doubles as the fee-source flag without a
+            // schema change: 'lalamove' = live courier quote, null = store tier.
+            $payload['dispatch_fee_source'] = $delivery->deliver_env ? 'lalamove' : 'store';
+
+            // The courier envelope kept inside `deliver_share_link`.
+            $courier = $delivery->courier();
+            $payload['courier'] = [
+                'provider' => $delivery->deliver_env ? 'lalamove' : null,
+                'order_id' => $courier['id'],
+                'share_url'=> $courier['url'],
+                'status'   => $courier['status'],
+                'booked'   => $delivery->isBooked(),
+            ];
+
+            // Every online checkout (pickup or delivery) settles at checkout:
+            // there is no pay-on-claim option for a preorder (rule 55).
+            $payload['ord_ship_policy'] = 'at_checkout';
         }
 
         $payload['is_preorder'] = $order->pickup !== null
             || $order->delivery !== null
             || $order->parcel !== null;
         $payload['is_walk_in'] = $order->isWalkIn();
+
+        // Rule 55 for both modalities: a preorder is paid online, at checkout.
+        // The only exception in the system is the walk-in POS register.
+        if (! isset($payload['ord_ship_policy'])) {
+            $payload['ord_ship_policy'] = $payload['is_walk_in'] ? null : 'at_checkout';
+        }
 
         return $payload;
     }
@@ -554,12 +594,19 @@ class OrdersAPI extends Controller
  *
  * Endpoints
  *   POST /checkout/dispatch        fee/ETA preview - no writes, no OTP
- *   POST /checkout/payment         OTP purpose `checkout`, ONE transaction
- *   POST /checkout/payment/intent  the same assembly plus a PayMongo intent
- *                                  whose metadata is `order:<ord_id>`
+ *   POST /checkout/payment         ONLINE-ONLY (rule 55): refuses to place an
+ *                                  order without a gateway confirmation
+ *   POST /checkout/payment/intent  the same assembly plus a PayMongo Hosted
+ *                                  Checkout session (`order:<ord_id>`)
+ *   POST /checkout/payment/status  idempotent paid check used when the browser
+ *                                  returns from PayMongo
  *   POST /checkout/payment/webhook public (outside auth:api), marks THAT order
  *                                  paid: orders.pay_reference / pay_received +
- *                                  the payment row (REQ-CHECKOUT-03)
+ *                                  the payment row (REQ-CHECKOUT-03), then books
+ *                                  the LalaMove courier for a delivery
+ *   POST /delivery/webhook         public, LalaMove order status pushes
+ *   POST /delivery/book            staff, (re)book the courier for an order
+ *   POST /delivery/cancel          staff, cancel the courier booking
  *
  * Cart selection: `bag_ids` (the checked rows) or nothing = every live bag
  * row (REQ-CHECKOUT-01).
@@ -567,8 +614,16 @@ class OrdersAPI extends Controller
 
     // ===== from the Checkout API file =====
 
-    /** Delivery tier fees in PHP; pickup is always free. */
+    /**
+     * Fallback delivery tier fees in PHP; pickup is always free.
+     *
+     * Used whenever LalaMove is unconfigured or refuses to quote, so the fee
+     * still exists before the courier account does.
+     */
     const DISPATCH_FEES = ['priority' => 100.0, 'standard' => 50.0, 'saver' => 30.0];
+
+    /** Tier speed -> upper bound in days, mirrored by deliveryExpectation(). */
+    const DISPATCH_DAYS = ['priority' => 1, 'standard' => 2, 'saver' => 5];
 
     // ==========================================
     // DISPATCH DETAILS (preview only, no DB writes)
@@ -611,7 +666,8 @@ class OrdersAPI extends Controller
 
             $bags        = $scope['bags'];
             $subtotal    = $this->bagSubtotal($bags);
-            $dispatchFee = $this->dispatchFee($dispatchType, $speed);
+            $quote       = $this->quoteDispatch($json, $dispatchType, $speed);
+            $dispatchFee = $quote['fee'];
             $totalDue    = round($subtotal + $dispatchFee, 2);
 
             if ($dispatchType === 'pickup') {
@@ -660,6 +716,11 @@ class OrdersAPI extends Controller
                     'deliver_phone'      => (string) ($customer->cust_phone ?? ''),
                     'deliver_expect'     => $expect,
                     'estimated_delivery' => $expect->toDateTimeString(),
+                    // LalaMove (when configured): the courier that will carry
+                    // it and what it actually costs. `source: store` means the
+                    // tier table was used because no courier is available.
+                    'courier'            => $quote['courier'],
+                    'fee_source'         => $quote['source'],
                 ];
             }
 
@@ -670,6 +731,7 @@ class OrdersAPI extends Controller
                     'bag_ids'          => $bags->pluck('bag_id')->all(),
                     'subtotal'         => $subtotal,
                     'dispatch_fee'     => $dispatchFee,
+                    'dispatch_quote'   => $quote,
                     'total_due'        => $totalDue,
                     'total'            => $totalDue,
                     'cart_count'       => UserAPI::cartCount($custId),
@@ -694,17 +756,24 @@ class OrdersAPI extends Controller
     // ==========================================
 
     /*
-        Integrating payment = placing the order (DOMAIN 26)
+        Integrating payment (DOMAIN 26) - ONLINE ONLY
         ----------
+        Business rule 55: "A preorder must be paid only online." Every order
+        this endpoint can receive is a preorder - walk-in sales run through
+        POST /pos/checkout - and the delivery fee travels with it, so there is
+        no offline tender left to accept here. The endpoint stays (the route,
+        its validator and its contract are part of the public API) and answers
+        409 with `ONLINE_PAYMENT_REQUIRED`; the customer's bag is never
+        touched. POST /checkout/payment/intent is the only way through.
+
         JSON REQUEST
 
         bag_ids         - array (opt: checked bag rows; empty = all live rows)
-        pay_given       - numeric (req: cash / on-hand amount tendered)
-        pay_ref         - string (opt: reference stamped on the payment row)
+        pay_given       - numeric (req by the validator; ignored)
         dispatch_type   - string (req: pickup | delivery)
         speed           - string (opt: priority | standard | saver)
         deliver_address - string (opt)
-        deliver_expect  - string/datetime (opt: delivery date)
+        deliver_expect  - string/datetime (opt)
         appoint_id      - integer (opt)
         appoint_start   - string/datetime (opt)
     */
@@ -713,86 +782,24 @@ class OrdersAPI extends Controller
         $validator = (new DatabaseAPI())->integratePayment($json);
         if ($validator) return $validator;
 
-        try {
-            $dispatchType = strtolower($json->input('dispatch_type'));
-            $speed        = strtolower($json->input('speed', 'standard'));
-            $payGiven     = round((float) $json->input('pay_given'), 2);
-
-            $custId = $this->customerId($json);
-            if ($custId === null) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Customer authentication is required.',
-                ], 403);
-            }
-
-            // FLOW-CHECKOUT-08: the phone OTP gates the order placement.
-            $gate = $this->otpGate($json, 'checkout');
-            if ($gate) return $gate;
-
-            $scope = $this->resolveBagScope($json, $custId);
-            if (isset($scope['error'])) {
-                return response()->json(['success' => false, 'message' => $scope['error'][0]], $scope['error'][1]);
-            }
-
-            $bags        = $scope['bags'];
-            $subtotal    = $this->bagSubtotal($bags);
-            $dispatchFee = $this->dispatchFee($dispatchType, $speed);
-            $totalDue    = round($subtotal + $dispatchFee, 2);
-
-            if ($payGiven < $totalDue) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Insufficient payment given. Total due is ' . number_format($totalDue, 2)
-                        . ', but only ' . number_format($payGiven, 2) . ' was provided.',
-                ], 400);
-            }
-
-            $payRef    = $json->input('pay_ref') ?: ('PAY-' . strtoupper(Str::random(16)));
-            $payChange = round($payGiven - $totalDue, 2);
-
-            $result = $this->placeOrder($json, $custId, $dispatchType, $speed,
-                function (Order $order, float $due) use ($payRef, $payGiven, $payChange) {
-                    return [
-                        'pay_ref' => $payRef,
-                        'paid'    => true,
-                        'given'   => $payGiven,
-                        'due'     => $due,
-                        'change'  => $payChange,
-                    ];
-                });
-
-            // The verification is burned only once the order exists.
-            $this->consumeOtp($json, 'checkout');
-
-            // REQ-ACCESS_LOG-01/03: placing an order is recorded on the account.
-            $this->logCustomer($custId, 'edit',
-                'POST /api/checkout/payment - order #' . $result['order']->ord_id);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Payment integrated and order checkout completed successfully',
-                'data'    => [
-                    'ord_id'     => $result['order']->ord_id,
-                    'bag_ids'    => $result['bag_ids'],
-                    'cart_count' => UserAPI::cartCount($custId),
-                    'payment'    => $result['payment'],
-                    'dispatch'   => $result['dispatch'],
-                    'order'      => OrdersAPI::orderPayload($result['order']),
-                ],
-            ], 201);
-
-        } catch (InsufficientStockException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
-        } catch (\RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
-        } catch (\Exception $e) {
+        $custId = $this->customerId($json);
+        if ($custId === null) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to integrate payment',
-                'error'   => $e->getMessage(),
-            ], 500);
+                'message' => 'Customer authentication is required.',
+            ], 403);
         }
+
+        // The refusal is logged so an attempted offline payment is visible in
+        // the access log (REQ-ACCESS_LOG-03) instead of failing anonymously.
+        $this->logCustomer($custId, 'edit',
+            'POST /api/checkout/payment - refused, preorders are paid online only');
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Preorders are paid online only. Your bag has been kept exactly as it was.',
+            'code'    => 'ONLINE_PAYMENT_REQUIRED',
+        ], 409);
     }
 
     // ==========================================
@@ -837,26 +844,55 @@ class OrdersAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Unsupported payment gateway'], 400);
             }
 
+            // The gateway has no keys yet: say so plainly (503) rather than
+            // falling through to an offline payment, which rule 55 forbids.
+            if (! PayMongoService::isConfigured()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Online payment is not configured yet, so no order was placed. '
+                        . 'Your bag is unchanged - please try again once the store enables online payments.',
+                    'code'    => 'PAYMENT_GATEWAY_UNAVAILABLE',
+                ], 503);
+            }
+
             // Same gate as the cash path: this endpoint also places the order.
             $gate = $this->otpGate($json, 'checkout');
             if ($gate) return $gate;
 
+            $returnBase = rtrim((string) config('services.frontend_url'), '/');
+
             $result = $this->placeOrder($json, $custId, $dispatchType, $speed,
-                function (Order $order, float $due) {
+                function (Order $order, float $due) use ($returnBase) {
                     $paymongo = new PayMongoService();
-                    $intent   = $paymongo->createPaymentIntent(
-                        $due,
+
+                    // Hosted Checkout, not a bare Payment Intent: only the
+                    // hosted session knows where to send the browser back to,
+                    // and it echoes `reference_number` - `order:<ord_id>` - in
+                    // the webhook that is the single source of truth for "paid".
+                    $session = $paymongo->createCheckoutSession(
+                        [[
+                            'name'     => 'Order #' . $order->ord_id . ' - Tindahan ni Isko',
+                            'amount'   => $due,
+                            'quantity' => 1,
+                        ]],
                         'order:' . $order->ord_id,
-                        'Payment for order #' . $order->ord_id
+                        $returnBase . '/checkout?status=paid&order=' . $order->ord_id,
+                        $returnBase . '/checkout?status=cancelled&order=' . $order->ord_id
                     );
 
                     return [
-                        'pay_ref' => $intent['payment_intent_id'],
+                        'pay_ref' => $session['id'],
                         'paid'    => false,
                         'given'   => 0.0,
                         'due'     => $due,
                         'change'  => 0.0,
-                        'intent'  => $intent,
+                        'intent'  => [
+                            'payment_intent_id' => $session['id'],
+                            'client_key'        => $session['id'],
+                            'checkout_url'      => $session['checkout_url'],
+                            'checkout_session'  => $session['id'],
+                            'livemode'          => $session['livemode'],
+                        ],
                     ];
                 });
 
@@ -872,16 +908,18 @@ class OrdersAPI extends Controller
                 'success' => true,
                 'message' => 'Payment intent created successfully',
                 'data'    => [
-                    'checkout_url'      => $intent['checkout_url'] ?? null,
-                    'payment_intent_id' => $intent['payment_intent_id'] ?? null,
-                    'client_key'        => $intent['client_key'] ?? null,
-                    'ord_id'            => $result['order']->ord_id,
-                    'bag_ids'           => $result['bag_ids'],
-                    'total_due'         => $result['payment']['pay_due'],
-                    'cart_count'        => UserAPI::cartCount($custId),
-                    'payment'           => $result['payment'],
-                    'dispatch'          => $result['dispatch'],
-                    'order'             => OrdersAPI::orderPayload($result['order']),
+                    'checkout_url'        => $intent['checkout_url'] ?? null,
+                    'checkout_session_id' => $intent['checkout_session'] ?? null,
+                    'payment_intent_id'   => $intent['payment_intent_id'] ?? null,
+                    'client_key'          => $intent['client_key'] ?? null,
+                    'reference'           => 'order:' . $result['order']->ord_id,
+                    'ord_id'              => $result['order']->ord_id,
+                    'bag_ids'             => $result['bag_ids'],
+                    'total_due'           => $result['payment']['pay_due'],
+                    'cart_count'          => UserAPI::cartCount($custId),
+                    'payment'             => $result['payment'],
+                    'dispatch'            => $result['dispatch'],
+                    'order'               => OrdersAPI::orderPayload($result['order']),
                 ],
             ], 201);
 
@@ -903,6 +941,15 @@ class OrdersAPI extends Controller
     // PAYMONGO WEBHOOK (public - REQ-CHECKOUT-03)
     // ==========================================
 
+    /**
+     * The single source of truth for "the money arrived".
+     *
+     * Handles BOTH shapes PayMongo sends: the Hosted Checkout event
+     * (`checkout_session.payment.paid`, whose identity lives in
+     * `reference_number`) and the older Payment Intent event (identity in
+     * `metadata.order_id`, status `succeeded`). Answering 200 for anything it
+     * does not understand is deliberate: a 4xx makes PayMongo retry for days.
+     */
     public function paymentWebhook(Request $json)
     {
         $signature = $json->header('Paymongo-Signature');
@@ -920,43 +967,78 @@ class OrdersAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
             }
 
-            $event      = json_decode($payload, true);
-            $attributes = $event['data']['attributes']['data']['attributes'] ?? [];
-            if ($attributes === []) {
-                $candidate = $event['data']['attributes'] ?? [];
-                if (isset($candidate['status']) || isset($candidate['metadata'])) {
-                    $attributes = $candidate;
-                }
+            $event = json_decode($payload, true);
+            if (! is_array($event)) {
+                return $this->webhookAck('Event acknowledged');
             }
 
-            // The intent metadata carries `order:<ord_id>` (REQ-CHECKOUT-03).
-            $reference = (string) ($attributes['metadata']['order_id'] ?? '');
-            $paid      = ($attributes['status'] ?? '') === 'succeeded';
+            $type      = (string) ($event['data']['type'] ?? ($event['type'] ?? ''));
+            $reference = (string) ($this->findDeep($event, 'reference_number')
+                ?? $this->findDeep($event, 'order_id')
+                ?? '');
+            $status    = strtolower((string) ($this->findDeep($event, 'status') ?? ''));
 
-            if (! str_starts_with($reference, 'order:') || ! $paid) {
-                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+            $failed = str_contains($type, 'failed')
+                || str_contains($type, 'expired')
+                || in_array($status, ['failed', 'expired', 'cancelled', 'canceled'], true);
+
+            $paid = ! $failed && (
+                in_array($type, [
+                    'checkout_session.payment.paid',
+                    'payment.paid',
+                    'payment.succeeded',
+                ], true)
+                || in_array($status, ['succeeded', 'paid'], true)
+            );
+
+            if (! str_starts_with($reference, 'order:')) {
+                return $this->webhookAck('Event acknowledged');
             }
 
             $order = Order::find((int) substr($reference, 6));
             if (! $order) {
                 Log::warning('PayMongo webhook: order not found', ['reference' => $reference]);
-                return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+                return $this->webhookAck('Event acknowledged');
             }
 
-            $payment = $this->markOrderPaid($order, $attributes);
-
-            // REQ-ACCESS_LOG-01/03: the paid order is recorded on the account.
-            if ((int) $order->cust_id > 0) {
-                $this->logCustomer((int) $order->cust_id, 'edit',
-                    'POST /api/checkout/payment/webhook - order #' . $order->ord_id . ' paid');
+            if ($failed) {
+                return $this->webhookAck('Payment attempt did not succeed');
             }
 
-            $this->announce(
-                (int) $order->cust_id,
-                '[PRIORITY] Payment confirmed for order #' . $order->ord_id
-                    . '. Your order is being processed.'
-            );
-            $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
+            if (! $paid) {
+                return $this->webhookAck('Event acknowledged');
+            }
+
+            // Re-deliveries are normal (PayMongo retries up to 12 times), so
+            // the notification half only runs the first time.
+            $alreadyPaid = (float) $order->pay_received > 0;
+
+            $payment = $this->markOrderPaid($order, [
+                'amount' => (int) round((float) $order->ord_amount * 100),
+            ]);
+
+            if (! $alreadyPaid) {
+                // REQ-ACCESS_LOG-01/03: the paid order is recorded on the account.
+                if ((int) $order->cust_id > 0) {
+                    $this->logCustomer((int) $order->cust_id, 'edit',
+                        'POST /api/checkout/payment/webhook - order #' . $order->ord_id . ' paid');
+                }
+
+                $this->announce(
+                    (int) $order->cust_id,
+                    '[PRIORITY] Payment confirmed for order #' . $order->ord_id
+                        . '. Your order is being processed.'
+                );
+                $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
+
+                // Rule 55 + the LalaMove section of the spec: the courier is
+                // only booked once the fee is actually in.
+                $booking = $this->bookDeliveryCourier($order);
+                if ($booking['booked'] && ! empty($booking['order_id'])) {
+                    $this->alertAdmins('LalaMove booked for order #' . $order->ord_id
+                        . ' (courier order ' . $booking['order_id'] . ').');
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -971,7 +1053,507 @@ class OrdersAPI extends Controller
 
         } catch (\Exception $e) {
             Log::error('PayMongo webhook error', ['error' => $e->getMessage()]);
-            return response()->json(['success' => true, 'message' => 'Event acknowledged'], 200);
+            return $this->webhookAck('Event acknowledged');
+        }
+    }
+
+    /**
+     * The browser is back from PayMongo. The webhook is authoritative, but it
+     * can only reach a publicly routed server - so this endpoint re-asks the
+     * gateway and settles the order if the push has not landed yet. It is
+     * idempotent: an order already paid returns immediately.
+     *
+     * POST /checkout/payment/status {ord_id}
+     */
+    public function paymentStatus(Request $json)
+    {
+        $validator = (new DatabaseAPI())->paymentStatus($json);
+        if ($validator) return $validator;
+
+        $custId = $this->customerId($json);
+        if ($custId === null) {
+            return response()->json(['success' => false, 'message' => 'Customer authentication is required.'], 403);
+        }
+
+        $order = Order::find((int) $json->input('ord_id'));
+        if (! $order || (int) $order->cust_id !== (int) $custId) {
+            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+        }
+
+        $state = [
+            'ord_id'      => $order->ord_id,
+            'paid'        => (float) $order->pay_received > 0,
+            'pay_ref'     => $order->pay_reference,
+            'ord_status'  => $order->ord_status,
+            'gateway'     => 'paymongo',
+        ];
+
+        if ($state['paid']) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment already confirmed',
+                'data'    => $state + ['booked' => null],
+            ], 200);
+        }
+
+        if (! PayMongoService::isConfigured()) {
+            $state['gateway_ready'] = false;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Online payment is not configured yet.',
+                'data'    => $state,
+            ], 200);
+        }
+
+        $session  = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
+        $sessionStatus = strtolower((string) ($session['attributes']['status'] ?? ''));
+
+        $settled = $session !== [] && (
+            str_contains($sessionStatus, 'paid')
+            || str_contains($sessionStatus, 'succeed')
+            || str_contains($sessionStatus, 'complete')
+            || (($session['attributes']['payments'] ?? []) !== [])
+        );
+
+        if ($settled) {
+            $payment = $this->markOrderPaid($order, [
+                'amount' => (int) round((float) $order->ord_amount * 100),
+            ]);
+
+            $this->announce((int) $order->cust_id,
+                '[PRIORITY] Payment confirmed for order #' . $order->ord_id
+                    . '. Your order is being processed.');
+            $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
+
+            $booking = $this->bookDeliveryCourier($order);
+
+            $state['paid']   = true;
+            $state['pay_ref'] = $payment->pay_ref;
+            $state['booked']  = $booking;
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $settled ? 'Payment confirmed' : 'Payment is still being completed',
+            'data'    => $state,
+        ], 200);
+    }
+
+    /** PayMongo asks for 2xx + JSON, and never for a 4xx on the unknown. */
+    private function webhookAck(string $message)
+    {
+        return response()->json(['success' => true, 'message' => $message], 200);
+    }
+
+    /** First value found under `$key` anywhere in the decoded payload. */
+    private function findDeep(array $data, string $key)
+    {
+        if (array_key_exists($key, $data)) {
+            return $data[$key];
+        }
+
+        foreach ($data as $value) {
+            if (is_array($value)) {
+                $found = $this->findDeep($value, $key);
+                if ($found !== null) {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // ==========================================
+    // LALAMOVE (preorder delivery)
+    // ==========================================
+
+    /**
+     * LalaMove order status pushes. Public, because the courier cannot carry
+     * our session token.
+     *
+     * LalaMove does not HMAC its webhooks, so nothing here is trusted with
+     * money or stock: the handler only moves delivery timestamps, re-points
+     * the tracking envelope and notifies. Everything it writes is idempotent
+     * and deduplicated through `deliver_last_event`.
+     */
+    public function lalamoveWebhook(Request $json)
+    {
+        try {
+            $event = $json->all();
+
+            $orderId = (string) ($this->findDeep($event, 'orderId') ?? '');
+            $message = strtoupper((string) ($this->findDeep($event, 'message') ?? $this->findDeep($event, 'type') ?? ''));
+            $status  = strtoupper((string) ($this->findDeep($event, 'status') ?? ''));
+
+            if ($orderId === '') {
+                return $this->webhookAck('Event acknowledged');
+            }
+
+            $delivery = Delivery::where('deliver_share_link', 'like', '%' . $orderId . '%')->first();
+            if (! $delivery) {
+                Log::info('LalaMove webhook: no matching delivery', ['order_id' => $orderId]);
+                return $this->webhookAck('Event acknowledged');
+            }
+
+            $order = $this->resolveDeliveryOrder($delivery);
+            if (! $order) {
+                return $this->webhookAck('Event acknowledged');
+            }
+
+            // POD / delivery-code events carry their own status vocabulary;
+            // only the order-status family moves the track.
+            $state = $status !== '' && in_array($status, [
+                'ASSIGNING_DRIVER', 'ON_GOING', 'PICKED_UP', 'COMPLETED',
+                'CANCELED', 'REJECTED', 'EXPIRED',
+            ], true) ? $status : ($message === 'DRIVER_ASSIGNED' ? 'ON_GOING' : null);
+
+            if ($state === null) {
+                return $this->webhookAck('Event acknowledged');
+            }
+
+            $previous = $delivery->courier()['status'];
+            if ($previous === $state && $delivery->deliver_last_event !== null) {
+                return $this->webhookAck('Duplicate event ignored');
+            }
+
+            $delivery->forceFill(['deliver_last_event' => now()])->save();
+            $delivery->storeCourier(['status' => $state]);
+
+            $this->applyCourierState($order, $delivery, $state);
+
+            return $this->webhookAck('Event acknowledged');
+        } catch (\Throwable $e) {
+            Log::error('LalaMove webhook error', ['error' => $e->getMessage()]);
+            return $this->webhookAck('Event acknowledged');
+        }
+    }
+
+    /**
+     * Translate one LalaMove state onto the store's own track.
+     *
+     * Stock and money are never touched here: the driver moving a parcel does
+     * not claim it - the customer still scans `deliver_qr` (FLOW-ORD_CLAIM-07).
+     */
+    private function applyCourierState(Order $order, Delivery $delivery, string $state): void
+    {
+        switch ($state) {
+            case 'PICKED_UP':
+                if ($delivery->deliver_pickedup === null) {
+                    $delivery->forceFill(['deliver_pickedup' => now()])->save();
+                }
+                if ($order->ord_status === 'processing' || $order->ord_status === 'to claim') {
+                    $order->update(['ord_status' => 'delivering']);
+                }
+                if ((int) $order->cust_id > 0) {
+                    $this->announce((int) $order->cust_id,
+                        'Order #' . $order->ord_id . ' is on its way to you.');
+                }
+                break;
+
+            case 'COMPLETED':
+                if ($delivery->deliver_completed === null) {
+                    $delivery->forceFill(['deliver_completed' => now()])->save();
+                }
+                if ($delivery->deliver_end === null) {
+                    $delivery->forceFill(['deliver_end' => now()])->save();
+                }
+                if ($order->ord_status === 'delivering') {
+                    // The customer still confirms by scanning the parcel QR.
+                    $order->update(['ord_status' => 'to receive']);
+                }
+                if ((int) $order->cust_id > 0) {
+                    $this->announce((int) $order->cust_id,
+                        'Order #' . $order->ord_id . ' has arrived. Please scan the parcel code to confirm receipt.');
+                }
+                break;
+
+            case 'CANCELED':
+            case 'REJECTED':
+            case 'EXPIRED':
+                // Free the row so staff can book another driver, and say so.
+                $delivery->forceFill(['deliver_placed' => null])->save();
+                $this->alertAdmins('[PRIORITY] Courier booking for order #' . $order->ord_id
+                    . ' was ' . strtolower($state) . '. Book it again from Deliveries.');
+                if ((int) $order->cust_id > 0) {
+                    $this->announce((int) $order->cust_id,
+                        'The courier for order #' . $order->ord_id
+                        . ' could not take the delivery. The store is re-arranging it.');
+                }
+                break;
+
+            default:
+                // ASSIGNING_DRIVER / ON_GOING: the tracking link already shows it.
+                break;
+        }
+    }
+
+    /**
+     * Book the courier for a PAID delivery order.
+     *
+     * Safe to call repeatedly: a booking that already exists is reported as
+     * done, and a courier that is not configured simply says so - the staff
+     * then hands the parcel over manually exactly as before.
+     *
+     * POST /delivery/book {ord_id}   (role:staff)
+     */
+    public function bookLalamoveDelivery(Request $json)
+    {
+        $validator = (new DatabaseAPI())->bookLalamoveDelivery($json);
+        if ($validator) return $validator;
+
+        $employee = $json->user('api');
+        if (! $this->isEmployee($employee)) {
+            return response()->json(['success' => false, 'message' => 'Employee access is required.'], 403);
+        }
+
+        $order = $this->resolveOrderFromIds($json);
+        if (! $order) {
+            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+        }
+
+        if (($order->ord_claiming ?? '') !== 'delivery') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only delivery orders are booked with a courier.',
+            ], 422);
+        }
+
+        $result = $this->bookDeliveryCourier($order);
+
+        if ($this->isEmployee($employee)) {
+            $this->logEmployee((int) $employee->emp_id, 'edit',
+                'POST /api/delivery/book - order #' . $order->ord_id . ' - ' . $result['message']);
+        }
+
+        $delivery = $this->deliveryForOrder($order);
+
+        return response()->json([
+            'success' => $result['booked'],
+            'message' => $result['message'],
+            'data'    => [
+                'ord_id'   => $order->ord_id,
+                'booked'   => $result['booked'],
+                'order_id' => $result['order_id'] ?? null,
+                'delivery' => $delivery ? $this->deliveryPayload($delivery, $order) : null,
+            ],
+        ], $result['booked'] ? 200 : ($result['code'] ?? 409));
+    }
+
+    /**
+     * Cancel the courier booking (an approved cancellation, or a re-arrange).
+     *
+     * POST /delivery/cancel {ord_id}   (role:staff)
+     */
+    public function cancelLalamoveDelivery(Request $json)
+    {
+        $validator = (new DatabaseAPI())->bookLalamoveDelivery($json);
+        if ($validator) return $validator;
+
+        $employee = $json->user('api');
+        if (! $this->isEmployee($employee)) {
+            return response()->json(['success' => false, 'message' => 'Employee access is required.'], 403);
+        }
+
+        $order = $this->resolveOrderFromIds($json);
+        if (! $order) {
+            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+        }
+
+        $delivery = $this->deliveryForOrder($order);
+        if (! $delivery) {
+            return response()->json(['success' => false, 'message' => 'Delivery record not found'], 404);
+        }
+
+        $courierId = $delivery->courier()['id'];
+        if (! $courierId || ! LalamoveService::isConfigured()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'There is no courier booking to cancel.',
+            ], 409);
+        }
+
+        $result = (new LalamoveService())->cancelOrder($courierId);
+
+        if ($result['cancelled']) {
+            $delivery->forceFill(['deliver_placed' => null, 'deliver_last_event' => now()])->save();
+            $delivery->storeCourier(['status' => 'CANCELED']);
+
+            $this->logEmployee((int) $employee->emp_id, 'edit',
+                'POST /api/delivery/cancel - order #' . $order->ord_id . ' - courier ' . $courierId);
+            if ((int) $order->cust_id > 0) {
+                $this->announce((int) $order->cust_id,
+                    'The courier booking for order #' . $order->ord_id . ' was cancelled.');
+            }
+        }
+
+        return response()->json([
+            'success' => $result['cancelled'],
+            'message' => $result['message'],
+            'data'    => [
+                'ord_id'   => $order->ord_id,
+                'booked'   => false,
+                'delivery' => $this->deliveryPayload($delivery, $order),
+            ],
+        ], $result['cancelled'] ? 200 : 409);
+    }
+
+    /**
+     * Has the money actually landed? (rule 55 - every preorder settles online)
+     *
+     * `pay_received` is stamped by the PayMongo confirmation (webhook or the
+     * return-URL poll). POS walk-in sales keep their own tender in the
+     * `payment` row, so that is checked too.
+     */
+    protected function orderIsPaid(Order $order): bool
+    {
+        if ((float) $order->pay_received > 0) {
+            return true;
+        }
+
+        try {
+            $payment = $order->parcel?->payment
+                ?? Payment::where('pay_ref', (string) $order->pay_reference)->first();
+        } catch (\Throwable $e) {
+            $payment = null;
+        }
+
+        return $payment !== null
+            && (float) $payment->pay_given >= (float) $payment->pay_due
+            && (float) $payment->pay_due > 0;
+    }
+
+    /**
+     * The name the courier addresses the parcel to. `customer` carries
+     * `cust_givname` / `cust_surname` (spec section 6), never a single
+     * `cust_name`, so the recipient is composed here instead of reading a
+     * column that does not exist.
+     */
+    protected function customerFullName(?Customer $customer): string
+    {
+        if (! $customer) {
+            return '';
+        }
+
+        $composed = trim((string) $customer->cust_givname . ' ' . (string) $customer->cust_surname);
+
+        if ($composed !== '') {
+            return $composed;
+        }
+
+        return trim((string) ($customer->cust_nickname ?? ''));
+    }
+
+    /**
+     * Quote + book LalaMove for a paid delivery. Called from the payment
+     * webhook and from POST /delivery/book; never throws.
+     *
+     * @return array{booked: bool, message: string, order_id?: string,
+     *               share_link?: ?string, code?: int}
+     */
+    protected function bookDeliveryCourier(Order $order): array
+    {
+        if (($order->ord_claiming ?? '') !== 'delivery') {
+            return ['booked' => false, 'message' => 'Not a delivery order.'];
+        }
+
+        $delivery = $this->deliveryForOrder($order);
+        if (! $delivery) {
+            return ['booked' => false, 'message' => 'No delivery record exists for this order.'];
+        }
+        if ($delivery->isBooked()) {
+            return ['booked' => true, 'message' => 'The courier is already booked.'];
+        }
+        if ((float) $order->pay_received <= 0) {
+            return ['booked' => false, 'message' => 'The order must be paid online before a courier is booked.'];
+        }
+        if (! LalamoveService::isConfigured()) {
+            return [
+                'booked' => false,
+                'code'   => 503,
+                'message' => 'LalaMove is not configured - hand the parcel to the courier manually.',
+            ];
+        }
+
+        try {
+            $customer = Customer::find((int) $order->cust_id);
+
+            $stops = [
+                $this->storeStop(),
+                [
+                    'address' => (string) $delivery->deliver_address,
+                    'lat'     => $delivery->deliver_lat,
+                    'lng'     => $delivery->deliver_lng,
+                ],
+            ];
+
+            $service = new LalamoveService();
+            $quote   = $service->quote($stops);
+
+            $pickupStop = $quote['stops'][0] ?? [];
+            $dropStop   = $quote['stops'][1] ?? [];
+
+            $recipient = trim((string) $delivery->deliver_recipient);
+            if ($recipient === '' && $customer) {
+                $recipient = trim($customer->cust_givname . ' ' . $customer->cust_surname);
+            }
+
+            $placed = $service->placeOrder(
+                $quote['quotation_id'],
+                [
+                    'stopId' => (string) ($pickupStop['stopId'] ?? ''),
+                    'name'   => (string) $this->settingValue('store_name', 'Tindahan ni Isko'),
+                    'phone'  => $this->e164((string) $this->settingValue('store_phone', '09000000000')),
+                ],
+                [[
+                    'stopId'  => (string) ($dropStop['stopId'] ?? ''),
+                    'name'    => $recipient !== '' ? $recipient : 'Customer',
+                    'phone'   => $this->e164(
+                        (string) $delivery->deliver_phone,
+                        $customer ? (string) $customer->cust_callcode : '+63'
+                    ),
+                    'remarks' => mb_substr((string) $delivery->deliver_notes, 0, 1500),
+                ]],
+                [
+                    'ord_id'     => (string) $order->ord_id,
+                    'deliver_id' => (string) $delivery->deliver_id,
+                ]
+            );
+
+            if ($placed['order_id'] === '') {
+                return ['booked' => false, 'code' => 409, 'message' => 'The courier returned no order number.'];
+            }
+
+            $delivery->forceFill([
+                'deliver_placed'     => now(),
+                'deliver_service'    => $quote['service_type'],
+                // What LalaMove actually charged vs what the customer paid
+                // (deliver_fee_charged) - the two figures the spec asks for.
+                'deliver_fee_actual' => $quote['total'],
+                'deliver_env'        => LalamoveService::environment(),
+            ])->save();
+
+            $delivery->storeCourier([
+                'id'     => $placed['order_id'],
+                'url'    => $placed['share_link'],
+                'status' => $placed['status'],
+            ]);
+
+            return [
+                'booked'     => true,
+                'message'    => 'Courier booked with LalaMove.',
+                'order_id'   => $placed['order_id'],
+                'share_link' => $placed['share_link'],
+            ];
+        } catch (LalamoveUnavailableException $e) {
+            Log::warning('LalaMove booking unavailable', ['ord_id' => $order->ord_id, 'error' => $e->getMessage()]);
+
+            return ['booked' => false, 'code' => 503, 'message' => $e->getMessage()];
+        } catch (\Throwable $e) {
+            Log::error('LalaMove booking failed', ['ord_id' => $order->ord_id, 'error' => $e->getMessage()]);
+
+            return ['booked' => false, 'code' => 409, 'message' => 'The courier booking failed. Please retry.'];
         }
     }
 
@@ -994,7 +1576,12 @@ class OrdersAPI extends Controller
      */
     protected function placeOrder(Request $json, int $custId, string $dispatchType, string $speed, callable $resolveReference): array
     {
-        return DB::transaction(function () use ($json, $custId, $dispatchType, $speed, $resolveReference) {
+        // The dispatch fee is decided OUTSIDE the transaction: a live LalaMove
+        // quote is an HTTP round-trip and must never hold the bag/stock locks
+        // while it waits. The client's own fee is never read (rule 55).
+        $quote = $this->quoteDispatch($json, $dispatchType, $speed);
+
+        return DB::transaction(function () use ($json, $custId, $dispatchType, $speed, $resolveReference, $quote) {
             // 1. Lock the selected bag rows for the duration of the checkout.
             $bags = $this->lockBagRows($json, $custId);
 
@@ -1038,7 +1625,7 @@ class OrdersAPI extends Controller
             }
 
             $subtotal    = round($subtotal, 2);
-            $dispatchFee = $this->dispatchFee($dispatchType, $speed);
+            $dispatchFee = round((float) ($quote['fee'] ?? 0), 2);
             $totalDue    = round($subtotal + $dispatchFee, 2);
 
             // 3. The order itself (FLOW-CHECKOUT-02: one order per checkout).
@@ -1127,16 +1714,41 @@ class OrdersAPI extends Controller
                 $address = $this->deliveryAddress($json, $customer);
                 $expect  = $this->deliveryExpectation($json, $speed);
 
+                // The courier columns are filled at placement even though the
+                // booking itself only happens once PayMongo reports the money
+                // received (POST /checkout/payment/webhook). `deliver_share_link`
+                // holds the LalaMove order envelope as JSON: {"id","url","status"}
+                // - the live column is a free-form link, so the envelope rides
+                // inside it instead of adding a column.
+                $recipient = trim((string) $json->input(
+                    'deliver_recipient',
+                    $this->customerFullName($customer)
+                ));
+                $lat   = $json->input('deliver_lat');
+                $lng   = $json->input('deliver_lng');
+                $notes = trim((string) $json->input('deliver_notes', ''));
+
                 $delivery = Delivery::create([
                     // No sequence for deliver_id on the live table.
-                    'deliver_id'     => $this->nextId('delivery', 'deliver_id'),
-                    'ord_id'         => $order->ord_id,
-                    'cust_id'        => $custId,
-                    'deliver_address'=> $address,
-                    'deliver_phone'  => (string) ($customer->cust_phone ?? ''),
-                    'deliver_qr'     => 'QR-DEL-' . strtoupper(Str::random(10)),
-                    'deliver_expect' => $expect,
-                    'deliver_created'=> now(),
+                    'deliver_id'          => $this->nextId('delivery', 'deliver_id'),
+                    'ord_id'              => $order->ord_id,
+                    'cust_id'             => $custId,
+                    'deliver_address'     => $address,
+                    'deliver_phone'       => (string) ($customer->cust_phone ?? ''),
+                    'deliver_qr'          => 'QR-DEL-' . strtoupper(Str::random(10)),
+                    'deliver_expect'      => $expect,
+                    'deliver_created'     => now(),
+                    // Courier bookkeeping (all nullable live columns).
+                    'deliver_recipient'   => $recipient !== '' ? $recipient : $this->customerFullName($customer),
+                    'deliver_notes'       => $notes !== '' ? $notes : null,
+                    'deliver_lat'         => is_numeric($lat) ? (float) $lat : null,
+                    'deliver_lng'         => is_numeric($lng) ? (float) $lng : null,
+                    'deliver_service'     => strtoupper($speed),
+                    'deliver_env'         => LalamoveService::isConfigured() ? LalamoveService::environment() : null,
+                    // Rule 55: the fee charged online is the quote the gateway
+                    // collected - the store tier table is only the fallback
+                    // when no courier could be reached.
+                    'deliver_fee_charged' => $dispatchFee,
                 ]);
 
                 $parcel = Parcel::create([
@@ -1147,13 +1759,18 @@ class OrdersAPI extends Controller
                 ]);
 
                 $dispatch = [
-                    'modality'        => 'DELIVERY',
-                    'delivery_id'     => $delivery->deliver_id,
-                    'parcel_id'       => $parcel->parcel_id,
-                    'deliver_qr'      => $delivery->deliver_qr,
-                    'deliver_address' => $delivery->deliver_address,
-                    'deliver_phone'   => $delivery->deliver_phone,
-                    'deliver_expect'  => $delivery->deliver_expect,
+                    'modality'            => 'DELIVERY',
+                    'delivery_id'         => $delivery->deliver_id,
+                    'parcel_id'           => $parcel->parcel_id,
+                    'deliver_qr'          => $delivery->deliver_qr,
+                    'deliver_address'     => $delivery->deliver_address,
+                    'deliver_phone'       => $delivery->deliver_phone,
+                    'deliver_expect'      => $delivery->deliver_expect,
+                    'deliver_recipient'   => $delivery->deliver_recipient,
+                    'deliver_service'     => $delivery->deliver_service,
+                    'dispatch_fee'        => $dispatchFee,
+                    'dispatch_fee_source' => (string) ($quote['source'] ?? 'store'),
+                    'courier'             => $quote['courier'] ?? null,
                 ];
                 $placedNote = 'It is expected to arrive by '
                     . ($delivery->deliver_expect
@@ -1266,6 +1883,7 @@ class OrdersAPI extends Controller
         ), 2);
     }
 
+    /** The store's own tier fee; pickup is always free. */
     protected function dispatchFee(string $dispatchType, string $speed): float
     {
         if ($dispatchType === 'pickup') {
@@ -1273,6 +1891,136 @@ class OrdersAPI extends Controller
         }
 
         return self::DISPATCH_FEES[$speed] ?? self::DISPATCH_FEES['standard'];
+    }
+
+    /**
+     * What this checkout costs to dispatch, and who will carry it.
+     *
+     * Pickup is free. A delivery asks LalaMove for a live quote and only falls
+     * back to the store's priority/standard/saver table when the courier is
+     * unconfigured or unreachable - so the fee exists before the account does,
+     * and becomes a real courier price the moment the keys are added.
+     *
+     * The result is advisory: the fee that is actually CHARGED is recomputed
+     * inside the placement transaction (placeOrder), never taken from the
+     * client.
+     *
+     * @return array{fee: float, source: 'lalamove'|'store'|'none',
+     *               currency: string, courier: ?array}
+     */
+    protected function quoteDispatch(Request $json, string $dispatchType, string $speed): array
+    {
+        $fallback = [
+            'fee'      => $this->dispatchFee($dispatchType, $speed),
+            'source'   => $dispatchType === 'pickup' ? 'none' : 'store',
+            'currency' => 'PHP',
+            'courier'  => null,
+        ];
+
+        if ($dispatchType !== 'delivery' || ! LalamoveService::isConfigured()) {
+            return $fallback;
+        }
+
+        try {
+            $quote = $this->lalamoveQuote($json);
+        } catch (\Throwable $e) {
+            // A courier hiccup must never stop a customer from checking out.
+            Log::info('LalaMove quote unavailable - using the store fee table', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return $fallback;
+        }
+
+        if ($quote['total'] <= 0) {
+            return $fallback;
+        }
+
+        return [
+            'fee'      => round($quote['total'], 2),
+            'source'   => 'lalamove',
+            'currency' => $quote['currency'],
+            'courier'  => [
+                'provider'     => 'lalamove',
+                'service_type' => $quote['service_type'],
+                'distance_m'   => $quote['distance_m'],
+                'quotation_id' => $quote['quotation_id'],
+                'expires_at'   => $quote['expires_at'],
+                'market'       => LalamoveService::market(),
+                'environment'  => LalamoveService::environment(),
+            ],
+        ];
+    }
+
+    /**
+     * The live LalaMove quotation for this request: store -> drop-off.
+     *
+     * @throws LalamoveUnavailableException
+     */
+    protected function lalamoveQuote(Request $json): array
+    {
+        $customer = Customer::find($this->customerId($json));
+        $address  = $this->deliveryAddress($json, $customer);
+
+        $lat = $json->input('deliver_lat');
+        $lng = $json->input('deliver_lng');
+
+        $stops = [
+            $this->storeStop(),
+            [
+                'address' => $address,
+                'lat'     => is_numeric($lat) ? $lat : null,
+                'lng'     => is_numeric($lng) ? $lng : null,
+            ],
+        ];
+
+        return (new LalamoveService())->quote($stops);
+    }
+
+    /**
+     * The pickup stop. The store's own coordinates are settings, not columns,
+     * so an unset address still quotes - LalaMove reverse-geocodes the text.
+     */
+    protected function storeStop(): array
+    {
+        return [
+            'address' => (string) $this->settingValue(
+                'store_address',
+                'Tindahan ni Isko, Bicol University, Legazpi City, Albay'
+            ),
+            'lat' => $this->settingValue('store_lat', null),
+            'lng' => $this->settingValue('store_lng', null),
+        ];
+    }
+
+    /**
+     * LalaMove only accepts E.164 (`+639171234567`). The store keeps local
+     * numbers (`09171234567`) so this normalises at the boundary instead of
+     * rejecting an otherwise valid order.
+     */
+    protected function e164(string $phone, string $callCode = '+63'): string
+    {
+        $phone = preg_replace('/[^\d+]/', '', trim($phone)) ?? '';
+
+        if ($phone === '') {
+            return '';
+        }
+
+        if (str_starts_with($phone, '+')) {
+            return $phone;
+        }
+
+        $callCode = $callCode !== '' && str_starts_with($callCode, '+') ? $callCode : '+63';
+
+        if (str_starts_with($phone, '0')) {
+            return $callCode . substr($phone, 1);
+        }
+
+        if (str_starts_with($phone, ltrim($callCode, '+'))) {
+            return '+' . $phone;
+        }
+
+        return $callCode . $phone;
     }
 
     /**
@@ -1659,13 +2407,38 @@ class OrdersAPI extends Controller
                 ], 400);
             }
 
-            // The register may name a variation (D11: the POS form offers a
-            // size/colour per product). `prodvar_id` is exact; `variant` /
-            // `prodvar_name` is matched by name, case-insensitively. When the
-            // caller sends neither, the main (else first) live variation is
-            // used, exactly as before.
+            // The register may name a variation (D11: the POS form offers the
+            // combinations a product has - colour and size at the same time).
+            // `prodvar_id` is exact; `variant_options` is the {axis: value}
+            // map; `variant` / `prodvar_name` is matched by label and then by
+            // the option values. When the caller expresses no preference at
+            // all, the main (else first) live variation is used, exactly as
+            // before.
             $prodvar = $this->resolveVariation($product, $json);
-            if (! $prodvar || $prodvar->prodvar_disabled) {
+
+            if (! $prodvar) {
+                // A combination that exists but was retired in the inventory is
+                // a different answer from a label that names nothing at all:
+                // the first is "no longer offered", the second is a typo.
+                if ($this->retiredVariation($product, $json)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Product "' . $product->prod_name . '" is no longer offered',
+                    ], 400);
+                }
+
+                // A preference that names no live variation used to fall back
+                // to the main row, which rung the sale up on the WRONG stock
+                // bucket and printed the wrong combination on the receipt.
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Product "' . $product->prod_name . '" has no variation matching "'
+                        . $this->requestedVariationLabel($json) . '".',
+                    'available' => $this->variationChoices($product),
+                ], 422);
+            }
+
+            if ($prodvar->prodvar_disabled) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Product "' . $product->prod_name . '" is no longer offered',
@@ -2176,8 +2949,14 @@ class OrdersAPI extends Controller
                 ->update(['ord_amount' => $this->orderTotal($order->ord_id)]);
             $this->syncBagCounter((int) $walkIn->cust_id);
 
-            $this->logPos($json, 'delete', 'pos/remove - "' . ($bag->prodvar->product->prod_name ?? 'product')
-                . '" - order #' . $order->ord_id);
+            // REQ-WALKIN-04: the register is a write surface, so the log names
+            // the combination that left the ticket - with two sizes of one
+            // shirt on a sale, "which shirt" is not an answer.
+            $bag->loadMissing('prodvar.product');
+            $this->logPos($json, 'delete', 'pos/remove - "'
+                . ($bag->prodvar->product->prod_name ?? 'product') . '" ('
+                . ($this->variationLabel($bag->prodvar) ?: 'main') . ')'
+                . ' - order #' . $order->ord_id);
 
             return response()->json([
                 'success' => true,
@@ -2306,12 +3085,108 @@ class OrdersAPI extends Controller
     }
 
     /**
-     * The variation the register actually asked for, else the default.
+     * The retired combination a request points at, if any: the row an employee
+     * disabled in the inventory. Resolved ignoring the disabled filter (a
+     * soft-deleted row stays invisible), so the register can tell "this
+     * combination used to exist" apart from "this label names nothing".
+     */
+    private function retiredVariation(Product $product, Request $json): ?Prodvar
+    {
+        $rows = Prodvar::where('prod_id', $product->prod_id)
+            ->whereNull('prodvar_deleted')
+            ->get();
+
+        $prodvarId = $json->input('prodvar_id');
+        if (filled($prodvarId) && is_numeric($prodvarId)) {
+            return $rows->first(fn (Prodvar $v) => (int) $v->prodvar_id === (int) $prodvarId
+                && $v->prodvar_disabled !== null);
+        }
+
+        $label = trim((string) ($json->input('variant') ?? $json->input('prodvar_name') ?? ''));
+
+        return $rows->first(function (Prodvar $variation) use ($label) {
+            if ($variation->prodvar_disabled === null || $label === '') {
+                return false;
+            }
+
+            return strcasecmp((string) $variation->prodvar_name, $label) === 0
+                || strcasecmp($this->variationLabel($variation), $label) === 0;
+        });
+    }
+
+    /**
+     * What the register asked for, as a label, for an error message. "Medium,
+     * Cream", "Cream / Medium" or {"Color":"Cream","Size":"Medium"} all name
+     * one combination of one product.
+     */
+    private function requestedVariationLabel(Request $json): string
+    {
+        $options = $json->input('variant_options') ?? $json->input('prodvar_options');
+        if (is_array($options) && $options !== []) {
+            $normalised = ProductsAPI::normalizeOptions($options);
+
+            return $normalised === null ? 'the requested variation'
+                : ProductsAPI::optionLabel($normalised, 'the requested variation');
+        }
+
+        return trim((string) ($json->input('variant') ?? $json->input('prodvar_name') ?? ''))
+            ?: 'the requested variation';
+    }
+
+    /**
+     * Every live combination of a product, as the POS picker and the error
+     * messages spell it: [{prodvar_id, label, options, stock, price}].
+     */
+    private function variationChoices(Product $product): array
+    {
+        return Prodvar::where('prod_id', $product->prod_id)
+            ->whereNull('prodvar_deleted')
+            ->whereNull('prodvar_disabled')
+            ->orderBy('prodvar_id')
+            ->get()
+            ->map(function (Prodvar $variation) use ($product) {
+                $options = ProductsAPI::decodeOptions($variation->prodvar_options);
+
+                return [
+                    'prodvar_id'   => (int) $variation->prodvar_id,
+                    'label'        => ProductsAPI::optionLabel(
+                        $options,
+                        (string) $variation->prodvar_name
+                    ),
+                    'prodvar_name' => (string) $variation->prodvar_name,
+                    'options'      => $options,
+                    'stock'        => (int) $variation->prodvar_stock,
+                    'unit_price'   => round(
+                        (float) $product->prod_price + (float) ($variation->prodvar_markup ?? 0),
+                        2
+                    ),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The variation the register actually asked for.
      *
-     * The POS form lets the cashier pick a size/colour and the cart line
-     * carries it, but /pos/add used to drop that choice on the floor - the
-     * sale was always rung up on the main variation, so the wrong stock
-     * bucket was decremented and the receipt named the wrong size.
+     * The POS form offers every combination of a product - (cream, medium) and
+     * (black, metallic) are different rows - so a plain "Medium, Orange" label
+     * is not enough to name one. The lookup therefore walks from the exact to
+     * the vague:
+     *
+     *   1. `prodvar_id`                - the exact row, always honoured;
+     *   2. `variant_options`           - the {axis: value} map, matched on its
+     *                                     normalised signature;
+     *   3. a label                     - the WHOLE label first ("Cream / Medium"),
+     *                                     then every part against the option
+     *                                     values ("Cream" + "Medium"), then a
+     *                                     single part against a variation name;
+     *   4. nothing at all              - the main (else first) live variation.
+     *
+     * A label that names no live variation returns null instead of falling
+     * back to the main row: silently ringing up the main variation decremented
+     * the WRONG stock bucket and printed the wrong size on the receipt. The
+     * caller answers 422 with the combinations that do exist.
      */
     private function resolveVariation(Product $product, Request $json): ?Prodvar
     {
@@ -2325,22 +3200,91 @@ class OrdersAPI extends Controller
             if ($found) {
                 return $found;
             }
+
+            return null;
+        }
+
+        // The combination as a map: {"Color":"Cream","Size":"Medium"}. The
+        // signature is the same one ProductsAPI uses to keep one row per
+        // combination, so a match here is a match there.
+        $options = $json->input('variant_options') ?? $json->input('prodvar_options');
+        if (is_array($options) && $options !== []) {
+            $normalised = ProductsAPI::normalizeOptions($options);
+            if ($normalised !== null) {
+                $wanted = ProductsAPI::optionSignature($normalised);
+
+                return $live()->get()->first(function (Prodvar $variation) use ($wanted) {
+                    return ProductsAPI::optionSignature(
+                        ProductsAPI::decodeOptions($variation->prodvar_options),
+                        (string) $variation->prodvar_name
+                    ) === $wanted;
+                });
+            }
+
+            return null;
         }
 
         $label = trim((string) ($json->input('variant')
             ?? $json->input('prodvar_name')
             ?? ''));
-        if ($label !== '') {
-            // "Medium, Orange" -> match on the size first, then the full label.
-            foreach (array_filter(array_map('trim', explode(',', $label))) as $part) {
-                $found = $live()->whereRaw('LOWER(prodvar_name) = ?', [strtolower($part)])->first();
-                if ($found) {
-                    return $found;
+        if ($label === '') {
+            // No preference expressed: the legacy default still applies.
+            return $this->defaultVariation($product);
+        }
+
+        // "Cream / Medium", "Medium, Cream", "Cream|Medium" all name one row.
+        $parts = array_values(array_filter(array_map('trim', preg_split('~[,/|]~', $label))));
+        if ($parts === []) {
+            return $this->defaultVariation($product);
+        }
+
+        $rows = $live()->get();
+
+        // 1. The whole label, so "Cream / Medium" hits its own row directly.
+        foreach ($rows as $variation) {
+            if (strcasecmp((string) $variation->prodvar_name, $label) === 0) {
+                return $variation;
+            }
+        }
+
+        // 2. Every part matches a value of the variation's option set, and no
+        //    part is left unmatched - this is what tells (cream, medium) apart
+        //    from (cream, large) when the label is only "Medium, Cream".
+        foreach ($rows as $variation) {
+            $options = array_map(
+                'strtolower',
+                array_values(ProductsAPI::decodeOptions($variation->prodvar_options))
+            );
+            $names = [strtolower((string) $variation->prodvar_name)];
+
+            if (count($parts) > count($options) + count($names)) {
+                continue;
+            }
+
+            $matched = 0;
+            foreach ($parts as $part) {
+                $needle = strtolower($part);
+                if (in_array($needle, $options, true) || in_array($needle, $names, true)) {
+                    $matched++;
+                }
+            }
+
+            if ($matched === count($parts)) {
+                return $variation;
+            }
+        }
+
+        // 3. A single part against a variation name (the pre-multi-axis
+        //    dialect: "Medium" on a product whose rows are named by size).
+        if (count($parts) === 1) {
+            foreach ($rows as $variation) {
+                if (strcasecmp((string) $variation->prodvar_name, $parts[0]) === 0) {
+                    return $variation;
                 }
             }
         }
 
-        return $this->defaultVariation($product);
+        return null;
     }
 
     /** REQ-ACCESS_LOG-01 / REQ-WALKIN-04: an employee action at the register. */
@@ -2581,8 +3525,26 @@ class OrdersAPI extends Controller
             'prod_tag'     => $product ? $product->prod_tag : null,
             'prod_name'    => $product ? $product->prod_name : null,
             'prodvar_name' => $prodvar ? $prodvar->prodvar_name : null,
+            // A product can variate along several axes at once, so the line
+            // answers with the combination it stands for: {"Color":"Cream",
+            // "Size":"Medium"} and its label "Cream / Medium".
+            'prodvar_options' => $prodvar ? $prodvar->prodvar_options : null,
+            'prodvar_label'   => $this->variationLabel($prodvar),
             'product'      => $this->productPayload($product, $prodvar),
         ];
+    }
+
+    /** "Cream / Medium" for one variation row, or its name when it has none. */
+    private function variationLabel($prodvar): ?string
+    {
+        if (! $prodvar) {
+            return null;
+        }
+
+        return ProductsAPI::optionLabel(
+            ProductsAPI::decodeOptions($prodvar->prodvar_options),
+            (string) $prodvar->prodvar_name
+        );
     }
 
     private function productPayload($product, $prodvar = null): ?array
@@ -2600,6 +3562,30 @@ class OrdersAPI extends Controller
         $payload['prod_preorder'] = $variants->contains(fn ($v) => (bool) $v->prodvar_preorder);
         $payload['prod_sizes'] = $variants->pluck('prodvar_name')->values()->all();
         $payload['prod_images'] = $variants->pluck('prodvar_pic')->filter()->unique()->values()->all();
+        $payload['option_axes'] = ProductsAPI::optionAxes($variants);
+        $payload['variants'] = $variants->map(function (Prodvar $variation) use ($product) {
+            $options = ProductsAPI::decodeOptions($variation->prodvar_options);
+
+            return [
+                'prodvar_id'   => (int) $variation->prodvar_id,
+                'prodvar_name' => (string) $variation->prodvar_name,
+                'label'        => ProductsAPI::optionLabel(
+                    $options,
+                    (string) $variation->prodvar_name
+                ),
+                'options'      => $options,
+                'prodvar_pic'  => $variation->prodvar_pic,
+                'prodvar_stock'=> (int) $variation->prodvar_stock,
+                'prodvar_main' => (bool) $variation->prodvar_main,
+                'prodvar_markup' => (float) ($variation->prodvar_markup ?? 0),
+                'unit_price'   => round(
+                    (float) $product->prod_price + (float) ($variation->prodvar_markup ?? 0),
+                    2
+                ),
+                'available'    => $variation->prodvar_disabled === null,
+                'preorder'     => (bool) $variation->prodvar_preorder,
+            ];
+        })->values()->all();
 
         if ($prodvar) {
             $payload['prodvar_id'] = $prodvar->prodvar_id;
@@ -2608,6 +3594,8 @@ class OrdersAPI extends Controller
             $payload['prodvar_markup'] = $prodvar->prodvar_markup;
             $payload['prodvar_stock'] = (int) $prodvar->prodvar_stock;
             $payload['prodvar_preorder'] = (bool) $prodvar->prodvar_preorder;
+            $payload['prodvar_options'] = $prodvar->prodvar_options;
+            $payload['prodvar_label'] = $this->variationLabel($prodvar);
             $payload['unit_price'] = round(
                 (float) $product->prod_price + (float) ($prodvar->prodvar_markup ?? 0),
                 2
@@ -2886,7 +3874,9 @@ class OrdersAPI extends Controller
                 if (in_array($status, ['claimed', 'received'], true)) {
                     // FLOW-ORD_CLAIM-08: the claim stamp (see Delivery::$fillable)
                     $delivery->update(['deliver_timestamp' => $delivery->deliver_end ?? now()]);
-                    $this->fulfilOrder($order);
+                    // REQ-MANAGE_INV-05: the claim's stock write is attributed
+                    // to the employee who performed it.
+                    $this->fulfilOrder($order, $employee);
                 }
 
                 // FLOW-ORD_LIST-09: an approved cancellation closes the track
@@ -2895,13 +3885,14 @@ class OrdersAPI extends Controller
                         $delivery->update(['deliver_timestamp' => now()]);
                     }
                     if (in_array($priorStatus, ['claimed', 'received'], true)) {
-                        $this->restockOrder($order);
+                        // REQ-MANAGE_INV-05: the restock is attributed to the
+                        // employee who approved the cancellation.
+                        $this->restockOrder($order, $employee);
                     }
                     foreach ($this->orderBags($order) as $bag) {
                         $this->bumpProdsales($bag, $order, 'cancel', $order->isWalkIn());
                     }
-                }
-            });
+                }            });
 
             $this->logEmployee(
                 (int) $employee->emp_id,
@@ -3205,11 +4196,13 @@ class OrdersAPI extends Controller
             ], 404);
         }
 
-        DB::transaction(function () use ($order, $delivery) {
+        DB::transaction(function () use ($order, $delivery, $user) {
             // FLOW-ORD_CLAIM-08: deliver_timestamp -> live `deliver_end` column
             $delivery->update(['deliver_timestamp' => $delivery->deliver_end ?? now()]);
             $order->update(['ord_status' => 'received']);
-            $this->fulfilOrder($order);
+            // REQ-MANAGE_INV-05: attribute the claim's stock write to the
+            // employee who scanned it.
+            $this->fulfilOrder($order, $user);
         });
 
         // REQ-ORD_CLAIM-03: every claim is logged with timestamp + method
@@ -3317,7 +4310,7 @@ class OrdersAPI extends Controller
         // FLOW-ORD_CLAIM-04 (on/before appoint_end) / -05 (after appoint_end)
         $late = $appointment->appoint_end !== null && $appointment->appoint_end->isPast();
 
-        DB::transaction(function () use ($order, $appointment, $late) {
+        DB::transaction(function () use ($order, $appointment, $late, $user, $isEmployee) {
             $appointment->update([
                 'appoint_status' => $late ? 'absent' : 'done',
                 'appoint_closed' => now(),
@@ -3328,7 +4321,10 @@ class OrdersAPI extends Controller
             ]);
 
             $order->update(['ord_status' => 'claimed']);
-            $this->fulfilOrder($order);
+            // REQ-MANAGE_INV-05: the claim's stock write is attributed to the
+            // employee who scanned it (no actor -> no row, a customer's own
+            // scan is already on their custlog above).
+            $this->fulfilOrder($order, $isEmployee ? $user : null);
         });
 
         // REQ-ORD_CLAIM-03: every claim is logged with timestamp + method
@@ -3542,7 +4538,11 @@ class OrdersAPI extends Controller
         foreach ($deliveries as $delivery) {
             $order = $this->resolveDeliveryOrder($delivery);
             if (! $order || $order->ord_status !== 'delivering') continue;
-            if (! $order->ord_paidat) continue; // unpaid orders never flip
+            // Unpaid orders never flip. `ord_paidat` does not exist on the live
+            // `orders` table (this read used to be a dead check that always
+            // passed), so the real payment signal is `pay_received` - stamped
+            // by the PayMongo confirmation.
+            if (! $this->orderIsPaid($order)) continue;
 
             $order->update(['ord_status' => 'to receive']);
 
@@ -3553,6 +4553,33 @@ class OrdersAPI extends Controller
                 );
             }
         }
+    }
+
+    /**
+     * The order named by `{ord_id}` or, when the admin screen only has the
+     * delivery row in hand, by `{deliver_id}` -> delivery.ord_id / parcel link.
+     */
+    private function resolveOrderFromIds(Request $json): ?Order
+    {
+        $ordId = (int) $json->input('ord_id', 0);
+
+        if ($ordId <= 0) {
+            $deliverId = (int) $json->input('deliver_id', 0);
+
+            if ($deliverId > 0) {
+                $delivery = Delivery::find($deliverId);
+                if ($delivery) {
+                    $order = $this->resolveDeliveryOrder($delivery);
+                    if ($order) {
+                        return $order;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        return Order::find($ordId);
     }
 
     /**
@@ -3632,13 +4659,19 @@ class OrdersAPI extends Controller
      * day's `prodsales` row is guaranteed to exist (Domain 9 / REQ-ORD_CLAIM-03
      * cares about the claim, not about counting the sale twice - the sale
      * itself was recorded when the order was placed).
+     *
+     * $employee is the actor who scanned the claim, when there is one:
+     * REQ-MANAGE_INV-05 asks for every inventory change to reach emplog, and a
+     * claim is the one place where a stock write is triggered by an employee
+     * rather than by the customer's own checkout.
      */
-    private function fulfilOrder(Order $order): void
+    private function fulfilOrder(Order $order, $employee = null): void
     {
         $order->loadMissing('items.bag.prodvar.product');
         $walkIn = $order->isWalkIn();
         $threshold = (int) $this->settingValue('low_stock_threshold', 5);
         $lowStock = [];
+        $deducted = [];
 
         foreach ($order->items as $item) {
             $bag = $item->bag;
@@ -3659,6 +4692,11 @@ class OrdersAPI extends Controller
                 Prodvar::where('prodvar_id', $bag->prodvar_id)
                     ->update(['prodvar_stock' => $newStock]);
                 $prodvar->prodvar_stock = $newStock;
+
+                if ($take > 0) {
+                    $deducted[] = ($prodvar->product ? $prodvar->product->prod_name : 'variation #' . $prodvar->prodvar_id)
+                        . ' (#' . $prodvar->prodvar_id . ') -' . $take;
+                }
             }
 
             if ($prodvar && (int) $prodvar->prodvar_stock <= $threshold) {
@@ -3677,14 +4715,40 @@ class OrdersAPI extends Controller
                 '[PRIORITY] Low stock: "' . $low['name'] . '" is now down to ' . $low['qty'] . ' unit(s).'
             );
         }
+
+        // REQ-MANAGE_INV-05: the claim's inventory change is an emplog row too.
+        if ($deducted !== [] && $this->isEmployee($employee)) {
+            $this->logEmployee(
+                (int) $employee->emp_id,
+                'edit',
+                'stock claim - order #' . $order->ord_id . ' - ' . implode(', ', $deducted)
+            );
+        }
     }
 
-    /** Cancelling an order that already left the shelf puts it back. */
-    private function restockOrder(Order $order): void
+    /**
+     * Cancelling an order that already left the shelf puts it back.
+     *
+     * $employee is the employee who approved the cancellation, when there is
+     * one: REQ-MANAGE_INV-05 wants every inventory change - including a
+     * restock - in emplog.
+     */
+    private function restockOrder(Order $order, $employee = null): void
     {
+        $restocked = [];
         foreach ($this->orderBags($order) as $bag) {
             Prodvar::where('prodvar_id', $bag->prodvar_id)
                 ->increment('prodvar_stock', (int) $bag->bag_qty);
+            $restocked[] = ($bag->prodvar?->product?->prod_name ?? 'variation #' . $bag->prodvar_id)
+                . ' (#' . $bag->prodvar_id . ') +' . (int) $bag->bag_qty;
+        }
+
+        if ($restocked !== [] && $this->isEmployee($employee)) {
+            $this->logEmployee(
+                (int) $employee->emp_id,
+                'edit',
+                'stock restock - order #' . $order->ord_id . ' - ' . implode(', ', $restocked)
+            );
         }
     }
 
@@ -3971,6 +5035,26 @@ class OrdersAPI extends Controller
         $payload['ord_status'] = $order ? $order->ord_status : null;
         $payload['status'] = $order ? $order->ord_status : null;
 
+        // Courier envelope for the admin dispatch screen: what the customer
+        // was charged, whether a real LalaMove booking exists, and the tracking
+        // link. Stored as JSON inside `deliver_share_link` (no DDL allowed).
+        $courier = $delivery->courier();
+        $payload['deliver_share_link'] = $courier['url'];
+        $payload['courier'] = [
+            'provider'  => $delivery->deliver_env ? 'lalamove' : null,
+            'order_id'  => $courier['id'],
+            'share_url' => $courier['url'],
+            'status'    => $courier['status'],
+            'booked'    => $delivery->isBooked(),
+            'environment'=> $delivery->deliver_env,
+        ];
+        $payload['deliver_fee_charged'] = $delivery->deliver_fee_charged !== null
+            ? (float) $delivery->deliver_fee_charged : null;
+        $payload['deliver_fee_actual'] = $delivery->deliver_fee_actual !== null
+            ? (float) $delivery->deliver_fee_actual : null;
+        $payload['deliver_env'] = $delivery->deliver_env;
+        $payload['lalamove_configured'] = LalamoveService::isConfigured();
+
         return $payload;
     }
 
@@ -4090,6 +5174,10 @@ class OrdersAPI extends Controller
             'prod_tag'     => $product ? $product->prod_tag : null,
             'prod_name'    => $product ? $product->prod_name : null,
             'prodvar_name' => $prodvar ? $prodvar->prodvar_name : null,
+            // The combination the line stands for ("Cream / Medium"), so the
+            // tracking screens show the same label the register rang up.
+            'prodvar_options' => $prodvar ? $prodvar->prodvar_options : null,
+            'prodvar_label'   => $this->variationLabel($prodvar),
             'product'      => $this->productPayload($product, $prodvar),
         ];
     }

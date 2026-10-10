@@ -1104,6 +1104,38 @@ class DatabaseAPI extends Controller
     // ORDERS API VALIDATORS
     // ==========================================
 
+    /**
+     * POST /checkout/payment/status - the return-URL poll. `ord_id` alone
+     * names the order; the controller re-checks ownership against the token.
+     */
+    public function paymentStatus(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id' => 'required|integer',
+        ], [
+            'ord_id.required' => 'Order ID is required.',
+            'ord_id.integer'  => 'Order ID must be an integer.',
+        ]);
+    }
+
+    /**
+     * POST /delivery/book and POST /delivery/cancel - staff action on an
+     * already placed (and paid) order. `ord_id` is canonical; a bare
+     * `deliver_id` is accepted as an alias for the admin dispatch screen.
+     */
+    public function bookLalamoveDelivery(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'     => 'required_without:deliver_id|nullable|integer',
+            'deliver_id' => 'required_without:ord_id|nullable|integer',
+        ], [
+            'ord_id.required_without'     => 'Order ID is required.',
+            'deliver_id.required_without' => 'Order ID is required.',
+            'ord_id.integer'              => 'Order ID must be an integer.',
+            'deliver_id.integer'          => 'Delivery ID must be an integer.',
+        ]);
+    }
+
     public function addProductToOrder(Request $json)
     {
         /*

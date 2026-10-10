@@ -59,6 +59,12 @@ Route::get('/reviews/score', [ProductsAPI::class, 'scoreRating']);
 // bearer token, so it stays outside `auth:api` and verifies its own signature.
 Route::post('/checkout/payment/webhook', [OrdersAPI::class, 'paymentWebhook']);
 
+// Public LalaMove webhook: the courier pushes order/driver status changes here
+// (ASSIGNING_DRIVER / ON_GOING / PICKED_UP / COMPLETED / CANCELED). LalaMove
+// does not sign its webhooks, so the handler only trusts the LalaMove order id
+// and never the payload's status text blindly.
+Route::post('/delivery/webhook', [OrdersAPI::class, 'lalamoveWebhook']);
+
 // Everything else requires a Sanctum bearer token
 Route::middleware('auth:api')->group(function () {
     Route::post('/auth/logout', [SecurityAPI::class, 'logout']);
@@ -82,6 +88,15 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/checkout/dispatch', [OrdersAPI::class, 'determineDispatchDetails']);
     Route::post('/checkout/payment', [OrdersAPI::class, 'integratePayment']);
     Route::post('/checkout/payment/intent', [OrdersAPI::class, 'createPaymentIntent']);
+    // The browser is back from PayMongo: the return URL carries the order id
+    // and the webhook may still be in flight, so the PWA asks this to settle.
+    Route::post('/checkout/payment/status', [OrdersAPI::class, 'paymentStatus']);
+
+    // Courier dispatch (staff): book / cancel the LalaMove order behind a paid
+    // delivery. Harmless when LalaMove is unconfigured - it reports that and
+    // the manual handover the staff already does keeps working.
+    Route::post('/delivery/book', [OrdersAPI::class, 'bookLalamoveDelivery'])->middleware('role:staff');
+    Route::post('/delivery/cancel', [OrdersAPI::class, 'cancelLalamoveDelivery'])->middleware('role:staff');
 
     // Reports API Routes
     Route::middleware('role:staff')->group(function () {

@@ -21,6 +21,7 @@ use App\Models\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
@@ -118,6 +119,57 @@ class SrsRequirementsTest extends TestCase
             true,
             now()->addMinutes(10)
         );
+    }
+
+    /**
+     * Rule 55 / REQ-CHECKOUT-03: the PWA never settles a preorder in cash, so
+     * the feature tests put a gateway behind the checkout the same way the
+     * deployed app does - a configured key plus a faked PayMongo API.
+     *
+     * @param array{status?: int, body?: array} $session
+     */
+    private function fakePayMongo(array $session = []): string
+    {
+        $secret = 'sk_test_' . str_repeat('a', 32);
+        $webhookSecret = 'whsec_' . str_repeat('b', 32);
+
+        config([
+            'services.paymongo.secret_key'     => $secret,
+            'services.paymongo.public_key'     => 'pk_test_' . str_repeat('c', 32),
+            'services.paymongo.webhook_secret' => $webhookSecret,
+            'services.frontend_url'            => 'http://localhost:5173',
+        ]);
+
+        $body = $session['body'] ?? [
+            'data' => [
+                'id'         => 'cs_test_session',
+                'attributes' => [
+                    'status'        => 'active',
+                    'checkout_url'  => 'https://checkout.paymongo.com/cs_test_session',
+                    'livemode'      => false,
+                ],
+            ],
+        ];
+
+        Http::fake([
+            'api.paymongo.com/v2/checkout_sessions*' => Http::response($body, $session['status'] ?? 200),
+            'api.paymongo.com/v2/checkout_sessions/*' => Http::response($body, $session['status'] ?? 200),
+            'api.paymongo.com/*' => Http::response($body, $session['status'] ?? 200),
+        ]);
+
+        return $webhookSecret;
+    }
+
+    /**
+     * The exact `Paymongo-Signature` PayMongo sends: `t=<ts>,v1=<hmac>` where
+     * the digest covers `"{timestamp}.{raw_body}"` (PayMongoService::webhookVerify).
+     */
+    private function payMongoSignature(string $rawBody, string $secret, ?int $timestamp = null): string
+    {
+        $t   = $timestamp ?? time();
+        $v1  = hash_hmac('sha256', $t . '.' . $rawBody, $secret);
+
+        return 't=' . $t . ',v1=' . $v1;
     }
 
     /**
@@ -561,9 +613,21 @@ class SrsRequirementsTest extends TestCase
         $this->assertEquals(750.0, (float) $cart->json('data.subtotal'));   // 150 x 5
         $this->assertEquals(1, $customer->fresh()->cust_cart);
 
-        // FLOW-CHECKOUT-08: the order placement is gated by the checkout OTP
+        // Rule 55: cash at the counter is refused outright for a preorder -
+        // the bag stays untouched and no order row exists.
         $this->json('POST', '/api/checkout/payment', [
             'pay_given'     => 10000,
+            'dispatch_type' => 'pickup',
+            'appoint_start' => $this->futureSlot(),
+        ], $this->headers($customer))
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'ONLINE_PAYMENT_REQUIRED');
+        $this->assertSame(0, Order::count());
+
+        // FLOW-CHECKOUT-08: the online placement is gated by the checkout OTP
+        $this->fakePayMongo();
+        $this->json('POST', '/api/checkout/payment/intent', [
+            'gateway'       => 'paymongo',
             'dispatch_type' => 'pickup',
             'appoint_start' => $this->futureSlot(),
         ], $this->headers($customer))
@@ -574,8 +638,8 @@ class SrsRequirementsTest extends TestCase
 
         // Checkout fails on stock and must leave nothing behind
         $this->grantCheckoutOtp($customer);
-        $this->json('POST', '/api/checkout/payment', [
-            'pay_given'     => 10000,
+        $this->json('POST', '/api/checkout/payment/intent', [
+            'gateway'       => 'paymongo',
             'dispatch_type' => 'pickup',
             'appoint_start' => $this->futureSlot(),
         ], $this->headers($customer))
@@ -611,12 +675,28 @@ class SrsRequirementsTest extends TestCase
         $cart->assertStatus(201);
         $this->assertSame(0, Order::count());
 
-        $this->grantCheckoutOtp($customer);
-        $checkout = $this->json('POST', '/api/checkout/payment', [
+        // Rule 55: the preorder cannot be tendered in cash at the counter.
+        $this->json('POST', '/api/checkout/payment', [
             'pay_given'     => 100000,
             'dispatch_type' => 'pickup',
             'appoint_start' => $this->futureSlot(),
+        ], $this->headers($customer))
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'ONLINE_PAYMENT_REQUIRED');
+
+        $webhookSecret = $this->fakePayMongo();
+
+        $this->grantCheckoutOtp($customer);
+        $checkout = $this->json('POST', '/api/checkout/payment/intent', [
+            'gateway'       => 'paymongo',
+            'dispatch_type' => 'pickup',
+            'appoint_start' => $this->futureSlot(),
         ], $this->headers($customer))->assertStatus(201);
+
+        // The browser is sent to PayMongo's hosted page and told where it came
+        // back to - the customer is never asked for cash afterwards.
+        $this->assertNotEmpty($checkout->json('data.checkout_url'));
+        $this->assertSame('order:' . $checkout->json('data.ord_id'), $checkout->json('data.reference'));
 
         // FLOW-CHECKOUT-02: one order, one payment, one pickup row and the
         // auto-booked CLAIM appointment the pickup hangs off.
@@ -626,8 +706,10 @@ class SrsRequirementsTest extends TestCase
         // claimable yet (processing -> to claim -> claimed).
         $this->assertSame('processing', $order->ord_status);
         $this->assertSame('pickup', $order->ord_claiming);
-        // The receipt reference is what a later scan resolves (scanCode step 3)
-        $this->assertStringStartsWith('PAY-', (string) $order->pay_reference);
+        // The receipt reference is the hosted checkout session the webhook
+        // echoes back (REQ-CHECKOUT-03).
+        $this->assertSame('cs_test_session', (string) $order->pay_reference);
+        $this->assertSame(0.0, (float) $order->pay_received);   // not settled yet
         $this->assertSame(0, (int) $checkout->json('data.cart_count'));
 
         $this->assertSame(1, Payment::count());
@@ -667,6 +749,51 @@ class SrsRequirementsTest extends TestCase
                 ->where('empnotif_msg', 'like', '%[PRIORITY] Low stock%')
                 ->first()
         );
+
+        // REQ-CHECKOUT-03: only the signed gateway webhook settles the order.
+        // The return-URL poll (POST /checkout/payment/status) asks PayMongo
+        // the same question and settles identically when the push is late.
+        $raw = json_encode([
+            'data' => [
+                'id'         => 'evt_test_paid',
+                'type'       => 'checkout_session.payment.paid',
+                'attributes' => [
+                    'reference_number' => 'order:' . $order->ord_id,
+                    'status'           => 'paid',
+                ],
+            ],
+        ], JSON_UNESCAPED_SLASHES);
+
+        // An unsigned push is refused - money is never taken on trust.
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders(['Content-Type' => 'application/json'])
+            ->postJson('/api/checkout/payment/webhook', json_decode($raw, true))
+            ->assertStatus(403);
+        $this->assertSame(0.0, (float) $order->fresh()->pay_received);
+
+        $this->withHeaders([
+            'Content-Type'           => 'application/json',
+            'Paymongo-Signature'     => $this->payMongoSignature($raw, $webhookSecret),
+        ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))
+            ->assertStatus(200);
+
+        $order->refresh();
+        $this->assertSame('processing', $order->ord_status);
+        $this->assertEquals((float) $order->ord_amount, (float) $order->pay_received);
+        $this->assertNotNull(
+            CustNotif::where('cust_id', $customer->cust_id)
+                ->where('custnotif_msg', 'like', '%Payment confirmed%')
+                ->first()
+        );
+
+        // The same webhook again is idempotent: no double settlement.
+        $this->withHeaders([
+            'Content-Type'           => 'application/json',
+            'Paymongo-Signature'     => $this->payMongoSignature($raw, $webhookSecret),
+        ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))
+            ->assertStatus(200);
+        $this->assertEquals((float) $order->ord_amount, (float) $order->fresh()->pay_received);
+        $this->assertSame(1, Payment::count());
     }
 
     // ==========================================

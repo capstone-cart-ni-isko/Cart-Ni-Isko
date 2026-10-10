@@ -109,7 +109,10 @@ export default function ProductReviews({ product }) {
           </span>
         </h2>
 
-        <ViewAllLink onClick={handleOpenWrite}>View all reviews</ViewAllLink>
+        {/* FLOW-MANAGE_REV-06: the customer wall only ever shows approved
+            reviews, so the header action opens the write form rather than a
+            "view all" list that does not exist. */}
+        <ViewAllLink onClick={handleOpenWrite}>Write a Review</ViewAllLink>
       </div>
 
       {hasReviews ? (

@@ -328,6 +328,11 @@ class Prodvar extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `prodvar_id` has no sequence on the live table either, so the key is
+        // allocated in application code (App\Support\IdAllocator) and must be
+        // mass-assignable - otherwise it is dropped and the INSERT fails on a
+        // NOT NULL violation whenever a variation is created.
+        'prodvar_id',
         'prod_id',
         'prodvar_name',
         'prodvar_pic',
@@ -350,6 +355,24 @@ class Prodvar extends Model
         'prodvar_disabled' => 'datetime',
         'prodvar_deleted' => 'datetime',
     ];
+
+    /**
+     * A product can variate along several axes at once - (cream, medium) is one
+     * variation, (black, metallic) another - so the {axis: value} pairs behind
+     * a row travel in `prodvar_options`. The cell is written as a JSON string
+     * by ProductsAPI::encodeOptions and read back as a map by decodeOptions;
+     * this cast only keeps a raw array usable on the way in, so a caller may
+     * hand the model the map directly.
+     */
+    public function setProdvarOptionsAttribute($value)
+    {
+        if (is_array($value)) {
+            ksort($value, SORT_NATURAL | SORT_FLAG_CASE);
+            $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        $this->attributes['prodvar_options'] = $value === '' ? null : $value;
+    }
 
     public function product()
     {

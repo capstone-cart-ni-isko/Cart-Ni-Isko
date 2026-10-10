@@ -497,8 +497,12 @@ function ProductDetail() {
               product.sizes[0] !== 'One Size' && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
+                    {/* A product can variate along several axes at the same
+                        time (colour and size, colour and material), so the
+                        heading names the axis the product actually has instead
+                        of always saying "Size". */}
                     <h3 className="text-xs font-bold text-gray-700">
-                      Select Size
+                      Select {product.secondAxis || 'Size'}
                     </h3>
 
                     {/* Size Guide Button */}

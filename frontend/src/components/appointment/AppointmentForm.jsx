@@ -12,7 +12,7 @@ import {
  *   visit - 10 minutes, 1 customer per slot
  *   pickup - 10 minutes, up to 5 customers per slot
  */
-export const APPOINT_TYPE = { VISIT: 'VISIT', PICKUP: 'PICKUP' }
+const APPOINT_TYPE = { VISIT: 'VISIT', PICKUP: 'PICKUP' }
 const TYPE_LABEL = { VISIT: 'Store Visit', PICKUP: 'Order Pickup' }
 const TYPE_RULES = {
   VISIT: { minutes: 10, capacity: 1 },
@@ -122,7 +122,9 @@ export default function AppointmentForm({
   const [appointType, setAppointType] = useState(
     kindOf(reschedule?.type || type) === 'PICKUP' ? APPOINT_TYPE.PICKUP : APPOINT_TYPE.VISIT
   )
-  const [typeLocked, setTypeLocked] = useState(Boolean(reschedule?.type || type))
+  // The caller fixing the kind (reschedule or a one-way booking) hides the
+  // toggle; it never changes during the form's life, so no state is needed.
+  const typeLocked = Boolean(reschedule?.type || type)
   const [date, setDate] = useState(reschedule?.dateISO || '')
   const [slots, setSlots] = useState([])
   const [slot, setSlot] = useState('')

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\ProductsAPI;
 use App\Models\Bag;
 use App\Models\CustNotif;
 use App\Models\Customer;
@@ -114,6 +115,9 @@ class UserAPI extends Controller
                     'prodvar_id'  => $json->input('prodvar_id'),
                     'size'        => $json->input('size'),
                     'color'       => $json->input('color'),
+                    // A product may variate along several axes at the same
+                    // time, so the client may name the whole combination.
+                    'options'     => $json->input('options'),
                     'item_qty'    => $json->input('item_qty', 1),
                     'item_amount' => $json->input('item_amount'),
                 ];
@@ -148,7 +152,8 @@ class UserAPI extends Controller
                     $product,
                     $line['prodvar_id'] ?? null,
                     $line['size'] ?? null,
-                    $line['color'] ?? null
+                    $line['color'] ?? null,
+                    $line['options'] ?? null
                 );
                 if (! $prodvar) {
                     // No variation row at all: OrdersAPI refuses the same way
@@ -705,15 +710,22 @@ class UserAPI extends Controller
     /**
      * Resolve the variation a cart line points at.
      *
-     * Explicit prodvar_id wins; otherwise the size/color sent by the client
-     * is matched against prodvar_name and prodvar_options - the same data
+     * Explicit prodvar_id wins; otherwise the labels sent by the client are
+     * matched against prodvar_name and prodvar_options - the same data
      * ProductsAPI::present() rebuilds `prod_sizes` / `prod_colors` /
-     * `prod_stock_matrix` from. No match (or no size/color at all) falls back
-     * to OrdersAPI::defaultVariation(): the main, else first, live variation.
+     * `prod_stock_matrix` from. No match (or no label at all) falls back to
+     * OrdersAPI::defaultVariation(): the main, else first, live variation.
+     *
+     * A product may variate along several axes at the same time - colour and
+     * size, colour and material - so a label is matched against EVERY axis
+     * value and not only against a key literally called "size"/"color". Without
+     * that, a colour × material shirt matched "Cream" on four rows and returned
+     * the first, which put the wrong stock bucket in the customer's bag. A row
+     * whose whole option set agrees with every label sent wins outright.
      *
      * @return Prodvar|null null when the product has no live variation at all
      */
-    public static function resolveVariation(Product $product, $prodvarId = null, $size = null, $color = null): ?Prodvar
+    public static function resolveVariation(Product $product, $prodvarId = null, $size = null, $color = null, $options = null): ?Prodvar
     {
         $vars = Prodvar::where('prod_id', $product->prod_id)
             ->whereNull('prodvar_deleted')
@@ -740,6 +752,23 @@ class UserAPI extends Controller
             ? ($color['image'] ?? ($color['gallery'][0] ?? null))
             : null;
 
+        // The client may name the combination outright - {"Color":"Cream",
+        // "Size":"Medium"} - which is the SAME vocabulary ProductsAPI and
+        // OrdersAPI use, so a match here is a match there.
+        if (is_array($options) && $options !== []) {
+            $wanted = ProductsAPI::normalizeOptions($options);
+            if ($wanted !== null) {
+                $signature = ProductsAPI::optionSignature($wanted);
+
+                return $vars->first(function (Prodvar $var) use ($signature) {
+                    return ProductsAPI::optionSignature(
+                        ProductsAPI::decodeOptions($var->prodvar_options),
+                        (string) $var->prodvar_name
+                    ) === $signature;
+                }) ?? $vars->first();
+            }
+        }
+
         if ($sizeLabel === '' && $colorName === '') {
             return $vars->first();
         }
@@ -750,6 +779,14 @@ class UserAPI extends Controller
         foreach ($vars as $var) {
             $name = trim((string) $var->prodvar_name);
             $opts = self::variationOptions($var);
+            // Every value of every axis: the identity of a row is its whole
+            // combination, so a label matches whichever axis carries it.
+            $values = array_map(
+                fn ($value) => strtolower(trim((string) $value)),
+                array_values($opts)
+            );
+            $axes = array_map('strtolower', array_keys($opts));
+
             $score = 0;
 
             if ($sizeLabel !== '') {
@@ -761,6 +798,11 @@ class UserAPI extends Controller
                         break;
                     }
                 }
+                // Same value on ANY axis: this is what makes a material or fit
+                // axis resolvable from a storefront that only knows "size".
+                if (in_array(strtolower($sizeLabel), $values, true)) {
+                    $score += 4;
+                }
             }
 
             if ($colorName !== '') {
@@ -769,11 +811,31 @@ class UserAPI extends Controller
                 if ($optionColor !== null && strcasecmp(trim((string) $optionColor), $colorName) === 0) {
                     $score += 4;
                 }
+                if (in_array(strtolower($colorName), $values, true)) {
+                    $score += 4;
+                }
             }
 
             if ($colorImage !== null && filled($var->prodvar_pic)
                 && trim((string) $var->prodvar_pic) === trim((string) $colorImage)) {
                 $score += 2;
+            }
+
+            // The combination that carries EVERY label sent is the one the
+            // customer actually picked, so it beats a partial match outright.
+            $matchedAxes = 0;
+            foreach ($axes as $index => $axis) {
+                $value = $values[$index];
+                if (($sizeLabel !== '' && $value === strtolower($sizeLabel))
+                    || ($colorName !== '' && $value === strtolower($colorName))) {
+                    $matchedAxes++;
+                }
+            }
+            if ($matchedAxes > 0 && $matchedAxes === max(
+                1,
+                count(array_filter([$sizeLabel !== '', $colorName !== '']))
+            )) {
+                $score += 10;
             }
 
             if ($score > $bestScore) {
@@ -1334,7 +1396,8 @@ class UserAPI extends Controller
                 $product,
                 $json->input('prodvar_id'),
                 $json->input('size'),
-                $json->input('color')
+                $json->input('color'),
+                $json->input('options')
             );
             if (!$prodvar) {
                 return response()->json([

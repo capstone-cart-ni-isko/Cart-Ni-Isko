@@ -468,17 +468,21 @@ abstract class Controller
     // ACCESS LOG (DOMAIN 32)
     // ==========================================
 
-    // FLOW-ACCESS_LOG-01..06: every authentication / view / edit action of an
-    // account lands in custlog or emplog. Rows are append-only (REQ-ACCESS_LOG-01).
+    // FLOW-ACCESS_LOG-01..06: every authentication / view / edit / delete
+    // action of an account lands in custlog or emplog. Rows are append-only
+    // (REQ-ACCESS_LOG-01).
     //
     // The access vocabulary is the one the access-log screen filters on
-    // (auth | view | edit, see SystemAPI::accessValue): an authentication
-    // action is written as `auth`, whatever the caller named it.
+    // (auth | view | edit | delete, see SystemAPI::accessValue): an
+    // authentication action is written as `auth`, whatever the caller named
+    // it. `delete` has to survive the fold - REQ-MANAGE_REV-04 asks for
+    // approve / reject / delete to be distinguishable in emplog, and falling
+    // back to `view` made a review deletion indistinguishable from a read.
     private function normalizeAccess(string $access): string
     {
         $access = strtolower(trim($access));
 
-        if (in_array($access, ['auth', 'view', 'edit'], true)) {
+        if (in_array($access, ['auth', 'view', 'edit', 'delete'], true)) {
             return $access;
         }
 

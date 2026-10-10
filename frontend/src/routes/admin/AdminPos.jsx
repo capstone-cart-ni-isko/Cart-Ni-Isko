@@ -7,15 +7,14 @@ import QRScanner from '../../components/ui/QRScanner.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { mapOrderRows } from '../../services/dashboard.js'
 
-const CATEGORIES = [
-  'All Items',
-  'Shirts',
-  'Hoodies',
-  'Jackets',
-  'Caps',
-  'Stickers',
-  'Pins',
-]
+const CATEGORY_ALL = 'All Items'
+/**
+ * FLOW-WALKIN-03: the category pills must be the categories the catalog
+ * actually has. They used to be a hardcoded list ("Stickers", "Jackets",
+ * "Caps") that the backend's normalisation never produces, so those pills
+ * matched nothing and real categories (Lanyard, Varsity Jacket) had none.
+ */
+const CATEGORY_FALLBACK = ['Shirts', 'Hoodie', 'Varsity Jacket', 'Cap', 'Lanyard', 'Pins', 'Accessories']
 
 /**
  * The mobile cart line used to print a fixed fake SKU ("CP-0003") for every
@@ -61,7 +60,7 @@ export default function AdminPos() {
   // Mobile product view: 'list' | 'grid'
   const [productViewMode, setProductViewMode] = useState('list')
 
-  const [selectedCategory, setSelectedCategory] = useState('All Items')
+  const [selectedCategory, setSelectedCategory] = useState(CATEGORY_ALL)
   const [searchQuery, setSearchQuery] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('Cash') // 'Cash' | 'Digital Wallet'
   const [customerName, setCustomerName] = useState('')
@@ -82,9 +81,8 @@ export default function AdminPos() {
   const [discountInput, setDiscountInput] = useState('') // amount being typed in
 
   /* ── Modals state ── */
-  const [variantModalProduct, setVariantModalProduct] = useState(null) // product selected for variant picking
-  const [selectedSize, setSelectedSize] = useState('Medium')
-  const [selectedColor, setSelectedColor] = useState('Default')
+  const [variantModalProduct, setVariantModalProduct] = useState(null) // product selected for variation picking
+  const [selectedVariantId, setSelectedVariantId] = useState(null) // prodvar id chosen in the picker
   const [variantQty, setVariantQty] = useState(1)
 
   const [showConfirmSaleModal, setShowConfirmSaleModal] = useState(false) // confirmation view before placing order
@@ -94,6 +92,14 @@ export default function AdminPos() {
   // POS sells only currently offered products (unlisted ones stay hidden)
   const products = backendProducts.filter((p) => !p.disabled)
 
+  // The pills come from the live catalog, with the store's predefined set as
+  // the floor so an empty catalog still offers the standard categories.
+  const categoryPills = useMemo(() => {
+    const present = [...new Set(products.map((p) => p.category).filter(Boolean))]
+    const merged = [...present, ...CATEGORY_FALLBACK.filter((cat) => !present.includes(cat))]
+    return [CATEGORY_ALL, ...merged]
+  }, [products])
+
   // Filter products by category and search (tolerant to singular/plural labels)
   const filteredProducts = useMemo(() => {
     const normalizeCat = (value) => String(value || '').trim().toLowerCase().replace(/s$/, '')
@@ -101,7 +107,7 @@ export default function AdminPos() {
     return products.filter((p) => {
       const cat = normalizeCat(p.category)
       const matchCat =
-        selectedCategory === 'All Items' || cat === selected || cat.includes(selected) || selected.includes(cat)
+        selectedCategory === CATEGORY_ALL || cat === selected || cat.includes(selected) || selected.includes(cat)
       const matchSearch =
         !searchQuery ||
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -115,6 +121,62 @@ export default function AdminPos() {
   // only walk-in/POS sales. The server already returns them newest-first.
   const posSales = useMemo(() => mapOrderRows(rawOrders).filter((o) => o.isPos), [rawOrders])
 
+  // FLOW-WALKIN-04: the picker lists the variation rows the product really
+  // has (name, stock, unit price with its markup), straight from the catalog.
+  const modalVariants = useMemo(() => productVariants(variantModalProduct), [variantModalProduct])
+  const chosenVariant =
+    modalVariants.find((v) => v.id === selectedVariantId) || modalVariants[0] || null
+
+  /**
+   * FLOW-WALKIN-04 + multi-axis variations: group the combinations by axis so
+   * the register can pick "Cream" on the colour axis and "Medium" on the size
+   * axis and land on exactly one row. A value is offered when at least one
+   * combination carrying it is still compatible with the values already picked
+   * on the other axes, and disabled (with its reason) when it is not - so a
+   * cashier never has to guess which pairs exist.
+   */
+  const modalAxisGroups = useMemo(() => {
+    if (!variantModalProduct || modalVariants.length === 0) return []
+
+    const axes = []
+    modalVariants.forEach((variant) => {
+      Object.entries(variant.options || {}).forEach(([axis, value]) => {
+        const entry = axes.find((e) => e.axis === axis)
+        if (entry) {
+          if (!entry.values.some((v) => v.value === value)) {
+            entry.values.push({ value, variant, stock: Number(variant.stock ?? 0) })
+          }
+          return
+        }
+        axes.push({
+          axis,
+          values: [{ value, variant, stock: Number(variant.stock ?? 0) }],
+        })
+      })
+    })
+
+    // Fewer than two axes and there is nothing to narrow: the flat list the
+    // picker has always shown is the clearer one.
+    if (axes.length < 2) return []
+
+    const picked = chosenVariant?.options || {}
+
+    return axes.map((entry) => ({
+      axis: entry.axis,
+      values: entry.values.map((option) => {
+        const compatible = modalVariants.some((variant) => {
+          const options = variant.options || {}
+          if (options[entry.axis] !== option.value) return false
+          if (Number(variant.stock ?? 0) <= 0) return false
+          return Object.entries(picked).every(
+            ([axis, value]) => axis === entry.axis || options[axis] === value
+          )
+        })
+        return { ...option, variant: compatible ? option.variant : null }
+      }),
+    }))
+  }, [variantModalProduct, modalVariants, chosenVariant])
+
   // Cart total calculations
   const subtotal = posCart.reduce((sum, item) => sum + item.price * item.qty, 0)
   // The discount can never exceed the cart (the server re-checks it too).
@@ -124,39 +186,47 @@ export default function AdminPos() {
   const changeDue = Math.max(0, tenderedNum - total)
   const cartCount = posCart.reduce((s, i) => s + i.qty, 0)
 
-  // Check if product has variations
-  const hasVariants = (product) => {
-    const cat = (product?.category || '').toLowerCase()
-    return (
-      cat.includes('shirt') ||
-      cat.includes('hoodie') ||
-      cat.includes('jacket') ||
-      cat.includes('cap') ||
-      Boolean(product?.variants?.length)
-    )
+  /**
+   * FLOW-WALKIN-04: the register must be able to ring up any VARIATION of a
+   * product. `variants` is built from the product's real prodvar rows
+   * (mapAdminProduct), so the picker lists the sizes/colours that exist and the
+   * chosen line carries the prodvar_id the /pos endpoints need.
+   */
+  const productVariants = (product) => {
+    const list = Array.isArray(product?.variants) ? product.variants : []
+    return list.filter((v) => v && (v.stock === undefined || Number(v.stock) > 0))
   }
+
+  const hasVariants = (product) => productVariants(product).length > 1
 
   // 1. Trigger product click -> open Variant Picker Modal if variations exist, else add directly
   const handleProductClick = (product) => {
     if (hasVariants(product)) {
       handleSelectProduct(product)
     } else {
-      posAddToCart(product, 'Standard')
+      // A single variation still has its own id, so it is passed through and
+      // the server rings up that exact stock bucket.
+      const only = productVariants(product)[0]
+      posAddToCart(product, only?.name || 'Standard', 1, only?.prodvarId ?? null, only?.price)
     }
   }
 
   const handleSelectProduct = (product) => {
     setVariantModalProduct(product)
-    setSelectedSize('Medium')
-    setSelectedColor('Default')
+    setSelectedVariantId(productVariants(product)[0]?.id ?? null)
     setVariantQty(1)
   }
 
-  // Confirm variant selection -> Add to cart (one call, one server sync)
+  // Confirm variation selection -> Add to cart (one call, one server sync)
   const handleConfirmVariantAdd = () => {
     if (!variantModalProduct) return
-    const variantLabel = `${selectedSize}${selectedColor !== 'Default' ? `, ${selectedColor}` : ''}`
-    posAddToCart(variantModalProduct, variantLabel, variantQty)
+    const variants = productVariants(variantModalProduct)
+    const chosen = variants.find((v) => v.id === selectedVariantId) || variants[0]
+    if (!chosen) {
+      showToast('That variation is no longer offered.', 'error')
+      return
+    }
+    posAddToCart(variantModalProduct, chosen.name, variantQty, chosen.prodvarId ?? null, chosen.price)
     setVariantModalProduct(null)
   }
 
@@ -305,7 +375,12 @@ export default function AdminPos() {
         (p) => !p.disabled && String(p.sku || '').toLowerCase() === value.toLowerCase()
       )
       if (hits.length === 1) {
-        posAddToCart(hits[0], 'Standard')
+        // FLOW-WALKIN-04: the scanned SKU may be a specific variation's, so
+        // the exact prodvar row is rung up instead of the product's default.
+        const scanned = hits[0].variants.find(
+          (v) => String(v.sku || '').toLowerCase() === value.toLowerCase()
+        ) || hits[0].variants[0]
+        posAddToCart(hits[0], scanned?.name || 'Standard', 1, scanned?.prodvarId ?? null, scanned?.price)
         showToast(`Added ${hits[0].name} to the sale`)
       } else if (hits.length === 0) {
         showToast(`No product matches barcode "${value}".`, 'error')
@@ -374,7 +449,7 @@ export default function AdminPos() {
 
               {/* Category Pills — standard rounded rectangle, matches search input height (h-8) */}
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none min-w-0">
-                {CATEGORIES.map((cat) => (
+                {categoryPills.map((cat) => (
                   <button
                     key={cat}
                     type="button"
@@ -418,6 +493,16 @@ export default function AdminPos() {
                             alt={product.name}
                             className="h-full w-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
                           />
+                          {product.preorder && (
+                            <span className="absolute top-2 left-2 bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                              Pre-order
+                            </span>
+                          )}
+                          {Number(product.totalStock) <= 0 && (
+                            <span className="absolute top-2 right-2 bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                              Sold out
+                            </span>
+                          )}
                         </div>
                         <div>
                           <p className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
@@ -710,7 +795,7 @@ export default function AdminPos() {
 
               {/* Category Chips — standard rounded rectangle */}
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0 py-0.5">
-                {CATEGORIES.map((cat) => (
+                {categoryPills.map((cat) => (
                   <button
                     key={cat}
                     type="button"
@@ -781,9 +866,14 @@ export default function AdminPos() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4 className="text-xs font-bold text-gray-900 truncate leading-tight">{product.name}</h4>
-                          <p className="text-[10px] text-gray-400 mt-0.5">{product.category} • Regular</p>
                           <p className="text-[10px] text-gray-400 mt-0.5">
-                            SKU: {skuCode} <span className="text-emerald-500 font-bold ml-1">• In stock</span>
+                            {product.category} • {product.preorder ? 'Pre-order' : 'Regular'}
+                          </p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            SKU: {skuCode}{' '}
+                            <span className={`font-bold ml-1 ${Number(product.totalStock) > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              • {Number(product.totalStock) > 0 ? 'In stock' : 'Out of stock'}
+                            </span>
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -792,7 +882,7 @@ export default function AdminPos() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation()
-                              posAddToCart(product, 'Standard')
+                              handleProductClick(product)
                             }}
                             className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-300 text-gray-700 text-[11px] font-bold hover:bg-gray-50 cursor-pointer"
                           >
@@ -1152,9 +1242,12 @@ export default function AdminPos() {
                 />
                 <div>
                   <h3 className="text-sm font-bold text-gray-900 leading-tight">{variantModalProduct.name}</h3>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{variantModalProduct.category} • In stock</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {variantModalProduct.category}
+                    {chosenVariant ? ` • ${chosenVariant.stock ?? 0} in stock` : ''}
+                  </p>
                   <p className="text-xs font-black text-gray-900 mt-0.5">
-                    ₱{(Number(variantModalProduct.price) || 0).toFixed(2)}
+                    ₱{(Number(chosenVariant?.price ?? variantModalProduct.price) || 0).toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -1167,47 +1260,84 @@ export default function AdminPos() {
               </button>
             </div>
 
-            {/* Variations options */}
+            {/* Variations options - FLOW-WALKIN-04: the product real variations */}
             <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-bold text-gray-700 block mb-1.5">Select Size Variant</label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {['Small', 'Medium', 'Large', 'XL', '2XL', 'One Size'].map((sz) => (
-                    <button
-                      key={sz}
-                      type="button"
-                      onClick={() => setSelectedSize(sz)}
-                      className={`px-3 py-1.5 rounded-xl border font-bold transition-all cursor-pointer ${
-                        selectedSize === sz
-                          ? 'bg-brand-orange text-white border-brand-orange shadow-2xs'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      {sz}
-                    </button>
-                  ))}
+              {modalAxisGroups.length > 1 ? (
+                // A product that variates along several axes at the same time
+                // (colour x size, colour x material) has one row per COMBINATION,
+                // so the picker walks the axes and narrows the combinations to
+                // those still possible. Without this a register with 20
+                // combinations offers 20 undifferentiated buttons and the
+                // cashier cannot tell (cream, medium) from (cream, large).
+                modalAxisGroups.map((group) => (
+                  <div key={`axis-${group.axis}`}>
+                    <label className="font-bold text-gray-700 block mb-1.5">
+                      {group.axis}
+                      {chosenVariant?.options?.[group.axis] && (
+                        <span className="ml-1.5 font-normal text-gray-400">
+                          ({chosenVariant.options[group.axis]})
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {group.values.map(({ value, variant, stock }) => (
+                        <button
+                          key={`${group.axis}-${value}`}
+                          type="button"
+                          disabled={!variant || Number(stock) <= 0}
+                          onClick={() => variant && setSelectedVariantId(variant.id)}
+                          title={
+                            variant
+                              ? `${value} — ${stock} in stock`
+                              : `${value} — not available with the other picks`
+                          }
+                          className={`px-3 py-1.5 rounded-xl border font-bold transition-all ${
+                            chosenVariant?.options?.[group.axis] === value
+                              ? 'bg-brand-orange text-white border-brand-orange shadow-2xs cursor-pointer'
+                              : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+                          }`}
+                        >
+                          {value}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1.5">
+                    Select Variation
+                    {chosenVariant && (
+                      <span className="ml-1.5 font-normal text-gray-400">
+                        ({chosenVariant.stock ?? 0} in stock)
+                      </span>
+                    )}
+                  </label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {modalVariants.map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        disabled={v.stock !== undefined && Number(v.stock) <= 0}
+                        onClick={() => setSelectedVariantId(v.id)}
+                        className={`px-3 py-1.5 rounded-xl border font-bold transition-all ${
+                          selectedVariantId === v.id
+                            ? 'bg-brand-orange text-white border-brand-orange shadow-2xs cursor-pointer'
+                            : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+                        }`}
+                      >
+                        {v.label || v.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-gray-700 block mb-1.5">Select Color / Style</label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {['Default', 'Black', 'Cream', 'Sand', 'Navy'].map((col) => (
-                    <button
-                      key={col}
-                      type="button"
-                      onClick={() => setSelectedColor(col)}
-                      className={`px-3 py-1.5 rounded-xl border font-bold transition-all cursor-pointer ${
-                        selectedColor === col
-                          ? 'bg-brand-orange text-white border-brand-orange shadow-2xs'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      {col}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
+              {modalVariants.length === 0 && (
+                <p className="text-[11px] text-gray-400 font-medium">
+                  No variation of this product is offered right now.
+                </p>
+              )}
+            </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                 <span className="font-bold text-gray-700">Quantity</span>
@@ -1217,7 +1347,7 @@ export default function AdminPos() {
                     onClick={() => setVariantQty((q) => Math.max(1, q - 1))}
                     className="text-gray-600 font-bold text-sm w-4 flex items-center justify-center cursor-pointer"
                   >
-                    −
+                    -
                   </button>
                   <span className="text-xs font-bold text-gray-900">{variantQty}</span>
                   <button
@@ -1243,13 +1373,13 @@ export default function AdminPos() {
               <button
                 type="button"
                 onClick={handleConfirmVariantAdd}
+                disabled={!chosenVariant}
                 className="flex-1 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
               >
-                Add to Sale • ₱{((Number(variantModalProduct.price) || 0) * variantQty).toFixed(2)}
+                Add to Sale • ₱{((Number(chosenVariant?.price ?? variantModalProduct.price) || 0) * variantQty).toFixed(2)}
               </button>
             </div>
           </div>
-        </div>
       )}
 
       {/* ===================================================================
@@ -1434,12 +1564,28 @@ export default function AdminPos() {
               </div>
               <div className="flex justify-between text-gray-500 text-[11px]">
                 <span>Payment:</span>
-                <span className="font-bold text-gray-900">{lastPlacedOrder.paymentMethod}</span>
+                <span className="font-bold text-gray-900">
+                  {lastPlacedOrder.paymentMethod}
+                  {lastPlacedOrder.payMethod ? ` (${lastPlacedOrder.payMethod})` : ''}
+                </span>
+              </div>
+              <div className="flex justify-between text-gray-500 text-[11px]">
+                <span>Reference:</span>
+                <span className="font-bold text-gray-900">{lastPlacedOrder.payRef || '—'}</span>
+              </div>
+              <div className="flex justify-between text-gray-500 text-[11px]">
+                <span>Tendered:</span>
+                <span className="font-bold text-gray-900">
+                  ₱{(Number(lastPlacedOrder.amountTendered) || 0).toFixed(2)}
+                </span>
               </div>
               <div className="pt-2 space-y-1.5">
                 {lastPlacedOrder.items.map((item, i) => (
                   <div key={i} className="flex justify-between text-gray-800">
-                    <span className="truncate max-w-[170px]">{item.qty}x {item.name}</span>
+                    <span className="truncate max-w-[170px]">
+                      {item.qty}x {item.name}
+                      {item.size && item.size !== 'Standard' ? ` (${item.size})` : ''}
+                    </span>
                     <span className="font-bold">₱{((Number(item?.price) || 0) * (Number(item?.qty) || 1)).toFixed(2)}</span>
                   </div>
                 ))}
