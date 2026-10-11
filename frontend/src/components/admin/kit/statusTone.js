@@ -6,8 +6,10 @@
   - lost (cancelled / returned / refunded): red
   Everything else stays neutral so colour always carries meaning.
 */
-const ACTIVE = ['TO PROCESS', 'TO CLAIM', 'TO RECEIVE']
-const URGENT = ['UNCLAIMED', 'CANCEL REQUESTED', 'RETURN REQUESTED']
+// The backend's own spellings (processing, delivering, to cancel, received)
+// map to the same tones as their display labels.
+const ACTIVE = ['TO PROCESS', 'TO CLAIM', 'TO RECEIVE', 'PROCESSING', 'DELIVERING']
+const URGENT = ['UNCLAIMED', 'CANCEL REQUESTED', 'RETURN REQUESTED', 'TO CANCEL']
 const LOST = ['CANCELLED', 'RETURNED', 'REFUNDED']
 
 export const TONE_CLASSES = {
@@ -33,6 +35,6 @@ export function statusTone(rawStatus) {
   if (ACTIVE.includes(status)) return 'active'
   if (URGENT.includes(status)) return 'urgent'
   if (LOST.includes(status)) return 'lost'
-  if (status === 'CLAIMED') return 'done'
+  if (status === 'CLAIMED' || status === 'RECEIVED') return 'done'
   return 'neutral'
 }

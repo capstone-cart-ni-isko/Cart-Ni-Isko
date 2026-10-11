@@ -48,6 +48,9 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
       stock,
       desc: form.desc.trim(),
       photo: form.photo,
+      // Quick add creates one Standard variation; more can be added from the
+      // product page in Inventory.
+      variations: [{ name: 'Standard', stock, markup: 0, pic: form.photo || '' }],
     })
     setBusy(false)
     if (!result?.success) {

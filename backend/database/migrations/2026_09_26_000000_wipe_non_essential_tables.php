@@ -26,7 +26,7 @@ return new class extends Migration
         // (phpunit.xml uses :memory:) do not have pg_tables.
         if (DB::connection()->getDriverName() !== 'pgsql') return;
 
-        $keep = ['product', 'customer', 'employee', 'migrations', 'personal_access_tokens',
+        $keep = ['customer', 'employee', 'migrations', 'personal_access_tokens',
                  'password_reset_tokens', 'cache', 'cache_locks', 'sessions',
                  'jobs', 'failed_jobs', 'users'];
 

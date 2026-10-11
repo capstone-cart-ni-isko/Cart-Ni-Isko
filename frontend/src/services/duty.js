@@ -1,30 +1,23 @@
-import { apiGet, apiPost, apiDelete } from './api.js'
+import { fetchShifts as fetchScheduleBlocks, SHIFT_STATUS } from './shifts.js'
 
-/** Duty types accepted by POST /duty/assign (stored upper-case). */
-export const DUTY_TYPES = [
-  { value: 'DESK DUTY', label: 'Desk Duty (Main Counter)' },
-  { value: 'EVENT PREP', label: 'Event Prep (Merch Distribution)' },
-  { value: 'INVENTORY', label: 'Inventory Audit (Stockroom)' },
-  { value: 'POS CASHIER', label: 'POS Cashier (In-Store)' },
-]
-
-/** GET /duty/display - one day's shifts plus whether it is locked for the reader. */
+/**
+ * One day's duty blocks for the dashboard widgets, read from GET /shifts
+ * (SystemAPI over the `schedules` table). Blocks an employee flagged
+ * unavailable (FLOW-EMP_SCHED-04) no longer staff the store, so they are left
+ * out of "who is on duty".
+ */
 export async function fetchShifts(date) {
-  const data = await apiGet('/duty/display', { date })
+  const rows = await fetchScheduleBlocks({ date })
   return {
-    shifts: data?.data?.shifts || [],
-    locked: Boolean(data?.data?.locked),
+    shifts: rows
+      .filter((row) => !row.unavailable)
+      .map((row) => ({
+        ...row,
+        emp_name: row.employee_name || `Employee #${row.emp_id}`,
+        pending_replacement: row.status === SHIFT_STATUS.PENDING_REPLACEMENT,
+      })),
+    locked: false,
   }
-}
-
-/** POST /duty/assign - { emp_id, shift_date, shift_start, shift_end, shift_type, shift_location }. */
-export function assignShift(payload) {
-  return apiPost('/duty/assign', payload)
-}
-
-/** DELETE /duty/remove - remove one shift. */
-export function removeShift(shiftId) {
-  return apiDelete('/duty/remove', { shift_id: shiftId })
 }
 
 /** "13:30" -> "1:30 PM". */

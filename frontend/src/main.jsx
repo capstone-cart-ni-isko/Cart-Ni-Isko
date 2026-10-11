@@ -3,20 +3,20 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { prefetch } from './services/api.js'
-import { restoreRedirectSession } from './services/session.js'
 import { ApiErrorBoundary } from './components/ui/ApiErrorBoundary.jsx'
 import './index.css'
 import App from './App.jsx'
 
-// Apply the stored light/dark preference before the first paint.
-if (localStorage.getItem('isko_theme') === 'dark') {
+// Apply the stored light/dark preference before the first paint. Each portal
+// owns its own key (rule 71), so this has to know which portal is loading —
+// and falls back to the pre-split key for anyone who already chose a theme.
+const bootThemeKey =
+  window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/')
+    ? 'isko_theme_staff'
+    : 'isko_theme_customer'
+const bootTheme = localStorage.getItem(bootThemeKey) ?? localStorage.getItem('isko_theme')
+if (bootTheme === 'dark') {
   document.documentElement.classList.add('dark')
-}
-
-// Returning from PayMongo's hosted checkout: bring back the session parked
-// just before the redirect (see services/session.js), before AuthProvider reads it.
-if (new URLSearchParams(window.location.search).has('paymongo')) {
-  restoreRedirectSession()
 }
 
 // Warm the API socket and cache public catalog data immediately on boot.

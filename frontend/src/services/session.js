@@ -1,64 +1,113 @@
 /**
- * The signed-in account, held in memory only.
+ * The signed-in account slots - one per portal.
  *
- * REQ-ALR-01: login is required every time after a logout, a refresh, a
- * browser reopen, or a device restart. Nothing is written to localStorage or
- * sessionStorage, so a reload always starts from the signed-out state.
+ * System rule 71: "The customer portal and the admin portal must be
+ * separate." That separation has to hold for the session too, otherwise the
+ * two portals overwrite each other's bearer on the shared slot and a reload
+ * can quietly hand an employee's tab to a customer (or the other way round).
  *
- * Within one open tab the slot lives in a module variable, which is enough for
- * the token to survive client-side navigation. Both the customer context and
- * the staff context write to it, tagged with a `kind`, so signing in as one
- * role never disturbs the other (last login wins).
+ * CUSTOMER (kind: 'customer') - REQ-CUST_LOGIN-01 / FLOW-CUST_LOGIN-01:
+ * the session lives in `sessionStorage`, so it survives a reload and every
+ * client-side navigation (FLOW-CUST_LOGIN-03: "no longer need to log in when
+ * going to other pages and tabs"), but it is thrown away the moment the
+ * browser closes - which is exactly where REQ-CUST_LOGIN-01 wants a fresh
+ * login. REQ-CUST_LOGOUT-01 says closing the browser must NOT log the
+ * customer out, and it does not: nothing is sent to the server, the row keeps
+ * its `cust_last_logout`, only this tab's copy of the bearer goes away.
+ *
+ * STAFF (kind: 'staff') - DOMAIN 16 / FLOW-EMP_LOGOUT-03. An employee stays
+ * signed in across a reload of the portal the same way, because the session
+ * is ended by the server (POST /auth/logout, an idle timeout or a password
+ * change), never by the browser losing its copy. Closing the tab still drops
+ * the local copy, and `ApiToken::EMPLOYEE_TTL` still cuts an idle token off
+ * after thirty minutes (REQ-EMP_LOGOUT-03).
+ *
+ * Both roles keep their own slot, so signing in as one never disturbs the
+ * other (rule 71).
  */
 
-let session = null
+const STORAGE_KEYS = {
+  customer: 'isko_session',
+  staff: 'isko_staff_session',
+}
+
+/** In-memory mirror of both slots: `{ customer: entry|null, staff: entry|null }`. */
+const sessions = { customer: null, staff: null }
+
+/** sessionStorage can be unavailable (private mode, blocked storage). */
+function readStored(kind) {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEYS[kind])
+    const parsed = raw ? JSON.parse(raw) : null
+    return parsed && parsed.kind === kind ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function writeStored(kind, value) {
+  try {
+    const key = STORAGE_KEYS[kind]
+    if (value) sessionStorage.setItem(key, JSON.stringify(value))
+    else sessionStorage.removeItem(key)
+  } catch {
+    // A blocked storage must never break the screen: the in-memory copy below
+    // still carries this tab's session.
+  }
+}
 
 /** Persist a session for this tab: `{ kind: 'customer'|'staff', token, user }`. */
 export function saveSession(kind, token, user) {
-  session = { kind, token, user }
+  if (!STORAGE_KEYS[kind]) return
+  // `at` is the tie-breaker when a browser holds both portals at once: the
+  // portal the person signed in to LAST is the one the bare "/" entry serves.
+  sessions[kind] = { kind, token, user, at: Date.now() }
+  writeStored(kind, sessions[kind])
 }
 
 /** Restore a session only when it was written by the same `kind`. */
 export function loadSession(kind) {
-  return session && session.kind === kind && session.token && session.user ? session : null
+  if (!STORAGE_KEYS[kind]) return null
+  if (!sessions[kind]) sessions[kind] = readStored(kind)
+  const entry = sessions[kind]
+  return entry && entry.kind === kind && entry.token && entry.user ? entry : null
 }
 
 /**
- * Drop the slot. Passing a `kind` only drops it when it belongs to that role,
- * so signing out one role never wipes the other. Passing nothing drops it
- * either way, which is what an expired token needs.
+ * Drop a slot. Passing a `kind` only drops that portal's copy, so signing out
+ * of one never wipes the other (rule 71). Passing nothing drops both, which
+ * is what an expired token needs when it cannot say who it belonged to.
  */
 export function clearSession(kind) {
-  if (!kind || !session || session.kind === kind) session = null
+  const kinds = kind ? [kind] : ['customer', 'staff']
+  kinds.forEach((slot) => {
+    sessions[slot] = null
+    writeStored(slot, null)
+  })
 }
 
-/*
- * The one exception to REQ-ALR-01: PayMongo's hosted checkout is a full page
- * redirect, so the in-memory session would be lost on the way back. Just
- * before leaving, the session is parked in this tab's sessionStorage; on the
- * return it is read once, deleted immediately, and dropped if stale. Any other
- * reload still starts signed out.
+/**
+ * Read a slot without touching it (used by the sliding token renew in
+ * api.js: the renewed bearer must re-persist whichever role it belongs to,
+ * without touching the user object).
  */
-const REDIRECT_KEY = 'cartniisko:paymongo_session'
-const REDIRECT_TTL_MS = 30 * 60 * 1000
-
-export function stashSessionForRedirect() {
-  if (!session) return
-  try {
-    sessionStorage.setItem(REDIRECT_KEY, JSON.stringify({ ...session, at: Date.now() }))
-  } catch {
-    // Blocked storage: the customer simply signs in again on return.
-  }
+export function peekSession(kind) {
+  return kind ? loadSession(kind) : null
 }
 
-export function restoreRedirectSession() {
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(REDIRECT_KEY) || 'null')
-    sessionStorage.removeItem(REDIRECT_KEY)
-    if (saved?.token && saved?.user && Date.now() - (saved.at || 0) < REDIRECT_TTL_MS) {
-      saveSession(saved.kind, saved.token, saved.user)
-    }
-  } catch {
-    // Unreadable or blocked storage: fall back to the signed-out state.
-  }
+/**
+ * Which portal owns the tab right now: the most recently signed-in session,
+ * or null when nobody is signed in. EntryRoute uses it so an employee who
+ * types the bare domain is served the employee portal instead of being sent
+ * to the customer login (and vice versa).
+ */
+export function latestSessionKind() {
+  const customer = loadSession('customer')
+  const staff = loadSession('staff')
+
+  if (!customer && !staff) return null
+  if (!customer) return 'staff'
+  if (!staff) return 'customer'
+
+  return (staff.at || 0) >= (customer.at || 0) ? 'staff' : 'customer'
 }

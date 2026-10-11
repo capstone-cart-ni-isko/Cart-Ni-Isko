@@ -1,24 +1,21 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
 
 /**
- * Dated staff duty shifts (REQ-SS-01 / REQ-SS-02 / REQ-SS-03).
+ * The duty_shift table: one block of duty for one staff member.
  *
- * Replaces the single emp_instore flag for scheduling: an employee counts
- * as in-store for an appointment slot only when one of their shifts on that
- * date covers the whole slot. Times are stored as zero-padded "HH:MM"
- * strings so they compare correctly as text on every database.
+ * shift_start and shift_end are 'HH:MM' 24-hour strings. The table carries no
+ * status column, so a block's status (SCHEDULED / ACTIVE / COMPLETED /
+ * PENDING REPLACEMENT) is derived at read time from the assignee's
+ * emp_instore flag and the block window.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('duty_shift')) return;
-
         Schema::create('duty_shift', function (Blueprint $table) {
             $table->bigIncrements('shift_id');
             $table->unsignedBigInteger('emp_id');
@@ -30,15 +27,9 @@ return new class extends Migration
             $table->timestamp('shift_created')->useCurrent();
             $table->unsignedBigInteger('created_by')->nullable();
 
-            $table->foreign('emp_id')->references('emp_id')->on('employee')->cascadeOnDelete();
+            $table->foreign('emp_id')->references('emp_id')->on('employee')->onDelete('cascade');
             $table->index(['shift_date', 'emp_id']);
         });
-
-        // Supabase exposes public tables to its REST roles; like every other
-        // table here, this one is reachable through the API only.
-        if (DB::connection()->getDriverName() === 'pgsql') {
-            DB::statement('ALTER TABLE duty_shift ENABLE ROW LEVEL SECURITY');
-        }
     }
 
     public function down(): void

@@ -1,18 +1,42 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { mapOrderRows } from '../../services/dashboard.js'
+import { empCateg, empHomePath, empIsStaff } from './schema.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 const ICON = 'w-4 h-4'
 
-const navSections = [
+/*
+ * FLOW-EMP_HOME-05 — the sidebar is a vertical array docked at the left of
+ * every employee page, composed of (top to bottom) the "dashboard" icon with
+ * the "Dashboard" label, the "walk-in" icon with the "Walk-in Orders" label,
+ * the "appointments" icon with the "Appointments" label, the "orders" icon
+ * with the "Orders" label, the "products" icon with the "Products" label, the
+ * "reviews" icon with the "Reviews" label, the "sales" icon with the "Sales"
+ * label, the "staff" icon with the "Staff" label, and the "logout" icon with
+ * the "Logout" label.
+ *
+ * Every entry therefore carries BOTH its icon and its label - the array can no
+ * longer collapse to icons, so the two are always rendered together.
+ *
+ * REQ-EMP_HOME-01 — when emp_categ is 'staff', the Dashboard, Walk-in Orders,
+ * Reviews and Sales entries must NOT render. REQ-EMP_HOME-01 also ensures only
+ * super admins can access the Staff management page, and only admins+super
+ * admins can access inventory, reviews, analytics, and appointments.
+ */
+const NAV_GROUPS = [
   {
-    title: 'Overview',
+    id: 'overview',
+    group: 'Overview',
     items: [
       {
         to: '/admin/dashboard',
         label: 'Dashboard',
+        hideForStaff: true,
+        // REQ-EMP_HOME-01: Dashboard only for admin and super admin
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -25,27 +49,41 @@ const navSections = [
     ],
   },
   {
-    title: 'Sales & Operations',
+    id: 'sales-ops',
+    group: 'Sales & Operations',
     items: [
       {
-        to: '/admin/pos',
-        label: 'Register',
+        to: '/admin/walkin',
+        label: 'Walk-in Orders',
+        hideForStaff: true,
         // POST /pos/* is admin-only in the API, so staff never open it.
         roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
-            <rect x="6" y="2" width="12" height="4" rx="1" />
-            <path d="M10 6v3" />
-            <path d="M14 6v3" />
-            <path d="M4 14l1.8-5h12.4l1.8 5" />
-            <rect x="3" y="14" width="18" height="7" rx="1.5" />
-            <line x1="9.5" y1="18" x2="14.5" y2="18" />
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <path d="M16 10a4 4 0 0 1-8 0" />
+          </svg>
+        ),
+      },
+      {
+        to: '/admin/appointments',
+        label: 'Appointments',
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <polyline points="9 16 11 18 15 14" />
           </svg>
         ),
       },
       {
         to: '/admin/orders',
         label: 'Orders',
+        // REQ-EMP_HOME-01: Orders only for admin and super admin
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <circle cx="9" cy="21" r="1" />
@@ -55,52 +93,32 @@ const navSections = [
         ),
       },
       {
-        to: '/admin/schedule',
-        label: 'Schedule',
+        to: '/admin/analytics',
+        label: 'Sales',
+        hideForStaff: true,
+        // REQ-EMP_HOME-01: Sales only for admin and super admin
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" />
-            <line x1="8" y1="2" x2="8" y2="6" />
-            <line x1="3" y1="10" x2="21" y2="10" />
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
           </svg>
         ),
       },
     ],
   },
   {
-    title: 'Fulfillment',
-    items: [
-      {
-        to: '/admin/pickup',
-        label: 'Pickup',
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-            <polyline points="9 22 9 12 15 12 15 22" />
-          </svg>
-        ),
-      },
-      {
-        to: '/admin/delivery',
-        label: 'Delivery',
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
-            <rect x="1" y="3" width="15" height="13" />
-            <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-            <circle cx="5.5" cy="18.5" r="2.5" />
-            <circle cx="18.5" cy="18.5" r="2.5" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    title: 'Store & Catalog',
+    id: 'store-catalog',
+    group: 'Store & Catalog',
     items: [
       {
         to: '/admin/inventory',
-        label: 'Inventory & Products',
+        label: 'Products',
+        hideForStaff: true,
+        // Rule 41 / REQ-MANAGE_INV-01: only admins and super admins manage the
+        // inventory, so a 'staff' employee never sees the Products entry.
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -112,43 +130,26 @@ const navSections = [
       {
         to: '/admin/reviews',
         label: 'Reviews',
+        hideForStaff: true,
+        // REQ-EMP_HOME-01: Reviews only for admin and super admin
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         ),
       },
-      {
-        to: '/admin/customization',
-        label: 'Storefront',
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
-            <path d="M2 9h20" />
-            <path d="M2 9l3-6h14l3 6" />
-            <path d="M4 9v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9" />
-            <path d="M9 22V14h6v8" />
-          </svg>
-        ),
-      },
     ],
   },
   {
-    title: 'Management',
+    id: 'management',
+    group: 'Management',
     items: [
       {
-        to: '/admin/analytics',
-        label: 'Analytics',
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
-            <line x1="18" y1="20" x2="18" y2="10" />
-            <line x1="12" y1="20" x2="12" y2="4" />
-            <line x1="6" y1="20" x2="6" y2="14" />
-          </svg>
-        ),
-      },
-      {
-        to: '/admin/users',
-        label: 'User Management',
+        to: '/admin/staff',
+        label: 'Staff',
+        // REQ-EMP_HOME-01: Staff management only for super admin
+        roles: ['SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -158,64 +159,46 @@ const navSections = [
           </svg>
         ),
       },
-      {
-        to: '/admin/settings',
-        label: 'Settings',
-        // PUT /settings/update is admin-only in the API.
-        roles: ['ADMIN', 'SUPER_ADMIN'],
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        ),
-      },
     ],
   },
 ]
 
-/* Panel-style collapse toggle */
-function PanelIcon({ className = 'w-4 h-4' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <line x1="9" y1="4" x2="9" y2="20" />
-    </svg>
-  )
-}
+/** Every entry the ribbon and the sidebar share a link for. */
+const staffAliases = ['/admin/staff', '/admin/users']
 
-export default function AdminSidebar({
-  onCloseMobile,
-  isCollapsed: controlledIsCollapsed,
-  onToggleCollapse: controlledToggleCollapse,
-  // True while the collapsed rail is temporarily expanded on hover
-  isOverlay = false,
-}) {
+export default function AdminSidebar({ onCloseMobile }) {
   const navigate = useNavigate()
-  const { orders: rawOrders = [], products = [], currentAdminUser } = useAdmin()
+  const location = useLocation()
+  const { orders: rawOrders = [], products = [], currentAdminUser, logoutAdmin } = useAdmin()
   // Live rows for the ⌘K search palette (server-backed, refreshed by context).
   const liveOrders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
-  // Nav mirrors the backend `role:` middleware (staff/admin/super admin).
-  const visibleSections = useMemo(() => {
-    const roleKey = currentAdminUser?.roleKey
-    return navSections
-      .map((section) => ({
-        ...section,
-        items: section.items.filter((item) => !item.roles || item.roles.includes(roleKey)),
-      }))
-      .filter((section) => section.items.length > 0)
-  }, [currentAdminUser?.roleKey])
-  const [internalCollapsed, setInternalCollapsed] = useState(false)
+
+  const roleKey = currentAdminUser?.roleKey || (empCateg(currentAdminUser) === 'super admin' ? 'SUPER_ADMIN' : empCateg(currentAdminUser) === 'admin' ? 'ADMIN' : 'STAFF')
+  // REQ-EMP_HOME-01 — a 'staff' category employee is a regular staff member,
+  // so the Dashboard / Walk-in / Reviews / Sales entries never render for them.
+  const isStaff = empIsStaff(currentAdminUser)
+  // Where this employee's "home" leads (Dashboard for admins, Orders for
+  // staff) - every logo/home link in the portal uses the same answer.
+  const homePath = empHomePath(currentAdminUser)
+
+  // FLOW-EMP_HOME-05 + REQ-EMP_HOME-01 — one pass over the grouped items, so
+  // an entry is filtered with exactly the same rule the route guard uses.
+  const navGroups = useMemo(() => {
+    return NAV_GROUPS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        if (item.hideForStaff && isStaff) return false
+        if (item.roles && !item.roles.includes(roleKey)) return false
+        return true
+      }),
+    })).filter((section) => section.items.length > 0)
+  }, [isStaff, roleKey])
 
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [confirmLogout, setConfirmLogout] = useState(false)
   const searchInputRef = useRef(null)
-
-  const isCollapsed =
-    controlledIsCollapsed !== undefined ? controlledIsCollapsed : internalCollapsed
-  const onToggleCollapse =
-    controlledToggleCollapse || (() => setInternalCollapsed((prev) => !prev))
 
   const smallIcon = 'w-4 h-4'
 
@@ -240,7 +223,7 @@ export default function AdminSidebar({
             iconBg: 'bg-blue-50 text-blue-600',
           })),
         ...products
-          .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+          .filter((p) => (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()))
           .slice(0, 3)
           .map((p) => ({
             id: p.id, type: 'product', title: p.name, subtitle: `In Stock (${p.totalStock ?? 0})`,
@@ -254,6 +237,20 @@ export default function AdminSidebar({
             ),
             iconBg: 'bg-slate-100 text-slate-600',
           })),
+        // Schedule deep link so the page stays reachable from the ribbon search.
+        {
+          id: 'schedule', type: 'page', title: 'Employee Schedule', subtitle: 'Schedules & availability',
+          link: '/admin/schedules',
+          icon: (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={smallIcon}>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+          ),
+          iconBg: 'bg-orange-50 text-brand-orange',
+        },
       ]
     : []
 
@@ -306,98 +303,64 @@ export default function AdminSidebar({
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
   }, [])
 
+  // DOMAIN 16 — confirmation dialog, then logout and redirect to the login page.
+  const handleLogout = () => {
+    logoutAdmin()
+    setConfirmLogout(false)
+    onCloseMobile?.()
+    navigate('/admin/login')
+  }
+
+  const isActivePath = (to) =>
+    staffAliases.includes(to)
+      ? staffAliases.some((p) => location.pathname === p)
+      : location.pathname === to || location.pathname.startsWith(`${to}/`)
+
   return (
-    <aside
-      className={`${
-        isCollapsed ? 'w-20' : 'w-60'
-      } bg-white border-r border-slate-200 flex flex-col h-full select-none transition-[width] duration-300 ease-in-out`}
-    >
+    /* Settings-like left-docked card: white surface, soft border, rounded
+       corners, full height so the nav scrolls inside the card instead of
+       pushing the page. Same visual language as the settings rail. */
+    <aside className="w-full h-full bg-white rounded-xl border border-slate-200 flex flex-col min-h-0 select-none overflow-hidden">
       <div className="flex flex-col flex-1 min-h-0">
         {/* Brand Header */}
-        <div
-          className={`p-3 border-b border-slate-100 flex items-center ${
-            isCollapsed ? 'flex-col gap-2 justify-center' : 'justify-between'
-          }`}
-        >
-          {!isCollapsed ? (
-            <div className="flex items-center justify-between w-full min-w-0">
-              <Link to="/admin/dashboard" className="flex items-center min-w-0">
-                <img src={brandLogo} alt="Tindahan ni Isko" className="h-8 w-auto object-contain" />
-              </Link>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={onToggleCollapse}
-                  title={isOverlay ? 'Keep sidebar open' : 'Collapse sidebar'}
-                  aria-label={isOverlay ? 'Keep sidebar open' : 'Collapse sidebar'}
-                  className="hidden md:flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-                >
-                  <PanelIcon />
-                </button>
-
-                {onCloseMobile && (
-                  <button
-                    type="button"
-                    onClick={onCloseMobile}
-                    className="md:hidden p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 py-0.5 w-full">
-              <Link
-                to="/admin/dashboard"
-                title="Tindahan ni Isko"
-                className="w-9 h-9 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center p-1 hover:bg-orange-100 transition-colors"
-              >
-                <img src={brandLogo} alt="Tindahan ni Isko" className="h-full w-auto object-contain" />
-              </Link>
-              <button
-                type="button"
-                onClick={onToggleCollapse}
-                title="Expand sidebar"
-                aria-label="Expand sidebar"
-                className="hidden md:flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-              >
-                <PanelIcon />
-              </button>
-            </div>
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between shrink-0">
+          <Link to={homePath} className="flex items-center min-w-0" title="Tindahan ni Isko">
+            <img src={brandLogo} alt="Tindahan ni Isko" className="h-8 w-auto object-contain" />
+            <span className="ml-2 hidden lg:block text-xs font-extrabold text-slate-900 tracking-tight truncate">
+              Tindahan ni Isko
+            </span>
+          </Link>
+          {onCloseMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="md:hidden p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer"
+              aria-label="Close menu"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
           )}
         </div>
 
         {/* Sidebar Search */}
-        <div className="px-3 pt-3 pb-1">
-          {!isCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setIsSearchModalOpen(true)}
-              className="w-full h-8 flex items-center gap-2 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-400 hover:border-slate-300 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <span className="flex-1 text-left truncate">Search...</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setIsSearchModalOpen(true)}
-              title="Search"
-              className="w-8 h-8 mx-auto flex items-center justify-center rounded-md bg-slate-50 border border-slate-200 text-slate-400 hover:bg-slate-100 hover:border-slate-300 transition-colors cursor-pointer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            </button>
-          )}
+        <div className="px-3 pt-2.5 pb-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsSearchModalOpen(true)}
+            className="w-full h-8 flex items-center gap-2 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-400 hover:border-slate-300 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <span className="flex-1 text-left truncate">Search...</span>
+            <kbd className="hidden lg:inline-flex items-center px-1 py-0.5 rounded border border-slate-200 text-[9px] font-semibold text-slate-400 bg-white">
+              ⌘K
+            </kbd>
+          </button>
         </div>
 
         {/* Search Command Palette Modal */}
@@ -487,44 +450,85 @@ export default function AdminSidebar({
           </div>
         )}
 
-        {/* Navigation */}
-        <nav className="p-2.5 space-y-3 overflow-y-auto flex-1 scrollbar-none">
-          {visibleSections.map((section, secIdx) => (
-            <div key={section.title} className="space-y-0.5">
-              {!isCollapsed ? (
-                <div className="px-2.5 pt-1 pb-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 select-none">
-                  {section.title}
-                </div>
-              ) : secIdx > 0 ? (
-                <div className="my-1.5 border-t border-slate-100" />
-              ) : null}
-
+        {/* Navigation — FLOW-EMP_HOME-05 */}
+        <nav aria-label="Employee navigation" className="px-2.5 py-1.5 space-y-2 overflow-y-auto flex-1 scrollbar-none">
+          {navGroups.map((section) => (
+            <div key={section.id} className="space-y-0.5">
+              <div className="px-2.5 pt-0.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 select-none">
+                {section.group}
+              </div>
               <div className="space-y-0.5">
-                {section.items.map(({ to, label, icon }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    onClick={onCloseMobile}
-                    title={isCollapsed ? label : undefined}
-                    className={({ isActive }) =>
-                      `flex items-center ${
-                        isCollapsed ? 'justify-center px-2 py-2' : 'gap-2.5 px-2.5 py-1.5'
-                      } rounded-md text-xs font-medium transition-all duration-150 ${
+                {section.items.map(({ to, label, icon }) => {
+                  const isActive = isActivePath(to)
+                  return (
+                    <button
+                      key={to}
+                      type="button"
+                      onClick={() => navigate(to)}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`flex items-center w-full gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-150 cursor-pointer ${
                         isActive
                           ? 'bg-brand-orange/10 text-brand-orange'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`
-                    }
-                  >
-                    <span className="shrink-0">{icon}</span>
-                    {!isCollapsed && <span className="truncate">{label}</span>}
-                  </NavLink>
-                ))}
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className="shrink-0">{icon}</span>
+                      <span className="truncate">{label}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           ))}
         </nav>
+
+        {/* Logout — last entry, pinned to the foot of the card so it is
+            always reachable, with a confirmation (DOMAIN 16). */}
+        <div className="shrink-0 px-2 pt-1.5 pb-1.5 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => setConfirmLogout(true)}
+            className="flex items-center w-full gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold text-rose-600 hover:bg-rose-50 transition-all duration-150 cursor-pointer"
+          >
+            <span className="shrink-0 flex justify-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </span>
+            <span className="truncate">Logout</span>
+          </button>
+        </div>
       </div>
+
+      {/* Logout confirmation dialog (DOMAIN 16) */}
+      {confirmLogout && (
+        <div className="fixed inset-0 z-[99999] bg-black/50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-xl max-w-sm w-full border border-slate-200 p-5 shadow-xl animate-scale-in">
+            <h3 className="text-sm font-bold text-slate-900">Sign out?</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Your staff session ends immediately and you will be redirected to the login page.
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setConfirmLogout(false)}
+                className="h-8 px-3 rounded-md bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="h-8 px-3 rounded-md bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 cursor-pointer"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

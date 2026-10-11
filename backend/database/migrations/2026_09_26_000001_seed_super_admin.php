@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
  * Username: super
  * Email:    super@super.com
  * Password: super_123
- * emp_type: SUPER ADMIN (rank 3 per EnsureRole middleware)
+ * emp_type: SUPER_ADMIN (rank 3 per EnsureRole middleware)
  *
  * This migration is idempotent — it inserts only if the row does not exist.
  */
@@ -27,7 +27,7 @@ return new class extends Migration
                 'emp_pronoun'    => 'they/them',
                 'emp_email'      => 'super@super.com',
                 'emp_password'   => Hash::make('super_123'),
-                'emp_type'       => 'SUPER ADMIN',
+                'emp_type'       => 'SUPER_ADMIN',
                 'emp_phone'      => '+639000000001',
                 'emp_birthday'   => '2000-01-01',
                 'emp_brgy'       => '',
@@ -36,17 +36,6 @@ return new class extends Migration
                 'emp_country'    => 'PH',
                 'emp_callcode'   => '+63',
                 'emp_instore'    => false,
-                // Explicitly null — avoids SQLite strict NOT NULL after Doctrine DBAL ->change()
-                'emp_studnum'    => null,
-                'emp_midname'    => null,
-                'emp_suffix'     => null,
-                'emp_backupcallcode' => null,
-                'emp_backupphone'    => null,
-                'emp_backupemail'    => null,
-                'emp_college'    => null,
-                'emp_program'    => null,
-                'emp_year'       => null,
-                'emp_bloc'       => null,
             ]);
         }
     }

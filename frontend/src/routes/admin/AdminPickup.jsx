@@ -280,7 +280,7 @@ function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
         title="Pickup schedule"
         meta="Today"
         actionLabel="Full schedule"
-        actionTo="/admin/schedule"
+        actionTo="/admin/schedules"
         className="lg:flex-1 min-h-[14rem] lg:min-h-0"
       >
         <div className={`h-full ${SCROLL_FADE} divide-y divide-slate-100`}>
@@ -326,7 +326,7 @@ function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
             </svg>
             View unscheduled
           </button>
-          <Link to="/admin/schedule" className={`${BTN_SECONDARY_SM} w-full justify-start`}>
+          <Link to="/admin/schedules" className={`${BTN_SECONDARY_SM} w-full justify-start`}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0 text-isko-blue" aria-hidden="true">
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>

@@ -2,33 +2,41 @@
 import { createContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../hooks/useAuth.js'
 import {
-  addToCart as addCartOrder,
+  addToCart as addCartLines,
+  clearCart as clearCartOnServer,
   fetchCart,
-  removeFromCart as removeCartOrder,
+  removeFromCart as removeBagRow,
+  updateBagQuantity,
 } from '../services/cart.js'
-import { addProductToOrder, removeProductFromOrder } from '../services/orders.js'
 import { mapProduct } from '../services/products.js'
 
 export const CartContext = createContext(null)
 
 const OWNER_KEY = 'isko_cart_owner'
 const GUEST = 'guest'
+const CART_EVENT = 'isko:cart-refresh'
+
+/**
+ * Ask every mounted bag surface to re-read the server. Fired after a mutation
+ * that happens outside this context (the wishlist's "add to bag") so the badge
+ * updates immediately (REQ-BAG-03) without the two providers depending on
+ * each other's mount order.
+ */
+export function notifyCartChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CART_EVENT))
+}
 
 function readLocal() {
   try {
     const saved = localStorage.getItem('isko_cart')
-    const items = saved ? JSON.parse(saved) : []
-    // Lines picked from the old offline sample catalog carry no real product
-    // id and can never be saved to the server, so they are dropped.
-    return Array.isArray(items)
-      ? items.filter((i) => (i?.prodId ?? i?.product?.prodId) != null)
-      : []
+    const rows = saved ? JSON.parse(saved) : []
+    return Array.isArray(rows) ? rows : []
   } catch {
     return []
   }
 }
 
-/** Server rows embed a `product` relation - accept raw or already-mapped shapes. */
+/** Server rows embed a presented `product` - accept raw or already-mapped shapes. */
 function toProduct(raw) {
   if (!raw) return null
   if (raw.name !== undefined && raw.price !== undefined) return raw
@@ -44,63 +52,148 @@ function toProduct(raw) {
   }
 }
 
+/** Color in the catalog shape (`value` is what the bag swatch paints). */
+function toColor(raw) {
+  if (!raw) return null
+  const name = typeof raw === 'string' ? raw : raw.name
+  if (!name) return null
+  const image = typeof raw === 'object' ? raw.image || raw.gallery?.[0] || '' : ''
+  const gallery = typeof raw === 'object' && Array.isArray(raw.gallery) && raw.gallery.length
+    ? raw.gallery
+    : image ? [image] : []
+  return { name, value: image, image, gallery }
+}
+
+/**
+ * One server bag row -> one local cart line. Rows are NEVER merged or
+ * de-duplicated by product: each variation is its own line (REQ-BAG-01) and
+ * the server has already ordered them bag_created DESC (FLOW-BAG-04).
+ */
+function mapServerItem(row) {
+  const product = toProduct(row.product)
+  if (!product) return null
+  const qty = Number(row.qty ?? row.bag_qty ?? 1)
+  const amount = Number(row.amount ?? row.bag_amount ?? product.price ?? 0)
+  const bagId = row.bag_id ?? row.bag_id_display?.replace?.(/^bag-/, '')
+
+  return {
+    cartItemId: row.bag_id_display || (row.bag_id != null ? `bag-${row.bag_id}` : row.id),
+    bagId: bagId != null ? Number(bagId) : null,
+    prodvarId: row.prodvar_id != null ? Number(row.prodvar_id) : null,
+    prodId: row.prod_id ?? product.prodId ?? null,
+    product,
+    qty,
+    amount,
+    lineTotal: Number(row.line_total ?? qty * amount),
+    size: row.size ?? null,
+    color: toColor(row.color),
+    available: row.available !== false,
+  }
+}
+
 function prodIdOf(item) {
   return item?.prodId ?? item?.product?.prodId ?? null
 }
 
-/** Line total. The server stores `item_amount` as prod_price * qty, so the
- *  catalog unit price is what both sides agree on. */
+/** Line total: `amount` on a cart line is always the UNIT price. */
 function amountOf(item) {
-  return (item?.product?.price ?? 0) * (Number(item?.qty) || 1)
+  return Number(item?.amount ?? item?.product?.price ?? 0) * (Number(item?.qty) || 1)
 }
 
-/** REQ-CW-02: Check if a cart item is available for checkout. */
+/** REQ-CW-02 / FLOW-WISHLIST-07: only offered lines may be checked out. */
 function isItemAvailable(item) {
-  if (!item || !item.product) return false
-  if (item.product.preOrder) return true
-  // One stock number per product (prod_qty); sizes/colours share it.
-  return (Number(item.product.qty) || 0) > 0
+  return Boolean(item?.product) && item.available !== false
+}
+
+/** The line payload POST /cart/add expects (item_amount is the UNIT price). */
+function lineFor(item, qty) {
+  const line = {
+    prod_id: prodIdOf(item),
+    item_qty: Math.max(1, Number(qty) || 1),
+    item_amount: Number(item?.amount ?? item?.product?.price ?? 0),
+  }
+  if (item?.prodvarId) line.prodvar_id = item.prodvarId
+  if (item?.size) line.size = item.size
+  if (item?.color?.name) line.color = { name: item.color.name, image: item.color.image || item.color.value }
+  if (item?.options && Object.keys(item.options).length > 0) {
+    line.options = item.options
+  }
+  return line
+}
+
+const lower = (value) => String(value ?? '').trim().toLowerCase()
+
+/**
+ * The {axis: value} map of what the customer picked, built from the product's
+ * own axes. A product that variates by colour and size answers
+ * {Color:'Cream', Size:'Medium'}; one that variates by colour and material
+ * answers {Color:'Cream', Material:'Metallic'}.
+ */
+function pickedOptions(product, size, color) {
+  const axes = Array.isArray(product?.axes) ? product.axes : []
+  const sizeLabel = lower(size)
+  const colorLabel = lower(color?.name)
+  const options = {}
+
+  axes.forEach((axis) => {
+    const key = String(axis).toLowerCase()
+    if (/colou?r/.test(key) && colorLabel) options[axis] = String(color.name).trim()
+    else if (sizeLabel) options[axis] = String(size).trim()
+  })
+
+  // No declared axes: fall back to the two labels the pickers have always used.
+  if (Object.keys(options).length === 0) {
+    if (colorLabel) options.Color = String(color.name).trim()
+    if (sizeLabel) options.Size = String(size).trim()
+  }
+
+  return options
 }
 
 /**
- * Flatten `GET /cart/display` orders (tagged CART-...) into the local cart-item
- * shape the UI renders. Variant details (size/color) are not stored server-side,
- * so they are read back out of the local cache by product id.
+ * Pin a bag line to the variation the customer actually picked so two
+ * variations of one product can never collapse into a single row. Only an
+ * unambiguous match (or a single-variation product) is sent; otherwise the
+ * server derives it from size/color exactly like the catalog does.
+ *
+ * A product can variate along several axes at the same time, so the match is
+ * against EVERY axis value - not only against keys literally called "size" and
+ * "color". Without that a colour × material shirt matched its colour on four
+ * rows and the bag line landed on whichever of them came first.
  */
-function mapServerRows(rows, cachedItems) {
-  const items = []
-  const claimed = new Set()
+function resolveProdvarId(product, size, color) {
+  const variations = product?.variations || []
+  if (variations.length === 0) return null
+  if (variations.length === 1) return variations[0].prodvar_id
 
-  for (const row of rows || []) {
-    const ordId = row.ord_id ?? row.id
-    for (const entry of row.items || []) {
-      const product = toProduct(entry.product)
-      if (!product) continue
-      const prodId = entry.prod_id ?? product.prodId ?? null
-      const cartItemId = `${ordId}:${prodId}`
-      const exact = cachedItems.find(
-        (c) => c.cartItemId === cartItemId && !claimed.has(c.cartItemId)
-      )
-      const byProduct = cachedItems.find(
-        (c) =>
-          !claimed.has(c.cartItemId) &&
-          (c.product?.id === product.id || c.prodId === prodId)
-      )
-      const cached = exact || byProduct
-      if (cached) claimed.add(cached.cartItemId)
+  const sizeLabel = lower(size)
+  const colorLabel = lower(color?.name)
+  if (!sizeLabel && !colorLabel) return null
 
-      items.push({
-        cartItemId,
-        ordId,
-        prodId,
-        product,
-        qty: Number(entry.item_qty ?? 1),
-        size: exact?.size ?? byProduct?.size ?? null,
-        color: exact?.color ?? byProduct?.color ?? null,
-      })
-    }
-  }
-  return items
+  const hits = variations.filter((variant) => {
+    const opts = variant.prodvar_options || {}
+    const name = lower(variant.prodvar_name)
+    const values = Object.values(opts).map(lower)
+    const sizes = [opts.size, opts.sizes].flat().filter(Boolean).map(lower)
+    const colors = [opts.color, opts.colour].filter(Boolean).map(lower)
+
+    const sizeOk = !sizeLabel
+      ? false
+      : name === sizeLabel
+        || sizes.includes(sizeLabel)
+        || values.includes(sizeLabel)
+        || (sizeLabel === 'one size' && values.length === 0)
+    const colorOk = !colorLabel
+      ? false
+      : name === colorLabel
+        || colors.includes(colorLabel)
+        || values.includes(colorLabel)
+        || values.length === 0
+
+    return sizeOk && colorOk
+  })
+
+  return hits.length === 1 ? hits[0].prodvar_id : null
 }
 
 export function CartProvider({ children }) {
@@ -112,9 +205,16 @@ export function CartProvider({ children }) {
   const [cartItems, setCartItems] = useState(readLocal)
   const cartItemsRef = useRef(cartItems)
 
-  // Selection state: array of selected cartItemId strings
+  // REQ-BAG-03: the number of live bag lines, mirrored from every response.
+  const [cartCount, setCartCount] = useState(() =>
+    readLocal().reduce((total, item) => total + (Number(item.qty) || 1), 0)
+  )
+  // FLOW-BAG-06: server total amount due (sum of every live line).
+  const [serverSubtotal, setServerSubtotal] = useState(null)
+
+  // Selection state: array of selected cartItemId strings.
   const [selectedItemIds, setSelectedItemIds] = useState(() =>
-    readLocal().map((i) => i.cartItemId)
+    readLocal().map((i) => i.cartItemId).filter(Boolean)
   )
 
   // Ids we have already seen, so a refetch only auto-selects brand-new items.
@@ -137,13 +237,12 @@ export function CartProvider({ children }) {
     seenIdsRef.current = new Set(newIds)
   }, [])
 
-  const hydrateFromRows = useCallback(
-    (rows) => {
-      // Removing a row's last line (or checking out its lines through a temp
-      // order) leaves an empty CART- order behind; delete those as they surface.
-      const empty = (rows || []).filter((row) => (row.items || []).length === 0)
-      empty.forEach((row) => removeCartOrder(row.ord_id ?? row.id).catch(() => null))
-      const items = mapServerRows(rows, cartItemsRef.current)
+  /** Adopt a {items, cart_count, subtotal} envelope from any cart response. */
+  const applyEnvelope = useCallback(
+    (envelope) => {
+      const items = (envelope?.items || []).map(mapServerItem).filter(Boolean)
+      setCartCount(Number(envelope?.cart_count ?? items.length))
+      setServerSubtotal(Number(envelope?.subtotal ?? 0))
       applyItems(items)
       return items
     },
@@ -156,81 +255,41 @@ export function CartProvider({ children }) {
     cartItemsRef.current = cartItems
   }, [cartItems])
 
-  // ── Server sync ──
-  // Every cart write runs through one serial queue, so a later step always
-  // sees the order id an earlier "add" created (no duplicate orders), and the
-  // cart is re-read from the server only once the queue is empty.
-  const syncQueueRef = useRef(Promise.resolve())
-  const pendingSyncsRef = useRef(0)
-  const refreshSeqRef = useRef(0)
-  // cartItemId -> server ord_id learned from /cart/add, for lines not yet refreshed
-  const knownOrdIdsRef = useRef({})
-
   /** Pull the server cart; server wins whenever it responds. */
   const refreshCart = useCallback(async () => {
     if (!custId) return null
-    const seq = ++refreshSeqRef.current
     try {
-      const rows = await fetchCart(custId)
-      // A newer refresh or a queued write supersedes this response: applying
-      // it would briefly revert changes the user has already made.
-      if (seq !== refreshSeqRef.current || pendingSyncsRef.current > 0) return null
-      knownOrdIdsRef.current = {}
-      return hydrateFromRows(rows)
+      const envelope = await fetchCart(custId)
+      return applyEnvelope(envelope)
     } catch (err) {
       console.warn('Cart refresh failed, using local cart:', err.message)
       return null
     }
-  }, [custId, hydrateFromRows])
+  }, [custId, applyEnvelope])
 
-  const enqueueSync = useCallback(
-    (task) => {
-      pendingSyncsRef.current += 1
-      const run = syncQueueRef.current.then(task)
-      syncQueueRef.current = run
-        .catch((err) => {
-          // API unreachable: the local cart stays as the read-through fallback.
-          console.warn('Cart sync failed, keeping local change:', err?.message)
-        })
-        .finally(() => {
-          pendingSyncsRef.current -= 1
-          if (pendingSyncsRef.current === 0) refreshCart()
-        })
-      return run
-    },
-    [refreshCart]
-  )
+  // Any surface that mutates the bag outside this context (wishlist card)
+  // asks for a re-read so the count is the server's answer immediately.
+  useEffect(() => {
+    const handler = () => refreshCart()
+    window.addEventListener(CART_EVENT, handler)
+    return () => window.removeEventListener(CART_EVENT, handler)
+  }, [refreshCart])
 
-  /** Server ord_id of a line: from the last refresh, or learned from /cart/add since. */
-  const ordIdOf = (item) => item?.ordId ?? knownOrdIdsRef.current[item?.cartItemId] ?? null
-
-  /** Latest local copy of a line (with its known ord_id). */
-  const lineOf = (cartItemId, fallback = null) => {
-    const item = cartItemsRef.current.find((i) => i.cartItemId === cartItemId) || fallback
-    return item ? { ...item, ordId: ordIdOf(item) } : null
-  }
-
-  /** Add qty units of a line to the server cart (its row, a twin row, or a new order). */
-  const syncAdd = (target, qty, { reuseOrder = true } = {}) =>
-    enqueueSync(async () => {
-      const item = lineOf(target.cartItemId, target)
-      const prodId = prodIdOf(item)
-      if (!prodId) return
-      const twin = cartItemsRef.current.find(
-        (i) => i.cartItemId !== item.cartItemId && prodIdOf(i) === prodId && ordIdOf(i)
-      )
-      const ordId = reuseOrder ? item.ordId ?? ordIdOf(twin) : null
-      if (ordId) {
-        await addProductToOrder(ordId, prodId, qty, amountOf(item))
-        knownOrdIdsRef.current[item.cartItemId] = ordId
-        return
+  /** Fire-and-forget server sync for one line; local state is the fallback. */
+  const pushLine = useCallback(
+    async (item, qty) => {
+      if (!custId || !prodIdOf(item)) return null
+      try {
+        const envelope = await addCartLines(custId, [lineFor(item, qty)])
+        applyEnvelope(envelope)
+        return envelope
+      } catch (err) {
+        console.warn('Cart sync failed, keeping local change:', err.message)
+        return null
       }
-      const res = await addCartOrder(custId, [
-        { prod_id: prodId, item_qty: qty, item_amount: amountOf(item) },
-      ])
-      const newOrdId = res?.data?.order?.ord_id ?? null
-      if (newOrdId) knownOrdIdsRef.current[item.cartItemId] = newOrdId
-    })
+    },
+    [custId, applyEnvelope]
+  )
 
   // Whenever the signed-in customer changes, reload from the backend.
   useEffect(() => {
@@ -251,21 +310,17 @@ export function CartProvider({ children }) {
         return
       }
 
-      // Guest picks are merged into the server cart once, after signing in.
-      // The module-level flag stops StrictMode's second effect run from
-      // merging the same guest rows a second time.
+      // REQ-BAG-02: guest picks are merged into the server cart once, after
+      // signing in. The module-level flag stops StrictMode's second effect run
+      // from merging the same guest rows a second time.
       const localItems = cartItemsRef.current
-      const mergeable = localItems.filter((i) => !i.ordId && prodIdOf(i))
+      const mergeable = localItems.filter((i) => !i.bagId && prodIdOf(i))
       if (storedOwner === GUEST && mergeable.length > 0 && !mergeInFlight) {
         mergeInFlight = true
         try {
-          await addCartOrder(
+          await addCartLines(
             custId,
-            mergeable.map((i) => ({
-              prod_id: prodIdOf(i),
-              item_qty: Number(i.qty || 1),
-              item_amount: amountOf(i),
-            }))
+            mergeable.map((i) => lineFor(i, Number(i.qty || 1)))
           )
         } catch (err) {
           console.warn('Guest cart merge failed:', err.message)
@@ -275,9 +330,9 @@ export function CartProvider({ children }) {
       }
 
       try {
-        const rows = await fetchCart(custId)
+        const envelope = await fetchCart(custId)
         if (cancelled) return
-        hydrateFromRows(rows)
+        applyEnvelope(envelope)
         localStorage.setItem(OWNER_KEY, String(custId))
       } catch (err) {
         if (cancelled) return
@@ -295,15 +350,16 @@ export function CartProvider({ children }) {
       cancelled = true
       releaseHydration(owner)
     }
-  }, [owner, custId, applyItems, hydrateFromRows])
+  }, [owner, custId, applyItems, applyEnvelope])
 
   // Add item to cart (local first, then mirror to the backend)
   const addToCart = (product, qty, size, color) => {
     const prev = cartItemsRef.current
+    const prodvarId = resolveProdvarId(product, size, color)
     const existingIndex = prev.findIndex(
       (item) =>
-        item.product.id === product.id &&
-        item.size === size &&
+        item.product?.id === product.id &&
+        item.size === (size ?? null) &&
         (item.color?.name ?? null) === (color?.name ?? null)
     )
 
@@ -314,17 +370,24 @@ export function CartProvider({ children }) {
       target = {
         ...next[existingIndex],
         qty: next[existingIndex].qty + qty,
+        amount: Number(product.price ?? next[existingIndex].amount ?? 0),
+        available: true,
       }
       next[existingIndex] = target
     } else {
-      const newItemId = `${product.id}-${size}-${color?.name || 'def'}-${Date.now()}`
+      const newItemId = `local-${product.id}-${size ?? ''}-${color?.name || 'def'}-${Date.now()}`
       target = {
         cartItemId: newItemId,
+        bagId: null,
+        prodvarId,
+        prodId: product.prodId ?? product.id ?? null,
         product,
         qty,
-        size,
-        color,
-        prodId: product.prodId ?? null,
+        amount: Number(product.price ?? 0),
+        lineTotal: Number(product.price ?? 0) * qty,
+        size: size ?? null,
+        color: color ? toColor(color) : null,
+        available: true,
       }
       next = [...prev, target]
     }
@@ -333,7 +396,24 @@ export function CartProvider({ children }) {
     setSelectedItemIds((curr) =>
       curr.includes(target.cartItemId) ? curr : [...curr, target.cartItemId]
     )
-    if (custId) syncAdd(target, qty)
+
+    // Signed-in customers also get the server row: /cart/add increments the
+    // one live line for this variation, so only the added units are sent.
+    if (custId) {
+      pushLine(
+        {
+          ...target,
+          prodId: prodIdOf(target) ?? product.prodId ?? product.id,
+          prodvarId,
+          // The combination the customer picked, so a product that variates
+          // along several axes at once (colour × material) still resolves to
+          // its exact variation server-side even when the labels alone are
+          // ambiguous.
+          options: pickedOptions(product, size, color),
+        },
+        qty
+      )
+    }
   }
 
   // Remove item from cart and return it for undo
@@ -342,28 +422,24 @@ export function CartProvider({ children }) {
     applyItems(cartItemsRef.current.filter((item) => item.cartItemId !== cartItemId))
     setSelectedItemIds((prev) => prev.filter((id) => id !== cartItemId))
 
-    if (removedItem && custId && prodIdOf(removedItem)) {
-      enqueueSync(async () => {
-        const ordId = ordIdOf(removedItem)
-        if (ordId) await removeProductFromOrder(ordId, prodIdOf(removedItem))
-        delete knownOrdIdsRef.current[cartItemId]
-      })
+    // FLOW-BAG-05: the server soft-deletes the row addressed by bag_id.
+    if (custId && removedItem?.bagId) {
+      removeBagRow(removedItem.bagId)
+        .then(() => refreshCart())
+        .catch((err) => {
+          console.warn('Cart remove sync failed:', err.message)
+        })
     }
     return removedItem
   }
 
-  // Restore removed item (Undo action)
+  // Restore removed item (Undo action): the deleted row stays deleted, so the
+  // line is re-created with its quantity and the envelope replaces the ids.
   const restoreItem = (item) => {
     if (!item) return
     applyItems([item, ...cartItemsRef.current])
     setSelectedItemIds((prev) => (prev.includes(item.cartItemId) ? prev : [...prev, item.cartItemId]))
-    // Put the line back on the server row it came from. If that row was the
-    // item's alone it is swept once empty, so recreate it as a new cart order.
-    if (!custId) return
-    const rowSurvived = cartItemsRef.current.some(
-      (i) => i.ordId && i.ordId === item.ordId && i.cartItemId !== item.cartItemId
-    )
-    syncAdd(rowSurvived ? item : { ...item, ordId: null }, item.qty, { reuseOrder: rowSurvived })
+    if (custId && prodIdOf(item)) pushLine(item, Number(item.qty || 1))
   }
 
   const updateQuantity = (cartItemId, qty) => {
@@ -381,37 +457,34 @@ export function CartProvider({ children }) {
       prev.map((item) => (item.cartItemId === cartItemId ? { ...item, qty } : item))
     )
 
-    if (!custId || !prodIdOf(current)) return
+    if (!custId) return
 
-    // Set the server line to the quantity shown *when this step runs*, so a
-    // burst of +/- clicks settles on the final number.
-    enqueueSync(async () => {
-      const item = lineOf(cartItemId)
-      if (!item) return // removed meanwhile; its own queued step updates the server
-      const prodId = prodIdOf(item)
-      if (!item.ordId) {
-        const res = await addCartOrder(custId, [
-          { prod_id: prodId, item_qty: item.qty, item_amount: amountOf(item) },
-        ])
-        const newOrdId = res?.data?.order?.ord_id ?? null
-        if (newOrdId) knownOrdIdsRef.current[cartItemId] = newOrdId
-        return
-      }
-      await removeProductFromOrder(item.ordId, prodId)
-      await addProductToOrder(item.ordId, prodId, item.qty, amountOf(item))
-    })
+    if (current.bagId) {
+      // FLOW-BAG-05: absolute quantity on that bag row, clamped server-side.
+      updateBagQuantity(current.bagId, qty)
+        .then(applyEnvelope)
+        .catch((err) => console.warn('Quantity sync failed:', err.message))
+      return
+    }
+
+    // A line that has not reached the server yet: push the delta so the
+    // server-side increment lands on the right total.
+    pushLine(current, Math.abs(delta))
   }
 
-  const clearCart = () => {
+  /** FLOW-BAG-07: one visible action empties the whole bag. */
+  const clearCart = async () => {
     applyItems([])
+    setCartCount(0)
+    setServerSubtotal(0)
     setSelectedItemIds([])
     if (!custId) return
-    // Only CART- tagged rows are deleted, never a checked-out ORD- order.
-    enqueueSync(async () => {
-      const rows = await fetchCart(custId)
-      await Promise.allSettled(rows.map((row) => removeCartOrder(row.ord_id ?? row.id)))
-      knownOrdIdsRef.current = {}
-    })
+    try {
+      applyEnvelope(await clearCartOnServer())
+    } catch (err) {
+      console.warn('Clear cart sync failed, falling back to a refresh:', err.message)
+      await refreshCart()
+    }
   }
 
   /**
@@ -432,7 +505,7 @@ export function CartProvider({ children }) {
     )
   }
 
-  // Select all or deselect all items
+  // Select all or deselect all items (REQ-CHECKOUT-01 "all at once")
   const selectAllItems = (select = true) => {
     if (select) {
       setSelectedItemIds(cartItems.map((i) => i.cartItemId))
@@ -444,7 +517,7 @@ export function CartProvider({ children }) {
   // Filter selection: select only regular or only pre-order items
   const selectOnlyType = (type) => {
     const matchingIds = cartItems
-      .filter((item) => (type === 'preorder' ? item.product.preOrder : !item.product.preOrder))
+      .filter((item) => (type === 'preorder' ? item.product?.preOrder : !item.product?.preOrder))
       .map((item) => item.cartItemId)
     setSelectedItemIds(matchingIds)
   }
@@ -452,12 +525,15 @@ export function CartProvider({ children }) {
   // Dynamic calculations based strictly on selected items (Requirement 4 & 5)
   const selectedItems = cartItems.filter((item) => selectedItemIds.includes(item.cartItemId))
   const subtotal = selectedItems.reduce((sum, item) => sum + amountOf(item), 0)
+  const allItemsSubtotal = cartItems.reduce((sum, item) => sum + amountOf(item), 0)
   const total = subtotal // Requirement 6: No tax, Shipping calculated at checkout
 
   return (
     <CartContext.Provider
       value={{
         cartItems,
+        cartCount,
+        serverSubtotal: serverSubtotal ?? (cartItems.length ? allItemsSubtotal : 0),
         selectedItemIds,
         selectedItems,
         addToCart,

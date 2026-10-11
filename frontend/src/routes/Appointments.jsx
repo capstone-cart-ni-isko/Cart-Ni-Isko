@@ -6,11 +6,13 @@ import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
 import AppointmentCard from '../components/appointment/AppointmentCard.jsx'
 import AppointmentDetailsModal from '../components/appointment/AppointmentDetailsModal.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
+import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import {
   APPOINT_TYPE,
   fetchAppointments,
   readAppointmentsCache,
   SLOT_RULES,
+  updateAppointment,
   writeAppointmentsCache,
 } from '../services/appointments.js'
 import { fetchOrder } from '../services/orders.js'
@@ -20,18 +22,18 @@ const STORE = {
   subLocation: 'Bicol University, Main Campus',
 }
 
-/** The four REQ-AB filter pills, in the order the ribbon expects. */
+/** The four FLOW-MANAGE_BOOKED-02 filter pills, in the order the ribbon expects. */
 const FILTERS = [
-  { id: 'today', label: 'Today' },
+  { id: 'all', label: 'All' },
   { id: 'upcoming', label: 'Upcoming' },
   { id: 'done', label: 'Done' },
-  { id: 'cancelled', label: 'Cancelled' },
+  { id: 'absent', label: 'Absent' },
 ]
 
 /** How many cards render before "Load more" - keeps long lists instant. */
 const PAGE_SIZE = 20
 
-/* ── Slot / date formatting (APPOINTMENT stores one appoint_date stamp) ── */
+/* ── Slot / date formatting: the live slot is appoint_start → appoint_end ── */
 
 function clockOf(value) {
   const match = String(value || '').match(/(\d{1,2}):(\d{2})/)
@@ -40,15 +42,23 @@ function clockOf(value) {
   return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? 'PM' : 'AM'}`
 }
 
-/** "9:00 AM – 9:10 AM" for a slot of the given type (VISIT 10 / CLAIM 30 min). */
-function timeRange(value, type) {
-  const clock = String(value || '').match(/(\d{1,2}):(\d{2})/)
-  if (!clock) return 'To be confirmed'
+/**
+ * "9:00 AM – 9:30 AM" from the live slot itself (appoint_start/appoint_end);
+ * when only the start is known it falls back to the type's duration
+ * (VISIT 10 / CLAIM 30 min).
+ */
+function timeRange(start, end, type) {
+  const first = clockOf(start)
+  if (!first) return 'To be confirmed'
+  if (end) return `${first} – ${clockOf(end)}`
+
+  const clock = String(start).match(/(\d{1,2}):(\d{2})/)
+  if (!clock) return first
   const minutes = Number(clock[1]) * 60 + Number(clock[2])
   const length = (SLOT_RULES[type] || SLOT_RULES.VISIT).minutes
   const stamp = (total) =>
     clockOf(`${Math.floor(total / 60) % 24}:${String(total % 60).padStart(2, '0')}`)
-  return `${stamp(minutes)} – ${stamp(minutes + length)}`
+  return `${first} – ${stamp(minutes + length)}`
 }
 
 function todayISO() {
@@ -80,44 +90,62 @@ function endMoment(value) {
 }
 
 /**
- * SRS mapping: APPOINTMENT has no status column, so it is derived -
- * closed = done, elapsed but never closed = cancelled, otherwise upcoming.
+ * One live appointment row: `appoint_start`/`appoint_end` hold the slot
+ * (there is no `appoint_date` or `appoint_desc`), `appoint_status` is the
+ * stored state and `ord_id`/`ord_status` come from /appoint/display's pickup
+ * join. The status pill falls back to deriving from `appoint_closed` + the
+ * slot clock when the stored value is missing.
  */
 function mapAppointment(row, order) {
-  const stamp = row.appoint_date ?? ''
+  const start = row.appoint_start ?? ''
+  const end = row.appoint_end ?? ''
   const type = String(row.appoint_type || 'VISIT').toUpperCase()
   const closed = Boolean(row.appoint_closed)
-  const ends = endMoment(stamp)
+  const ends = endMoment(end || start)
   const expired = ends ? ends.getTime() < Date.now() : false
 
   const raw = String(row.appoint_status ?? row.status ?? '').toUpperCase()
   let status = 'upcoming'
-  if (raw.includes('CANCEL') || (!closed && expired)) status = 'cancelled'
+  if (raw.includes('CANCEL')) status = 'cancelled'
+  else if (raw.includes('ABSENT')) status = 'absent'
   else if (closed || ['COMPLETED', 'CLAIMED', 'CLOSED', 'DONE'].some((k) => raw.includes(k))) {
     status = 'done'
-  }
+  } else if (expired) status = 'cancelled'
 
-  const { iso, date, dayOfWeek } = parseDate(stamp)
-  const items = (order?.items || []).map((entry) => ({
-    name: entry.product?.prod_name || entry.product?.name || 'Item',
-    details: `Qty ${entry.item_qty ?? 1}${entry.product?.size ? ` · ${entry.product.size}` : ''}`,
-    image: entry.color?.image || entry.product?.image || null,
-  }))
+  const { iso, date, dayOfWeek } = parseDate(start)
+  const orderItems = order?.items || []
+  const items = orderItems.map((entry) => {
+    const prodvar = entry.prodvar || null
+    const variant = prodvar?.prodvar_name || ''
+    return {
+      name: entry.product?.prod_name || entry.product?.name || entry.prod_name || 'Item',
+      details: [`Qty ${entry.qty ?? entry.item_qty ?? 1}`, variant].filter(Boolean).join(' · '),
+      image: prodvar?.prodvar_pic || entry.product?.main_image || null,
+    }
+  })
+  const qtyTotal = orderItems.reduce(
+    (sum, entry) => sum + Number(entry.qty ?? entry.item_qty ?? 0),
+    0
+  )
 
   return {
     id: row.appoint_id ?? row.id,
     orderId: row.ord_id ?? row.order_id ?? null,
+    ordStatus: String(row.ord_status ?? order?.ord_status ?? '')
+      .trim()
+      .toLowerCase(),
     type,
     status,
     isToday: Boolean(iso) && iso === todayISO(),
     dateISO: iso,
-    rawStamp: stamp,       // full "YYYY-MM-DD HH:MM" for SlotPicker's currentSlot
     date,
     dayOfWeek,
-    time: timeRange(row.appoint_start ?? row.slot_start ?? stamp, type),
-    desc: String(row.appoint_desc || ''),
+    startISO: start || null,
+    endISO: end || null,
+    time: start ? timeRange(start, end, type) : 'To be confirmed',
+    desc: '',
     qr: row.appoint_qr || '',
-    itemCount: items.length || Number(row.item_count ?? 1),
+    itemCount: qtyTotal || items.length || 1,
     items,
     ...STORE,
   }
@@ -145,8 +173,8 @@ function Appointments() {
 
   // The pill the customer pressed (instant) and the filter the request uses
   // (debounced), so tapping pills never fires competing requests.
-  const [filter, setFilter] = useState('today')
-  const [status, setStatus] = useState('today')
+  const [filter, setFilter] = useState('upcoming')
+  const [status, setStatus] = useState('upcoming')
   const [list, setList] = useState([])
   const [limit, setLimit] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(true) // first paint → skeleton
@@ -154,6 +182,8 @@ function Appointments() {
   const [error, setError] = useState('')
   const [form, setForm] = useState(null) // null | 'new' | appointment
   const [viewing, setViewing] = useState(null)
+  // FLOW-ORD_CLAIM-01: the appointment whose appoint_qr is being scanned
+  const [claimTarget, setClaimTarget] = useState(null)
   const alive = useRef(true)
   const firstRun = useRef(true)
 
@@ -222,6 +252,26 @@ function Appointments() {
   }, [])
   const closeForm = useCallback(() => setForm(null), [])
 
+  // FLOW-MANAGE_BOOKED-05/06: the customer cancels through the list; the
+  // backend flips `appoint_status` to `cancelled` and deletes the QR code.
+  const handleCancel = useCallback(
+    async (appt) => {
+      if (!appt) return
+      if (!window.confirm(`Cancel appointment #${appt.id}?\n\nYour slot will be freed up.`)) return
+      try {
+        await updateAppointment(appt.id, { appoint_status: 'cancelled' })
+        setViewing(null)
+        setForm(null)
+        refresh()
+      } catch (err) {
+        setError(
+          apiErrorMessage(err, 'Failed to cancel the appointment. Please try again.')
+        )
+      }
+    },
+    [refresh]
+  )
+
   const cards = list.slice(0, limit)
 
   return (
@@ -238,7 +288,7 @@ function Appointments() {
           <span className="min-w-0">
             <span className="block text-base font-extrabold">Add Appointment</span>
             <span className="block text-xs font-medium text-white/85 leading-snug mt-0.5">
-              Reserve a 10-minute store visit or a 30-minute order claiming slot.
+              Reserve a 10-minute store visit or an order pickup slot.
             </span>
           </span>
           <span className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
@@ -316,12 +366,28 @@ function Appointments() {
         ) : (
           <div className="space-y-3">
             {cards.map((appt) => (
-              <AppointmentCard
-                key={appt.id}
-                appointment={appt}
-                onView={() => setViewing(appt)}
-                onEdit={() => startEdit(appt)}
-              />
+              <div key={appt.id} className="space-y-2">
+                <AppointmentCard
+                  appointment={appt}
+                  onView={() => setViewing(appt)}
+                  onEdit={() => startEdit(appt)}
+                  onCancel={handleCancel}
+                />
+
+                {/* FLOW-ORD_CLAIM-01: scan the pickup order's appoint_qr
+                    straight from the /appointments tab. */}
+                {appt.qr && appt.ordStatus === 'to claim' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setClaimTarget({ code: appt.qr, orderId: appt.orderId, id: appt.id })
+                    }
+                    className="w-full h-9 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                  >
+                    Scan to claim{appt.orderId ? ` · Order #${appt.orderId}` : ''}
+                  </button>
+                )}
+              </div>
             ))}
 
             {switching && (
@@ -348,6 +414,22 @@ function Appointments() {
         appointment={viewing}
         onClose={() => setViewing(null)}
         onEdit={() => startEdit(viewing)}
+        onCancel={handleCancel}
+      />
+
+      {/* Camera scan of the pickup QR: POST /tracking/scan {scanned_by:'customer'} */}
+      <QrScanModal
+        open={Boolean(claimTarget)}
+        title={
+          claimTarget?.orderId
+            ? `Scan to claim · Order #${claimTarget.orderId}`
+            : 'Scan to claim'
+        }
+        subtitle="Point the camera at the claim QR code for this pickup order."
+        fallbackCode={claimTarget?.code || null}
+        fallbackLabel="Use this appointment's code"
+        onClose={() => setClaimTarget(null)}
+        onSuccess={() => refresh()}
       />
     </AppShell>
   )

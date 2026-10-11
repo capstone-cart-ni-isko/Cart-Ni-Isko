@@ -54,9 +54,6 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
-    // Customer SPA origin, used for PayMongo success/cancel redirects
-    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
-
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
@@ -68,12 +65,7 @@ return [
     |
     */
 
-    'timezone' => env('APP_TIMEZONE', 'Asia/Manila'),
-
-    // Wall-clock timezone of the physical store. Used for store-day rules
-    // (e.g. the 7:00 AM duty-schedule lock, REQ-SS-02) while stored
-    // timestamps stay in UTC.
-    'store_timezone' => env('STORE_TIMEZONE', 'Asia/Manila'),
+    'timezone' => 'UTC',
 
     /*
     |--------------------------------------------------------------------------

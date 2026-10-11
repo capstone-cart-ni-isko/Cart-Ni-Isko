@@ -14,7 +14,7 @@ function Row({ label, value }) {
 }
 
 /** Full details for a single appointment (the "View" action). */
-export default function AppointmentDetailsModal({ appointment, onClose, onEdit }) {
+export default function AppointmentDetailsModal({ appointment, onClose, onEdit, onCancel }) {
   if (!appointment) return null
 
   return createPortal(
@@ -82,13 +82,24 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit }
             Close
           </button>
           {appointment.status === 'upcoming' && (
-            <button
-              type="button"
-              onClick={onEdit}
-              className="flex-1 h-9 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer"
-            >
-              Edit
-            </button>
+            <>
+              {onCancel && (
+                <button
+                  type="button"
+                  onClick={() => onCancel(appointment)}
+                  className="flex-1 h-9 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onEdit}
+                className="flex-1 h-9 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer"
+              >
+                Edit
+              </button>
+            </>
           )}
         </footer>
       </div>

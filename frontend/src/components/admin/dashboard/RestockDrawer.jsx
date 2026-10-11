@@ -41,7 +41,11 @@ export default function RestockDrawer({ isOpen, onClose, onCompleted }) {
     const units = Math.floor(Number(amounts[product.id] ?? 10))
     if (!units || units < 1) return
     setSavingId(product.id)
-    const saved = await adjustStock(product.id, product.totalStock + units)
+    // A product with variations is restocked on its main variation
+    const v = (product.variants || []).find((x) => x.main && x.prodvarId != null)
+    const saved = v
+      ? await adjustStock(product.id, (Number(v.stock) || 0) + units, v.prodvarId)
+      : await adjustStock(product.id, product.totalStock + units)
     setSavingId(null)
     // adjustStock reports its own failures with a toast
     if (!saved) return

@@ -1,31 +1,53 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './api.js'
 
 /**
- * Product reviews live on the `orders` table in Supabase (ord_rating /
- * ord_review) and are only reachable through the Laravel API.
+ * DOMAIN 13 (PRODUCT REVIEWS).
+ *
+ * Reviews live in the `reviews` table (rev_id, cust_id, prod_id, rev_msg,
+ * rev_created, rev_approved) and are only reachable through the Laravel API.
+ * There is no rating column, so the rating travels inside `rev_msg` as a
+ * leading "<rating>|" token - which is why every row below answers with both
+ * the canonical fields (rating / message) and the legacy order-shaped aliases
+ * (ord_rating / ord_review / ord_completed / ord_id) the screens still read.
  */
 
 /**
  * Reviews written for a product, shaped for the ProductReviews component.
  * `status` ('pending' | 'approved') is the employee moderation queue filter
  * (the server only honours it for employee tokens).
+ *
+ * `prodId` is optional: with an employee token and no product the backend
+ * answers with the WHOLE moderation queue (FLOW-MANAGE_REV-01), which is what
+ * the admin page loads. Asking per product instead fired one request per
+ * product - a load that grows with the catalog rather than with the reviews.
  */
-export async function fetchProductReviews(prodId, status = null) {
+export async function fetchProductReviews(prodId = null, status = null) {
   try {
-    const params = { prod_id: prodId }
+    const params = {}
+    if (prodId != null) params.prod_id = prodId
     if (status) params.status = status
     const data = await apiGet('/reviews/display', params)
     const rows = Array.isArray(data.data) ? data.data : []
     return {
       success: true,
       items: rows.map((row, index) => ({
-        id: `ord-${row.ord_id}-${index}`,
+        // FLOW-MANAGE_REV-05 / REQ-MANAGE_REV-04: rev_id is the canonical
+        // handle, prod_id disambiguates a review when its order holds several
+        // products. Both travel with every row so the moderation queue can
+        // target the exact row instead of guessing an order.
+        id: `rev-${row.rev_id ?? row.ord_id ?? index}`,
+        revId: row.rev_id ?? null,
+        prodId: row.prod_id ?? null,
+        prodName: row.prod_name ?? null,
         ordId: row.ord_id,
-        prodId: row.prod_id,
-        productName: row.prod_name || 'Product',
         custId: row.cust_id,
-        status: (row.status || 'APPROVED').toLowerCase(),
-        author: row.cust_name || 'Verified Student',
+        status: String(row.status || 'APPROVED').toLowerCase(),
+        // FLOW-MANAGE_REV-02 / FLOW-MANAGE_REV-04: the employee queue shows
+        // (and searches by) the customer's name, which ReviewsAPI returns as
+        // cust_name. It is exposed additively so the customer-facing
+        // ProductReviews list keeps its generic "Verified Student" label.
+        author: 'Verified Student',
+        custName: row.cust_name || null,
         rating: Number(row.ord_rating) || 0,
         date: row.ord_completed
           ? new Date(row.ord_completed).toLocaleDateString()
@@ -33,7 +55,10 @@ export async function fetchProductReviews(prodId, status = null) {
             ? new Date(row.ord_created).toLocaleDateString()
             : 'Recently',
         variant: 'Verified Purchase',
-        comment: row.ord_review || '',
+        // `message` is the review's real text. `ord_review` is the legacy alias
+        // that carries the [REVIEW CENSORED] sentinel on a rejected row, so the
+        // moderation queue prefers `message` and shows what was written.
+        comment: row.message ?? row.ord_review ?? '',
         verified: true,
         isOwn: Boolean(row.is_own),
       })),

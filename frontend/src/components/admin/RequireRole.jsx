@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { empHomePath, empRoleKey } from './schema.js'
 
 /**
  * Mirrors the backend `role:` middleware for admin screens: staff may only
@@ -12,8 +13,10 @@ export default function RequireRole({ roles }) {
     return <Navigate to="/admin/login" replace />
   }
 
-  if (!roles.includes(currentAdminUser.roleKey)) {
-    return <Navigate to="/admin/dashboard" replace />
+  if (!roles.includes(empRoleKey(currentAdminUser))) {
+    // Never fall back to a screen this role is not allowed to open - that
+    // would loop for /admin/dashboard itself. Staff go to their own home.
+    return <Navigate to={empHomePath(currentAdminUser)} replace />
   }
 
   return <Outlet />

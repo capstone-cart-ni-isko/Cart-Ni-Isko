@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchCatalog } from '../services/products.js'
+import { fetchCatalog, readCatalogCache } from '../services/products.js'
 
 /**
- * Live catalog from the API. There is no offline sample data: on failure
- * `error` is set and the page offers `reload()` (a Retry button).
+ * Active catalog, mapped through mapProduct so the UI sees name/price/images/id/category.
+ * On a failure with nothing on screen, `error` is set and the page offers
+ * `reload()` (a Retry button).
  */
 export function useCatalog(params = {}) {
   const [products, setProducts] = useState([])
@@ -14,25 +15,31 @@ export function useCatalog(params = {}) {
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
+    const wanted = JSON.parse(query)
 
-    fetchCatalog(JSON.parse(query))
+    // Paint the 60-second mirror first, then let the request below refresh it.
+    const cached = readCatalogCache(wanted)
+    if (cached) {
+      setProducts(cached)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
+
+    fetchCatalog(wanted)
       .then((rows) => {
-        if (!cancelled) {
-          setProducts(rows || [])
-          setError(null)
-        }
+        if (cancelled) return
+        setProducts(rows)
+        setError(null)
       })
       .catch((err) => {
-        if (!cancelled) {
-          setProducts([])
-          setError(err?.message || "Can't reach the store server. Please try again.")
-        }
+        // A failed refresh must never blank a screen that already has data.
+        if (cancelled || cached) return
+        setProducts([])
+        setError(err?.message || "Can't reach the store server. Please try again.")
       })
       .finally(() => {
-        if (!cancelled) {
-          setLoading(false)
-        }
+        if (!cancelled) setLoading(false)
       })
 
     return () => {

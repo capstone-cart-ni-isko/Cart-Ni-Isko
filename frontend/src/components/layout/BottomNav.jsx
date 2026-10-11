@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import React from 'react'
 import { useAuth } from '../../hooks/useAuth.js'
+import { useCart } from '../../hooks/useCart.js'
 import { useMenu } from './MenuSidebar.jsx'
 import { fetchNotifications, unreadCount } from '../../services/notifications.js'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
@@ -32,7 +33,7 @@ const TAB_CLASS =
 /* The four ribbon destinations that are real routes; Menu is a drawer toggle. */
 const ROUTE_TABS = [
   { to: '/home', label: 'Home', icon: homeIcon, end: true },
-  { to: '/cart', label: 'Bag', icon: cartIcon },
+  { to: '/bag', label: 'Bag', icon: cartIcon, active: ['/bag', '/cart'] },
   { to: '/appointments', label: 'Appointments', glyph: 'calendar' },
   { to: '/notifications', label: 'Notifications', icon: bellIcon, badge: true },
 ]
@@ -46,9 +47,14 @@ const ROUTE_TABS = [
  */
 function BottomNav() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { currentUser } = useAuth()
+  const { cartItems } = useCart()
   const { isMenuOpen, open: openMenu } = useMenu()
   const [unread, setUnread] = useState(0)
+
+  // REQ-BAG-03: the Bag tab carries the live cart_count (sum of bag quantities).
+  const bagCount = cartItems.reduce((sum, item) => sum + Number(item.qty || 0), 0)
 
   // CUSTNOTIF unread badge: rows with no custnotif_read stamp are unread.
   useEffect(() => {
@@ -85,31 +91,38 @@ function BottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 z-[110000] safe-bottom md:bottom-4 lg:hidden">
       <div className="mx-auto max-w-lg md:max-w-xl px-4">
         <div className="flex items-center justify-around bg-white rounded-lg px-2 py-1.5 border border-slate-200">
-          {ROUTE_TABS.map(({ to, label, icon, end, badge, glyph }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              onClick={(e) => guard(e, to)}
-              className={({ isActive }) =>
-                `${TAB_CLASS} ${isActive ? 'text-brand-orange font-bold bg-orange-50/50' : 'text-text-muted'}`
-              }
-            >
-              {({ isActive }) => (
+          {ROUTE_TABS.map(({ to, label, icon, end, badge, glyph, active }) => {
+            // Bag badge = bag quantity; bell badge = unread notifications.
+            const count = to === '/bag' ? bagCount : badge ? unread : 0
+            // FLOW-BAG-03: the ribbon tab is "/bag"; "/cart" stays an alias
+            // for old links, so either path lights the same tab up.
+            const paths = active || [to]
+            const isActive = paths.some(
+              (p) => pathname === p || (!end && pathname.startsWith(`${p}/`))
+            )
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                onClick={(e) => guard(e, to)}
+                className={`${TAB_CLASS} ${isActive ? 'text-brand-orange font-bold bg-orange-50/50' : 'text-text-muted'}`}
+              >
                 <>
                   <span className="relative">
                     {glyph === 'calendar' ? <CalendarGlyph /> : <Glyph src={icon} active={isActive} />}
-                    {badge && unread > 0 && (
+                    {count > 0 && (
                       <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-[#FF6A00] text-white text-[9px] font-black flex items-center justify-center">
-                        {unread > 99 ? '99+' : unread}
+                        {count > 99 ? '99+' : count}
                       </span>
                     )}
                   </span>
                   <span className="text-[11px] font-medium leading-tight whitespace-nowrap">{label}</span>
                 </>
-              )}
-            </NavLink>
-          ))}
+              </NavLink>
+            )
+          })}
 
           <button
             type="button"

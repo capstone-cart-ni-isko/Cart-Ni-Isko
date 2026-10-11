@@ -58,6 +58,10 @@ CMD sh -c '
 
   php artisan serve --host=0.0.0.0 --port=${PORT:-10000} &
   server=$!
+  # REQ-AN-03 watchdog: without a running scheduler the heartbeat file is
+  # never written and GET /api/health/scheduler answers 503 forever, even
+  # though the app itself is healthy.
+  php artisan schedule:work >/dev/null 2>&1 &
   sleep 2
   i=0
   while [ $i -lt "${PHP_CLI_SERVER_WORKERS:-8}" ]; do

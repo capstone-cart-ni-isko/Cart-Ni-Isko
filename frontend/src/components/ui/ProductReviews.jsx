@@ -41,7 +41,6 @@ export default function ProductReviews({ product }) {
   const [rating, setRating] = useState(5)
   const [hoverRating, setHoverRating] = useState(0)
   const [comment, setComment] = useState('')
-  const [authorName, setAuthorName] = useState(currentUser?.nickname || currentUser?.name || '')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
@@ -215,7 +214,7 @@ export default function ProductReviews({ product }) {
         </div>
       )}
 
-      {ownReview && ownReview.status === 'censored' && (
+      {ownReview && (ownReview.status === 'rejected' || ownReview.status === 'censored') && (
         <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-1.5 animate-fade-in">
           <div className="flex items-center justify-between gap-2">
             <h4 className="text-xs font-bold text-rose-800">Your Review Was Moderated</h4>

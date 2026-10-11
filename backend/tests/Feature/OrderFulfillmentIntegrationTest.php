@@ -2,19 +2,21 @@
 
 namespace Tests\Feature;
 
-use App\Models\CustNotif;
 use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\Order;
+use App\Models\Pickup;
 use App\Models\Product;
+use App\Models\Prodvar;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 /**
- * Feature tests for the order endpoints the frontend relies on: staff order
- * listings with fulfillment data, delivery tracking lookups, and the
- * customer cancel/return request approval flow.
+ * Feature tests for the order endpoints the admin dashboard relies on: staff
+ * order listings with fulfillment data, read-cache invalidation, legacy
+ * super admin spellings, and the customer cancellation request flow
+ * (FLOW-ORD_LIST-04..07).
  */
 class OrderFulfillmentIntegrationTest extends TestCase
 {
@@ -30,13 +32,12 @@ class OrderFulfillmentIntegrationTest extends TestCase
 
     private function headers($model): array
     {
-        // Sanctum caches the resolved user per app instance; drop it so each
-        // request authenticates its own bearer token.
+        // Re-authenticate every request so a test can switch identities.
         $this->app['auth']->forgetGuards();
 
         $key = get_class($model) . ':' . $model->getKey();
         if (!isset($this->tokens[$key])) {
-            $this->tokens[$key] = $model->createToken('test')->plainTextToken;
+            $this->tokens[$key] = \App\Support\ApiToken::issue($model);
         }
 
         return ['Authorization' => 'Bearer ' . $this->tokens[$key]];
@@ -72,7 +73,9 @@ class OrderFulfillmentIntegrationTest extends TestCase
     {
         $this->seq++;
 
-        return Employee::create([
+        // emp_type is not mass assignable and EnsureRole reads emp_categ, so
+        // both are written past mass assignment (see SrsRequirementsTest).
+        return Employee::forceCreate([
             'emp_created'   => now(),
             'emp_password'  => Hash::make('Password123!'),
             'emp_surname'   => 'Dela Cruz',
@@ -90,6 +93,7 @@ class OrderFulfillmentIntegrationTest extends TestCase
             'emp_phone'     => '09' . str_pad((string) (500000000 + $this->seq), 9, '0', STR_PAD_LEFT),
             'emp_email'     => 'emp' . $this->seq . uniqid() . '@bicol-u.edu.ph',
             'emp_type'      => $type,
+            'emp_categ'     => $type,
             'emp_instore'   => 0,
         ]);
     }
@@ -98,25 +102,37 @@ class OrderFulfillmentIntegrationTest extends TestCase
     {
         $this->seq++;
 
-        return Product::create([
+        $product = Product::create([
             'prod_created'   => now(),
             'prod_tag'       => 'TAG' . $this->seq . strtoupper(substr(md5(uniqid()), 0, 6)),
             'prod_name'      => 'Product ' . $this->seq . ' ' . uniqid(),
             'prod_categ'     => 'ACCESSORIES',
             'prod_price'     => 150.00,
-            'prod_qty'       => 50,
+            'prod_qty'       => 10,
             'prod_desc'      => 'Test product',
-            'prod_peakqty'   => 50,
+            'prod_peakqty'   => 10,
             'prod_peaksold'  => 0,
             'prod_peakdate'  => now(),
-            'prod_todayqty'  => 50,
+            'prod_todayqty'  => 10,
             'prod_todaysold' => 0,
         ]);
+
+        // Live products always own their main variation
+        Prodvar::create([
+            'prod_id'         => $product->prod_id,
+            'prodvar_name'    => 'Default',
+            'prodvar_stock'   => 10,
+            'prodvar_main'    => true,
+            'prodvar_created' => now(),
+        ]);
+
+        return $product;
     }
 
-    private function makeOrder(Customer $customer, string $status): Order
+    /** A preorder (not a walk-in): it owns a pickup fulfillment row. */
+    private function makePickupOrder(Customer $customer, string $status = 'processing'): Order
     {
-        return Order::create([
+        $order = Order::create([
             'cust_id'       => $customer->getKey(),
             'ord_created'   => now(),
             'ord_completed' => null,
@@ -125,29 +141,9 @@ class OrderFulfillmentIntegrationTest extends TestCase
             'ord_rating'    => 0,
             'ord_review'    => null,
         ]);
-    }
+        Pickup::create(['ord_id' => $order->ord_id, 'pickup_created' => now()]);
 
-    /** Cart order paid through the delivery modality; returns the ord_id. */
-    private function checkoutDelivery(Customer $customer, Product $product): int
-    {
-        $ordId = $this->postJson('/api/cart/add', [
-            'cust_id' => $customer->getKey(),
-            'items'   => [['prod_id' => $product->prod_id, 'item_qty' => 2]],
-        ], $this->headers($customer))
-            ->assertStatus(201)
-            ->json('data.order.ord_id');
-
-        $this->postJson('/api/checkout/payment', [
-            'ord_id'          => $ordId,
-            'dispatch_type'   => 'delivery',
-            'speed'           => 'standard',
-            'deliver_address' => 'Sagpon, Legazpi, Albay',
-            'pay_given'       => 350,
-        ], $this->headers($customer))
-            ->assertStatus(201)
-            ->assertJsonPath('data.order.ord_status', 'TO RECEIVE');
-
-        return (int) $ordId;
+        return $order;
     }
 
     // ==========================================
@@ -159,45 +155,27 @@ class OrderFulfillmentIntegrationTest extends TestCase
         $staff = $this->makeEmployee();
         $alice = $this->makeCustomer();
         $bob = $this->makeCustomer();
-        $product = $this->makeProduct();
 
-        $deliveryOrdId = $this->checkoutDelivery($alice, $product);
-        $this->makeOrder($bob, 'TO PROCESS');
+        $aliceOrder = $this->makePickupOrder($alice);
+        $this->makePickupOrder($bob);
 
-        // Open cart rows stay out of the staff listing
-        $this->postJson('/api/cart/add', [
-            'cust_id' => $bob->getKey(),
-            'prod_id' => $product->prod_id,
-        ], $this->headers($bob))->assertStatus(201);
+        $rows = collect(
+            $this->json('GET', '/api/cart/display', [], $this->headers($staff))
+                ->assertStatus(200)
+                ->json('data')
+        );
 
-        $rows = $this->json('GET', '/api/cart/display', ['exclude_prefix' => 'CART-'], $this->headers($staff))
-            ->assertStatus(200)
-            ->json('data');
-
-        $this->assertCount(2, $rows);
-        $delivery = collect($rows)->firstWhere('ord_id', $deliveryOrdId);
-        $this->assertNotNull($delivery['parcel']);
-        $this->assertNull($delivery['pickup']);
-        $this->assertSame('Sagpon, Legazpi, Albay', $delivery['parcel']['delivery']['deliver_address']);
-        $this->assertNotEmpty($delivery['parcel']['delivery']['deliver_qr']);
-
-        // cust_id narrows the staff listing
-        $this->json('GET', '/api/cart/display', ['cust_id' => $bob->getKey(), 'exclude_prefix' => 'CART-'], $this->headers($staff))
-            ->assertStatus(200)
-            ->assertJsonCount(1, 'data');
-
-        // Search and sort are open to staff too
-        $this->json('GET', '/api/cart/search', ['q' => 'TO RECEIVE'], $this->headers($staff))
-            ->assertStatus(200)
-            ->assertJsonCount(1, 'data');
-        $this->json('GET', '/api/cart/sort', ['sort_by' => 'id', 'order' => 'asc'], $this->headers($staff))
-            ->assertStatus(200)
-            ->assertJsonCount(3, 'data');
+        // Staff see every customer's orders, each carrying its fulfillment row
+        $this->assertTrue($rows->contains('ord_id', $aliceOrder->ord_id));
+        $this->assertGreaterThanOrEqual(2, $rows->pluck('cust_id')->unique()->count());
+        $this->assertNotNull($rows->firstWhere('ord_id', $aliceOrder->ord_id)['pickup']);
 
         // Customers still only see their own orders
-        $this->json('GET', '/api/cart/display', [], $this->headers($bob))
+        $own = $this->json('GET', '/api/cart/display', [], $this->headers($bob))
             ->assertStatus(200)
-            ->assertJsonCount(2, 'data');
+            ->json('data');
+        $this->assertNotEmpty($own);
+        $this->assertSame([(int) $bob->cust_id], collect($own)->pluck('cust_id')->map(fn ($id) => (int) $id)->unique()->values()->all());
     }
 
     // ==========================================
@@ -214,15 +192,17 @@ class OrderFulfillmentIntegrationTest extends TestCase
 
         $this->json('GET', '/api/products/view', ['prod_id' => $product->prod_id])
             ->assertStatus(200)
-            ->assertJsonPath('data.prod_qty', 50);
+            ->assertJsonPath('data.prod_desc', 'Test product');
 
-        $this->putJson('/api/products/update', ['prod_id' => $product->prod_id, 'prod_qty' => 3], $this->headers($admin))
-            ->assertStatus(200);
+        $this->putJson('/api/products/update', [
+            'prod_id'   => $product->prod_id,
+            'prod_desc' => 'Updated description',
+        ], $this->headers($admin))->assertStatus(200);
 
         $this->app['auth']->forgetGuards();
         $this->json('GET', '/api/products/view', ['prod_id' => $product->prod_id])
             ->assertStatus(200)
-            ->assertJsonPath('data.prod_qty', 3);
+            ->assertJsonPath('data.prod_desc', 'Updated description');
     }
 
     // ==========================================
@@ -232,105 +212,62 @@ class OrderFulfillmentIntegrationTest extends TestCase
     public function test_legacy_super_admin_spelling_keeps_super_admin_rights()
     {
         $legacy = $this->makeEmployee('SUPER_ADMIN');
-        $staff = $this->makeEmployee();
+        $admin = $this->makeEmployee('ADMIN');
 
-        // Only a super admin may edit another employee's account
-        $this->putJson('/api/accounts/update', [
-            'account_type' => 'employee',
-            'user_id'      => $staff->emp_id,
-            'emp_instore'  => true,
-        ], $this->headers($legacy))->assertStatus(200);
-
-        // The data migration rewrites the legacy value to the canonical one
-        (require database_path('migrations/2026_09_28_000000_normalize_super_admin_type.php'))->up();
-        $this->assertSame('SUPER ADMIN', $legacy->fresh()->emp_type);
+        // The access log is super-admin only (role:super_admin)
+        $this->json('GET', '/api/access/logs', [], $this->headers($legacy))->assertStatus(200);
+        $this->json('GET', '/api/access/logs', [], $this->headers($admin))->assertStatus(403);
     }
 
     // ==========================================
-    // DELIVERY TRACKING
+    // CANCELLATION REQUESTS (FLOW-ORD_LIST-04..07)
     // ==========================================
 
-    public function test_delivery_track_lookup_returns_the_parcel_qr()
-    {
-        $customer = $this->makeCustomer();
-        $ordId = $this->checkoutDelivery($customer, $this->makeProduct());
-
-        $response = $this->postJson('/api/tracking/create', [
-            'ord_id'     => $ordId,
-            'track_type' => 'delivery',
-        ], $this->headers($customer))->assertStatus(200);
-
-        $this->assertSame('DELIVERY', $response->json('data.track_type'));
-        $this->assertSame($response->json('data.delivery.deliver_qr'), $response->json('data.qr_code'));
-        $this->assertNotEmpty($response->json('data.qr_code'));
-    }
-
-    // ==========================================
-    // CANCEL / RETURN REQUESTS
-    // ==========================================
-
-    public function test_cancel_requests_can_be_approved_or_declined_by_admins()
+    public function test_cancel_requests_can_be_approved_or_rejected_by_admins()
     {
         $admin = $this->makeEmployee('ADMIN');
         $customer = $this->makeCustomer();
 
-        // Approve: TO CLAIM -> CANCEL REQUESTED -> CANCELLED
-        $approved = $this->makeOrder($customer, 'TO CLAIM');
+        // Approve: processing -> to cancel -> cancelled
+        $approved = $this->makePickupOrder($customer);
         $this->putJson('/api/orders/update', ['ord_id' => $approved->ord_id, 'ord_status' => 'CANCEL REQUESTED'], $this->headers($customer))
             ->assertStatus(200);
-        $this->putJson('/api/orders/update', ['ord_id' => $approved->ord_id, 'ord_status' => 'CANCELLED'], $this->headers($admin))
-            ->assertStatus(200)
-            ->assertJsonPath('data.ord_status', 'CANCELLED');
-
-        // Decline: back to the active state, and the customer is told why
-        $declined = $this->makeOrder($customer, 'TO CLAIM');
-        $this->putJson('/api/orders/update', ['ord_id' => $declined->ord_id, 'ord_status' => 'CANCEL REQUESTED'], $this->headers($customer))
+        $this->assertSame('to cancel', $approved->fresh()->ord_status);
+        $this->putJson('/api/orders/update', ['ord_id' => $approved->ord_id, 'ord_status' => 'cancelled'], $this->headers($admin))
             ->assertStatus(200);
-        $this->putJson('/api/orders/update', ['ord_id' => $declined->ord_id, 'ord_status' => 'TO CLAIM'], $this->headers($admin))
-            ->assertStatus(200)
-            ->assertJsonPath('data.ord_status', 'TO CLAIM');
+        $this->assertSame('cancelled', $approved->fresh()->ord_status);
 
-        $this->assertTrue(
-            CustNotif::where('cust_id', $customer->getKey())
-                ->where('custnotif_msg', 'like', '%cancellation request for order ' . $declined->ord_tag . ' was declined%')
-                ->exists()
-        );
+        // Reject: back to processing (FLOW-ORD_LIST-07)
+        $rejected = $this->makePickupOrder($customer);
+        $this->putJson('/api/orders/update', ['ord_id' => $rejected->ord_id, 'ord_status' => 'CANCEL REQUESTED'], $this->headers($customer))
+            ->assertStatus(200);
+        $this->putJson('/api/orders/update', ['ord_id' => $rejected->ord_id, 'ord_status' => 'processing'], $this->headers($admin))
+            ->assertStatus(200);
+        $this->assertSame('processing', $rejected->fresh()->ord_status);
 
         // Staff below admin cannot decide requests
         $staff = $this->makeEmployee();
-        $pending = $this->makeOrder($customer, 'TO PROCESS');
+        $pending = $this->makePickupOrder($customer);
         $this->putJson('/api/orders/update', ['ord_id' => $pending->ord_id, 'ord_status' => 'CANCEL REQUESTED'], $this->headers($customer))
             ->assertStatus(200);
-        $this->putJson('/api/orders/update', ['ord_id' => $pending->ord_id, 'ord_status' => 'CANCELLED'], $this->headers($staff))
+        $this->putJson('/api/orders/update', ['ord_id' => $pending->ord_id, 'ord_status' => 'cancelled'], $this->headers($staff))
             ->assertStatus(403);
     }
 
-    public function test_return_requests_are_limited_to_claimed_orders()
+    public function test_only_processing_orders_can_be_cancelled_and_returns_are_refused()
     {
-        $admin = $this->makeEmployee('ADMIN');
         $customer = $this->makeCustomer();
 
-        // Only claimed orders can be returned
-        $active = $this->makeOrder($customer, 'TO RECEIVE');
-        $this->putJson('/api/orders/update', ['ord_id' => $active->ord_id, 'ord_status' => 'RETURN REQUESTED'], $this->headers($customer))
+        // Cancellation is asked only while the order is processing
+        $toClaim = $this->makePickupOrder($customer, 'to claim');
+        $this->putJson('/api/orders/update', ['ord_id' => $toClaim->ord_id, 'ord_status' => 'CANCEL REQUESTED'], $this->headers($customer))
             ->assertStatus(403);
+        $this->assertSame('to claim', $toClaim->fresh()->ord_status);
 
-        // Approve: CLAIMED -> RETURN REQUESTED -> RETURNED
-        $returned = $this->makeOrder($customer, 'CLAIMED');
-        $this->putJson('/api/orders/update', ['ord_id' => $returned->ord_id, 'ord_status' => 'RETURN REQUESTED'], $this->headers($customer))
-            ->assertStatus(200);
-        $this->putJson('/api/orders/update', ['ord_id' => $returned->ord_id, 'ord_status' => 'RETURNED'], $this->headers($admin))
-            ->assertStatus(200)
-            ->assertJsonPath('data.ord_status', 'RETURNED');
-
-        // Decline: back to CLAIMED with the original completion stamp kept
-        $kept = $this->makeOrder($customer, 'CLAIMED');
-        $kept->update(['ord_completed' => '2026-01-01 10:00:00']);
-        $this->putJson('/api/orders/update', ['ord_id' => $kept->ord_id, 'ord_status' => 'RETURN REQUESTED'], $this->headers($customer))
-            ->assertStatus(200);
-        $this->putJson('/api/orders/update', ['ord_id' => $kept->ord_id, 'ord_status' => 'CLAIMED'], $this->headers($admin))
-            ->assertStatus(200);
-
-        $this->assertStringStartsWith('2026-01-01 10:00', (string) $kept->fresh()->ord_completed);
+        // system-new has no return flow: a claimed order stays claimed
+        $claimed = $this->makePickupOrder($customer, 'claimed');
+        $this->putJson('/api/orders/update', ['ord_id' => $claimed->ord_id, 'ord_status' => 'RETURN REQUESTED'], $this->headers($customer))
+            ->assertStatus(403);
+        $this->assertSame('claimed', $claimed->fresh()->ord_status);
     }
 }

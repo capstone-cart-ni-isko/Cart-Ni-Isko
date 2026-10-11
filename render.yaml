@@ -44,6 +44,20 @@ services:
         value: require
       - key: DB_PERSISTENT
         value: "true"
+      # System rule 71 (the two portals are separate) AND ISO 25010
+      # Interoperability: the browser only sends cross-origin requests to an
+      # API that names the origin it came from. Without this the middleware
+      # falls back to the localhost dev pair and EVERY call from the deployed
+      # PWA and web build is refused by CORS, however healthy the API is.
+      # The Vercel preview domain belongs on the same list when it is known.
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://cartniisko.com,https://www.cartniisko.com
+      # REQ-CHECKOUT-03: absolute origin of the SPA - where PayMongo sends
+      # the browser back after the hosted checkout. Frontend, not API.
+      - key: FRONTEND_URL
+        value: https://cartniisko.com
+      - key: APP_URL
+        value: https://cart-ni-isko-api.onrender.com
       - key: CACHE_STORE
         value: file
       - key: SESSION_DRIVER

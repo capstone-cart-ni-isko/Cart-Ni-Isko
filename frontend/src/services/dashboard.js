@@ -128,8 +128,34 @@ export function mapOrderRow(row) {
   const customer = row.customer || null
   const custId = row.cust_id ?? null
   const tag = String(row.ord_tag || `ORD-${row.ord_id}`)
-  const rawStatus = String(row.ord_status || '').trim().toUpperCase()
-  const isPos = custId === null || custId === undefined || tag.toUpperCase().startsWith('POS-')
+  // Backend stores the DOMAIN 27 spec literals (`processing`, `to cancel`,
+  // …); the admin tables speak the display vocabulary. Mirrors the customer
+  // Orders.jsx STATUS_DISPLAY_MAP exactly, so a cancellation request shows as
+  // 'CANCEL REQUESTED' and the Approve/Reject buttons (FLOW-MANAGE_PRE-05)
+  // render for it.
+  const STATUS_DISPLAY_MAP = {
+    processing: 'TO PROCESS',
+    'to cancel': 'CANCEL REQUESTED',
+    'to claim': 'TO CLAIM',
+    delivering: 'TO RECEIVE',
+    'to receive': 'TO RECEIVE',
+    claimed: 'CLAIMED',
+    received: 'RECEIVED',
+    unclaimed: 'UNCLAIMED',
+    cancelled: 'CANCELLED',
+    returned: 'RETURNED',
+    refunded: 'REFUNDED',
+  }
+  const storedStatus = String(row.ord_status || '').trim()
+  const rawStatus = (
+    STATUS_DISPLAY_MAP[storedStatus.toLowerCase()] || storedStatus.toUpperCase()
+  ).trim()
+  const isPos =
+    row.is_walk_in === true ||
+    row.is_preorder === false ||
+    custId === null ||
+    custId === undefined ||
+    tag.toUpperCase().startsWith('POS-')
   const preorder = /PRE/i.test(tag) || items.some((item) => item.preorder)
   // Fulfillment comes from the pickup / parcel record made at checkout; the
   // status guess only covers rows fetched before those relations existed.
@@ -200,8 +226,20 @@ const RANGE_WINDOWS = {
  * (Week/'7D' = 7 days, Month/'30D' = 30 days) so the charts always have data.
  * Returns { from, duration } so a caller can also cut the *previous* window.
  */
-export function rangeBounds(range = 'Today') {
+export function rangeBounds(range = 'Today', custom = null) {
   const now = new Date()
+  // FLOW-ANALYTICS-06: the custom preset is an explicit from/to window rather
+  // than a fixed span, so it resolves before the preset table below. Callers
+  // that do not pass one are unaffected.
+  if (
+    range === 'Custom' &&
+    custom &&
+    Number.isFinite(custom.from) &&
+    Number.isFinite(custom.to) &&
+    custom.to > custom.from
+  ) {
+    return { from: custom.from, duration: custom.to - custom.from }
+  }
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
   const duration =
     range === 'Today' ? Math.max(now.getTime() - todayStart, 1) : (RANGE_WINDOWS[range] ?? 1) * MS_DAY
@@ -218,8 +256,8 @@ function rowTime(row) {
  * Keep orders created inside the selected window.
  * Rows without a parseable date are dropped from ranged views.
  */
-export function filterOrdersByRange(rows = [], range = 'Today') {
-  return filterByRange(rows, range, (row) => rowTime(row))
+export function filterOrdersByRange(rows = [], range = 'Today', custom = null) {
+  return filterByRange(rows, range, (row) => rowTime(row), custom)
 }
 
 /**
@@ -227,8 +265,8 @@ export function filterOrdersByRange(rows = [], range = 'Today') {
  * window. Used for every dashboard panel, so sales, bookings, attendance and
  * fulfillment all answer to the same date range.
  */
-export function filterByRange(rows = [], range = 'Today', getTime = rowTime) {
-  const { from, duration } = rangeBounds(range)
+export function filterByRange(rows = [], range = 'Today', getTime = rowTime, custom = null) {
+  const { from, duration } = rangeBounds(range, custom)
   return rows.filter((row) => {
     const time = getTime(row)
     return time !== null && time !== undefined && time >= from && time < from + duration
@@ -272,8 +310,8 @@ export function buildBookingSummary(appointments = [], range = 'Today', slots = 
  * '+14% vs last period' style KPI trend: the selected window compared with the
  * window of the same length immediately before it.
  */
-export function buildTrendLabel(rows = [], range = 'Today', accessor = (row) => row.total) {
-  const { from, duration } = rangeBounds(range)
+export function buildTrendLabel(rows = [], range = 'Today', accessor = (row) => row.total, custom = null) {
+  const { from, duration } = rangeBounds(range, custom)
   let current = 0
   let previous = 0
   rows.forEach((row) => {
@@ -361,10 +399,29 @@ export function countByStatus(rows = [], status) {
  * Sales trend buckets for the Sales Overview chart: { date, online, pos, total }.
  * Today -> hourly inside operating hours; Week/'7D' -> daily; Month/'30D' -> 5-day buckets.
  */
-export function buildSalesTrend(rows = [], range = 'Today') {
+export function buildSalesTrend(rows = [], range = 'Today', custom = null) {
   const buckets = []
 
-  if (range === 'Today') {
+  // FLOW-ANALYTICS-06: a custom window buckets by day while it stays short
+  // enough to read, and by 5-day chunks past two weeks - the same rule the
+  // 30-day preset uses.
+  if (range === 'Custom' && custom) {
+    const spanDays = Math.max(1, Math.ceil(custom.duration / MS_DAY))
+    const start = new Date(custom.from)
+    const step = spanDays > 14 ? 5 : 1
+    for (let i = 0; i < spanDays; i += step) {
+      const chunkStart = new Date(start.getTime() + i * MS_DAY)
+      const chunkEnd = new Date(start.getTime() + Math.min(i + step, spanDays) * MS_DAY)
+      buckets.push({
+        key: `c${i}`,
+        label: chunkStart.toLocaleDateString(
+          'en-US',
+          step === 1 ? { weekday: 'short' } : { month: 'short', day: 'numeric' }
+        ),
+        match: (date) => date >= chunkStart && date < chunkEnd,
+      })
+    }
+  } else if (range === 'Today') {
     for (let hour = OPEN_HOUR; hour < CLOSE_HOUR; hour += 1) {
       buckets.push({
         key: `h${hour}`,
@@ -401,16 +458,22 @@ export function buildSalesTrend(rows = [], range = 'Today') {
     }
   }
 
+  // FLOW-ANALYTICS-03: the trend splits by order type. The three buckets are
+  // mutually exclusive and add back up to the total, so the stacked bars and
+  // the Total line always agree.
   return buckets.map((bucket) => {
+    let walkin = 0
+    let preorder = 0
     let online = 0
-    let pos = 0
     rows.forEach((row) => {
       const date = parseDate(row.createdAt)
       if (!date || !bucket.match(date)) return
-      if (row.isPos) pos += Number(row.total) || 0
-      else online += Number(row.total) || 0
+      const value = Number(row.total) || 0
+      if (row.isPos) walkin += value
+      else if (row.preorder) preorder += value
+      else online += value
     })
-    return { date: bucket.label, online, pos, total: online + pos }
+    return { date: bucket.label, walkin, preorder, online, total: walkin + preorder + online }
   })
 }
 
@@ -663,8 +726,8 @@ export async function fetchDashboardSnapshot(date = new Date()) {
   const accounts = normalizeAccounts(accountsPayload)
 
   return {
-    orders: (orderRows || []).filter((row) => !isCartRow(row)).map(mapOrderRow).filter(Boolean),
-    cartRows: ((cartPayload && cartPayload.data) || []).filter((row) => isCartRow(row)),
+    orders: (Array.isArray(orderRows) ? orderRows : []).filter((row) => !isCartRow(row)).map(mapOrderRow).filter(Boolean),
+    cartRows: (Array.isArray(cartPayload?.data) ? cartPayload.data : []).filter((row) => isCartRow(row)),
     appointments: appointments || [],
     accounts,
     products: products || [],

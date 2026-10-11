@@ -44,7 +44,7 @@ function ProductDetail() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
-  }, [id])
+  }, [id, reloadKey])
 
   useEffect(() => {
     let cancelled = false
@@ -72,7 +72,10 @@ function ProductDetail() {
         if (!cancelled) {
           setProduct(null)
           setRelatedProducts([])
-          setLoadError(err?.message || "Can't reach the store server. Please try again.")
+          // A 404 is a missing product (the "not found" view below), not an outage.
+          if (err?.status !== 404) {
+            setLoadError(err?.message || "Can't reach the store server. Please try again.")
+          }
         }
       })
       .finally(() => {
@@ -82,7 +85,7 @@ function ProductDetail() {
     return () => {
       cancelled = true
     }
-  }, [id, reloadKey])
+  }, [id])
 
   if (loading) {
     return (
@@ -152,13 +155,26 @@ function ProductDetail() {
     setActiveImage(currentGallery[nextIndex])
   }
 
-  // 2. Stock: one number per product (prod_qty), shared by every size/colour -
-  // the same figure the admin edits and checkout deducts.
-  const availableStock = product.preOrder
-    ? (product.preOrderInfo?.maxPreOrderQty || 10)
-    : Number(product.qty) || 0
+  // 2. Stock / Inventory calculation per variant
+  const calculateStock = (colorObj, sizeVal) => {
+    if (product.stockMatrix && colorObj?.name) {
+      const colorStock = product.stockMatrix[colorObj.name]
+      if (colorStock) {
+        if (sizeVal && colorStock[sizeVal] !== undefined) {
+          return colorStock[sizeVal]
+        }
+        const values = Object.values(colorStock)
+        if (values.length > 0) return values[0]
+      }
+    }
+    return product.preOrder
+      ? (product.preOrderInfo?.maxPreOrderQty || 10)
+      : (product.qty ?? 15)
+  }
+
+  const availableStock = calculateStock(selectedColor, selectedSize)
   const isOutOfStock = !product.preOrder && availableStock === 0
-  const isLowStock = !product.preOrder && availableStock > 0 && availableStock <= 5
+  const isLowStock = !product.preOrder && availableStock > 0 && availableStock <= 3
 
   // Color selection handler
   const handleSelectColor = (color) => {
@@ -167,11 +183,19 @@ function ProductDetail() {
     if (newImage) {
       setActiveImage(newImage)
     }
+    const newStock = calculateStock(color, selectedSize)
+    if (!product.preOrder && qty > newStock) {
+      setQty(Math.max(1, newStock))
+    }
   }
 
   // Size selection handler
   const handleSelectSize = (sz) => {
     setSelectedSize(sz)
+    const newStock = calculateStock(selectedColor, sz)
+    if (!product.preOrder && qty > newStock) {
+      setQty(Math.max(1, newStock))
+    }
   }
 
   const handleAddToCart = () => {
@@ -494,8 +518,12 @@ function ProductDetail() {
               product.sizes[0] !== 'One Size' && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
+                    {/* A product can variate along several axes at the same
+                        time (colour and size, colour and material), so the
+                        heading names the axis the product actually has instead
+                        of always saying "Size". */}
                     <h3 className="text-xs font-bold text-gray-700">
-                      Select Size
+                      Select {product.secondAxis || 'Size'}
                     </h3>
 
                     {/* Size Guide Button */}
@@ -516,7 +544,9 @@ function ProductDetail() {
                   <div className="flex gap-2.5 flex-wrap">
                     {product.sizes.map((sz) => {
                       const isSelected = selectedSize === sz
-                      const isSizeOutOfStock = isOutOfStock
+                      const sizeStock =
+                        product.stockMatrix?.[selectedColor?.name]?.[sz] ?? 10
+                      const isSizeOutOfStock = !product.preOrder && sizeStock === 0
 
                       return (
                         <button

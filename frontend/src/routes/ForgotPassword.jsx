@@ -10,28 +10,41 @@ function ForgotPassword() {
   const navigate = useNavigate()
   const { showToast } = useToast()
 
-  const [step, setStep] = useState(0) // 0: Phone, 1: OTP, 2: Reset
-  const [phone, setPhone] = useState('')
+  const [step, setStep] = useState(0) // 0: Identifier, 1: OTP, 2: Reset
+  const [identifier, setIdentifier] = useState('')
   const [otp, setOtp] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [timer, setTimer] = useState(59)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [userType, setUserType] = useState('customer')
 
   useEffect(() => {
-    if (step !== 1 || timer <= 0) return
-    const interval = setInterval(() => {
-      setTimer((t) => t - 1)
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [step, timer])
+    const saved = localStorage.getItem('isko_forgot_type')
+    if (saved === 'customer' || saved === 'employee') {
+      setUserType(saved)
+    }
+  }, [])
 
-  const handlePhoneSubmit = async (e) => {
+  useEffect(() => {
+    try {
+      localStorage.setItem('isko_forgot_type', userType)
+    } catch {
+      // Storage can be unavailable (private mode, quota) - the flow still works.
+    }
+  }, [userType])
+
+  const handleIdentifierSubmit = async (e) => {
     e.preventDefault()
-    if (phone.trim().length < 10) return
+    const identifierVal = identifier.trim()
+    if (userType === 'customer') {
+      if (identifierVal.length < 10) return
+    } else {
+      if (!identifierVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifierVal)) return
+    }
     setIsSubmitting(true)
-    const { error } = await recoverCredentials(phone.trim(), 'customer')
+    const { error } = await recoverCredentials(identifierVal, userType)
     setIsSubmitting(false)
     if (error) {
       showToast(error, 'error')
@@ -40,13 +53,12 @@ function ForgotPassword() {
     setStep(1)
     setTimer(59)
     showToast('Verification code sent!')
+    localStorage.setItem('isko_forgot_type', userType)
   }
 
   const handleOtpSubmit = (e) => {
     e.preventDefault()
     if (otp.length < 4) return
-    // No OTP verification endpoint exists yet - the code cannot be checked
-    // server-side, so the flow continues to the password step (gap reported).
     setStep(2)
     showToast('Code verified. Set your new password.')
   }
@@ -57,7 +69,7 @@ function ForgotPassword() {
 
     setIsSubmitting(true)
     const { error } = await updateCredentials({
-      identifier: phone.trim(),
+      identifier: identifier.trim(),
       password,
     })
     setIsSubmitting(false)
@@ -99,38 +111,69 @@ function ForgotPassword() {
       <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-100 shadow-xl p-8 flex flex-col justify-between min-h-[580px] z-10 animate-fade-in">
         <div>
           {/* Header Row */}
-          <div className="flex items-center mb-8">
+          <div className="flex items-center mb-4">
             <BackButton onClick={prevStep} label="Back" />
+            <div className="ml-4">
+              <div className="flex gap-2">
+                <button
+                  key="customer"
+                  type="button"
+                  onClick={() => setUserType('customer')}
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
+                    userType === 'customer'
+                      ? 'bg-brand-orange text-white'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Customer
+                </button>
+                <button
+                  key="employee"
+                  type="button"
+                  onClick={() => setUserType('employee')}
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
+                    userType === 'employee'
+                      ? 'bg-brand-orange text-white'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Employee
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Select account type</p>
+            </div>
           </div>
 
           {step === 0 && (
             <div className="animate-fade-in">
               <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Confirm it's you</h1>
               <p className="text-sm text-gray-500 font-semibold mb-8 leading-relaxed">
-                Enter the phone number associated with your account.
+                {userType === 'customer'
+                  ? 'Enter the phone number associated with your account.'
+                  : 'Enter your university email address.'}
               </p>
 
-              <form onSubmit={handlePhoneSubmit} className="space-y-6">
+              <form onSubmit={handleIdentifierSubmit} className="space-y-6">
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                    Phone Number
+                    {userType === 'customer' ? 'Phone Number' : 'Email Address'}
                   </label>
                   <input
                     type="tel"
-                    placeholder="Enter phone number"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder={userType === 'customer' ? 'Enter phone number' : 'you@bicol-u.edu.ph'}
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-all"
                   />
-                </div>
 
-                <Button
-                  type="submit"
-                  disabled={phone.trim().length < 10 || isSubmitting}
-                  className="w-full h-12 rounded-full font-bold shadow-md"
-                >
-                  {isSubmitting ? 'Sending...' : 'Continue'}
-                </Button>
+                  <Button
+                    type="submit"
+                    disabled={identifier.trim().length < (userType === 'customer' ? 10 : undefined) || isSubmitting}
+                    className="w-full h-12 rounded-full font-bold shadow-md"
+                  >
+                    {isSubmitting ? 'Sending...' : 'Continue'}
+                  </Button>
+                </div>
               </form>
             </div>
           )}
@@ -139,7 +182,7 @@ function ForgotPassword() {
             <div className="animate-fade-in">
               <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Verify Code</h1>
               <p className="text-sm text-gray-500 font-semibold mb-8 leading-relaxed">
-                Enter the 4-digit code sent to <span className="font-semibold text-gray-700">{phone}</span>
+                Enter the 4-digit code sent to <span className="font-semibold text-gray-700">{identifier}</span>
               </p>
 
               <form onSubmit={handleOtpSubmit} className="space-y-6">
@@ -178,7 +221,7 @@ function ForgotPassword() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPass((s) => !s)}
+                      onClick={() => setShowPass(!showPass)}
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange transition-colors"
                     >
                       {showPass ? 'Hide' : 'Show'}
@@ -189,24 +232,24 @@ function ForgotPassword() {
                       Your password must be at least 8 characters.
                     </p>
                   )}
-                </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
-                    Confirm New Password
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="Re-enter password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-all"
-                  />
-                  {confirmPassword.length > 0 && !passwordsMatch && (
-                    <p className="text-red-500 text-xs mt-1 font-semibold">
-                      Passwords do not match.
-                    </p>
-                  )}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Re-enter password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full h-12 px-4 border border-gray-200 rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-all"
+                    />
+                    {confirmPassword.length > 0 && !passwordsMatch && (
+                      <p className="text-red-500 text-xs mt-1 font-semibold">
+                        Passwords do not match.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <Button
@@ -219,30 +262,30 @@ function ForgotPassword() {
               </form>
             </div>
           )}
+
+          {step === 1 && (
+            <div className="text-center pt-6">
+              {timer > 0 ? (
+                <p className="text-sm text-gray-400 font-semibold">
+                  Resend code in <span className="text-brand-orange font-bold">{formatTime(timer)}</span>
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500 font-semibold">
+                  Didn't receive a code?{' '}
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    className="text-brand-orange font-black hover:underline"
+                  >
+                    Resend
+                  </button>
+                </p>
+              )}
+            </div>
+          )}
+
+          <div />
         </div>
-
-        {step === 1 && (
-          <div className="text-center pt-6">
-            {timer > 0 ? (
-              <p className="text-sm text-gray-400 font-semibold">
-                Resend code in <span className="text-brand-orange font-bold">{formatTime(timer)}</span>
-              </p>
-            ) : (
-              <p className="text-sm text-gray-500 font-semibold">
-                Didn't receive a code?{' '}
-                <button
-                  type="button"
-                  onClick={handleResend}
-                  className="text-brand-orange font-black hover:underline"
-                >
-                  Resend
-                </button>
-              </p>
-            )}
-          </div>
-        )}
-
-        <div />
       </div>
     </div>
   )

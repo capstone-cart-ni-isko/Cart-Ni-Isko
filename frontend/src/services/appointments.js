@@ -1,8 +1,9 @@
 import { apiGet, apiPost, apiPut, cacheRead, cacheWrite } from './api.js'
 
-/** Timeslot geometry from the SRS (REQ-AB-01/02, REQ-SC-02). */
+/** Timeslot geometry (system-new D8/D21/D22): pickup and visit slots are both
+ *  10 minutes; a pickup block holds up to 5 open bookings, a visit exactly 1. */
 export const SLOT_RULES = {
-  CLAIM: { minutes: 30, capacity: 10 },
+  CLAIM: { minutes: 10, capacity: 5 },
   VISIT: { minutes: 10, capacity: 1 },
 }
 
@@ -15,7 +16,7 @@ export const APPOINT_TYPE = { VISIT: 'VISIT', CLAIM: 'CLAIM' }
 /** GET /appoint/display - own appointments, or all for staff (REQ-SC-01). */
 export async function fetchAppointments(params = {}) {
   const data = await apiGet('/appoint/display', params)
-  return data.data || []
+  return Array.isArray(data.data) ? data.data : []
 }
 
 /* The ribbon opens the list often, so the last answer for each

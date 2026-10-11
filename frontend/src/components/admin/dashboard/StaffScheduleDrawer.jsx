@@ -10,7 +10,7 @@ function localDate(date = new Date()) {
 
 const titleCase = (value) => String(value || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
 
-/* Today's full shift list (GET /duty/display), opened from the duty widget. */
+/* Today's full shift list (GET /shifts), opened from the duty widget. */
 export default function StaffScheduleDrawer({ isOpen, onClose }) {
   const [shifts, setShifts] = useState([])
   const [loading, setLoading] = useState(false)
@@ -42,7 +42,7 @@ export default function StaffScheduleDrawer({ isOpen, onClose }) {
       onClose={onClose}
       title="Today’s schedule"
       subtitle={new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-      footer={<Link to="/admin/schedule" className={BTN_SECONDARY}>Open full schedule</Link>}
+      footer={<Link to="/admin/schedules" className={BTN_SECONDARY}>Open full schedule</Link>}
     >
       {loading && <p className="text-xs text-slate-500">Loading…</p>}
       {error && <p className="text-xs text-rose-600">{error}</p>}

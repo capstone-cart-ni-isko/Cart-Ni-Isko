@@ -15,7 +15,15 @@ export function closeTrack(trackId, trackType) {
   return apiPut('/tracking/close', { track_id: trackId, track_type: trackType })
 }
 
-/** POST /tracking/scan - QR verification (SRS QR-code Verification). */
+/**
+ * POST /tracking/scan - QR verification (SRS QR-code Verification).
+ *
+ * Body: { code, scanned_by } where `code` is whatever the camera read -
+ * a parcel's `deliver_qr` (FLOW-ORD_CLAIM-07), an appointment's `appoint_qr`
+ * or the signed CNI-ORDER-<id>.<hmac> payload (FLOW-ORD_CLAIM-01) - and
+ * `scanned_by` labels the scanner ('customer' | 'employee'). The answer
+ * carries { success, message, data } so callers can surface it verbatim.
+ */
 export function scanQr(code, scannedBy = '') {
   return apiPost('/tracking/scan', { code, scanned_by: scannedBy })
 }

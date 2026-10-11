@@ -266,7 +266,7 @@ export default function AdminDashboard() {
               title="Bookings"
               meta={`${bookings.total} in range`}
               actionLabel="Schedule"
-              actionTo="/admin/schedule"
+              actionTo="/admin/schedules"
               className="shrink-0"
               bodyClassName="space-y-2.5"
             >

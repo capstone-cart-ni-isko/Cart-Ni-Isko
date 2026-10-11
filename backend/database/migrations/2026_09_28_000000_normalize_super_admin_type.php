@@ -4,24 +4,25 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Normalize super-admin employee types to the canonical "SUPER ADMIN".
+ * Store the super admin type the way the rest of the app spells it.
  *
- * Earlier seeds stored "SUPER_ADMIN" (underscore), which the role checks,
- * validators and admin notifications (all written against "SUPER ADMIN")
- * did not recognise, so the account was treated as a plain admin.
+ * seed_super_admin writes 'SUPER_ADMIN', but every other emp_type value in the
+ * schema uses a space ('SUPER ADMIN', 'ADMIN', 'STAFF'), so the underscore
+ * form is normalized here.
  */
 return new class extends Migration
 {
     public function up(): void
     {
         DB::table('employee')
-            ->whereRaw("UPPER(REPLACE(emp_type, '_', ' ')) = 'SUPER ADMIN'")
-            ->where('emp_type', '!=', 'SUPER ADMIN')
+            ->where('emp_type', 'SUPER_ADMIN')
             ->update(['emp_type' => 'SUPER ADMIN']);
     }
 
     public function down(): void
     {
-        // Irreversible data fix: "SUPER ADMIN" is the canonical value.
+        DB::table('employee')
+            ->where('emp_type', 'SUPER ADMIN')
+            ->update(['emp_type' => 'SUPER_ADMIN']);
     }
 };

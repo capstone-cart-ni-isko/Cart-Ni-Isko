@@ -1,0 +1,819 @@
+CART NI ISKO
+A web-based, mobile-accessible system for Tindahan ni Isko, the official merchandise of the Bicol University University Student Council (BU USC) in Legazpi City, Albay.
+BUSINESS RULES
+GENERAL
+1. The store is named "Tindahan ni Isko".
+2. BUeños are categorized as "student", "alumni", or "faculty".
+3. A person is a student if he is currently enrolled at Bicol University.
+4. A person is an alumni if he is formerly enrolled at Bicol University regardless if he graduated or not.
+5. A person is a faculty if he is currently teaching at Bicol University, regardless if he is a student or an alumni.
+APPOINTMENTS
+6. A customer can book zero or more appointments.
+7. Appointments must be categorized as "visit" or "pickup".
+8. An appointment must belong to only one customer.
+9. An appointment must be facilitated by only one employee.
+10. An appointment must not be booked in a timeslot where there is no employee prescheduled.
+11. An appointment timeslot must exactly be 10 minutes long.
+12. A timeslot can have zero to 5 pickup appointments and only 1 visit appointment.
+BAG
+13. A customer can add zero or more products to his bag.
+14. A product must have one or more product variations in the bag.
+15. A product variation must have one or more pieces in the bag.
+CUSTOMERS
+16. The store can have zero or more customers.
+17. Customers are categorized as "BUeños" or "guest".
+18. A guest must not be a "student", "alumni", or "faculty".
+19. A phone number must belong to only one customer.
+20. A customer must have one or more addresses.
+21. A customer can have zero or more backup phone numbers.
+22. A phone number belonging to a customer can be used as a backup phone number by another customer.
+23. A customer can have zero or more backup email addresses.
+24. An email address belonging to a customer can be used as a backup email address by another customer.
+EMPLOYEES
+25. The store must have one or more employees.
+26. An employee must be a student.
+27. A Bicol University email must belong to only one employee.
+28. An employee can have zero or more backup phone numbers.
+29. A phone number belonging to an employee can be used as a backup phone number by another employee.
+30. An employee can have zero or more backup email addresses.
+31. An email address belonging to an employee can be used as a backup email address by another employee.
+32. Employees are categorized as "staff", "admin", or "super admin".
+33. The store must have one or more super admins.
+34. The store can have zero or more admins.
+35. The store can have zero or more staff.
+36. Only super admins can enroll, suspend, or remove an employee.
+37. Only super admins can change the category of an employee.
+38. Only super admins can preschedule and modify the current schedule of an employee.
+39. Only super admins can view the access log of all customers and employees.
+40. Only super admins can change system-wide settings.
+41. Only super admins and admins can add, modify, or disable products in the inventory.
+42. Only super admins and admins can manage preorders.
+43. Only super admins and admins can facilitate booked appointments.
+44. Only super admins and admins can facilitate walk-in orders.
+45. Only super admins and admins can read, approve, and delete reviews.
+46. An employee must be prescheduled for a minimum total of 180 minutes per week.
+ORDERS
+47. A customer can place zero or more orders.
+48. An order must belong to only one customer.
+49. An order must include one or more products.
+50. A product must have one or more product variations in an order.
+51. A product variation must have one or more pieces in an order.
+52. Orders must be categorized as "walk-in" or "preorder".
+53. A preorder must be claimed either by pickup or delivery.
+54. A preorder pickup is both an appointment and an order.
+55. A preorder must be paid only online.
+56. A preorder can still be claimed from the physical store even if the appointment or delivery is over.
+57. A walk-in order must be done, paid, and claimed in the physical store.
+58. A walk-in order must be facilitated by only one employee.
+PRODUCT
+59. A product must have one or more product variations.
+60. A product disabled in the inventory must be hidden in the catalog.
+61. A product tag must belong to only one product, regardless of letter capitalizations.
+62. A product name must belong to only one product, regardless of letter capitalizations.
+WISHLIST
+63. A customer can have zero or more products to his wishlist.
+SYSTEM RULES
+GENERAL
+64. A page must have one or more tabs.
+65. The page ribbon can be seen in different tabs, but not on a different page.
+ERRORS
+66. Input validation must be realtime.
+67. Invalid input messages must show in real time below or beside a form field.
+NAVIGATION
+68. There must be a working "back" button or "exit" button wherever necessary in the system.
+69. If using a "back" button, it must be at the top left.
+70. If using an "exit" button, it must be at the top right.
+STRUCTURE
+71. The customer portal and the admin portal must be separate.
+72. The customer portal and the admin portal must both have a ribbon docked at the top.
+73. The "Tindahan ni Isko" logo must be at the left of the ribbon.
+74. The search bar must be at the center of the ribbon.
+75. The horizontal array composed of a maximum of 5 icons must be at the right of the ribbon.
+SCHEMA
+APPOINTMENTS
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_id | int8 | X | X | X | X
+emp_id | int8 | X | X | X | X
+appoint_closed | timestamptz | X | X | / | X
+appoint_created | timestamptz | X | X | X | now()
+appoint_end | timestamptz | X | X | X | X
+appoint_id | int8 | / | / | X | X
+appoint_qr | varchar | X | X | / | X
+appoint_type | varchar | X | X | X | visit
+appoint_start | timestamptz | X | X | X | X
+appoint_status | varchar | X | X | X | upcoming
+
+BAG
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_id | int8 | X | X | X | X
+prodvar_id | int8 | X | X | X | X
+bag_amount | numeric | X | X | X | 0.00
+bag_created | timestamptz | X | X | X | now()
+bag_deleted | timestamptz | X | X | / | X
+bag_id | int8 | / | / | X | X
+bag_placed | bool | X | X | X | false
+bag_qty | int4 | X | X | X | 1
+
+CUSTLOG
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_id | int8 | X | X | X | X
+custlog_access | varchar | X | X | X | view
+custlog_created | timestamptz | X | X | X | now()
+custlog_endpoint | varchar | X | X | X | X
+custlog_id | int8 | / | / | X | X
+
+CUSTNOTIF
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_id | int8 | X | X | X | X
+custnotif_created | timestamptz | X | X | X | now()
+custnotif_id | int8 | / | / | X | X
+custnotif_msg | varchar | X | X | X | X
+custnotif_read | timestamptz | X | X | / | X
+custnotif_type | varchar | X | X | X | priority
+
+CUSTOMER
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_address | varchar | X | X | X | /
+cust_appoint | int4 | X | X | X | 0
+cust_avatar | varchar | X | X | X | X
+cust_backup_answer | varchar | X | X | / | /
+cust_backup_code | varchar | X | X | X | /
+cust_backup_email | varchar | X | X | X | /
+cust_backup_phone | varchar | X | X | X | /
+cust_backup_ques | varchar | X | X | / | /
+cust_bag | int4 | X | X | X | 0
+cust_bday | date | X | X | X | X
+cust_callcode | varchar | X | X | X | +63
+cust_categ | varchar | X | X | / | student
+cust_college | varchar | X | X | / | X
+cust_created | timestamptz | X | X | X | now()
+cust_darkmode | bool | X | X | X | false
+cust_deleted | timestamptz | X | X | / | X
+cust_dept | varchar | X | X | / | X
+cust_email | varchar | X | / | / | X
+cust_givname | varchar | X | X | X | X
+cust_id | int8 | / | / | X | X
+cust_last_logout | timestamptz | X | X | / | X
+cust_login_active | varchar | X | X | / | /
+cust_login_failed | timestamptz | X | X | / | X
+cust_notif_appointremind | int4 | X | X | X | 10
+cust_notif_email | bool | X | X | X | false
+cust_notif_prod | bool | X | X | X | false
+cust_orders | int4 | X | X | X | 0
+cust_password | varchar | X | X | X | X
+cust_phone | varchar | X | / | X | X
+cust_pronoun | varchar | X | X | X | they/them
+cust_surname | varchar | X | X | X | X
+cust_suspended | timestamptz | X | X | / | X
+cust_type | varchar | X | X | X | guest
+cust_unread | int4 | X | X | X | 0
+cust_wishlist | int4 | X | X | X | 0
+
+DELIVERY
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_id | int8 | X | X | X | X
+deliver_address | varchar | X | X | X | X
+deliver_created | timestamptz | X | X | X | now()
+deliver_end | timestamptz | X | X | / | X
+deliver_expect | timestamptz | X | X | X | X
+deliver_id | int8 | / | / | X | X
+deliver_phone | varchar | X | X | X | X
+deliver_qr | varchar | X | X | / | X
+ord_id | int8 | X | X | X | X
+deliver_env | varchar | X | X | X | sandbox
+deliver_recipient | varchar | X | X | / | X
+deliver_lat | numeric | X | X | / | X
+deliver_lng | numeric | X | X | / | X
+deliver_notes | varchar | X | X | / | X
+deliver_service | varchar | X | X | / | X
+deliver_fee_charged | numeric | X | X | / | X
+deliver_fee_actual | numeric | X | X | / | X
+deliver_placed | timestamptz | X | X | / | X
+deliver_pickedup | timestamptz | X | X | / | X
+deliver_completed | timestamptz | X | X | / | X
+deliver_share_link | text | X | X | / | X
+deliver_last_event | timestamptz | X | X | / | X
+
+EMPLOG
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+emp_id | int8 | X | X | X | X
+emplog_access | varchar | X | X | X | view
+emplog_created | timestamptz | X | X | X | now()
+emplog_endpoint | varchar | X | X | X | X
+emplog_id | int8 | / | / | X | X
+
+EMPNOTIF
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+emp_id | int8 | X | X | X | X
+empnotif_created | timestamptz | X | X | X | now()
+empnotif_id | int8 | / | / | X | X
+empnotif_msg | varchar | X | X | X | X
+empnotif_read | timestamptz | X | X | / | X
+empnotif_type | varchar | X | X | X | priority
+
+EMPLOYEE
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+emp_avatar | varchar | X | X | X | X
+emp_backup_answer | varchar | X | X | / | /
+emp_backup_code | varchar | X | X | X | /
+emp_backup_email | varchar | X | X | X | /
+emp_backup_phone | varchar | X | X | X | /
+emp_backup_ques | varchar | X | X | / | /
+emp_callcode | varchar | X | X | X | +63
+emp_categ | varchar | X | X | X | staff
+emp_created | timestamptz | X | X | X | now()
+emp_darkmode | bool | X | X | X | false
+emp_deleted | timestamptz | X | X | / | X
+emp_email | varchar | X | / | X | X
+emp_givname | varchar | X | X | X | X
+emp_id | int8 | / | / | X | X
+emp_last_logout | timestamptz | X | X | / | X
+emp_login_active | varchar | X | X | / | /
+emp_login_failed | timestamptz | X | X | / | X
+emp_notif_appointremind | int4 | X | X | X | 10
+emp_notif_email | bool | X | X | X | false
+emp_password | varchar | X | X | X | X
+emp_phone | varchar | X | / | X | X
+emp_present | bool | X | X | X | true
+emp_surname | varchar | X | X | X | X
+emp_suspended | timestamptz | X | X | / | X
+emp_unread | int4 | X | X | X | 0
+
+ITEMS
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+bag_id | int8 | X | X | X | X
+item_created | timestamptz | X | X | X | now()
+item_id | int8 | / | / | X | X
+ord_id | int8 | X | X | X | X
+
+ORDERS
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_id | int8 | X | X | X | X
+ord_amount | numeric | X | X | X | 0.00
+ord_claiming | varchar | X | X | X | pickup
+ord_created | timestamptz | X | X | X | now()
+ord_id | int8 | / | / | X | X
+ord_status | varchar | X | X | X | processing
+pay_change | numeric | X | X | X | 0.00
+pay_received | numeric | X | X | X | 0.00
+pay_reference | varchar | X | X | / | X
+
+PICKUP
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+appoint_id | int8 | X | X | X | X
+ord_id | int8 | X | X | X | X
+pickup_created | timestamptz | X | X | X | now()
+pickup_id | int8 | / | / | X | X
+
+PRODUCT
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+prod_categ | varchar | X | X | X | others
+prod_created | timestamptz | X | X | X | now()
+prod_deleted | timestamptz | X | X | / | X
+prod_desc | varchar | X | X | / | X
+prod_disabled | timestamptz | X | X | / | X
+prod_id | int8 | / | / | X | X
+prod_name | varchar | X | / | X | X
+prod_price | numeric | X | X | X | 0.00
+prod_rating | numeric | X | X | X | 0.00
+prod_reviews | int4 | X | X | X | 0
+prod_tag | varchar | X | / | X | X
+prod_total_var | int4 | X | X | X | 1
+
+PRODVAR
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+prod_id | int8 | X | X | X | X
+prodvar_created | timestamptz | X | X | X | now()
+prodvar_deleted | timestamptz | X | X | / | X
+prodvar_disabled | timestamptz | X | X | / | X
+prodvar_id | int8 | / | / | X | X
+prodvar_main | bool | X | X | X | false
+prodvar_markup | numeric | X | X | / | 0.00
+prodvar_name | varchar | X | X | X | X
+prodvar_options | varchar | X | X | / | /
+prodvar_pic | varchar | X | / | / | X
+prodvar_preorder | bool | X | X | X | false
+prodvar_stock | int4 | X | X | X | 0
+
+PRODSALES
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+prodvar_id | int8 | X | X | X | X
+prodsales_amount | numeric | X | X | X | 0.00
+prodsales_bag | int4 | X | X | X | 0
+prodsales_bueno_categ | varchar | X | X | / | /
+prodsales_cancelled | int4 | X | X | X | 0
+prodsales_college | varchar | X | X | / | /
+prodsales_created | timestamptz | X | X | X | now()
+prodsales_cust | int4 | X | X | X | 0
+prodsales_date | date | X | X | X | now()
+prodsales_guest | int4 | X | X | X | 0
+prodsales_id | int8 | / | / | X | X
+prodsales_preorder | int4 | X | X | X | 0
+prodsales_qty | int4 | X | X | X | 0
+prodsales_unsold | int4 | X | X | X | 0
+prodsales_walkin | int4 | X | X | X | 0
+prodsales_wishlist | int4 | X | X | X | 0
+
+REVIEWS
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_id | int8 | X | X | X | X
+prod_id | int8 | X | X | X | X
+rev_approved | timestamptz | X | X | / | X
+rev_created | timestamptz | X | X | X | now()
+rev_id | int8 | / | / | X | X
+rev_msg | varchar | X | X | X | X
+
+SCHEDULES
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+emp_id | int8 | X | X | X | X
+sched_created | timestamptz | X | X | X | now()
+sched_disabled | timestamptz | X | X | / | X
+sched_id | int8 | / | / | X | X
+sched_time_end | timestamptz | X | X | X | X
+sched_time_start | timestamptz | X | X | X | X
+
+WISHLIST
+ATTRIBUTE | TYPE | PRIMARY? | UNIQUE? | NULL? | DEFAULT
+cust_id | int8 | X | X | X | X
+prod_id | int8 | X | X | X | X
+wish_created | timestamptz | X | X | X | now()
+wish_hidden | timestamptz | X | X | / | X
+wish_id | int8 | / | / | X | X
+
+LALAMOVE INTEGRATION SUGGESTIONS
+To support delivery functionality without adding new tables, the following ALTER columns are recommended for existing tables:
+ORDERS Table: Add ord_method (varchar, default 'pickup') to distinguish between pickup and delivery orders. Add ord_ship_fee (numeric, nullable) to store the final delivery fee actually paid. Add ord_ship_policy (varchar, nullable) to track whether delivery is paid at checkout ('at_checkout') or later ('pay_later').
+DELIVERY Table: Add deliver_env (varchar, default 'sandbox') to mark whether delivery is in sandbox or production. Add deliver_recipient (varchar, nullable) for recipient name. Add deliver_phone (varchar, nullable) for recipient contact in international format. Add deliver_lat and deliver_lng (numeric, nullable) for drop-off coordinates required by Lalamove. Add deliver_notes (varchar, nullable) for driver instructions. Add deliver_service (varchar, nullable) for vehicle type booked (e.g., MOTORCYCLE). Add deliver_fee_charged (numeric, nullable) to track what the customer paid. Add deliver_fee_actual (numeric, nullable) to track what Lalamove charged. Add deliver_placed (timestamptz, nullable) to record booking time. Add deliver_pickedup (timestamptz, nullable) to record driver pick-up time. Add deliver_completed (timestamptz, nullable) to record delivery time. Add deliver_share_link (text, nullable) for Lalamove tracking URL shown to customers. Add deliver_last_event (timestamptz, nullable) to prevent processing duplicate webhook messages.
+Note: These additions maintain backward compatibility. New tables (address, preorder_batch, lalamove_quote, lalamove_event, delivery_driver) are optional and not included in this integration. The system will continue using existing delivery and payment mechanisms while adding Lalamove-specific fields as needed.
+REQUIREMENTS
+DOMAIN 1: SETUP
+FLOWS:
+FLOW-SETUP-01: The system must be initialized with store configuration, including store name, location, contact information, and operating hours.
+FLOW-SETUP-02: Super admins must configure system settings such as appointment duration, timeslot capacity limits, and notification preferences.
+FLOW-SETUP-03: The system must validate that all required configuration fields are completed before allowing customer and employee access.
+FLOW-SETUP-04: Initial super admin accounts must be created during setup with secure password generation and storage.
+FLOW-SETUP-05: A setup wizard must guide the first-time administrator through essential configuration steps.
+REQUIREMENTS:
+REQ-SETUP-01: All system configuration must be validated before being saved to the database.
+REQ-SETUP-02: Setup must not allow the system to go live without all critical configuration fields populated.
+REQ-SETUP-03: Super admin credentials must meet security standards including minimum length and complexity.
+REQ-SETUP-04: The system must log all setup and configuration changes for audit purposes.
+DOMAIN 2: EMPLOYEE LOGIN
+FLOWS:
+FLOW-EMP_LOGIN-01: Employee X must input his email address and password in the "login" form.
+FLOW-EMP_LOGIN-02: If the email address does not exist, the message "User not found" must immediately show below the "email" field.
+FLOW-EMP_LOGIN-03: The message "User not found" must immediately disappear if Employee X already inputted an existing email address.
+FLOW-EMP_LOGIN-04: If Employee X inputted a password but he did not input an email address, the message "Provide a valid email" must immediately show below the "password" field.
+FLOW-EMP_LOGIN-05: If Employee X inputted a password but the message "User not found" showed below the "email" field, the message "Provide a valid email" must immediately show below the "password" field.
+FLOW-EMP_LOGIN-06: The message "Provide a valid email" must immediately disappear if Employee X already inputted an existing email address.
+FLOW-EMP_LOGIN-07: If Employee X inputted an existing email address, but he inputted the wrong password, the message "Wrong password" must immediately show below the "password" field.
+FLOW-EMP_LOGIN-08: The message "Wrong password" must immediately disappear if Employee X already inputted the correct password.
+REQUIREMENTS:
+REQ-EMP_LOGIN-01: The inputted password must be masked.
+REQ-EMP_LOGIN-02: Employee X can unmask his inputted password for as many times as he may want.
+REQ-EMP_LOGIN-03: An inputted password must automatically be masked again after 3 seconds of being unmasked.
+REQ-EMP_LOGIN-04: The inputted email address must not disappear even if it does not exist.
+REQ-EMP_LOGIN-05: The inputted password must not disappear even if no email is inputted.
+REQ-EMP_LOGIN-06: Current inputs in the "login" form must never disappear even if Employee X switched back tabs in the same browser.
+DOMAIN 3: EMPLOYEE HOMEPAGE
+FLOWS:
+FLOW-EMP_HOME-01: There must be a navigation ribbon docked in the top.
+FLOW-EMP_HOME-02: The logo of "Tindahan ni Isko" must be at the leftmost of the navigation ribbon.
+FLOW-EMP_HOME-03: The search bar must be at the centermost of the navigation ribbon.
+FLOW-EMP_HOME-04: The horizontal array composed of (from left to right) the "home" icon, "QR" icon, "notifications" icon, "dark mode" icon, and "settings" icon must be at the rightmost of the navigation ribbon.
+FLOW-EMP_HOME-05: There must be a vertical array docked at the left of the page, composed of (from top to bottom) the "dashboard" icon with the "Dashboard" label, the "walk-in" icon with the "Walk-in Orders" label, the "appointments" icon with the "Appointments" label, the "orders" icon with the "Orders" label, the "products" icon with the "Products" label, the "reviews" icon with the "Reviews" label, the "sales" icon with the "Sales" label, the "staff" icon with the "Staff" label, and the "logout" icon with the "Logout" label.
+FLOW-EMP_HOME-06: Employee X must be redirected to the "home" page if he clicks the "home" icon.
+FLOW-EMP_HOME-07: Employee X must be redirected to the "QR scanner" page if he clicks the "QR" icon.
+FLOW-EMP_HOME-08: Employee X must be redirected to the "notification" tab if he clicks the "notification" icon.
+FLOW-EMP_HOME-09: The system theme for Employee X must change to dark mode if he clicks the "dark mode" icon.
+FLOW-EMP_HOME-10: The "dark mode" icon will change to the "light mode" icon if Employee X clicks the "dark mode" icon.
+REQUIREMENTS:
+REQ-EMP_HOME-01: The "dashboard" icon and the "Dashboard" label, the "walk-in" icon and the "Walk-in Orders" label, the "reviews" icon and the "Reviews" label, and the "sales" icon and the "Sales" label must never show to Employee X if his "emp_categ" is "staff".
+REQ-EMP_HOME-02: All navigation elements must remain consistent and accessible throughout all employee pages.
+DOMAIN 4: EMPLOYEE PROFILE
+FLOWS:
+FLOW-EMP_PROF-01: Employee X must navigate to his profile page through the "settings" icon in the navigation ribbon.
+FLOW-EMP_PROF-02: The profile page must display Employee X's current information including name, email, phone, and employee category.
+FLOW-EMP_PROF-03: Employee X must be able to edit his personal information including phone number and pronoun preferences.
+FLOW-EMP_PROF-04: All changes to profile information must be saved to the database upon submission.
+FLOW-EMP_PROF-05: Employee X must be able to upload or change his profile avatar.
+FLOW-EMP_PROF-06: The system must validate all profile changes before saving them.
+REQUIREMENTS:
+REQ-EMP_PROF-01: Employee email addresses must not be editable by regular staff members.
+REQ-EMP_PROF-02: Profile changes must be logged in the emplog table for audit purposes.
+REQ-EMP_PROF-03: Employee avatars must be validated for format and file size before upload.
+DOMAIN 5: EMPLOYEE LIST
+FLOWS:
+FLOW-EMP_LIST-01: Only super admins can access the employee list through the "/admin/staff" page.
+FLOW-EMP_LIST-02: The employee list must display all active and inactive employees with their ID, name, email, phone, and category.
+FLOW-EMP_LIST-03: Super admins must be able to search for employees by name or email.
+FLOW-EMP_LIST-04: Super admins must be able to filter employees by category (staff, admin, super admin) or status (active, suspended, deleted).
+FLOW-EMP_LIST-05: Super admins must be able to sort the employee list by name, email, or date created.
+FLOW-EMP_LIST-06: Clicking on an employee entry must open their detailed profile page for editing.
+FLOW-EMP_LIST-07: The employee list must display the total number of active employees and their distribution by category.
+REQUIREMENTS:
+REQ-EMP_LIST-01: Only super admins can view the complete employee list.
+REQ-EMP_LIST-02: The employee list must be paginated if it exceeds 50 employees.
+REQ-EMP_LIST-03: Deleted employees must be visible only with a deleted filter applied.
+REQ-EMP_LIST-04: All employee list queries must be logged for security audit.
+REQ-EMP_LIST-05: Staff members must not be able to access this page.
+DOMAIN 6: EMPLOYEE ENROLLMENT
+FLOWS:
+FLOW-EMP_ENROLL-01: Only super admins can enroll new employees through the "/admin/enroll" page.
+FLOW-EMP_ENROLL-02: The enrollment form must collect employee surname, given name, Bicol University email, phone number, and initial category.
+FLOW-EMP_ENROLL-03: The system must validate that the email address belongs to Bicol University domain.
+FLOW-EMP_ENROLL-04: The system must generate a temporary password and send it to the employee's email.
+FLOW-EMP_ENROLL-05: After successful enrollment, the new employee's account status must be "active" and the employee must be prescheduled as "available".
+FLOW-EMP_ENROLL-06: Super admins must receive a confirmation once the employee enrollment is complete.
+FLOW-EMP_ENROLL-07: The system must log the enrollment action with the super admin's ID and timestamp.
+REQUIREMENTS:
+REQ-EMP_ENROLL-01: Only super admins can enroll new employees.
+REQ-EMP_ENROLL-02: Bicol University email must be validated against the institution's domain before enrollment.
+REQ-EMP_ENROLL-03: Temporary passwords must meet security standards and be marked for required change on first login.
+REQ-EMP_ENROLL-04: Duplicate email addresses must be rejected with a clear error message.
+REQ-EMP_ENROLL-05: All enrollment attempts must be logged, including failures.
+REQ-EMP_ENROLL-06: New employees must be automatically prescheduled with full availability.
+DOMAIN 7: EMPLOYEE SCHEDULING
+FLOWS:
+FLOW-EMP_SCHED-01: Super admins must access the employee scheduling interface through the "/admin/schedules" page.
+FLOW-EMP_SCHED-02: The schedule calendar must display all employees with their pre-scheduled availability for the current and future weeks.
+FLOW-EMP_SCHED-03: Super admins must be able to preschedule employees by selecting start and end times in 10-minute increments.
+FLOW-EMP_SCHED-04: Employees must be able to view their own schedule and mark specific time blocks as "unavailable" due to classes or conflicts.
+FLOW-EMP_SCHED-05: The system must enforce that each employee is scheduled for a minimum of 180 minutes per week.
+FLOW-EMP_SCHED-06: When an employee marks a time block as unavailable, the system must automatically check if this creates a staff shortage.
+FLOW-EMP_SCHED-07: If a staff shortage is created, the system must alert the super admin and restrict customer booking for affected timeslots.
+FLOW-EMP_SCHED-08: Super admins must be able to modify or override employee availability schedules.
+REQUIREMENTS:
+REQ-EMP_SCHED-01: All scheduling changes must be validated to ensure the 180-minute minimum per week is maintained.
+REQ-EMP_SCHED-02: Schedule changes must take effect immediately and update the appointment booking availability in real-time.
+REQ-EMP_SCHED-03: Employees must not be able to modify schedules more than 24 hours in the past.
+REQ-EMP_SCHED-04: Schedule conflicts (overlapping bookings) must be prevented at the database level.
+REQ-EMP_SCHED-05: All schedule changes must be logged with the responsible user and timestamp.
+REQ-EMP_SCHED-06: The system must allow batch scheduling for multiple employees at once.
+REQ-EMP_SCHED-07: Scheduling data must be queryable by date range for payroll and reporting purposes.
+DOMAIN 8: MANAGING APPOINTMENTS
+FLOWS:
+FLOW-MANAGE_APP-01: Only admins and super admins can access the appointment management page at "/admin/appointments".
+FLOW-MANAGE_APP-02: The appointment list must display all booked appointments with customer name, appointment type, scheduled time, and status.
+FLOW-MANAGE_APP-03: Admins must be able to search appointments by customer name or email.
+FLOW-MANAGE_APP-04: Admins must be able to filter appointments by type (visit or pickup), status (upcoming, done, cancelled), or date range.
+FLOW-MANAGE_APP-05: When an employee is assigned to facilitate an appointment, the system must generate a unique QR code for that appointment.
+FLOW-MANAGE_APP-06: Admins must be able to mark an appointment as "done" by scanning the customer's QR code or manually confirming completion.
+FLOW-MANAGE_APP-07: Admins must be able to mark an appointment as "cancelled" if the customer requests cancellation or a no-show occurs.
+FLOW-MANAGE_APP-08: The system must send notifications to customers when their appointment is confirmed, cancelled, or completed.
+FLOW-MANAGE_APP-09: Admins must be able to view appointment history and reschedule requests from this interface.
+REQUIREMENTS:
+REQ-MANAGE_APP-01: Only admins and super admins can manage appointments.
+REQ-MANAGE_APP-02: Each appointment must have exactly one facilitating employee assigned.
+REQ-MANAGE_APP-03: QR codes must be unique per appointment and regenerated if an appointment is rescheduled.
+REQ-MANAGE_APP-04: Appointment status changes must trigger automatic customer notifications.
+REQ-MANAGE_APP-05: No-show appointments must be marked and tracked for reporting purposes.
+REQ-MANAGE_APP-06: All appointment modifications must be logged in the emplog table.
+REQ-MANAGE_APP-07: Appointments that exceed their scheduled time window must auto-close after 10 minutes.
+DOMAIN 9: MANAGING INVENTORY
+FLOWS:
+FLOW-MANAGE_INV-01: Only admins and super admins can access the inventory management page at "/admin/inventory".
+FLOW-MANAGE_INV-02: The inventory view must display all products with their variations, current stock levels, and status (active or disabled).
+FLOW-MANAGE_INV-03: Admins must be able to filter products by category or search by product name or tag.
+FLOW-MANAGE_INV-04: Admins must be able to sort products by name, creation date, or current stock level.
+FLOW-MANAGE_INV-05: Clicking on a product must open its detail page showing all variations, prices, stock levels, and metrics.
+FLOW-MANAGE_INV-06: The inventory must display automated alerts for products that fall below a configurable minimum stock threshold.
+FLOW-MANAGE_INV-07: Admins must be able to enable or disable products from the inventory, which automatically updates catalog visibility.
+FLOW-MANAGE_INV-08: Admins must be able to view the sales history for each product including daily sales, revenue, and trends.
+REQUIREMENTS:
+REQ-MANAGE_INV-01: Only admins and super admins can manage inventory.
+REQ-MANAGE_INV-02: Disabled products must be hidden from the customer catalog immediately.
+REQ-MANAGE_INV-03: Stock levels must be updated in real-time when orders are placed or claimed.
+REQ-MANAGE_INV-04: Low-stock alerts must trigger notifications to admins when thresholds are breached.
+REQ-MANAGE_INV-05: All inventory changes must be logged in the emplog table.
+REQ-MANAGE_INV-06: Product metrics must be aggregated from the prodsales table.
+REQ-MANAGE_INV-07: Inventory reports must be queryable by date range for business analysis.
+DOMAIN 10: ADDING PRODUCT TO INVENTORY
+FLOWS:
+FLOW-ADD_PROD-01: Only admins and super admins can add products through the "/admin/add-product" page.
+FLOW-ADD_PROD-02: The product form must collect product name, category, description, base price, and at least one product variation.
+FLOW-ADD_PROD-03: For each variation, admins must input variation name, stock quantity, and optional markup price and image.
+FLOW-ADD_PROD-04: The system must validate that product names and tags are unique (case-insensitive).
+FLOW-ADD_PROD-05: The system must validate that all required fields are completed before allowing product creation.
+FLOW-ADD_PROD-06: Upon successful product creation, the product is automatically set to "active" and visible in the customer catalog.
+FLOW-ADD_PROD-07: The system must generate a unique product tag for internal reference.
+FLOW-ADD_PROD-08: Admins must receive a confirmation message with the product ID once creation is complete.
+REQUIREMENTS:
+REQ-ADD_PROD-01: Only admins and super admins can add products.
+REQ-ADD_PROD-02: Product names must be unique regardless of letter capitalization.
+REQ-ADD_PROD-03: At least one product variation must be created for every product.
+REQ-ADD_PROD-04: Product categories must match predefined, system-wide categories.
+REQ-ADD_PROD-05: Duplicate product names must be rejected with a clear error message.
+REQ-ADD_PROD-06: All new products must be logged in the product table with creation timestamp.
+REQ-ADD_PROD-07: Images must be validated for format (jpg, png) and file size before upload.
+REQ-ADD_PROD-08: The system must not allow products with zero or negative prices.
+DOMAIN 11: WALK-IN ORDERS
+FLOWS:
+FLOW-WALKIN-01: Only admins and super admins can process walk-in orders through the "/admin/walkin" page.
+FLOW-WALKIN-02: The walk-in order interface must display the current product catalog in the same format as customers see.
+FLOW-WALKIN-03: Admins must be able to search and filter products by category while building the walk-in order.
+FLOW-WALKIN-04: Admins must be able to add multiple product variations to the walk-in order and adjust quantities.
+FLOW-WALKIN-05: The system must display a running total amount due for the walk-in order.
+FLOW-WALKIN-06: Before order finalization, admins must select a payment method (cash or digital).
+FLOW-WALKIN-07: Admins must enter the payment amount received from the customer.
+FLOW-WALKIN-08: The system must calculate and display change if applicable.
+FLOW-WALKIN-09: Upon order completion, a receipt must be generated and the order marked as "walk-in" and "completed".
+REQUIREMENTS:
+REQ-WALKIN-01: Only admins and super admins can process walk-in orders.
+REQ-WALKIN-02: Walk-in orders must bypass online payment and be marked as cash or direct payment.
+REQ-WALKIN-03: Stock must be deducted immediately when a walk-in order is completed.
+REQ-WALKIN-04: All walk-in orders must be logged with employee ID and timestamp.
+REQ-WALKIN-05: Walk-in customers must be recorded with a default phone number "0000000000".
+REQ-WALKIN-06: Walk-in orders must be completed and paid immediately; no delayed payment allowed.
+REQ-WALKIN-07: The point-of-sale interface must be quick and responsive for fast transaction processing.
+DOMAIN 12: MANAGING PRE-ORDERS
+FLOWS:
+FLOW-MANAGE_PRE-01: To track preorders, Employee X must open the "/admin/orders" tab from the "menu" sidebar.
+FLOW-MANAGE_PRE-02: All orders whose "ord_claiming" are "pickup" and "delivery" are combined in the "orders" list. The "orders" list is descendingly ordered by "ord_created", and they can be filtered into "all", "cancel requests", "processing", "to claim/receive", "claimed/received", "unclaimed", and "cancelled".
+FLOW-MANAGE_PRE-03: If "ord_claiming" is "pickup" and if "ord_status" is "processing", Employee X must change it to "to claim" once in-store stock for the preordered product variation is already enough for "bag_qty" without affecting the in-store stocks for other preorders.
+FLOW-MANAGE_PRE-04: If "ord_claiming" is "delivery" and if "ord_status" is "processing", Employee X must change it to "delivering" once in-store stock for the preordered product variation is already enough for "bag_qty" without affecting the in-store stocks for other preorders. He must also set the "deliver_expect" based on the settled delivery date with the freight forwarder. 24 hours before "deliver_expect", "ord_status" must change from "delivering" to "to receive".
+FLOW-MANAGE_PRE-05: Employee X can approve or reject requests for preorder cancellation through the "cancel requests" filter in the "orders" list.
+REQUIREMENTS:
+REQ-MANAGE_PRE-01: Preorders must be tracked separately from walk-in orders to ensure accurate stock allocation and timely customer notifications.
+DOMAIN 13: MANAGING REVIEWS
+FLOWS:
+FLOW-MANAGE_REV-01: Only admins and super admins can view all customer reviews through the "/admin/reviews" page.
+FLOW-MANAGE_REV-02: The reviews list must display product name, customer name, rating, review message, and approval status.
+FLOW-MANAGE_REV-03: Admins must be able to filter reviews by approval status (pending, approved, rejected).
+FLOW-MANAGE_REV-04: Admins must be able to search for reviews by product name or customer name.
+FLOW-MANAGE_REV-05: Clicking on a review must display the full text and allow admins to approve or reject it.
+FLOW-MANAGE_REV-06: When a review is approved, it becomes visible to customers on the product detail page.
+FLOW-MANAGE_REV-07: When a review is rejected, it is permanently deleted and not visible to customers.
+FLOW-MANAGE_REV-08: Admins must be able to delete approved reviews if they violate content policies.
+REQUIREMENTS:
+REQ-MANAGE_REV-01: Only admins and super admins can moderate reviews.
+REQ-MANAGE_REV-02: Pending reviews must not be visible to customers until approved.
+REQ-MANAGE_REV-03: Deleted reviews must be soft-deleted and remain in the database for audit purposes.
+REQ-MANAGE_REV-04: All review actions (approve, reject, delete) must be logged in the emplog table.
+REQ-MANAGE_REV-05: Review moderation must not affect the product rating calculation.
+DOMAIN 14: ANALYTICS DASHBOARD
+FLOWS:
+FLOW-ANALYTICS-01: Only admins and super admins can access the analytics dashboard through the "/admin/analytics" page.
+FLOW-ANALYTICS-02: The dashboard must display key metrics including total revenue, total orders, average order value, and customer count.
+FLOW-ANALYTICS-03: The dashboard must show sales trends broken down by order type (walk-in vs. preorder).
+FLOW-ANALYTICS-04: The dashboard must display top-selling products by quantity and revenue.
+FLOW-ANALYTICS-05: The dashboard must show appointment statistics including booked, completed, and cancelled appointments.
+FLOW-ANALYTICS-06: Admins must be able to filter all metrics by date range (today, this week, this month, custom).
+FLOW-ANALYTICS-07: The dashboard must display employee performance metrics including orders facilitated and appointment completions.
+FLOW-ANALYTICS-08: Admins must be able to export analytics reports in PDF or CSV format.
+REQUIREMENTS:
+REQ-ANALYTICS-01: Only admins and super admins can access analytics.
+REQ-ANALYTICS-02: All dashboard metrics must be calculated from actual transaction data in real-time or updated hourly.
+REQ-ANALYTICS-03: Analytics must be filterable by date range with preset options.
+REQ-ANALYTICS-04: Reports must be accurate and traceable to source transaction records.
+REQ-ANALYTICS-05: Analytics dashboards must load within 3 seconds for responsive user experience.
+REQ-ANALYTICS-06: Export functionality must include all selected metrics and filters.
+DOMAIN 15: EMPLOYEE SETTINGS
+FLOWS:
+FLOW-EMP_SET-01: Employees must access settings through the "settings" icon in the navigation ribbon.
+FLOW-EMP_SET-02: The settings page must allow employees to change their password by providing the current password and a new password twice.
+FLOW-EMP_SET-03: Employees must be able to update backup contact information (phone and email) for account recovery.
+FLOW-EMP_SET-04: Employees must be able to set notification preferences for appointment reminders and system alerts.
+FLOW-EMP_SET-05: Employees must be able to toggle dark mode and save their theme preference.
+FLOW-EMP_SET-06: Super admins must be able to access a system settings page at "/admin/settings" to configure store-wide parameters.
+FLOW-EMP_SET-07: System settings must include appointment duration, timeslot capacity, minimum weekly hours, and notification intervals.
+FLOW-EMP_SET-08: All employee setting changes must be saved immediately to the database.
+REQUIREMENTS:
+REQ-EMP_SET-01: Password changes must require the current password to be entered correctly first.
+REQ-EMP_SET-02: All setting changes must be logged with the employee ID and timestamp.
+REQ-EMP_SET-03: Theme preferences must persist across sessions.
+REQ-EMP_SET-04: Notification preferences must apply immediately without requiring logout.
+REQ-EMP_SET-05: System settings changes by super admins must take effect immediately for all users.
+DOMAIN 16: EMPLOYEE LOGOUT
+FLOWS:
+FLOW-EMP_LOGOUT-01: Employees must be able to logout by clicking the "logout" icon in the navigation ribbon.
+FLOW-EMP_LOGOUT-02: A "logout" confirmation dialog must appear asking the employee to confirm the logout action.
+FLOW-EMP_LOGOUT-03: Upon confirming logout, the employee session must be terminated immediately.
+FLOW-EMP_LOGOUT-04: The system must redirect the employee to the "/login" page after logout.
+FLOW-EMP_LOGOUT-05: The employee's last logout timestamp must be saved to the database.
+FLOW-EMP_LOGOUT-06: All active sessions for that employee must be terminated across all devices.
+REQUIREMENTS:
+REQ-EMP_LOGOUT-01: Logout confirmation must be shown before terminating the session.
+REQ-EMP_LOGOUT-02: All logout events must be logged in the emplog table.
+REQ-EMP_LOGOUT-03: Employees must be automatically logged out if they are inactive for more than 30 minutes.
+DOMAIN 17: CUSTOMER SIGNUP
+FLOWS:
+FLOW-CUST_SIGNUP-01: To signup, Customer X must open the "/signup" page from the "/login" page.
+FLOW-CUST_SIGNUP-02: Customer X must choose his "cust_type", either "BUeño" or "guest".
+FLOW-CUST_SIGNUP-03: If "cust_type" is "BUeño", Customer X must fill out all details in the "signup" form and specify "cust_categ", "cust_college", and "cust_dept".
+FLOW-CUST_SIGNUP-04: If "cust_type" is "guest", Customer X must fill out all details in the "signup" form while "cust_categ", "cust_college", and "cust_dept" will be set to "NULL".
+FLOW-CUST_SIGNUP-05: After successful signup, Customer X must undergo phone OTP verification before account creation is finalized.
+FLOW-CUST_SIGNUP-06: The system must validate that the provided email address is not already registered.
+FLOW-CUST_SIGNUP-07: The system must validate that the provided phone number is in a valid format.
+REQUIREMENTS:
+REQ-CUST_SIGNUP-01: All required fields in the signup form must be validated before submission.
+REQ-CUST_SIGNUP-02: BUeños must provide a valid Bicol University email address.
+REQ-CUST_SIGNUP-03: Guest users are not required to provide university affiliation.
+REQ-CUST_SIGNUP-04: Phone OTP verification must be sent via SMS or in-app notification.
+DOMAIN 18: CUSTOMER LOGIN
+FLOWS:
+FLOW-CUST_LOGIN-01: If Customer X is the previously logged-in customer in the browser-device, he must be redirected to the "/home" page after searching "cartniisko.com" in the "URL" bar. If there is no logged-in customer in the browser-device, Customer X must be redirected to the "/login" page.
+FLOW-CUST_LOGIN-02: To log in, Customer X must fill out his correct email address and password in the "login" form. If it is more than 15 days since "cust_last_logout", Customer X must also undergo phone OTP verification.
+FLOW-CUST_LOGIN-03: After successfully logging in, Customer X must be redirected to the "/home" page. He must no longer need to log in when going to other pages and tabs.
+FLOW-CUST_LOGIN-04: The login form must retain all user inputs if the customer switches tabs in the same browser session.
+FLOW-CUST_LOGIN-05: Error messages must appear in real-time as the customer types, providing specific feedback for each field.
+REQUIREMENTS:
+REQ-CUST_LOGIN-01: Login must be required every time after a logout, the browser reopens, or the device restarts.
+REQ-CUST_LOGIN-02: The login form must not refresh, nor must form input with incorrect data be emptied after an incorrect input is detected.
+REQ-CUST_LOGIN-03: Error messages must be shown only when necessary, particularly during input validation.
+DOMAIN 19: CUSTOMER HOMEPAGE
+FLOWS:
+FLOW-CUST_HOME-01: Upon opening the "/home" page, Customer X must see the "home" ribbon docked at the top with the logo at left, search bar in center, and navigation icons at right.
+FLOW-CUST_HOME-02: The "navigation" horizontal array must be composed of (from left to right) the "home" icon, the "bag" icon, the "appointment" icon, the "notification" icon, and the "menu" icon.
+FLOW-CUST_HOME-03: Clicking the "home" icon redirects Customer X to the "/home" page.
+FLOW-CUST_HOME-04: Clicking the "bag" icon redirects Customer X to the "/bag" tab.
+FLOW-CUST_HOME-05: Clicking the "appointment" icon redirects Customer X to the "/appointments" tab.
+FLOW-CUST_HOME-06: Clicking the "notification" icon redirects Customer X to the "/notifications" tab.
+FLOW-CUST_HOME-07: Clicking the "menu" icon opens the "menu" sidebar.
+FLOW-CUST_HOME-08: The "menu" sidebar must be on the right side with profile, dark mode, orders, wishlist, settings, and logout icons.
+FLOW-CUST_HOME-09: The product catalog must display in grid format, with products ordered alphabetically and filterable by category.
+FLOW-CUST_HOME-10: Customers must be able to view product details including variations, prices, reviews, and availability.
+REQUIREMENTS:
+REQ-CUST_HOME-01: The ribbon and sidebar must remain consistent across all customer pages.
+REQ-CUST_HOME-02: Menu items must clearly indicate their purpose through icons and labels.
+DOMAIN 20: CUSTOMER PROFILE
+FLOWS:
+FLOW-CUST_PROF-01: The "profile" page must open after Customer X clicks the "profile" icon from the "menu" sidebar.
+FLOW-CUST_PROF-02: The profile page must display Customer X's current information including name, email, phone, pronoun, birthday, and addresses.
+FLOW-CUST_PROF-03: Customer X must be able to edit personal information including name, pronoun, and birthday.
+FLOW-CUST_PROF-04: Customer X must be able to add or edit multiple delivery addresses.
+FLOW-CUST_PROF-05: Customer X must be able to upload or change a profile avatar.
+FLOW-CUST_PROF-06: All profile changes must be validated before saving.
+FLOW-CUST_PROF-07: The system must display a confirmation message upon successful profile update.
+REQUIREMENTS:
+REQ-CUST_PROF-01: Customers must not be able to edit their email address or customer type.
+REQ-CUST_PROF-02: Profile changes must be logged in the custlog table.
+REQ-CUST_PROF-03: Multiple addresses must be allowed for each customer.
+REQ-CUST_PROF-04: Avatar uploads must be validated for format and file size.
+DOMAIN 21: MANAGING BOOKED APPOINTMENTS
+FLOWS:
+FLOW-MANAGE_BOOKED-01: To view all appointments, Customer X must open the "/appointments" tab from the "home" ribbon.
+FLOW-MANAGE_BOOKED-02: All appointments whose "appoint_type" is "pickup" and "visit" are combined in the "appointments" list, descendingly ordered by "appoint_created", and filterable into "all", "upcoming", "done", and "absent".
+FLOW-MANAGE_BOOKED-03: If the "appoint_end" is not yet over, Customer X must scan the appointment's "appoint_qr" code from the "/appointments" tab or the "/orders" tab.
+FLOW-MANAGE_BOOKED-04: Once the "appoint_qr" code is scanned by Employee X's scanner, "appoint_status" must change from "upcoming" to "done" and the "appoint_closed" must save the timestamp.
+FLOW-MANAGE_BOOKED-05: If the "appoint_end" is not yet over, Customer X can cancel the appointment through the "appointments" list.
+FLOW-MANAGE_BOOKED-06: When an appointment is cancelled, "appoint_status" must change to "cancelled" and the "appoint_qr" must be deleted.
+REQUIREMENTS:
+REQ-MANAGE_BOOKED-01: Customers must be able to view and manage all their booked appointments from a single interface.
+REQ-MANAGE_BOOKED-02: Appointment status changes must trigger real-time notifications to customers.
+REQ-MANAGE_BOOKED-03: Cancelled appointments must be clearly marked in the appointment list.
+DOMAIN 22: BOOKING APPOINTMENT
+FLOWS:
+FLOW-BOOK_APP-01: To book an appointment, Customer X must open the "/book" page by clicking the "book an appointment" button from the "/appointments" tab.
+FLOW-BOOK_APP-02: The appointment booking form must allow Customer X to select an appointment type (visit or pickup).
+FLOW-BOOK_APP-03: Customer X must choose a timeslot at least 30 minutes from the current time.
+FLOW-BOOK_APP-04: Customer X must select a timeslot where at least one employee is prescheduled.
+FLOW-BOOK_APP-05: Customer X must undergo phone OTP verification before the appointment is saved.
+FLOW-BOOK_APP-06: After the appointment is saved, "appoint_status" is set to "upcoming" and a unique QR code is generated.
+FLOW-BOOK_APP-07: All employees whose schedule covers the booked timeslot must be notified of the appointment.
+REQUIREMENTS:
+REQ-BOOK_APP-01: Appointment timeslots must be 10 minutes long.
+REQ-BOOK_APP-02: A single timeslot can accommodate up to 5 pickup appointments or 1 visit appointment.
+REQ-BOOK_APP-03: Customers cannot book appointments less than 30 minutes from the current time.
+REQ-BOOK_APP-04: All appointment details must be validated before submission.
+REQ-BOOK_APP-05: QR codes must be unique per appointment.
+DOMAIN 23: PRODUCT CATALOG
+FLOWS:
+FLOW-CATALOG-01: The "catalog" grid is in the "/home" page, accessible after login, after clicking the "Tindahan ni Isko" logo, or after clicking the "home" icon.
+FLOW-CATALOG-02: The products in the "catalog" grid are ascendingly ordered by "prod_name", and filterable into "all" and each existing "prod_categ".
+FLOW-CATALOG-03: To view product details and variations, Customer X must open the "/catalog/[prod_categ]/[prod_tag]" tab.
+FLOW-CATALOG-04: To view all reviews of a product, Customer X must open the "/catalog/[prod_categ]/[prod_tag]" tab in the "reviews" section.
+FLOW-CATALOG-05: All reviews are descendingly ordered by "rev_created" and display only approved reviews.
+FLOW-CATALOG-06: Each product catalog card must display the product name, category, base price, and main product image.
+FLOW-CATALOG-07: Disabled products must be hidden from the catalog.
+REQUIREMENTS:
+REQ-CATALOG-01: The product catalog is displayed in grid format.
+REQ-CATALOG-02: Products must be sorted alphabetically by name within each category.
+REQ-CATALOG-03: Only products that are not disabled must appear in the catalog.
+DOMAIN 24: WISHLIST
+FLOWS:
+FLOW-WISHLIST-01: To add products in the "wishlist" list, Customer X must click the "wishlist" icon from the "/catalog/[prod_categ]/[prod_tag]" page.
+FLOW-WISHLIST-02: To view the "wishlist" list, Customer X must open the "/wishlist" page from the "menu" sidebar.
+FLOW-WISHLIST-03: The "wishlist" list must be descendingly ordered by "wish_created".
+FLOW-WISHLIST-04: To remove products, Customer X can remove them from the "/wishlist" page or by clicking the "wishlist" icon again.
+FLOW-WISHLIST-05: Once a product is removed, its row in the "wishlist" database table must be deleted.
+FLOW-WISHLIST-06: Customers must be able to add wishlist items directly to their shopping bag.
+FLOW-WISHLIST-07: Wishlist items that are no longer available must remain visible but marked as unavailable.
+REQUIREMENTS:
+REQ-WISHLIST-01: Wishlist items must persist across browser sessions.
+REQ-WISHLIST-02: Wishlist items must be soft-deleted when removed, not hard-deleted.
+DOMAIN 25: BAG
+FLOWS:
+FLOW-BAG-01: To add products in the "bag" checklist, Customer X must click the "add to bag" button from the "/catalog/[prod_categ]/[prod_tag]" page.
+FLOW-BAG-02: Once the product variation is added, the "bag_placed" is set to "false".
+FLOW-BAG-03: To view the "bag" checklist, Customer X must open the "/bag" tab from the "home" ribbon.
+FLOW-BAG-04: The "bag" checklist must be descendingly ordered by "bag_created".
+FLOW-BAG-05: Customers must be able to modify quantities and remove items before checkout.
+FLOW-BAG-06: The bag must display the total amount due for all selected items.
+FLOW-BAG-07: Customers must be able to clear the entire bag at once.
+REQUIREMENTS:
+REQ-BAG-01: Product variations of the same product must be added as separate items.
+REQ-BAG-02: The bag must persist across browser sessions until items are checked out.
+REQ-BAG-03: Bag updates must reflect in the cart count icon in real-time.
+DOMAIN 26: ORDER CHECKOUT
+FLOWS:
+FLOW-CHECKOUT-01: To check out products, Customer X must open the "/checkout" page through the "checkout" button from the "/bag" tab.
+FLOW-CHECKOUT-02: All product variations selected become items in a single order.
+FLOW-CHECKOUT-03: Customer X must complete both payment and claiming details before placing the order.
+FLOW-CHECKOUT-04: If "ord_claiming" is "pickup", Customer X is redirected to the "/book" page to complete appointment details.
+FLOW-CHECKOUT-05: Once appointment details are complete, Customer X is redirected back to the "/checkout" page.
+FLOW-CHECKOUT-06: All appointment details are saved to the database only after the order is placed.
+FLOW-CHECKOUT-07: If "ord_claiming" is "delivery", the form must expand with delivery address and date fields.
+FLOW-CHECKOUT-08: Before placing an order, Customer X must undergo phone OTP verification.
+FLOW-CHECKOUT-09: A 5-second confirmation dialog appears with "looks good" and "go back" buttons.
+FLOW-CHECKOUT-10: Upon confirmation, the order is saved and the customer is redirected to the "/bag" tab.
+REQUIREMENTS:
+REQ-CHECKOUT-01: The customer can check out only certain product variations or all items at once.
+REQ-CHECKOUT-02: A failed checkout must restore the cart to its original state.
+REQ-CHECKOUT-03: Payment must be processed through an approved online payment gateway.
+REQ-CHECKOUT-04: All checkout forms must validate data in real-time.
+DOMAIN 27: ORDERS LIST
+FLOWS:
+FLOW-ORD_LIST-01: To track his orders, Customer X must open the "/orders" page from the "menu" sidebar.
+FLOW-ORD_LIST-02: All orders are combined in the "orders" list, descendingly ordered by "ord_created".
+FLOW-ORD_LIST-03: The list can be filtered into "all", "processing", "to claim/receive", "claimed/received", "unclaimed", and "cancelled".
+FLOW-ORD_LIST-04: If the "ord_status" is "processing", Customer X can request cancellation through the "orders" list.
+FLOW-ORD_LIST-05: The cancellation request must be approved first by Employee X through the "/admin/orders/" list.
+FLOW-ORD_LIST-06: Once the request is sent, "ord_status" changes to "to cancel".
+FLOW-ORD_LIST-07: If Employee X rejects the cancellation, "ord_status" must return to "processing".
+FLOW-ORD_LIST-08: If an order is cancelled and "ord_claiming" is "pickup", "appoint_closed" must save the timestamp.
+FLOW-ORD_LIST-09: If an order is cancelled and "ord_claiming" is "delivery", "deliver_end" must save the timestamp.
+REQUIREMENTS:
+REQ-ORD_LIST-01: Customers must be able to view all their past and current orders.
+REQ-ORD_LIST-02: Order status must be updated in real-time as fulfillment progresses.
+REQ-ORD_LIST-03: Customers must receive notifications when their order status changes.
+DOMAIN 28: ORDER CLAIMING
+FLOWS:
+FLOW-ORD_CLAIM-01: If "ord_claiming" is "pickup", Customer X must scan the order's "appoint_qr" code from the "/orders" or "/appointments" tab.
+FLOW-ORD_CLAIM-02: Once the "appoint_qr" is scanned by Employee X's scanner, "appoint_closed" saves the timestamp.
+FLOW-ORD_CLAIM-03: The "appoint_qr" must be set to "NULL" and the file deleted.
+FLOW-ORD_CLAIM-04: If "ord_status" is "to claim" and the "appoint_qr" is scanned on or before "appoint_end", "appoint_status" changes to "done" and "ord_status" changes to "claimed".
+FLOW-ORD_CLAIM-05: If the "appoint_qr" is scanned after "appoint_end", "appoint_status" changes to "absent" and "ord_status" changes to "claimed".
+FLOW-ORD_CLAIM-06: If the "appoint_qr" is not scanned after "appoint_end", both statuses change to "absent" and "unclaimed".
+FLOW-ORD_CLAIM-07: If "ord_claiming" is "delivery", Customer X must scan the "deliver_qr" code from the parcel.
+FLOW-ORD_CLAIM-08: Upon scanning, "deliver_end" saves the timestamp and "ord_status" changes to "received".
+REQUIREMENTS:
+REQ-ORD_CLAIM-01: QR code scanning must be available to customers for delivery orders.
+REQ-ORD_CLAIM-02: QR code scanning must be available to employees for pickup verification.
+REQ-ORD_CLAIM-03: All order claims must be logged with timestamp and verification method.
+DOMAIN 29: CUSTOMER SETTINGS
+FLOWS:
+FLOW-CUST_SET-01: To change his password, Customer X must open the "/settings" page from the "menu" sidebar.
+FLOW-CUST_SET-02: He must fill out his current password once and his new password twice in the "change password" form.
+FLOW-CUST_SET-03: If the form is completed, Customer X must undergo phone OTP verification before saving.
+FLOW-CUST_SET-04: To change backup contacts, Customer X must open the "/settings" page.
+FLOW-CUST_SET-05: Existing backup emails and phones must prefill the "backup contacts" form.
+FLOW-CUST_SET-06: Customer X can modify, remove, or add new backup contacts with OTP verification for each change.
+FLOW-CUST_SET-07: To modify appointment reminders, Customer X must enter the new reminder time in minutes.
+FLOW-CUST_SET-08: Changes must save immediately without requiring additional confirmation.
+FLOW-CUST_SET-09: To change notification email preferences, Customer X must toggle the "email notifications" switch.
+FLOW-CUST_SET-10: To view store information, developers, and version history, Customer X must go to the "/settings/about" tab.
+REQUIREMENTS:
+REQ-CUST_SET-01: The unit of time for appointment reminders is minutes.
+REQ-CUST_SET-02: All sensitive changes must require OTP verification.
+REQ-CUST_SET-03: Reminder settings must take effect immediately.
+REQ-CUST_SET-04: Setting changes must be logged in the custlog table.
+DOMAIN 30: CUSTOMER LOGOUT
+FLOWS:
+FLOW-CUST_LOGOUT-01: To log out, the "log out" confirmation appears after Customer X clicks the "logout" icon from the "menu" sidebar.
+FLOW-CUST_LOGOUT-02: Customer X must choose "Yes" to confirm logout.
+FLOW-CUST_LOGOUT-03: The "logout" confirmation closes if Customer X chooses "Cancel".
+FLOW-CUST_LOGOUT-04: After logout, the "cust_last_logout" timestamp must be saved to the database.
+FLOW-CUST_LOGOUT-05: The customer must be redirected to the "/login" page.
+REQUIREMENTS:
+REQ-CUST_LOGOUT-01: Customer X must not be logged out if he closes the browser.
+REQ-CUST_LOGOUT-02: Customer X must automatically be logged out if it is more than 7 days since "cust_last_logout".
+REQ-CUST_LOGOUT-03: All logout events must be logged in the custlog table.
+DOMAIN 31: NOTIFICATIONS
+FLOWS:
+FLOW-NOTIF-01: If unread notifications exist, a circle counter must show at the top-right of the "notification" icon with the real-time count.
+FLOW-NOTIF-02: The "notification" list must be sorted by read status, with unread notifications at the top.
+FLOW-NOTIF-03: Unread notifications must be further sorted by type, with "priority" notifications at the top.
+FLOW-NOTIF-04: Within each type, notifications must be ordered descendingly by "custnotif_created".
+FLOW-NOTIF-05: When a notification is viewed, its "custnotif_read" must be set to the current timestamp.
+FLOW-NOTIF-06: Read notifications must appear below unread notifications in the same order.
+REQUIREMENTS:
+REQ-NOTIF-01: No customer or employee can manually add or edit notifications.
+REQ-NOTIF-02: Notifications must be automatically generated only when system events occur.
+REQ-NOTIF-03: Customer X must never receive notifications not belonging to his account.
+REQ-NOTIF-04: Unread notifications must be visually distinct from read notifications.
+DOMAIN 32: ACCESS LOG
+FLOWS:
+FLOW-ACCESS_LOG-01: All "authentication" actions by all customers must be logged in the "custlog" database table.
+FLOW-ACCESS_LOG-02: All "view" actions by all customers must be logged in the "custlog" database table.
+FLOW-ACCESS_LOG-03: All "edit" actions by all customers must be logged in the "custlog" database table.
+FLOW-ACCESS_LOG-04: All "authentication" actions by all employees must be logged in the "emplog" database table.
+FLOW-ACCESS_LOG-05: All "view" actions by all employees must be logged in the "emplog" database table.
+FLOW-ACCESS_LOG-06: All "edit" actions by all employees must be logged in the "emplog" database table.
+FLOW-ACCESS_LOG-07: Only super admins can view the "access log" list at the "/admin/settings/logs" page.
+FLOW-ACCESS_LOG-08: All logs are combined in the "access log" list, descendingly ordered by creation time.
+FLOW-ACCESS_LOG-09: Logs can be filtered into "all", "customers", and "employees".
+REQUIREMENTS:
+REQ-ACCESS_LOG-01: All access logs must be immutable and cannot be edited or deleted.
+REQ-ACCESS_LOG-02: Only super admins can view complete access logs.
+REQ-ACCESS_LOG-03: Logs must be searchable by user, action type, and date range.

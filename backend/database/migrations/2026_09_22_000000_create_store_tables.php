@@ -59,11 +59,16 @@ return new class extends Migration
                 $table->string('emp_suffix')->nullable();
                 $table->string('emp_studnum')->nullable();
                 $table->string('emp_pronoun');
-                $table->date('emp_birthday');
-                $table->string('emp_brgy');
-                $table->string('emp_city');
-                $table->string('emp_province');
-                $table->string('emp_country')->default('');
+                // The live table has no birthday column at all; the legacy
+                // fixture keeps it for writers that still send one, so it must
+                // NOT be mandatory (employee rows are created without it).
+                $table->date('emp_birthday')->nullable();
+                // Live carries no street/city/province breakdown for staff, so
+                // these stay optional: employee rows are created without them.
+                $table->string('emp_brgy')->nullable();
+                $table->string('emp_city')->nullable();
+                $table->string('emp_province')->nullable();
+                $table->string('emp_country')->nullable()->default('');
                 $table->string('emp_callcode')->default('+63');
                 $table->string('emp_phone')->nullable();
                 $table->string('emp_email');
@@ -97,6 +102,52 @@ return new class extends Migration
             });
         }
 
+        if (!Schema::hasTable('prodvar')) {
+            Schema::create('prodvar', function (Blueprint $table) {
+                $table->bigIncrements('prodvar_id');
+                $table->bigInteger('prod_id');
+                $table->string('prodvar_name');
+                $table->string('prodvar_pic')->nullable();
+                $table->integer('prodvar_stock')->default(0);
+                $table->boolean('prodvar_main')->default(false);
+                $table->decimal('prodvar_markup', 10, 2)->default(0)->nullable();
+                $table->string('prodvar_options')->nullable();
+                $table->boolean('prodvar_preorder')->default(false);
+                $table->timestampTz('prodvar_created')->useCurrent();
+                $table->timestampTz('prodvar_disabled')->nullable();
+                $table->timestampTz('prodvar_deleted')->nullable();
+                $table->index('prod_id', 'idx_prodvar_prod');
+            });
+        }
+
+        if (!Schema::hasTable('bag')) {
+            Schema::create('bag', function (Blueprint $table) {
+                // `bag_id` carries no sequence on the live table: writers pass
+                // IdAllocator::next('bag', 'bag_id'), so this stays a plain key.
+                $table->bigInteger('bag_id')->primary();
+                $table->bigInteger('cust_id');
+                $table->bigInteger('prodvar_id');
+                $table->integer('bag_qty')->default(1);
+                $table->decimal('bag_amount', 10, 2)->default(0);
+                $table->boolean('bag_placed')->default(false);
+                $table->timestampTz('bag_created')->useCurrent();
+                $table->timestampTz('bag_deleted')->nullable();
+                $table->index('cust_id', 'idx_bag_cust');
+            });
+        }
+
+        if (!Schema::hasTable('reviews')) {
+            Schema::create('reviews', function (Blueprint $table) {
+                $table->bigIncrements('rev_id');
+                $table->bigInteger('cust_id');
+                $table->bigInteger('prod_id');
+                $table->string('rev_msg');
+                $table->timestampTz('rev_created')->useCurrent();
+                $table->timestampTz('rev_approved')->nullable();
+                $table->index('prod_id');
+            });
+        }
+
         if (!Schema::hasTable('orders')) {
             Schema::create('orders', function (Blueprint $table) {
                 $table->bigIncrements('ord_id');
@@ -121,13 +172,18 @@ return new class extends Migration
         }
 
         if (!Schema::hasTable('wishlist')) {
+            // Mirrors the live table exactly: `wish_id` is the primary key and
+            // carries NO sequence (writers pass IdAllocator::next), and removal
+            // is a soft delete through `wish_hidden` (REQ-WISHLIST-02), so the
+            // row keeps no quantity columns.
             Schema::create('wishlist', function (Blueprint $table) {
+                $table->bigInteger('wish_id')->primary();
                 $table->bigInteger('cust_id');
                 $table->bigInteger('prod_id');
                 $table->timestampTz('wish_created')->useCurrent();
-                $table->integer('item_qty')->default(0);
-                $table->decimal('item_amount', 10, 2)->default(0);
-                $table->primary(['cust_id', 'prod_id']);
+                $table->timestampTz('wish_hidden')->nullable();
+                $table->index('cust_id', 'idx_wishlist_cust');
+                $table->index('prod_id', 'idx_wishlist_prod');
             });
         }
 
@@ -152,6 +208,24 @@ return new class extends Migration
                 $table->string('appoint_type')->default('VISIT');
                 $table->string('appoint_qr');
                 $table->text('appoint_desc')->nullable();
+            });
+        }
+
+        if (!Schema::hasTable('appointments')) {
+            // The booking table the models actually use (the legacy
+            // `appointment` table above is the old singular one).
+            Schema::create('appointments', function (Blueprint $table) {
+                $table->bigIncrements('appoint_id');
+                $table->bigInteger('cust_id')->nullable();
+                $table->bigInteger('emp_id')->nullable();
+                $table->string('appoint_type')->default('VISIT');
+                $table->string('appoint_status')->nullable();
+                $table->string('appoint_qr')->nullable();
+                $table->timestampTz('appoint_start')->nullable();
+                $table->timestampTz('appoint_end')->nullable();
+                $table->timestampTz('appoint_created')->useCurrent();
+                $table->timestampTz('appoint_closed')->nullable();
+                $table->index('cust_id');
             });
         }
 

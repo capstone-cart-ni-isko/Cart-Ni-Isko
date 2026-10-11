@@ -5,6 +5,7 @@ import PageHeader from '../components/ui/PageHeader.jsx'
 import collegesData from '../data/colleges.json'
 import Avatar from '../components/ui/Avatar.jsx'
 import { useAuth } from '../hooks/useAuth.js'
+import { useToast } from '../hooks/useToast.js'
 import { updateAccount } from '../services/accounts.js'
 import { uploadImage } from '../services/upload.js'
 
@@ -39,25 +40,19 @@ function PencilIcon({ className = 'w-4 h-4' }) {
 function AccountInfo() {
   const navigate = useNavigate()
   const { currentUser, setCurrentUser } = useAuth()
+  const { showToast } = useToast()
   const [form, setForm] = useState({
-    nickname: currentUser?.nickname || currentUser?.fullName || '',
-    username: currentUser?.username || '',
-    email: currentUser?.email || '',
-    phone: currentUser?.phone || '',
-    yearLevel: currentUser?.yearLevel || 'N/A',
+    givname: currentUser?.cust_givname || currentUser?.givname || '',
+    surname: currentUser?.cust_surname || currentUser?.surname || '',
+    email: currentUser?.cust_email || currentUser?.email || '',
+    phone: currentUser?.cust_phone || currentUser?.phone || '',
+    yearLevel: currentUser?.cust_categ || currentUser?.yearLevel || 'N/A',
     campus: currentUser?.campus || 'N/A',
-    college: currentUser?.college || 'N/A',
-    course: currentUser?.course || 'N/A',
-    pronoun: currentUser?.pronoun || '',
-    birthday: currentUser?.birthday || '',
-    brgy: currentUser?.brgy || '',
-    city: currentUser?.city || '',
-    province: currentUser?.province || '',
-    country: currentUser?.country || '',
-    callcode: currentUser?.callcode || '+63',
-    backupcallcode: currentUser?.backupcallcode || '',
-    backupphone: currentUser?.backupphone || '',
-    backupemail: currentUser?.backupemail || '',
+    college: currentUser?.cust_college || currentUser?.college || 'N/A',
+    course: currentUser?.cust_dept || currentUser?.course || 'N/A',
+    pronoun: currentUser?.cust_pronoun || currentUser?.pronoun || '',
+    birthday: currentUser?.cust_bday || currentUser?.birthday || '',
+    callcode: currentUser?.cust_callcode || currentUser?.callcode || '+63',
   })
   const [saveState, setSaveState] = useState('')
   const [availableColleges, setAvailableColleges] = useState([])
@@ -131,59 +126,69 @@ function AccountInfo() {
     setSaveState('Saving…')
     try {
       const response = await updateAccount('customer', customerId, {
-        cust_nickname: form.nickname.trim(),
+        cust_givname: form.givname.trim(),
+        cust_surname: form.surname.trim(),
+        // REQ-CUST_PROF-01: the stored email is never changed by a profile
+        // save, so it travels only to keep the read-only field round-tripping.
         cust_email: form.email,
         cust_phone: form.phone,
         cust_college: form.college,
-        cust_username: form.username,
-        cust_campus: form.campus,
-        cust_course: form.course,
-        cust_year: form.yearLevel,
+        cust_dept: form.course,
+        cust_categ: form.yearLevel !== 'N/A' ? form.yearLevel : null,
         cust_pronoun: form.pronoun,
-        cust_birthday: form.birthday,
-        cust_brgy: form.brgy,
-        cust_city: form.city,
-        cust_province: form.province,
-        cust_country: form.country,
+        cust_bday: form.birthday,
         cust_callcode: form.callcode,
-        cust_backupcallcode: form.backupcallcode,
-        cust_backupphone: form.backupphone,
-        cust_backupemail: form.backupemail,
-        cust_photo: photo,
+        cust_avatar: photo,
       })
-      // The response is the raw cust_* row; rebuild the mapped fields the UI
-      // reads so Profile/Settings reflect the save immediately.
+      // Re-sync the in-memory user with whatever the backend confirmed.
       setCurrentUser((user) => ({
         ...user,
         ...response.data,
-        nickname: form.nickname.trim(),
-        fullName: form.nickname.trim(),
-        username: form.username,
+        cust_givname: form.givname.trim(),
+        cust_surname: form.surname.trim(),
+        givname: form.givname.trim(),
+        surname: form.surname.trim(),
+        fullName: `${form.givname.trim()} ${form.surname.trim()}`.trim(),
         email: form.email,
+        cust_email: form.email,
         phone: form.phone,
+        cust_phone: form.phone,
         yearLevel: form.yearLevel,
         campus: form.campus,
         college: form.college,
+        cust_college: form.college,
         course: form.course,
+        cust_dept: form.course,
         pronoun: form.pronoun,
+        cust_pronoun: form.pronoun,
         birthday: form.birthday,
-        brgy: form.brgy,
-        city: form.city,
-        province: form.province,
-        country: form.country,
+        cust_bday: form.birthday,
         callcode: form.callcode,
-        backupcallcode: form.backupcallcode,
-        backupphone: form.backupphone,
-        backupemail: form.backupemail,
+        cust_callcode: form.callcode,
         avatarImage: photo,
       }))
       setSaveState('Changes saved!')
+      showToast('Profile updated successfully')
     } catch (error) {
       setSaveState(error.message || 'Unable to save changes.')
+      showToast(error.message || 'Unable to save changes.', 'error')
     }
   }
 
-  const fullName = form.nickname.trim() || 'User'
+  const fullName = `${form.givname} ${form.surname}`.trim() || 'User'
+
+  /* ── Realtime inline validation (values are checked as they are typed) ── */
+  const fieldErrors = {
+    givname: form.givname.trim() ? '' : 'First name is required.',
+    surname: form.surname.trim() ? '' : 'Last name is required.',
+    phone: /^[0-9]{10,11}$/.test(form.phone) ? '' : 'Enter a 10- or 11-digit phone number.',
+    pronoun: form.pronoun.length > 50 ? 'Keep pronouns to 50 characters.' : '',
+  }
+  const hasErrors = Object.values(fieldErrors).some(Boolean)
+  const fieldError = (name) =>
+    fieldErrors[name] ? (
+      <p className="mt-1 text-[11px] font-semibold text-red-500">{fieldErrors[name]}</p>
+    ) : null
 
   /* ── Shared form field components ── */
   const inputClasses = 'w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all placeholder-gray-400'
@@ -217,21 +222,36 @@ function AccountInfo() {
           </div>
 
           <div className="space-y-4">
-            <div>
-              <label className={labelClasses}>Nickname <span className="text-red-500">*</span></label>
-              <input name="nickname" required minLength={2} maxLength={100} value={form.nickname} onChange={handleChange} className={inputClasses} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClasses}>First Name <span className="text-red-500">*</span></label>
+                <input name="givname" required maxLength={100} value={form.givname} onChange={handleChange} className={inputClasses} />
+                {fieldError('givname')}
+              </div>
+              <div>
+                <label className={labelClasses}>Last Name <span className="text-red-500">*</span></label>
+                <input name="surname" required maxLength={100} value={form.surname} onChange={handleChange} className={inputClasses} />
+                {fieldError('surname')}
+              </div>
             </div>
             <div>
-              <label className={labelClasses}>Username <span className="text-red-500">*</span></label>
-              <input name="username" required minLength={3} value={form.username} onChange={handleChange} className={inputClasses} />
-            </div>
-            <div>
-              <label className={labelClasses}>Email <span className="text-red-500">*</span></label>
-              <input name="email" type="email" required value={form.email} onChange={handleChange} className={inputClasses} />
+              <label className={labelClasses}>Email</label>
+              <input
+                name="email"
+                type="email"
+                value={form.email}
+                readOnly
+                aria-readonly="true"
+                className={`${inputClasses} bg-gray-50 text-gray-500 cursor-not-allowed`}
+              />
+              <p className="mt-1 text-[11px] font-medium text-gray-400">
+                Your sign-in email cannot be changed here (REQ-CUST_PROF-01).
+              </p>
             </div>
             <div>
               <label className={labelClasses}>Phone <span className="text-red-500">*</span></label>
-              <input name="phone" type="tel" required pattern="[0-9]{10,11}" value={form.phone} onChange={handleChange} className={inputClasses} />
+              <input name="phone" type="tel" required value={form.phone} onChange={handleChange} className={inputClasses} />
+              {fieldError('phone')}
             </div>
 
             {/* Year Level */}
@@ -280,44 +300,29 @@ function AccountInfo() {
                 <input name="birthday" type="date" value={form.birthday} onChange={handleChange} className={inputClasses} />
               </div>
               <div>
-                <label className={labelClasses}>Barangay</label>
-                <input name="brgy" value={form.brgy} onChange={handleChange} className={inputClasses} />
-              </div>
-              <div>
-                <label className={labelClasses}>City</label>
-                <input name="city" value={form.city} onChange={handleChange} className={inputClasses} />
-              </div>
-              <div>
-                <label className={labelClasses}>Province</label>
-                <input name="province" value={form.province} onChange={handleChange} className={inputClasses} />
-              </div>
-              <div>
-                <label className={labelClasses}>Country</label>
-                <input name="country" value={form.country} onChange={handleChange} className={inputClasses} />
-              </div>
-              <div>
                 <label className={labelClasses}>Phone Code</label>
                 <input name="callcode" value={form.callcode} onChange={handleChange} className={inputClasses} />
               </div>
-              <div>
-                <label className={labelClasses}>Backup Call Code</label>
-                <input name="backupcallcode" value={form.backupcallcode} onChange={handleChange} className={inputClasses} />
-              </div>
-              <div>
-                <label className={labelClasses}>Backup Phone</label>
-                <input name="backupphone" value={form.backupphone} onChange={handleChange} className={inputClasses} />
-              </div>
-              <div>
-                <label className={labelClasses}>Backup Email</label>
-                <input name="backupemail" type="email" value={form.backupemail} onChange={handleChange} className={inputClasses} />
+              <div className="col-span-2">
+                <label className={labelClasses}>Delivery Addresses</label>
+                <Link
+                  to="/settings/address"
+                  className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-xl text-sm font-bold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
+                >
+                  Manage your addresses
+                  <span className="text-lg leading-none">›</span>
+                </Link>
+                <p className="mt-1 text-[11px] font-medium text-gray-400">
+                  Addresses are managed under Settings → Addresses.
+                </p>
               </div>
             </div>
           </div>
 
           <button
             type="submit"
-            disabled={saveState === 'Saving…'}
-            className="w-full h-12 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-xl shadow-md active:scale-[0.98] transition-all"
+            disabled={saveState === 'Saving…' || hasErrors}
+            className="w-full h-12 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-xl shadow-md active:scale-[0.98] transition-all disabled:opacity-60"
           >
             {saveState || 'Save Changes'}
           </button>
@@ -371,20 +376,33 @@ function AccountInfo() {
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
-                  <label className={labelClasses}>Nickname <span className="text-red-500">*</span></label>
-                  <input name="nickname" required minLength={2} maxLength={100} value={form.nickname} onChange={handleChange} className={inputClasses} />
+                  <label className={labelClasses}>First Name <span className="text-red-500">*</span></label>
+                  <input name="givname" required maxLength={100} value={form.givname} onChange={handleChange} className={inputClasses} />
+                  {fieldError('givname')}
                 </div>
                 <div>
-                  <label className={labelClasses}>Username <span className="text-red-500">*</span></label>
-                  <input name="username" required minLength={3} value={form.username} onChange={handleChange} className={inputClasses} />
+                  <label className={labelClasses}>Last Name <span className="text-red-500">*</span></label>
+                  <input name="surname" required maxLength={100} value={form.surname} onChange={handleChange} className={inputClasses} />
+                  {fieldError('surname')}
                 </div>
                 <div>
-                  <label className={labelClasses}>Email <span className="text-red-500">*</span></label>
-                  <input name="email" type="email" required value={form.email} onChange={handleChange} className={inputClasses} />
+                  <label className={labelClasses}>Email</label>
+                  <input
+                    name="email"
+                    type="email"
+                    value={form.email}
+                    readOnly
+                    aria-readonly="true"
+                    className={`${inputClasses} bg-gray-50 text-gray-500 cursor-not-allowed`}
+                  />
+                  <p className="mt-1 text-[11px] font-medium text-gray-400">
+                    Your sign-in email cannot be changed here (REQ-CUST_PROF-01).
+                  </p>
                 </div>
                 <div>
                   <label className={labelClasses}>Phone <span className="text-red-500">*</span></label>
-                  <input name="phone" type="tel" required pattern="[0-9]{10,11}" value={form.phone} onChange={handleChange} className={inputClasses} />
+                  <input name="phone" type="tel" required value={form.phone} onChange={handleChange} className={inputClasses} />
+                  {fieldError('phone')}
                 </div>
               </div>
             </div>
@@ -402,38 +420,23 @@ function AccountInfo() {
                   <input name="birthday" type="date" value={form.birthday} onChange={handleChange} className={inputClasses} />
                 </div>
                 <div>
-                  <label className={labelClasses}>Barangay</label>
-                  <input name="brgy" value={form.brgy} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>City</label>
-                  <input name="city" value={form.city} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>Province</label>
-                  <input name="province" value={form.province} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>Country</label>
-                  <input name="country" value={form.country} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
                   <label className={labelClasses}>Phone Code</label>
                   <input name="callcode" value={form.callcode} onChange={handleChange} className={inputClasses} />
                 </div>
                 <div>
-                  <label className={labelClasses}>Backup Call Code</label>
-                  <input name="backupcallcode" value={form.backupcallcode} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>Backup Phone</label>
-                  <input name="backupphone" value={form.backupphone} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>Backup Email</label>
-                  <input name="backupemail" type="email" value={form.backupemail} onChange={handleChange} className={inputClasses} />
+                  <label className={labelClasses}>Delivery Addresses</label>
+                  <Link
+                    to="/settings/address"
+                    className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-xl text-sm font-bold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
+                  >
+                    Manage your addresses
+                    <span className="text-lg leading-none">›</span>
+                  </Link>
                 </div>
               </div>
+              <p className="text-[11px] font-medium text-gray-400">
+                Delivery addresses and backup contacts are managed under Settings.
+              </p>
             </div>
 
             {/* Academic Information Section */}
@@ -482,8 +485,8 @@ function AccountInfo() {
               </button>
               <button
                 type="submit"
-                disabled={saveState === 'Saving…'}
-                className="px-7 py-2.5 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm shadow-sm active:scale-95 transition-all"
+                disabled={saveState === 'Saving…' || hasErrors}
+                className="px-7 py-2.5 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm shadow-sm active:scale-95 transition-all disabled:opacity-60"
               >
                 {saveState || 'Save Changes'}
               </button>

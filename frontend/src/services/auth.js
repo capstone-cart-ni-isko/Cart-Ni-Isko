@@ -1,50 +1,176 @@
 import { apiPost, apiPut } from './api.js'
 
+/**
+ * The academic category behind a signup role. The new schema stores
+ * `cust_categ` ∈ student | alumni | faculty (null for guests); the
+ * legacy forms still send `role` = 'Student' | 'Alumni' | 'Faculty' |
+ * 'Guest'.
+ */
+function resolveCateg(details) {
+  const explicit = details.cust_categ || details.categ || details.categ === ''
+    ? details.cust_categ || details.categ
+    : ''
+  const raw = String(explicit || details.role || details.cust_type || '').trim().toLowerCase()
+  if (['student', 'alumni', 'faculty'].includes(raw)) return raw
+  if (raw === 'guest') return null
+  // 'Student' -> 'student', 'Alumni' -> 'alumni', 'Faculty' -> 'faculty'
+  const normalized = raw.replace(/[^a-z]/g, '')
+  return ['student', 'alumni', 'faculty'].includes(normalized) ? normalized : null
+}
+
+/** True when the signup declares a guest account. */
+function isGuestRole(details) {
+  const raw = String(
+    details.cust_type || details.type || details.role || resolveCateg(details) || ''
+  ).trim().toLowerCase()
+  return raw === 'guest' || raw === 'walk-in'
+}
+
+/**
+ * Split a display name into the new givname / surname pair. A single
+ * word is the surname (the backend does the same on its side).
+ */
+function splitFullName(fullName) {
+  const text = String(fullName || '').trim().replace(/\s+/, ' ')
+  if (!text) return { givname: '', surname: '' }
+  const space = text.indexOf(' ')
+  if (space === -1) return { givname: '', surname: text }
+  return { givname: text.slice(0, space), surname: text.slice(space + 1) }
+}
+
 export async function signUpUser(details) {
+  // The name travels under the new `givname` / `surname` keys first;
+  // the legacy `nickname` key is still sent because the current
+  // backend reads it (spec section 6: input accepts the new name
+  // first and falls back to the legacy alias).
+  const nameSource = details.givname || details.surname
+    ? { givname: details.givname || '', surname: details.surname || '' }
+    : splitFullName(details.fullName || details.nickname || details.username || '')
+  const fullName = `${nameSource.givname} ${nameSource.surname}`.trim()
+    || details.fullName
+    || details.nickname
+    || ''
+  const guest = isGuestRole(details)
+  const categ = guest ? null : resolveCateg(details)
+  const role = guest ? 'Guest' : 'Student'
+  // FLOW-CUST_SIGNUP-02: the canonical account type is "BUeño" | "guest".
+  const custType = guest ? 'guest' : 'BUeño'
+
+  // The four legacy address parts fold into the single `address`
+  // column; both spellings are sent so either backend generation
+  // understands the payload.
+  const address = details.address || details.cust_address
+    || [details.brgy, details.city, details.province, details.country]
+        .map((part) => String(part || '').trim())
+        .filter((part) => part && part.toUpperCase() !== 'N/A')
+        .join(', ')
+
+  // No fabricated defaults: the system-new.docx schema keeps cust_bday and
+  // cust_address nullable, so a birthday or address the customer never gave
+  // stays NULL instead of being invented (the legacy table shape still gets
+  // its own fallback inside the backend).
+  const birthday = details.birthday || details.bday || details.cust_bday || ''
+  const backupPhone = details.backup_phone || details.cust_backup_phone
+    || [details.backupcallcode, details.backupphone]
+        .map((part) => String(part || '').trim())
+        .filter(Boolean)
+        .join(' ')
+  const backupEmail = details.backup_email || details.backupemail || ''
+
   try {
     const data = await apiPost('/auth/cust_signup', {
+      // canonical (new schema) keys
       phone: details.phone,
       password: details.password,
-      nickname: details.fullName || details.username || '',
+      givname: nameSource.givname,
+      surname: nameSource.surname,
       pronoun: details.pronoun || 'they/them',
-      birthday: details.birthday || '2000-01-01',
+      bday: birthday,
+      address,
+      callcode: details.callcode || '+63',
+      email: details.email || '',
+      cust_type: custType,
+      categ,
+      cust_categ: categ,
+      cust_college: details.cust_college || details.college || '',
+      cust_dept: details.cust_dept || details.dept || details.course || details.program || '',
+      backup_phone: backupPhone,
+      backup_email: backupEmail,
+      // legacy aliases (the current backend reads these)
+      nickname: fullName,
+      birthday,
       brgy: details.brgy || '',
       city: details.city || '',
       province: details.province || '',
-      country: details.country || 'PH',
-      callcode: details.callcode || '+63',
+      country: details.country || '',
       backupcallcode: details.backupcallcode || '',
       backupphone: details.backupphone || '',
-      backupemail: details.backupemail || '',
-      email: details.email || '',
-      type: details.role || 'Student',
+      backupemail: backupEmail,
+      type: role,
+      college: details.college || '',
+      course: details.course || '',
+      campus: details.campus || '',
+      year_level: details.yearLevel || details.year || '',
       ...(details.username ? { username: details.username } : {}),
-      ...(details.role === 'Student'
-        ? {
-            campus: details.campus || '',
-            college: details.college || '',
-            course: details.course || '',
-            year_level: details.yearLevel || '',
-          }
-        : {}),
     })
-    // data.data carries the account; data.data.token is the bearer token.
-    return { user: data.data, error: null }
+    // FLOW-CUST_SIGNUP-05: the account row is created but NOT finalized -
+    // the answer carries a signed `challenge` and no token, so the caller
+    // has to clear the phone OTP before a session exists.
+    const payload = data.data || {}
+    if (payload.requires_otp) {
+      return {
+        user: null,
+        error: null,
+        requiresOtp: true,
+        challenge: payload.challenge,
+        phone: payload.phone || '',
+        purpose: payload.purpose || 'signup',
+        custId: payload.cust_id ?? null,
+      }
+    }
+    return { user: payload, error: null, requiresOtp: false, challenge: null, phone: '', purpose: null }
   } catch (err) {
-    return { user: null, error: err.message || 'Signup failed' }
+    return { user: null, error: err.message || 'Signup failed', requiresOtp: false, challenge: null }
   }
 }
 
 export async function signInUser(credentials) {
+  // FLOW-CUST_LOGIN-02: the login form's identifier is the e-mail address;
+  // the registered phone number is accepted as the same identifier for the
+  // accounts that predate it. It travels under its own key so the backend
+  // never has to guess which one it was given.
+  const identifier = String(
+    credentials.identifier || credentials.email || credentials.phone || ''
+  ).trim()
+  const body = { password: credentials.password }
+
+  if (identifier.includes('@')) {
+    body.email = identifier
+    if (credentials.phone && credentials.phone !== identifier) body.phone = credentials.phone
+  } else {
+    body.phone = identifier
+    if (credentials.email && credentials.email !== identifier) body.email = credentials.email
+  }
   try {
-    const data = await apiPost('/auth/cust_login', {
-      phone: credentials.phone,
-      password: credentials.password,
-    })
-    // data.data carries the account; data.data.token is the bearer token.
-    return { user: data.data, error: null }
+    const data = await apiPost('/auth/cust_login', body)
+    // FLOW-CUST_LOGIN-02: a login more than fifteen days after the last
+    // logout (or one whose signup never finished) answers with a signed
+    // `challenge` instead of a token - the OTP gate comes before the session.
+    const payload = data.data || {}
+    if (payload.requires_otp) {
+      return {
+        user: null,
+        error: null,
+        requiresOtp: true,
+        challenge: payload.challenge,
+        phone: payload.phone || '',
+        purpose: payload.purpose || 'login',
+        custId: payload.cust_id ?? null,
+      }
+    }
+    return { user: payload, error: null, requiresOtp: false, challenge: null, phone: '', purpose: null }
   } catch (err) {
-    return { user: null, error: err.message || 'Login failed' }
+    return { user: null, error: err.message || 'Login failed', requiresOtp: false, challenge: null }
   }
 }
 
@@ -65,9 +191,35 @@ export async function recoverCredentials(identifier, accountType = 'customer') {
 export async function updateCredentials(payload) {
   try {
     const data = await apiPut('/auth/update_credentials', payload)
-    return { data, error: null }
+    return { data, error: null, code: null, status: null }
   } catch (err) {
-    return { data: null, error: err.message || 'Unable to update password' }
+    return {
+      data: null,
+      error: err.message || 'Unable to update password',
+      // DOMAIN 29 - the machine code (OTP_REQUIRED / CHALLENGE_EXPIRED ...)
+      // travels with the message so the caller can branch on it instead of
+      // matching text.
+      code: err?.payload?.code || null,
+      status: err?.status || null,
+    }
+  }
+}
+
+/**
+ * POST /auth/backup_credentials - DOMAIN 15 / FLOW-EMP_SET-03: the backup
+ * phone and email an employee keeps reachable for account recovery.
+ */
+export async function updateBackupCredentials(payload) {
+  try {
+    const data = await apiPost('/auth/backup_credentials', payload)
+    return { data, error: null, code: null, status: null }
+  } catch (err) {
+    return {
+      data: null,
+      error: err.message || 'Unable to update backup contacts',
+      code: err?.payload?.code || null,
+      status: err?.status || null,
+    }
   }
 }
 
@@ -97,8 +249,12 @@ export function mapEmployee(employeeData) {
       .substring(0, 2)
       .toUpperCase() || 'ST'
 
-  // Resolve staff role from the backend emp_type into the admin-UI role model
-  const rawType = String(employeeData.emp_type || '').trim()
+  // Resolve staff role from the backend emp_categ (legacy alias
+  // emp_type) into the admin-UI role model. Both spellings carry
+  // 'staff' | 'admin' | 'super admin' in any case.
+  const rawType = String(
+    employeeData.emp_categ || employeeData.emp_type || ''
+  ).trim()
   let role = 'Staff Member'
   let roleKey = 'STAFF'
   let permissions = 'Fulfillment, Orders, POS'
@@ -125,15 +281,23 @@ export function mapEmployee(employeeData) {
     email,
     phone: employeeData.emp_phone || '',
     type: rawType || 'Staff',
-    instore: employeeData.emp_instore || false,
+    // The raw category under its schema names: every portal helper reads the
+    // employee through empCateg() (schema.js), which looks for these first and
+    // otherwise falls back to 'staff' - hiding the admin-only nav from admins.
+    emp_categ: rawType,
+    emp_type: rawType,
+    // emp_present (legacy alias emp_instore)
+    instore: employeeData.emp_present ?? employeeData.emp_instore ?? false,
     role,
     roleKey,
     permissions,
     modules,
     avatar: initials,
     avatarBg: 'blue',
-    avatarImage: employeeData.emp_photo || '',
-    status: employeeData.emp_disabled ? 'Disabled' : 'Active',
+    // emp_avatar (legacy alias emp_photo)
+    avatarImage: employeeData.emp_avatar || employeeData.emp_photo || '',
+    // emp_suspended (legacy alias emp_disabled)
+    status: (employeeData.emp_suspended ?? employeeData.emp_disabled) ? 'Disabled' : 'Active',
     mustChangePassword: Boolean(employeeData.must_change_password),
     dateAdded: employeeData.emp_created
       ? new Date(employeeData.emp_created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -142,11 +306,32 @@ export function mapEmployee(employeeData) {
 }
 
 export async function employeeSignUp(details) {
+  // Enrolment keeps the legacy onboarding keys (studnum, college,
+  // program, year, bloc, type) because the current backend still
+  // requires them, and adds the new `categ` key the migrated
+  // endpoint reads. `type` is the uppercased legacy spelling of
+  // `categ` ('STAFF' | 'ADMIN' | 'SUPER ADMIN').
+  const categ = String(
+    details.categ || details.emp_categ || details.type || 'staff'
+  ).trim().toLowerCase()
+  const normalized = categ === 'super admin' || categ === 'superadmin'
+    ? 'super admin'
+    : ['admin', 'staff'].includes(categ)
+      ? categ
+      : 'staff'
+
   try {
     const data = await apiPost('/auth/emp_signup', {
-      email: details.email,
-      surname: details.surname || '',
+      // canonical (new schema) keys
       givname: details.givname || '',
+      surname: details.surname || '',
+      email: details.email,
+      phone: details.phone || '',
+      callcode: details.callcode || '+63',
+      pronoun: details.pronoun || '',
+      categ: normalized,
+      // legacy keys the enrolment form still supplies (the backend
+      // keeps accepting them so the form is unchanged)
       midname: details.midname || '',
       suffix: details.suffix || '',
       studnum: details.studnum || details.studentNumber || '',
@@ -154,11 +339,13 @@ export async function employeeSignUp(details) {
       program: details.program || details.course || '',
       year: details.year || details.yearLevel || '',
       bloc: details.bloc || '',
-      pronoun: details.pronoun || '',
-      phone: details.phone || '',
-      callcode: details.callcode || '+63',
-      type: String(details.type || 'Staff').toUpperCase(),
-      instore: details.instore ?? false,
+      birthday: details.birthday || details.bday || '',
+      brgy: details.brgy || '',
+      city: details.city || '',
+      province: details.province || '',
+      country: details.country || '',
+      type: normalized.toUpperCase(),
+      instore: details.instore ?? true,
     })
     return { user: data.data, error: null }
   } catch (err) {

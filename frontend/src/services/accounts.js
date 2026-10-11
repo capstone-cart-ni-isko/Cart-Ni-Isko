@@ -3,6 +3,8 @@ import { apiGet, apiPost, apiPut, apiDelete } from './api.js'
 /** GET /accounts/display - customer + employee directory (User Management). */
 export async function fetchAccounts(params = {}) {
   const data = await apiGet('/accounts/display', params)
+  // The API answers { customers: [...], employees: [...] }; every caller
+  // accepts that object (and a plain array), so it is passed through.
   return data.data || []
 }
 
@@ -12,6 +14,12 @@ export function searchAccounts(q, params = {}) {
 
 export function sortAccounts(sortBy = 'date', order = 'desc', params = {}) {
   return apiGet('/accounts/sort', { sort_by: sortBy, order, ...params })
+}
+
+/** GET /accounts/me - the signed-in account's own row (aliases included). */
+export async function fetchMyAccount() {
+  const data = await apiGet('/accounts/me')
+  return data.data || null
 }
 
 /** PUT /accounts/type - STAFF | ADMIN | SUPER ADMIN (super admin only). */

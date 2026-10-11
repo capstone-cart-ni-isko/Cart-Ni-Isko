@@ -2,32 +2,62 @@
 
 namespace Tests\Feature;
 
-use App\Models\Appointment;
+use App\Models\EmpNotif;
+use App\Models\Visit;
 use App\Models\CustNotif;
 use App\Models\Customer;
-use App\Models\DutyShift;
 use App\Models\EmpLog;
-use App\Models\EmpNotif;
 use App\Models\Employee;
+use App\Models\Schedule;
+use App\Models\Setting;
+use App\Support\AcademicPeriodRoster;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
-/*
-    REQ-AB-03 / REQ-SS-03 staffing rules on top of the duty_shift schedule:
-    per-block headcounts, the one-time shortage notice, and the PENDING
-    REPLACEMENT alert raised when a shift loses its assignee.
-*/
+/**
+ * Staffing headcount (REQ-AB-03 / REQ-SS-03), the academic-period roster
+ * rebuild (REQ-SS-01) and the registration audit row (REQ-UM-04).
+ *
+ * These run on phpunit's sqlite :memory: database, so no row in the Supabase
+ * database is read or written from here. Duty blocks live in `schedules`
+ * (system-new DOMAIN 7) as a start/end timestamp pair - the retired
+ * duty_shift table keeps its migration but is no longer written to.
+ */
 class StaffingRosterTest extends TestCase
 {
     use RefreshDatabase;
 
     private int $seq = 0;
     private array $tokens = [];
+    private ?string $markerBackup = null;
+    private bool $markerExisted = false;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // The roster job writes a marker file next to the application's own
+        // state. It is saved and put back so a test run never leaves the
+        // running scheduler's marker changed.
+        $this->markerBackup = storage_path('framework/academic-period-applied');
+        $this->markerExisted = file_exists($this->markerBackup);
+        if ($this->markerExisted) {
+            $this->markerBackup = file_get_contents($this->markerBackup);
+            @unlink(storage_path('framework/academic-period-applied'));
+        }
+    }
 
     protected function tearDown(): void
     {
+        $path = storage_path('framework/academic-period-applied');
+        @unlink($path);
+        if ($this->markerExisted && $this->markerBackup !== null) {
+            file_put_contents($path, $this->markerBackup);
+        }
+
         Carbon::setTestNow();
         parent::tearDown();
     }
@@ -42,7 +72,10 @@ class StaffingRosterTest extends TestCase
 
         $key = get_class($model) . ':' . $model->getKey();
         if (! isset($this->tokens[$key])) {
-            $this->tokens[$key] = $model->createToken('test')->plainTextToken;
+            // The api guard is the signed `cni_token` bearer (ApiToken), so the
+            // test mints one the same way login does instead of a Sanctum
+            // personal access token, which the guard no longer accepts.
+            $this->tokens[$key] = \App\Support\ApiToken::issue($model);
         }
 
         return ['Authorization' => 'Bearer ' . $this->tokens[$key]];
@@ -52,7 +85,11 @@ class StaffingRosterTest extends TestCase
     {
         $this->seq++;
 
-        return Employee::create(array_merge([
+        // emp_type is a legacy fixture column and is deliberately absent from
+        // the model's fillable list (the live table spells it emp_categ), so
+        // the fixture writes it past mass assignment. Both spellings are kept
+        // in step so EnsureRole and notifyEmployeesByType agree on the rank.
+        $data = array_merge([
             'emp_created'  => now(),
             'emp_password' => Hash::make('Password123!'),
             'emp_surname'  => 'Dela Cruz',
@@ -68,8 +105,12 @@ class StaffingRosterTest extends TestCase
             // Offset past the seeded super admin, whose phone is unique too.
             'emp_phone'    => '+639' . str_pad((string) ($this->seq + 500), 9, '0', STR_PAD_LEFT),
             'emp_type'     => 'STAFF',
-            'emp_instore'  => 1,
-        ], $attributes));
+            'emp_instore'  => 0,
+        ], $attributes);
+
+        $data['emp_categ'] = $data['emp_type'] ?? 'STAFF';
+
+        return Employee::forceCreate($data);
     }
 
     private function makeSuperAdmin(): Employee
@@ -103,72 +144,130 @@ class StaffingRosterTest extends TestCase
         ]);
     }
 
-    private function makeShift(Employee $employee, array $attributes = []): DutyShift
+    /**
+     * One duty block: `schedules` holds the window as a start/end timestamp
+     * pair, so the API's `shift_date` + `shift_start` / `shift_end` fields are
+     * folded into it here exactly as SystemAPI does on write.
+     */
+    private function makeShift(Employee $employee, array $attributes = []): Schedule
     {
-        return DutyShift::create(array_merge([
-            'emp_id'         => $employee->getKey(),
-            'shift_date'     => now()->format('Y-m-d'),
-            'shift_start'    => '08:00',
-            'shift_end'      => '18:00',
-            'shift_type'     => 'DESK DUTY',
-            'shift_location' => 'Main Counter',
-            'shift_created'  => now(),
-            'created_by'     => null,
+        $date = $attributes['shift_date'] ?? now()->format('Y-m-d');
+        $start = $attributes['shift_start'] ?? '08:00';
+        $end   = $attributes['shift_end'] ?? '18:00';
+
+        unset($attributes['shift_date'], $attributes['shift_start'], $attributes['shift_end']);
+
+        return Schedule::create(array_merge([
+            'emp_id'           => $employee->getKey(),
+            'sched_time_start' => Carbon::parse($date . ' ' . $start),
+            'sched_time_end'   => Carbon::parse($date . ' ' . $end),
+            'sched_created'    => now(),
         ], $attributes));
     }
 
-    private function makeAppointment(Customer $customer, string $type, string $date, string $time): Appointment
+    private function makeAppointment(Customer $customer, string $type, string $date, string $time): Visit
     {
-        return Appointment::create([
-            'cust_id'      => $customer->getKey(),
-            'appoint_type' => $type,
-            'appoint_date' => Carbon::parse($date . ' ' . $time),
-            'appoint_qr'   => 'QR' . str_pad((string) ++$this->seq, 10, '0', STR_PAD_LEFT),
-        ]);
-    }
+        $start = Carbon::parse($date . ' ' . $time);
 
-    private function removeShift(Employee $actor, DutyShift $shift)
-    {
-        return $this->json('DELETE', '/api/duty/remove', ['shift_id' => $shift->shift_id], $this->headers($actor));
+        // Live `appointments` columns: status + start/end window (the legacy
+        // appoint_date / appoint_desc keys are request aliases only and are
+        // dropped by mass assignment).
+        return Visit::create([
+            'cust_id'        => $customer->getKey(),
+            'appoint_type'   => $type,
+            'appoint_status' => 'upcoming',
+            'appoint_start'  => $start,
+            'appoint_end'    => $start->copy()->addMinutes(10),
+            'appoint_qr'     => 'QR' . str_pad((string) ++$this->seq, 10, '0', STR_PAD_LEFT),
+        ]);
     }
 
     // ==========================================
     // REQ-AB-03 / REQ-SS-03 PER-BLOCK HEADCOUNT
     // ==========================================
 
-    public function test_a_block_is_only_staffed_by_the_employees_on_shift_for_it()
+    public function test_a_block_is_only_staffed_by_the_employees_rostered_for_it()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
         $admin = $this->makeSuperAdmin();
 
-        // Two officers, but only one of them is on shift after 11:00.
-        $this->makeShift($this->makeEmployee(), ['shift_start' => '08:00', 'shift_end' => '11:00']);
-        $this->makeShift($this->makeEmployee(), ['shift_start' => '08:00', 'shift_end' => '18:00']);
+        // Both officers are in store, but only one is rostered for the morning.
+        $morning = $this->makeEmployee(['emp_instore' => 1]);
+        $allDay = $this->makeEmployee(['emp_instore' => 1]);
+
+        $this->makeShift($morning, ['shift_start' => '08:00', 'shift_end' => '11:00']);
+        $this->makeShift($allDay, ['shift_start' => '08:00', 'shift_end' => '18:00']);
 
         $slots = $this->getJson('/api/appoint/slots?date=2026-10-05', $this->headers($admin))
             ->assertStatus(200)
             ->json('data.slots');
 
-        $this->assertSame(2, $this->slotAt($slots, '08:00', 'VISIT')['staff']);
-        $this->assertSame(1, $this->slotAt($slots, '11:00', 'VISIT')['staff']);
+        // 08:00 is covered by both blocks; 11:00 is covered by one block only.
+        $this->assertSame(2, $this->slotAt($slots, '08:00', 'VISIT')['in_store']);
+        $this->assertSame(1, $this->slotAt($slots, '11:00', 'VISIT')['in_store']);
 
-        // REQ-AB-03: a visit needs two, so the thin block closes while the
-        // fully covered one stays bookable.
+        // Rule 10: the pickup and visit thresholds are the same, so ONE
+        // rostered employee is already enough - the thin block stays bookable.
         $this->assertTrue($this->slotAt($slots, '08:00', 'VISIT')['available']);
-        $this->assertFalse($this->slotAt($slots, '11:00', 'VISIT')['available']);
+        $this->assertTrue($this->slotAt($slots, '11:00', 'VISIT')['available']);
+        $this->assertNull($this->slotAt($slots, '11:00', 'VISIT')['reason']);
+    }
+
+    public function test_a_slot_with_no_rostered_employee_closes_for_both_types()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        $admin = $this->makeSuperAdmin();
+
+        // The day IS rostered (so the day-wide fallback does not kick in), but
+        // the only employee holding a block for it is off duty - so the roster
+        // reports a real headcount of zero for that day.
+        $offDuty = $this->makeEmployee(['emp_instore' => 0]);
+        $this->makeShift($offDuty, ['shift_start' => '08:00', 'shift_end' => '18:00']);
+
+        $slots = $this->getJson('/api/appoint/slots?date=2026-10-05', $this->headers($admin))
+            ->assertStatus(200)
+            ->json('data.slots');
+
+        // Both kinds share the same floor, so both report the same reason.
         $this->assertSame(
-            'Not enough in-store employees available (minimum 2 required)',
-            $this->slotAt($slots, '11:00', 'VISIT')['reason']
+            'Not enough in-store employees available (minimum 1 required)',
+            $this->slotAt($slots, '09:00', 'VISIT')['reason']
         );
+        $this->assertSame(
+            'Not enough in-store employees available (minimum 1 required)',
+            $this->slotAt($slots, '09:00', 'CLAIM')['reason']
+        );
+        $this->assertFalse($this->slotAt($slots, '09:00', 'VISIT')['available']);
+        $this->assertFalse($this->slotAt($slots, '09:00', 'CLAIM')['available']);
+    }
+
+    public function test_a_day_without_any_roster_falls_back_to_the_day_wide_headcount()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        $admin = $this->makeSuperAdmin();
+
+        // Rostered for a different day only.
+        $this->makeEmployee(['emp_instore' => 1]);
+        $this->makeEmployee(['emp_instore' => 1]);
+        $this->makeShift($this->makeEmployee(['emp_instore' => 0]), ['shift_date' => '2026-11-01']);
+
+        $slots = $this->getJson('/api/appoint/slots?date=2026-10-05', $this->headers($admin))
+            ->assertStatus(200)
+            ->json('data.slots');
+
+        $this->assertSame(2, $this->slotAt($slots, '09:00', 'VISIT')['in_store']);
+        $this->assertTrue($this->slotAt($slots, '09:00', 'VISIT')['available']);
     }
 
     public function test_a_booking_is_refused_when_its_own_block_is_understaffed()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        $admin = $this->makeSuperAdmin();
         $customer = $this->makeCustomer();
 
-        // One officer, on shift only in the afternoon.
-        $this->makeShift($this->makeEmployee(), ['shift_start' => '13:00', 'shift_end' => '18:00']);
+        // One in-store officer, rostered only for the afternoon.
+        $officer = $this->makeEmployee(['emp_instore' => 1]);
+        $this->makeShift($officer, ['shift_start' => '13:00', 'shift_end' => '18:00']);
 
         $this->json('POST', '/api/appoint/create', [
             'cust_id'      => $customer->getKey(),
@@ -176,7 +275,7 @@ class StaffingRosterTest extends TestCase
             'appoint_type' => 'VISIT',
         ], $this->headers($customer))
             ->assertStatus(409)
-            ->assertJsonPath('message', 'Not enough in-store employees available (minimum 2 required)');
+            ->assertJsonPath('message', 'Not enough in-store employees available (minimum 1 required)');
     }
 
     // ==========================================
@@ -190,18 +289,21 @@ class StaffingRosterTest extends TestCase
         $customer = $this->makeCustomer();
 
         $appointment = $this->makeAppointment($customer, 'VISIT', '2026-10-05', '09:00');
-        $first = $this->makeShift($this->makeEmployee());
-        $second = $this->makeShift($this->makeEmployee());
+        $officer = $this->makeEmployee(['emp_instore' => 1]);
+        $this->makeShift($officer);
 
-        // Both removals leave the visit understaffed; the notice must not double up.
-        $this->removeShift($admin, $first)->assertStatus(200);
-        $this->removeShift($admin, $second)->assertStatus(200);
+        // Flip the single officer out twice; the notice must not double up.
+        $this->putJson('/api/shifts/' . $this->shiftOf($officer)->sched_id, ['emp_instore' => false], $this->headers($admin))
+            ->assertStatus(200);
+        $this->putJson('/api/shifts/' . $this->shiftOf($officer)->sched_id, ['emp_instore' => false], $this->headers($admin))
+            ->assertStatus(200);
 
         $notices = CustNotif::where('cust_id', $customer->getKey())
             ->where('custnotif_msg', 'like', '%appointment #' . $appointment->appoint_id . '%')
             ->get();
 
         $this->assertCount(1, $notices);
+        $this->assertStringContainsString('staff shortage', $notices->first()->custnotif_msg);
         $this->assertStringContainsString('Reason: staff shortage', $notices->first()->custnotif_msg);
     }
 
@@ -211,86 +313,299 @@ class StaffingRosterTest extends TestCase
         $admin = $this->makeSuperAdmin();
         $customer = $this->makeCustomer();
 
-        // A CLAIM needs one employee on shift, so losing one of two keeps the
+        // A CLAIM needs one in-store employee, so losing one of two keeps the
         // block staffed and the customer hears nothing.
         $this->makeAppointment($customer, 'CLAIM', '2026-10-05', '09:00');
-        $first = $this->makeShift($this->makeEmployee());
-        $this->makeShift($this->makeEmployee());
+        $first = $this->makeEmployee(['emp_instore' => 1]);
+        $second = $this->makeEmployee(['emp_instore' => 1]);
+        $this->makeShift($first);
+        $this->makeShift($second);
 
-        $this->removeShift($admin, $first)->assertStatus(200);
+        $this->putJson('/api/shifts/' . $this->shiftOf($first)->sched_id, ['emp_instore' => false], $this->headers($admin))
+            ->assertStatus(200);
 
-        $this->assertSame(0, CustNotif::where('custnotif_msg', 'like', '%Reason: staff shortage%')->count());
-        $this->assertSame(0, EmpNotif::where('empnotif_msg', 'like', '%PENDING REPLACEMENT%')->count());
-    }
-
-    // ==========================================
-    // REQ-SS-03 PENDING REPLACEMENT
-    // ==========================================
-
-    public function test_removing_a_needed_shift_alerts_super_admins_of_a_pending_replacement()
-    {
-        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
-        $admin = $this->makeSuperAdmin();
-        $customer = $this->makeCustomer();
-
-        $this->makeAppointment($customer, 'CLAIM', '2026-10-05', '09:00');
-        $shift = $this->makeShift($this->makeEmployee());
-
-        $this->removeShift($admin, $shift)->assertStatus(200);
-
-        $alert = EmpNotif::where('emp_id', $admin->getKey())
-            ->where('empnotif_msg', 'like', '%PENDING REPLACEMENT%')
-            ->first();
-
-        $this->assertNotNull($alert);
-        $this->assertStringContainsString('shift #' . $shift->shift_id, $alert->empnotif_msg);
-        $this->assertStringContainsString('1 open booking(s)', $alert->empnotif_msg);
-    }
-
-    public function test_disabling_an_employee_flags_their_shift_as_pending_replacement()
-    {
-        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
-        $admin = $this->makeSuperAdmin();
-        $customer = $this->makeCustomer();
-        $officer = $this->makeEmployee();
-
-        $this->makeAppointment($customer, 'CLAIM', '2026-10-05', '09:00');
-        $this->makeShift($officer);
-
-        $this->postJson('/api/accounts/disable', [
-            'user_id'      => $officer->getKey(),
-            'account_type' => 'employee',
-            'reason'       => 'Left the org',
-        ], $this->headers($admin))->assertStatus(200);
-
-        $shifts = $this->getJson('/api/duty/display?date=2026-10-05', $this->headers($admin))
-            ->assertStatus(200)
-            ->json('data.shifts');
-
-        $this->assertTrue($shifts[0]['pending_replacement']);
-        $this->assertSame(1, DutyShift::pendingReplacements());
         $this->assertSame(
-            1,
-            EmpNotif::where('emp_id', $admin->getKey())->where('empnotif_msg', 'like', '%PENDING REPLACEMENT%')->count()
+            0,
+            CustNotif::where('custnotif_msg', 'like', '%Reason: staff shortage%')->count()
         );
     }
 
-    public function test_an_active_employees_shift_is_not_pending_replacement()
+    // ==========================================
+    // REQ-SS-01 ACADEMIC PERIOD ROSTER
+    // ==========================================
+
+    public function test_the_roster_stays_dormant_while_the_term_has_not_opened()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
-        $admin = $this->makeSuperAdmin();
-        $this->makeShift($this->makeEmployee());
+        $this->makeEmployee();
 
-        $shifts = $this->getJson('/api/duty/display?date=2026-10-05', $this->headers($admin))
-            ->assertStatus(200)
-            ->json('data.shifts');
+        $summary = AcademicPeriodRoster::apply();
 
-        $this->assertFalse($shifts[0]['pending_replacement']);
-        $this->assertSame(0, DutyShift::pendingReplacements());
+        $this->assertFalse($summary['applied']);
+        $this->assertSame('the term has not opened yet', $summary['reason']);
+        $this->assertSame(0, $summary['reset']);
+        $this->assertDatabaseCount('schedules', 0);
+        $this->assertSame(0, (int) Employee::first()->fresh()->emp_instore);
+    }
+
+    public function test_the_roster_runs_once_per_term()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        Setting::setValue('academic_period_start', '2026-08-04');
+        $officer = $this->makeEmployee();
+
+        $first = AcademicPeriodRoster::apply();
+
+        $this->assertTrue($first['applied']);
+        $this->assertSame(1, (int) $officer->fresh()->emp_instore);
+        $this->assertSame(
+            AcademicPeriodRoster::DAYS,
+            Schedule::where('emp_id', $officer->getKey())->count()
+        );
+
+        // A second run in the same term is a no-op, so nothing is doubled up
+        $second = AcademicPeriodRoster::apply();
+
+        $this->assertFalse($second['applied']);
+        $this->assertSame('this term is already applied', $second['reason']);
+        $this->assertSame(
+            AcademicPeriodRoster::DAYS,
+            Schedule::where('emp_id', $officer->getKey())->count()
+        );
+    }
+
+    public function test_the_roster_never_overwrites_a_block_an_admin_already_created()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        Setting::setValue('academic_period_start', '2026-08-04');
+        // The officer is available, so the exception rule does not apply and
+        // the rebuild reaches its gap-filling step.
+        $officer = $this->makeEmployee(['emp_instore' => 1]);
+
+        $this->makeShift($officer, ['shift_start' => '13:00', 'shift_end' => '17:00']);
+
+        AcademicPeriodRoster::apply();
+
+        // Every remaining day is filled, and today keeps the admin's own block
+        $this->assertSame(
+            AcademicPeriodRoster::DAYS,
+            Schedule::where('emp_id', $officer->getKey())->count()
+        );
+
+        $mine = Schedule::where('emp_id', $officer->getKey())
+            ->whereDate('sched_time_start', '2026-10-05')
+            ->first();
+
+        $this->assertNotNull($mine);
+        $this->assertSame('13:00', $mine->sched_time_start->format('H:i'));
+        $this->assertSame('17:00', $mine->sched_time_end->format('H:i'));
+    }
+
+    /**
+     * REGRESSION - the baseline roster rebuild used to fail the first time a
+     * term was opened: it wrote `schedules` without a primary key, and on the
+     * live connection `sched_id` is a bare bigint NOT NULL with no sequence,
+     * so every block insert died on a NOT NULL violation and the whole rebuild
+     * aborted.
+     */
+    public function test_the_baseline_roster_allocates_a_key_for_every_block_it_writes()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        Setting::setValue('academic_period_start', '2026-08-04');
+        $officer = $this->makeEmployee();
+
+        $statements = [];
+        DB::listen(function ($query) use (&$statements) {
+            $statements[] = $query->sql;
+        });
+
+        AcademicPeriodRoster::apply();
+
+        // Every block write the rebuild performs names its own key.
+        $inserts = collect($statements)->filter(
+            fn (string $sql) => str_starts_with($sql, 'insert into "schedules"')
+        );
+        $this->assertNotEmpty($inserts->all(), 'The roster rebuild wrote no blocks at all.');
+        foreach ($inserts as $sql) {
+            $this->assertStringContainsString('"sched_id"', $sql);
+        }
+
+        $this->assertSame(
+            AcademicPeriodRoster::DAYS,
+            Schedule::where('emp_id', $officer->getKey())->whereNotNull('sched_id')->count()
+        );
+    }
+
+    public function test_the_roster_uses_the_store_operating_hours()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        Setting::setValue('academic_period_start', '2026-08-04');
+        Setting::setValue('operating_hours', '09:00 - 21:00');
+        $officer = $this->makeEmployee();
+
+        AcademicPeriodRoster::apply();
+
+        $block = Schedule::where('emp_id', $officer->getKey())
+            ->whereDate('sched_time_start', '2026-10-05')
+            ->first();
+
+        $this->assertNotNull($block);
+        $this->assertSame('09:00', $block->sched_time_start->format('H:i'));
+        $this->assertSame('21:00', $block->sched_time_end->format('H:i'));
+    }
+
+    public function test_a_logged_unavailability_survives_the_roster_rebuild()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        Setting::setValue('academic_period_start', '2026-08-04');
+
+        $excepted = $this->makeEmployee(['emp_instore' => 0]);
+        $normal = $this->makeEmployee(['emp_instore' => 0]);
+
+        // The exception: a block the officer is not available for.
+        $this->makeShift($excepted);
+
+        $summary = AcademicPeriodRoster::apply();
+
+        $this->assertSame(1, $summary['excepted']);
+        $this->assertSame(0, (int) $excepted->fresh()->emp_instore);
+        $this->assertSame(1, (int) $normal->fresh()->emp_instore);
+
+        // The excepted employee keeps the block that recorded the exception,
+        // and gains no baseline block on top of it for that day.
+        $kept = Schedule::where('emp_id', $excepted->getKey())
+            ->whereDate('sched_time_start', '2026-10-05')
+            ->first();
+
+        $this->assertNotNull($kept);
+        $this->assertSame('08:00', $kept->sched_time_start->format('H:i'));
+        $this->assertSame(
+            1,
+            Schedule::where('emp_id', $excepted->getKey())
+                ->whereDate('sched_time_start', '2026-10-05')
+                ->count()
+        );
+    }
+
+    public function test_a_disabled_or_deleted_employee_is_left_out_of_the_roster()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        Setting::setValue('academic_period_start', '2026-08-04');
+
+        $disabled = $this->makeEmployee(['emp_disabled' => now()]);
+        $deleted = $this->makeEmployee(['emp_deleted' => now()]);
+
+        AcademicPeriodRoster::apply();
+
+        $this->assertSame(0, Schedule::where('emp_id', $disabled->getKey())->count());
+        $this->assertSame(0, Schedule::where('emp_id', $deleted->getKey())->count());
+        $this->assertSame(0, (int) $disabled->fresh()->emp_instore);
+        $this->assertSame(0, (int) $deleted->fresh()->emp_instore);
     }
 
     // ==========================================
-    // REQ-UM-04 REGISTRATION LOG
+    // FLOW-EMP_SCHED-06/07 - THE ROSTER CONTROLS MUST ANNOUNCE A SHORTAGE
+    // ==========================================
+
+    /**
+     * REGRESSION - the schedule page's On Duty / Off Duty toggle is
+     * PUT /api/accounts/update, and it used to only notify customers about a
+     * staff shortage: the super admins were never told to find a substitute,
+     * so the primary roster control of DOMAIN 7 raised no cover request at
+     * all. Only the block editor (PUT /api/shifts/{id}) reached them.
+     */
+    public function test_the_duty_toggle_alerts_the_super_admins_about_every_block_that_lost_its_assignee()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+
+        $today = $this->makeShift($officer, ['shift_start' => '09:00', 'shift_end' => '18:00']);
+        $tomorrow = $this->makeShift($officer, ['shift_date' => '2026-10-06', 'shift_start' => '09:00', 'shift_end' => '18:00']);
+        // Already over: it needs no substitute, so it must never be announced.
+        $past = $this->makeShift($officer, ['shift_date' => '2026-10-01', 'shift_start' => '09:00', 'shift_end' => '18:00']);
+
+        $this->putJson('/api/accounts/update', [
+            'user_id'      => $officer->getKey(),
+            'account_type' => 'employee',
+            'emp_instore'  => false,
+        ], $this->headers($superAdmin))->assertStatus(200);
+
+        $alerts = EmpNotif::where('empnotif_msg', 'like', '%PENDING REPLACEMENT%')->get();
+        $superAdmins = Employee::whereRaw('UPPER(emp_categ) = ?', ['SUPER ADMIN'])->count()
+            + Employee::whereNull('emp_categ')->whereRaw('UPPER(emp_type) = ?', ['SUPER ADMIN'])->count();
+
+        // One alert per block that still needs cover, to every super admin.
+        $this->assertSame(2 * $superAdmins, $alerts->count(), 'One alert per block per super admin.');
+        $this->assertGreaterThan(0, $superAdmins);
+
+        foreach ([$today, $tomorrow] as $block) {
+            $this->assertSame(
+                $superAdmins,
+                $this->alertsFor($block->sched_id)->count(),
+                'Block #' . $block->sched_id . ' was not announced to every super admin.'
+            );
+        }
+
+        $this->assertSame(0, $this->alertsFor($past->sched_id)->count(), 'A block that ended needs no substitute.');
+
+        // Every alert went to a super admin and to nobody else.
+        foreach ($alerts as $alert) {
+            $this->assertSame(1, Employee::where('emp_id', $alert->emp_id)
+                ->whereRaw("UPPER(COALESCE(NULLIF(emp_categ, ''), emp_type)) = ?", ['SUPER ADMIN'])->count());
+        }
+
+        // Turning them back on duty keeps the queue as it was and adds nothing.
+        $this->putJson('/api/accounts/update', [
+            'user_id'      => $officer->getKey(),
+            'account_type' => 'employee',
+            'emp_instore'  => true,
+        ], $this->headers($superAdmin))->assertStatus(200);
+
+        $this->assertSame($alerts->count(), EmpNotif::where('empnotif_msg', 'like', '%PENDING REPLACEMENT%')->count());
+    }
+
+    /**
+     * The block editor's own "unavailable" flag and a store-wide availability
+     * flip in the same request must not raise the same alert twice.
+     */
+    public function test_one_request_announces_each_block_once()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        $this->makeShift($officer, ['shift_date' => '2026-10-06', 'shift_start' => '00:00', 'shift_end' => '23:59']);
+        $block = $this->makeShift($officer, ['shift_start' => '10:00', 'shift_end' => '12:00']);
+
+        $this->putJson('/api/shifts/' . $block->sched_id, [
+            'unavailable' => true,
+            'emp_instore' => false,
+        ], $this->headers($superAdmin))->assertStatus(200);
+
+        $superAdmins = Employee::whereRaw('UPPER(emp_categ) = ?', ['SUPER ADMIN'])->count()
+            + Employee::whereNull('emp_categ')->whereRaw('UPPER(emp_type) = ?', ['SUPER ADMIN'])->count();
+
+        $this->assertSame(
+            $superAdmins,
+            $this->alertsFor($block->sched_id)->count(),
+            'The same block was announced more than once in one request.'
+        );
+
+        // Off duty also strips the employee's other block, so it is announced
+        // too - exactly once.
+        $other = Schedule::where('emp_id', $officer->getKey())
+            ->where('sched_id', '!=', $block->sched_id)->first();
+        $this->assertSame($superAdmins, $this->alertsFor($other->sched_id)->count());
+    }
+
+    /** Alerts naming one specific block, past any other block id. */
+    private function alertsFor($schedId): \Illuminate\Support\Collection
+    {
+        return EmpNotif::where('empnotif_msg', 'like', '%Shift block #' . $schedId . ' assigned%')->get();
+    }
+
+    // ==========================================
+    // REQ-UM-04 REGISTRATION AUDIT ROW
     // ==========================================
 
     public function test_employee_registration_is_logged_with_the_responsible_admin()
@@ -335,5 +650,10 @@ class StaffingRosterTest extends TestCase
         }
 
         $this->fail('No ' . $type . ' slot at ' . $time);
+    }
+
+    private function shiftOf(Employee $employee): Schedule
+    {
+        return Schedule::where('emp_id', $employee->getKey())->orderBy('sched_id')->first();
     }
 }

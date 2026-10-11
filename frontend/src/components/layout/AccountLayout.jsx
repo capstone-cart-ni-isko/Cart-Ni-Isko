@@ -4,7 +4,6 @@ import BottomNav from './BottomNav.jsx'
 import MenuSidebar, { MenuProvider } from './MenuSidebar.jsx'
 import DesktopHeader from './DesktopHeader.jsx'
 import DesktopFooter from './DesktopFooter.jsx'
-import DesktopAccountSidebar from './DesktopAccountSidebar.jsx'
 
 /**
  * Shared shell for every account page (Profile, Orders, Order Details, Settings, ...).
@@ -33,11 +32,6 @@ function AccountLayout({ children, className = '' }) {
           <div
             className={`app-container relative flex-1 w-full bg-[#F8F9FA] max-w-7xl mx-auto px-4 md:px-6 lg:px-8 md:py-6 lg:flex lg:items-start lg:gap-6 ${className}`}
           >
-            {/* Sidebar stays visible while navigating between account pages (desktop only) */}
-            <div className="hidden lg:block w-64 shrink-0 sticky top-18 self-start">
-              <DesktopAccountSidebar />
-            </div>
-
             <div className="flex-1 min-w-0">
               {isOffline && (
                 <div className="bg-amber-500 text-white text-xs font-bold py-2 px-4 text-center sticky top-0 z-[99999]">

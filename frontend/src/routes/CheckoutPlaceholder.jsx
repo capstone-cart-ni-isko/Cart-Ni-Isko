@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import QRCode from 'qrcode'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { useCart } from '../hooks/useCart.js'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
@@ -9,53 +9,30 @@ import BottomNav from '../components/layout/BottomNav.jsx'
 import Button from '../components/ui/Button.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { ApiErrorText } from '../components/ui/ApiErrorBoundary.jsx'
+import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
-import { CheckIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
-import { getDispatch, payOrder, createPaymentIntent } from '../services/checkout.js'
-import { addToCart as addCartOrder, removeFromCart as removeCartOrder } from '../services/cart.js'
-import { fetchOrder, removeProductFromOrder } from '../services/orders.js'
-import { createAppointment, closeAppointment } from '../services/appointments.js'
-import SlotPicker from '../components/ui/SlotPicker.jsx'
-import { stashSessionForRedirect } from '../services/session.js'
+import {
+  clearCheckoutSlot,
+  createPaymentIntent,
+  getDispatch,
+  readCheckoutSlot,
+  verifyPaymentStatus,
+} from '../services/checkout.js'
 
-/* Delivery tiers previewed through POST /checkout/dispatch (SRS shipping fees).
-   ETAs match the server's estimate: +24 hours / +2 days / +5 days. */
+/* Delivery tiers previewed through POST /checkout/dispatch (SRS shipping fees). */
 const DELIVERY_TIERS = [
-  { key: 'priority', label: 'Priority', fee: 100, eta: '24 hours' },
-  { key: 'standard', label: 'Standard', fee: 50, eta: '2 days' },
-  { key: 'saver', label: 'Saver', fee: 30, eta: '5 days' },
+  { key: 'priority', label: 'Priority', fee: 100, eta: 'Same-day' },
+  { key: 'standard', label: 'Standard', fee: 50, eta: '1–2 days' },
+  { key: 'saver', label: 'Saver', fee: 30, eta: '3–5 days' },
 ]
 
-function prodIdOf(item) {
-  return item?.prodId ?? item?.product?.prodId ?? null
-}
+/** FLOW-CHECKOUT-09: the pre-placement confirmation lives five seconds. */
+const CONFIRM_SECONDS = 5
 
-/** /cart/add nests the new row under data.order, other endpoints inline it. */
-function pickOrdId(res) {
-  const d = res?.data
-  if (d && typeof d === 'object' && !Array.isArray(d)) {
-    return d.ord_id ?? d.id ?? d.order?.ord_id ?? d.order?.id ?? null
-  }
-  if (Array.isArray(d) && d.length) return d[0].ord_id ?? d[0].id ?? null
-  return res?.ord_id ?? null
-}
-
-/** "2026-09-26 10:30" -> "Sat, Sep 26 at 10:30 AM". */
-function slotWhen(start) {
-  const at = new Date(String(start || '').replace(' ', 'T'))
-  if (Number.isNaN(at.getTime())) return String(start || '')
-  const day = at.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  const time = at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  return `${day} at ${time}`
-}
-
-/** Local YYYY-MM-DD (toISOString would give the UTC date). */
-function todayLocal() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+/** Marker left behind while the browser is off paying at the gateway. */
+const PENDING_KEY = 'isko_checkout_pending'
 
 function addressText(addr) {
   if (!addr) return ''
@@ -65,61 +42,75 @@ function addressText(addr) {
     .join(', ')
 }
 
-/** Receipt summary from the POST /checkout/payment response. */
-function receiptFrom(data, ordId, dispatchType, slot) {
-  const payment = data?.payment || {}
-  const dispatch = data?.dispatch || {}
-  const order = data?.order || {}
-  const isDelivery = dispatchType === 'delivery'
-  return {
-    ordId: order.ord_id ?? ordId,
-    tag: order.ord_tag || `#${ordId}`,
-    isDelivery,
-    paid: Number(payment.pay_given ?? 0),
-    due: Number(payment.pay_due ?? 0),
-    change: Number(payment.pay_change ?? 0),
-    deliverRef: dispatch.deliver_ref || '',
-    deliverAddress: dispatch.deliver_address || '',
-    deliverDate: dispatch.deliver_date || null,
-    pickupWhen: !isDelivery && slot ? slotWhen(slot) : '',
-    // Delivery: the parcel code the customer scans on arrival. Pickup: the
-    // ORD- tag staff scan at the counter (both accepted by /tracking/scan).
-    qrCode: isDelivery ? dispatch.deliver_qr || '' : order.ord_tag || '',
+function todayISO() {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/**
+ * Arrival copy under the delivery date. When the server quoted a live courier
+ * the local tier row is not the store's to promise on its own, so the server's
+ * own estimate (dispatch_details / dispatch) is quoted instead - never the
+ * local table's day range.
+ */
+function etaNote(feeSource, serverEta) {
+  if (feeSource === 'lalamove') {
+    return serverEta
+      ? `Live courier quote — estimated arrival ${String(serverEta).replace('T', ' ')}.`
+      : 'Live courier quote — the courier confirms the arrival window after booking.'
   }
+  return 'Earliest possible arrival for the selected speed.'
 }
 
-function formatWhen(value) {
-  if (!value) return ''
-  const d = new Date(String(value).replace(' ', 'T'))
-  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString()
-}
+/** The exact body every checkout endpoint receives for this form. */
+function buildCheckoutPayload(form) {
+  const { dispatchType, tier, deliveryAddress, deliverExpect, slot, bagIds } = form
+  const payload = { dispatch_type: dispatchType }
+  // No bag_ids key = "every live row"; a checked selection is sent explicitly.
+  if (bagIds.length > 0) payload.bag_ids = bagIds
 
-/* The order being paid through PayMongo, kept across the redirect round trip. */
-const PENDING_PAYMONGO_KEY = 'cartniisko:pending_paymongo'
-
-function savePendingPayMongo(pending) {
-  try {
-    sessionStorage.setItem(PENDING_PAYMONGO_KEY, JSON.stringify(pending))
-  } catch {
-    // Blocked storage: the return handler then reports the payment as unfinished.
+  if (dispatchType === 'delivery') {
+    payload.speed = tier
+    payload.deliver_address = deliveryAddress
+    if (deliverExpect) payload.deliver_expect = deliverExpect
+  } else if (slot?.appoint_start) {
+    payload.appoint_start = slot.appoint_start
+    if (slot.appoint_id) payload.appoint_id = slot.appoint_id
   }
+  return payload
 }
 
-function readPendingPayMongo() {
-  try {
-    const pending = JSON.parse(sessionStorage.getItem(PENDING_PAYMONGO_KEY) || 'null')
-    sessionStorage.removeItem(PENDING_PAYMONGO_KEY)
-    return pending
-  } catch {
-    return null
-  }
-}
-
+/**
+ * DOMAIN 26 (ORDER CHECKOUT).
+ *
+ * The bag rows to cut are addressed by `bag_ids` (the checked lines - the
+ * selection made on /bag); an omitted key means "every live row"
+ * (REQ-CHECKOUT-01). Nothing is written until the final placement call:
+ *
+ *   POST /checkout/dispatch        quote (fees, ETA, total due)
+ *   POST /checkout/payment         refused - 409 ONLINE_PAYMENT_REQUIRED
+ *   POST /checkout/payment/intent  place it - PayMongo, then redirect to
+ *                                  data.checkout_url (REQ-CHECKOUT-03)
+ *
+ * Flow: claim details (FLOW-CHECKOUT-03) -> phone OTP (FLOW-CHECKOUT-08) ->
+ * 5-second "Looks good / Go back" dialog (FLOW-CHECKOUT-09) -> placement ->
+ * redirect to data.checkout_url -> back through ?status=/&order= which is
+ * confirmed with POST /checkout/payment/status (the webhook may still be in
+ * flight) -> navigate('/bag') (FLOW-CHECKOUT-10). Pickup slots are collected on
+ * /book?return=/checkout and only ever sent to the server as
+ * `appoint_start`: the appointment row is created inside the checkout
+ * transaction (FLOW-CHECKOUT-06).
+ *
+ * Rule 55: every preorder - pickup OR delivery, delivery fee included - is
+ * paid online here, so the gateway is fixed to `paymongo` and the customer is
+ * never offered a pay-at-store tender. The POS register keeps its cash.
+ */
 function CheckoutPlaceholder() {
   const navigate = useNavigate()
+  const location = useLocation()
   const {
     cartItems,
-    selectedItemIds,
     selectedItems,
     clearSelectedItems,
     refreshCart,
@@ -127,86 +118,123 @@ function CheckoutPlaceholder() {
   const { currentUser, addresses } = useAuth()
   const { showToast } = useToast()
 
-  // State: 'review' | 'confirmed'
-  const [step, setStep] = useState('review')
   const [dispatchType, setDispatchType] = useState('pickup')
-  const [countdown, setCountdown] = useState(5)
 
-  // Pickup scheduling (REQ-OC-01: pickup claim slot is part of checkout)
-  const [pickupDate, setPickupDate] = useState('')
-  // Full slot start from GET /appoint/slots ("YYYY-MM-DD HH:MM")
-  const [slot, setSlot] = useState('')
+  // Pickup: the slot is COLLECTED on /book (FLOW-CHECKOUT-04) and parked in
+  // sessionStorage; no appointment row exists client-side (FLOW-CHECKOUT-06).
+  const [slot, setSlot] = useState(() => readCheckoutSlot())
 
-  // Delivery (address + priority tier)
+  // Delivery (address + date + priority tier) - FLOW-CHECKOUT-07.
   const [addressIdx, setAddressIdx] = useState(0)
+  const [customAddress, setCustomAddress] = useState('')
+  const [useCustomAddress, setUseCustomAddress] = useState(false)
   const [tier, setTier] = useState('standard')
+  const [deliverExpect, setDeliverExpect] = useState('')
 
-  // Server checkout state
+  // Server quote state
   const [serverPreview, setServerPreview] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [paidRef, setPaidRef] = useState('')
-  const [receipt, setReceipt] = useState(null)
-  const [receiptQr, setReceiptQr] = useState('')
+
+  // FLOW-CHECKOUT-09 confirmation dialog + FLOW-CHECKOUT-08 OTP gate
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmSeconds, setConfirmSeconds] = useState(CONFIRM_SECONDS)
+  const [otpOpen, setOtpOpen] = useState(false)
+  const [otpFlow, setOtpFlow] = useState(null) // 'confirm' | 'retry'
+  const [otpVerified, setOtpVerified] = useState(false)
+  const [touched, setTouched] = useState({})
+  const [submitted, setSubmitted] = useState(false)
+  const busyRef = useRef(false)
 
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
+  // REQ-CHECKOUT-01: only the checked rows travel - everything when nothing
+  // was explicitly deselected on /bag.
   const itemsToCheckout = selectedItems.length > 0 ? selectedItems : cartItems
-  // item_amount is a line total on the server (prod_price * qty), so the
-  // displayed subtotal is rebuilt from the unit price the catalog reports.
+  const bagIds = itemsToCheckout
+    .map((i) => i.bagId)
+    .filter((id) => id != null && Number(id) > 0)
+    .map(Number)
+
+  // item_amount on a bag row is the UNIT price; line total = unit * qty.
   const orderSubtotal = itemsToCheckout.reduce(
-    (sum, item) => sum + (item.product?.price ?? item.price ?? 0) * (Number(item.qty) || 1),
+    (sum, item) => sum + Number(item.amount ?? item.product?.price ?? 0) * (Number(item.qty) || 1),
     0
   )
 
   const sortedAddresses = [...(addresses || [])].sort(
     (a, b) => Number(b.isDefault) - Number(a.isDefault)
   )
-  const chosenAddress = sortedAddresses[addressIdx] || null
-  const deliveryAddress = addressText(chosenAddress)
-
-  // The selection can be checked out directly only when it covers whole cart
-  // rows; anything else becomes a temporary order that is rolled back on failure.
-  const sourceOrdIds = [...new Set(itemsToCheckout.map((i) => i.ordId).filter(Boolean))]
-  const coversWholeRows =
-    sourceOrdIds.length > 0 &&
-    sourceOrdIds.every((id) =>
-      cartItems.filter((i) => i.ordId === id).every((i) => selectedItemIds.includes(i.cartItemId))
-    ) &&
-    itemsToCheckout.every((i) => i.ordId)
-  const directOrdId =
-    sourceOrdIds.length === 1 && coversWholeRows && selectedItems.length > 0
-      ? sourceOrdIds[0]
-      : null
+  const chosenAddress = useCustomAddress ? null : sortedAddresses[addressIdx]
+  const deliveryAddress = useCustomAddress
+    ? customAddress.trim()
+    : addressText(chosenAddress)
 
   const tierInfo = DELIVERY_TIERS.find((t) => t.key === tier) || DELIVERY_TIERS[1]
   const clientFee = dispatchType === 'delivery' ? tierInfo.fee : 0
   const serverDue =
-    serverPreview?.total_due ?? serverPreview?.total ?? serverPreview?.ord_total ?? null
+    serverPreview?.total_due ?? serverPreview?.total ?? null
   const totalDue = serverDue != null ? Number(serverDue) : orderSubtotal + clientFee
 
-  // Gateway selection: 'pay_ref' (existing) or 'paymongo'
-  const [gateway, setGateway] = useState('pay_ref')
+  /* The server's quote outranks the local tier table: a live courier quote
+     (dispatch_fee_source 'lalamove') can differ from the store's rows and it
+     carries the courier's own arrival estimate, so the tier ETA is not
+     promised when the fee came from the courier. */
+  const dispatchInfo = serverPreview?.dispatch_details ?? serverPreview?.dispatch ?? null
+  const feeSource =
+    serverPreview?.dispatch_fee_source ??
+    serverPreview?.dispatch_quote?.source ??
+    dispatchInfo?.fee_source ??
+    dispatchInfo?.dispatch_fee_source ??
+    null
+  const serverEta =
+    dispatchInfo?.estimated_delivery ?? dispatchInfo?.deliver_expect ?? null
+  const feeRowLabel =
+    dispatchType === 'pickup'
+      ? 'Fulfillment Fee'
+      : feeSource === 'lalamove'
+      ? 'Delivery Fee (live courier quote)'
+      : `Delivery Fee (${tierInfo.label})`
 
-  // The server derives every fee itself; it only needs the modality inputs.
-  const dispatchOptions = (appointId = null) =>
-    dispatchType === 'delivery'
-      ? { speed: tier, deliver_address: deliveryAddress }
-      : appointId
-      ? { appoint_id: appointId }
-      : {}
+  const touch = (key) => setTouched((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
 
-  /* Preview fees/total from the backend for the current modality (REQ-OC-01).
-     Pickup is skipped here: it quotes only once its appointment exists, which
-     happens at pay time - see handlePlaceOrder. */
+  /* REQ-CHECKOUT-04: every field validates as the customer types. */
+  const errors = {}
+  if (dispatchType === 'pickup') {
+    if (!slot?.appoint_start) errors.slot = 'Book a pickup slot to continue.'
+  } else {
+    if (!deliveryAddress.trim()) errors.address = 'Delivery address is required.'
+    else if (deliveryAddress.trim().length < 8)
+      errors.address = 'Please enter a complete delivery address.'
+    if (!deliverExpect) errors.date = 'Delivery date is required.'
+    else if (deliverExpect < todayISO()) errors.date = 'Delivery date must be today or later.'
+  }
+
+  const showError = (key) => (submitted || touched[key] ? errors[key] : undefined)
+
+  /* Re-quote fees/total for the current form (best effort - the server is the
+     authority; on any rejection the client fee table is displayed instead).
+     The selected rows travel as a primitive key so the quote only re-runs
+     when the form actually changes, never on a fresh array identity. */
+  const bagIdsKey = bagIds.join(',')
   useEffect(() => {
-    if (!directOrdId || dispatchType !== 'delivery') {
+    if (itemsToCheckout.length === 0) {
       setServerPreview(null)
       return undefined
     }
+    const bagIdsFromKey = bagIdsKey ? bagIdsKey.split(',').map(Number) : []
     let cancelled = false
     ;(async () => {
       try {
-        const res = await getDispatch(directOrdId, dispatchType, dispatchOptions())
+        const res = await getDispatch(
+          buildCheckoutPayload({
+            dispatchType,
+            tier,
+            deliveryAddress,
+            deliverExpect,
+            slot,
+            bagIds: bagIdsFromKey,
+          })
+        )
         if (!cancelled) setServerPreview(res?.data || null)
       } catch {
         if (!cancelled) setServerPreview(null)
@@ -215,383 +243,231 @@ function CheckoutPlaceholder() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directOrdId, dispatchType, tier, addressIdx])
+  }, [bagIdsKey, dispatchType, tier, deliveryAddress, deliverExpect, slot, itemsToCheckout.length])
 
-  /* The PayMongo webhook finalizes the order on the server; landing on the
-     success URL proves nothing, so wait until the order leaves the cart. */
-  const awaitPayMongoOrder = async (ordId) => {
-    setBusy(true)
+  /* Returning from the PayMongo hosted checkout. The order already exists
+     (the intent call created it), so nothing here places anything: the
+     redirect carries ?status=&order=, and POST /checkout/payment/status is
+     asked because the webhook may still be in flight. The params are stripped
+     first so a refresh never replays the handler. */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const status = params.get('status') || params.get('payment_status')
+    const orderId = params.get('order')
+    const intentId = params.get('payment_intent_id')
+    if (!status && !orderId && !intentId) return undefined
+    // The gateway return URL always names the order; the pending marker only
+    // guards the legacy intent redirect that arrives without one.
+    if (!orderId && !sessionStorage.getItem(PENDING_KEY)) return undefined
+
+    window.history.replaceState({}, document.title, window.location.pathname)
     try {
-      for (let attempt = 0; attempt < 20; attempt++) {
-        const order = await fetchOrder(ordId).catch(() => null)
-        if (order) {
-          clearSelectedItems()
-          refreshCart()
-          showToast('Payment successful! Your order is being processed.', 'success')
-          navigate(`/orders/${ordId}`, { replace: true })
+      sessionStorage.removeItem(PENDING_KEY)
+    } catch {
+      /* nothing to clear */
+    }
+
+    let cancelled = false
+    ;(async () => {
+      if (orderId) {
+        let res = null
+        let failure = null
+        try {
+          res = await verifyPaymentStatus({ ord_id: Number(orderId) })
+        } catch (err) {
+          failure = err
+        }
+        if (cancelled) return
+
+        if (failure) {
+          // 503 PAYMENT_GATEWAY_UNAVAILABLE: say what the server said, plainly,
+          // and leave the bag exactly as it was (REQ-CHECKOUT-02).
+          if (failure.status === 503) {
+            showToast(
+              failure.message ||
+                'Online payment is not configured yet. Your bag is unchanged.',
+              'error'
+            )
+          } else if (status === 'cancelled') {
+            showToast(
+              'Payment was cancelled. Your order was not completed and your bag is unchanged.',
+              'info'
+            )
+          } else {
+            showToast(
+              failure.message || 'We could not confirm your payment yet. Please check your orders.',
+              'error'
+            )
+          }
           return
         }
-        await new Promise((resolve) => setTimeout(resolve, 3000))
+
+        if (status === 'cancelled') {
+          showToast(
+            'Payment was cancelled. Your order was not completed and your bag is unchanged.',
+            'info'
+          )
+          return
+        }
+
+        if (res?.data?.paid === true) {
+          clearCheckoutSlot()
+          clearSelectedItems()
+          await refreshCart()
+          if (cancelled) return
+          showToast('Payment received. Your order is now being processed!', 'success')
+          navigate('/bag', { replace: true })
+          return
+        }
+
+        // The redirect says paid but the server has not settled it yet: never
+        // claim success while the confirmation is still outstanding.
+        showToast(
+          'Your payment is still being confirmed. We will update this order as soon as it lands.',
+          'info'
+        )
+        return
       }
-      setError(
-        'PayMongo received your payment, but your order is still being confirmed. ' +
-          'Check My Orders in a few minutes, or contact the store if it does not appear.'
-      )
+
+      await refreshCart()
+      if (cancelled) return
+      if (status === 'paid' || status === 'succeeded') {
+        showToast('Payment received. Your order is now being processed!', 'success')
+      } else {
+        showToast('Payment was not completed. Please try again.', 'error')
+      }
+      navigate('/bag', { replace: true })
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [refreshCart, navigate, showToast, clearSelectedItems])
+
+  // Coming back from /book with a freshly collected slot.
+  useEffect(() => {
+    setSlot(readCheckoutSlot())
+  }, [location.key])
+
+  // Never leave the checkout empty-handed.
+  useEffect(() => {
+    if (cartItems.length === 0 && selectedItems.length === 0 && !sessionStorage.getItem(PENDING_KEY)) {
+      navigate('/bag', { replace: true })
+    }
+  }, [cartItems.length, selectedItems.length, navigate])
+
+  // FLOW-CHECKOUT-09: the dialog counts five seconds down, then gives up
+  // without ever calling the placement endpoint.
+  useEffect(() => {
+    if (!confirmOpen) return undefined
+    if (confirmSeconds <= 0) {
+      setConfirmOpen(false)
+      setConfirmSeconds(CONFIRM_SECONDS)
+      showToast('Confirmation timed out — your order was not placed.', 'info')
+      return undefined
+    }
+    const timer = setTimeout(() => setConfirmSeconds((s) => s - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [confirmOpen, confirmSeconds, showToast])
+
+  const runPlacement = async () => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    setError('')
+
+    const payload = buildCheckoutPayload({
+      dispatchType,
+      tier,
+      deliveryAddress,
+      deliverExpect,
+      slot,
+      bagIds: bagIdsKey ? bagIdsKey.split(',').map(Number) : [],
+    })
+    try {
+      // Rule 55: the gateway is fixed - there is no offline tender left for a
+      // preorder, so the intent endpoint is the only placement call.
+      // REQ-CHECKOUT-03: it places the order first so its metadata can carry
+      // `order:<ord_id>`, then hands back the hosted-checkout URL.
+      const res = await createPaymentIntent({ ...payload, gateway: 'paymongo' })
+      const checkoutUrl = res?.data?.checkout_url
+      if (!checkoutUrl) throw new Error('Failed to create a payment session. Please try again.')
+      try {
+        sessionStorage.setItem(
+          PENDING_KEY,
+          JSON.stringify({ ord_id: res?.data?.ord_id ?? null, at: Date.now() })
+        )
+      } catch {
+        /* storage blocked: the return handler simply stays quiet */
+      }
+      window.location.href = checkoutUrl
+      return
+    } catch (err) {
+      if (err?.status === 428) {
+        // FLOW-CHECKOUT-08: the server asked for a phone code - verify, retry.
+        setOtpFlow('retry')
+        setOtpOpen(true)
+        return
+      }
+      // REQ-CHECKOUT-02: nothing local was cleared, the bag stays as it was.
+      // 503 PAYMENT_GATEWAY_UNAVAILABLE carries the server's own sentence.
+      setError(err?.message || 'Payment failed. Your bag was not changed. Please try again.')
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
 
-  /* PayMongo sends the customer back here with ?paymongo=success|cancel&ord_id=.
-     The page reloads on the way back, so the claim slot to release on a
-     cancelled payment comes from the record saved just before the redirect. */
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const outcome = params.get('paymongo')
-    const ordId = params.get('ord_id')
-    if (!outcome) return
-
-    window.history.replaceState({}, document.title, window.location.pathname)
-    const pending = readPendingPayMongo()
-
-    if (outcome === 'success' && ordId) {
-      awaitPayMongoOrder(ordId)
-    } else {
-      // Unpaid or abandoned: release the claim slot like any failed payment.
-      if (pending?.appointId) {
-        closeAppointment(pending.appointId, 'Checkout payment failed').catch(() => {})
-      }
-      showToast('Payment was not completed. Please try again.', 'error')
-      setError('Payment was not completed. Please try again.')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-
-  // Never leave the checkout empty-handed.
-  useEffect(() => {
-    if (step === 'review' && cartItems.length === 0 && selectedItems.length === 0) {
-      navigate('/cart', { replace: true })
-    }
-  }, [step, cartItems.length, selectedItems.length, navigate])
-
-  /* Success: drop the checked-out lines from their source rows, then resync. */
-  const removeSourceLines = async () => {
-    await Promise.allSettled(
-      selectedItems
-        .filter((i) => i.ordId && prodIdOf(i))
-        .map((i) => removeProductFromOrder(i.ordId, prodIdOf(i)))
-    )
-  }
-
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = () => {
     if (busy) return
-    setError(null)
+    setError('')
 
-    if (!custId) {
-      navigate('/signin')
-      return
-    }
+    // FLOW-CHECKOUT-03: payment AND claiming details first.
     if (itemsToCheckout.length === 0) {
       setError('Please select at least one item to checkout.')
       return
     }
-    // REQ-CW-02: Block checkout if any non-pre-order item is out of stock
-    const outOfStockItems = itemsToCheckout.filter(
-      (i) => !i.product.preOrder && (Number(i.product.qty) || 0) <= 0
-    )
-    if (outOfStockItems.length > 0) {
-      setError('Some items are currently out of stock and cannot be checked out. Please remove them from your selection.')
+    if (bagIds.length !== itemsToCheckout.length) {
+      setError('Some items are not synced to your bag yet. Refresh your bag and try again.')
       return
     }
-    if (dispatchType === 'pickup' && (!pickupDate || !slot)) {
-      setError('Please choose a pickup date and time to continue.')
-      return
-    }
-    if (dispatchType === 'delivery' && !deliveryAddress) {
-      setError('Please add a delivery address in My Address to continue.')
+    if (Object.keys(errors).length > 0) {
+      setSubmitted(true)
+      setError('Please complete your payment and claiming details before placing the order.')
       return
     }
 
-    setBusy(true)
-    let tempOrdId = null
-    let appointId = null
-
-    try {
-      // 1. Resolve the order being paid: existing cart row, or a temp order.
-      let ordId = directOrdId
-      if (!ordId) {
-        const missing = itemsToCheckout.find((i) => !prodIdOf(i))
-        if (missing) {
-          throw new Error(
-            `"${missing.product?.name || 'An item'}" is not synced to your account yet. Refresh your bag and try again.`
-          )
-        }
-        const res = await addCartOrder(
-          custId,
-          itemsToCheckout.map((i) => ({
-            prod_id: prodIdOf(i),
-            item_qty: Number(i.qty || 1),
-            item_amount:
-              (i.product?.price ?? 0) * (Number(i.qty) || 1),
-          }))
-        )
-        ordId = pickOrdId(res)
-        if (!ordId) {
-          throw new Error('Unable to prepare your order. Please try again.')
-        }
-        tempOrdId = ordId
-      }
-
-      // 2. Reserve the pickup slot before quoting or charging. Pickup checkout
-      //    requires a previously booked order-claiming appointment, and the
-      //    slot grid expects the date and start time as one datetime.
-      if (dispatchType === 'pickup') {
-        const res = await createAppointment({
-          cust_id: custId,
-          appoint_date: slot,
-          appoint_type: 'CLAIM',
-          appoint_desc: `Pickup of order ${ordId}`,
-        })
-        appointId = res?.data?.appoint_id ?? res?.data?.id ?? null
-        if (!appointId) {
-          throw new Error('Unable to reserve your pickup slot. Please try again.')
-        }
-      }
-
-      // 3. Ask the backend for the authoritative amount due (REQ-OC-01).
-      let due = totalDue
-      try {
-        const res = await getDispatch(ordId, dispatchType, dispatchOptions(appointId))
-        const serverTotal = res?.data?.total_due
-        if (serverTotal != null) due = Number(serverTotal)
-      } catch {
-        // Preview unavailable: pay the amount computed from the fee table.
-      }
-
-      // 4a. PayMongo: hand off to the hosted checkout. The order and its claim
-      //     slot are kept while the customer pays; the webhook finalizes them,
-      //     and the return handler above releases the slot when payment fails.
-      if (gateway === 'paymongo') {
-        const intentRes = await createPaymentIntent(ordId, 'paymongo', {
-          dispatch_type: dispatchType,
-          ...dispatchOptions(appointId),
-        })
-        const checkoutUrl = intentRes?.data?.checkout_url
-        if (!checkoutUrl) {
-          throw new Error('Failed to create payment session. Please try again.')
-        }
-        savePendingPayMongo({ ordId, appointId })
-        stashSessionForRedirect()
-        window.location.href = checkoutUrl
-        return
-      }
-
-      // 4b. Settle the payment; the server mints the gateway reference
-      //     (REQ-OC-02) and returns it on the payment record.
-      const payRes = await payOrder(ordId, dispatchType, due, dispatchOptions(appointId))
-      const payRef = payRes?.data?.payment?.pay_ref ?? ''
-      setReceipt(receiptFrom(payRes?.data, ordId, dispatchType, slot))
-
-      // 5. Success: clean up the source rows and resync the cart.
-      if (tempOrdId) await removeSourceLines()
-      clearSelectedItems()
-      refreshCart()
-      setPaidRef(payRef)
-      showToast('Payment received. Your order is now being processed!', 'success')
-      setStep('confirmed')
-      setCountdown(5)
-    } catch (err) {
-      // REQ-OC-02: failed payment must roll back every temp artifact.
-      if (appointId) {
-        closeAppointment(appointId, 'Checkout payment failed').catch(() => {})
-      }
-      if (tempOrdId) {
-        removeCartOrder(tempOrdId).catch(() => {})
-      }
-      setError(err?.message || 'Payment failed. Please try again.')
-    } finally {
-      setBusy(false)
+    // FLOW-CHECKOUT-08: a verified phone code comes before the final call.
+    if (!otpVerified) {
+      setOtpFlow('confirm')
+      setOtpOpen(true)
+      return
     }
+    setConfirmSeconds(CONFIRM_SECONDS)
+    setConfirmOpen(true)
   }
 
-  // Scannable copy of the order's claim / delivery code for the receipt.
-  useEffect(() => {
-    let alive = true
-    if (!receipt?.qrCode) {
-      setReceiptQr('')
-      return () => {
-        alive = false
-      }
+  const handleOtpVerified = async () => {
+    setOtpOpen(false)
+    setOtpVerified(true)
+    const flow = otpFlow
+    setOtpFlow(null)
+    if (flow === 'retry') {
+      await runPlacement()
+      return
     }
-    QRCode.toDataURL(String(receipt.qrCode), {
-      margin: 1,
-      width: 200,
-      color: { dark: '#111827', light: '#ffffff' },
-    })
-      .then((url) => {
-        if (alive) setReceiptQr(url)
-      })
-      .catch(() => {
-        if (alive) setReceiptQr('')
-      })
-    return () => {
-      alive = false
-    }
-  }, [receipt])
+    // Verified: show the pre-placement confirmation (FLOW-CHECKOUT-09).
+    setConfirmSeconds(CONFIRM_SECONDS)
+    setConfirmOpen(true)
+  }
 
-  // Countdown back to the cart when the order is confirmed. Paused while a
-  // receipt is on screen so the customer can save the claim code.
-  useEffect(() => {
-    if (step !== 'confirmed' || receipt) return undefined
+  /* Picking "In-Store Pickup" sends the customer to /book (FLOW-CHECKOUT-04);
+     the collected slot comes back through sessionStorage (FLOW-CHECKOUT-05). */
+  const bookPickupSlot = () => navigate('/book?return=/checkout')
 
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer)
-          navigate('/cart')
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [step, receipt, navigate])
-
-  if (step === 'confirmed') {
-    return (
-      <AppShell showNav={false}>
-        <div className="min-h-dvh flex flex-col items-center justify-center p-6 pb-28 text-center animate-fade-in">
-          <div className="w-20 h-20 bg-orange-50 rounded-xl flex items-center justify-center p-2.5 mb-4 relative">
-            <img src={logo} alt="Tindahan ni Isko" className="w-14 h-14 object-contain" />
-            <div className="absolute -top-1.5 -right-1.5 bg-brand-orange text-white p-1 rounded-full">
-              <CheckIcon className="w-4 h-4 text-white" />
-            </div>
-          </div>
-
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Payment Confirmed!</h1>
-          <p className="text-sm text-gray-600 font-normal max-w-[360px] leading-relaxed mb-3">
-            Your payment has been received and your order is now being processed. We'll notify
-            you via SMS/Email when it's ready for pick-up or out for courier delivery.
-          </p>
-          {paidRef && (
-            <p className="text-xs font-mono text-gray-500 bg-slate-50 rounded-md px-3 py-1.5 mb-3">
-              Gateway reference: {paidRef}
-            </p>
-          )}
-
-          {receipt ? (
-            <div className="w-full max-w-sm bg-white border border-slate-100 rounded-xl p-4 mb-6 text-left text-sm space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Receipt</p>
-                <span className="font-mono text-xs font-bold text-gray-900">{receipt.tag}</span>
-              </div>
-
-              {receipt.qrCode && (
-                <div className="flex flex-col items-center gap-1.5 py-1">
-                  {receiptQr ? (
-                    <img
-                      src={receiptQr}
-                      alt={receipt.isDelivery ? 'Delivery verification QR code' : 'Pickup claim QR code'}
-                      className="w-36 h-36 rounded-lg border border-slate-200 p-1.5 bg-white"
-                    />
-                  ) : (
-                    <div className="w-36 h-36 rounded-lg border border-slate-200 flex items-center justify-center text-xs text-gray-400">
-                      Generating QR…
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500 text-center">
-                    {receipt.isDelivery
-                      ? 'Scan this code from your order page when the courier hands over your parcel.'
-                      : 'Show this code at the pickup counter to claim your order.'}
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between text-gray-600">
-                  <span>Fulfillment</span>
-                  <span className="font-semibold text-gray-900">
-                    {receipt.isDelivery ? 'Courier Delivery' : 'Store Pickup'}
-                  </span>
-                </div>
-                {receipt.pickupWhen && (
-                  <div className="flex justify-between text-gray-600">
-                    <span>Claim slot</span>
-                    <span className="font-semibold text-gray-900">{receipt.pickupWhen}</span>
-                  </div>
-                )}
-                {receipt.isDelivery && receipt.deliverRef && (
-                  <div className="flex justify-between text-gray-600">
-                    <span>Delivery ref</span>
-                    <span className="font-mono font-semibold text-gray-900">{receipt.deliverRef}</span>
-                  </div>
-                )}
-                {receipt.isDelivery && receipt.deliverDate && (
-                  <div className="flex justify-between text-gray-600">
-                    <span>Estimated arrival</span>
-                    <span className="font-semibold text-gray-900">{formatWhen(receipt.deliverDate)}</span>
-                  </div>
-                )}
-                {receipt.isDelivery && receipt.deliverAddress && (
-                  <p className="text-gray-500 truncate" title={receipt.deliverAddress}>
-                    Ship to: {receipt.deliverAddress}
-                  </p>
-                )}
-                <div className="h-px bg-slate-100 my-1.5" />
-                <div className="flex justify-between text-gray-600">
-                  <span>Total due</span>
-                  <span className="font-semibold text-gray-900">₱{receipt.due.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Paid</span>
-                  <span className="font-semibold text-gray-900">₱{receipt.paid.toFixed(2)}</span>
-                </div>
-                {receipt.change > 0 && (
-                  <div className="flex justify-between text-gray-600">
-                    <span>Change</span>
-                    <span className="font-semibold text-gray-900">₱{receipt.change.toFixed(2)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Dynamic countdown indicator */
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-orange-50 text-brand-orange text-sm font-semibold rounded-lg mb-6">
-              <span>Redirecting back to your cart in {countdown}s...</span>
-            </div>
-          )}
-
-          <div className="w-full max-w-xs space-y-2">
-            {receipt?.ordId ? (
-              <Link
-                to={`/orders/${receipt.ordId}`}
-                className="w-full h-11 rounded-lg font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white flex items-center justify-center transition-colors"
-              >
-                View This Order
-              </Link>
-            ) : (
-              <Button
-                onClick={() => navigate('/orders')}
-                className="w-full h-11 rounded-lg font-bold text-sm cursor-pointer"
-              >
-                View My Orders Now
-              </Button>
-            )}
-            <button
-              type="button"
-              onClick={() => navigate('/cart')}
-              className="w-full text-sm font-semibold text-gray-500 hover:text-brand-orange transition-colors py-1 cursor-pointer"
-            >
-              Back to Cart
-            </button>
-          </div>
-        </div>
-        <BottomNav />
-      </AppShell>
-    )
+  const chooseModality = (type) => {
+    setDispatchType(type)
+    setSubmitted(false)
   }
 
   return (
@@ -599,7 +475,7 @@ function CheckoutPlaceholder() {
       <div className="min-h-dvh flex flex-col items-center justify-center p-4 pb-28 md:p-8 animate-fade-in bg-slate-50/60">
         <div className="w-full max-w-xl bg-white rounded-xl p-6 md:p-8 border border-slate-100 space-y-6">
           {/* Back to the previous view of this step-by-step process */}
-          <BackButton to="/cart" label="Back to Bag" />
+          <BackButton to="/bag" label="Back to Bag" />
 
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -634,12 +510,12 @@ function CheckoutPlaceholder() {
 
             <div className="p-3.5 bg-slate-50 rounded-lg space-y-1.5">
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                Fulfillment Method
+                Claiming Details
               </p>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setDispatchType('pickup')}
+                  onClick={() => chooseModality('pickup')}
                   className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
                     dispatchType === 'pickup'
                       ? 'bg-brand-orange text-white border-brand-orange'
@@ -650,7 +526,7 @@ function CheckoutPlaceholder() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDispatchType('delivery')}
+                  onClick={() => chooseModality('delivery')}
                   className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
                     dispatchType === 'delivery'
                       ? 'bg-brand-orange text-white border-brand-orange'
@@ -662,40 +538,51 @@ function CheckoutPlaceholder() {
               </div>
               <p className="text-xs text-gray-500 pt-0.5">
                 {dispatchType === 'pickup'
-                  ? 'Pickup at BU Main Campus Student Center — choose a date and time below'
+                  ? 'Pickup at BU Main Campus Student Center — choose a claim slot below'
                   : 'Courier delivery to your chosen address'}
               </p>
             </div>
           </div>
 
-          {/* Pickup scheduling: date + slot grid */}
+          {/* FLOW-CHECKOUT-04/05: pickup slot comes from /book and is only
+              held here until the order (and appointment) are created. */}
           {dispatchType === 'pickup' && (
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <p className="font-bold text-gray-900">Pickup Schedule</p>
-                <label className="flex items-center gap-2 text-xs text-gray-500">
-                  <span>Date</span>
-                  <input
-                    type="date"
-                    value={pickupDate}
-                    min={todayLocal()}
-                    onChange={(e) => setPickupDate(e.target.value)}
-                    className="px-2 py-1.5 rounded-md border border-slate-200 text-xs text-gray-700 focus:border-brand-orange focus:ring-brand-orange/30"
-                  />
-                </label>
-              </div>
-
-              <SlotPicker date={pickupDate} type="CLAIM" value={slot} onChange={setSlot} />
-
-              {slot && (
-                <p className="text-xs font-semibold text-brand-orange bg-orange-50 rounded-lg p-2.5">
-                  Pickup time: {slotWhen(slot)}
-                </p>
+            <div className="space-y-2">
+              {slot ? (
+                <div className="p-3.5 rounded-lg border border-orange-200 bg-orange-50/70 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-900">Pickup slot selected</p>
+                    <p className="text-xs text-slate-600 truncate">
+                      {String(slot.appoint_start).replace('T', ' ')} · claimed with your order
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={bookPickupSlot}
+                    className="shrink-0 h-8 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Change slot
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    touch('slot')
+                    bookPickupSlot()
+                  }}
+                  className="w-full h-11 rounded-lg border-2 border-dashed border-brand-orange text-brand-orange text-sm font-bold hover:bg-orange-50 transition-colors cursor-pointer"
+                >
+                  Book your in-store pickup slot
+                </button>
+              )}
+              {showError('slot') && (
+                <p className="text-xs font-semibold text-red-500">{errors.slot}</p>
               )}
             </div>
           )}
 
-          {/* Delivery: address + priority tier */}
+          {/* FLOW-CHECKOUT-07: delivery expands with address AND date. */}
           {dispatchType === 'delivery' && (
             <div className="space-y-3 text-sm">
               <p className="font-bold text-gray-900">Delivery Address</p>
@@ -705,9 +592,13 @@ function CheckoutPlaceholder() {
                     <button
                       key={addr.id ?? idx}
                       type="button"
-                      onClick={() => setAddressIdx(idx)}
+                      onClick={() => {
+                        setAddressIdx(idx)
+                        setUseCustomAddress(false)
+                        touch('address')
+                      }}
                       className={`w-full text-left p-3 rounded-lg border transition-colors cursor-pointer ${
-                        addressIdx === idx
+                        !useCustomAddress && addressIdx === idx
                           ? 'border-brand-orange bg-orange-50/60'
                           : 'border-slate-100 bg-white hover:bg-gray-50'
                       }`}
@@ -728,18 +619,52 @@ function CheckoutPlaceholder() {
                 </div>
               )}
 
-              {sortedAddresses.length === 0 ? (
-                <div className="text-xs text-gray-600 bg-amber-50 border border-amber-100 rounded-lg p-3">
-                  Add a delivery address first.{' '}
-                  <Link to="/settings/address" className="font-bold text-brand-orange hover:underline">
-                    Add address
-                  </Link>
-                </div>
-              ) : (
-                <Link to="/settings/address" className="inline-block text-xs font-semibold text-brand-orange hover:underline">
-                  Manage addresses
-                </Link>
+              <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useCustomAddress}
+                  onChange={(e) => {
+                    setUseCustomAddress(e.target.checked)
+                    touch('address')
+                  }}
+                  className="mt-0.5 accent-[var(--color-brand-orange,#f97316)]"
+                />
+                Ship to a different address
+              </label>
+              {useCustomAddress && (
+                <textarea
+                  value={customAddress}
+                  onChange={(e) => {
+                    setCustomAddress(e.target.value)
+                    touch('address')
+                  }}
+                  rows={2}
+                  placeholder="House/Unit no., street, barangay, city"
+                  className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2 focus:border-brand-orange focus:ring-brand-orange/30"
+                />
               )}
+              {showError('address') && (
+                <p className="text-xs font-semibold text-red-500 -mt-1">{errors.address}</p>
+              )}
+
+              <div>
+                <p className="font-bold text-gray-900 mb-1.5">Delivery Date</p>
+                <input
+                  type="date"
+                  value={deliverExpect}
+                  min={todayISO()}
+                  onChange={(e) => {
+                    setDeliverExpect(e.target.value)
+                    touch('date')
+                  }}
+                  className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2.5 text-gray-700 focus:border-brand-orange focus:ring-brand-orange/30"
+                />
+                {showError('date') ? (
+                  <p className="text-xs font-semibold text-red-500 mt-1">{errors.date}</p>
+                ) : (
+                  <p className="text-[11px] text-gray-400 mt-1">{etaNote(feeSource, serverEta)}</p>
+                )}
+              </div>
 
               <p className="font-bold text-gray-900">Delivery Speed</p>
               <div className="grid grid-cols-3 gap-2">
@@ -770,20 +695,23 @@ function CheckoutPlaceholder() {
               <span>Order Items ({itemsToCheckout.length})</span>
               <button
                 type="button"
-                onClick={() => navigate('/cart')}
+                onClick={() => navigate('/bag')}
                 className="text-brand-orange text-xs font-semibold hover:underline cursor-pointer"
               >
                 Edit Items
               </button>
             </p>
             <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 rounded-lg px-3 py-1 bg-slate-50 scrollbar-none">
-              {itemsToCheckout.map((item, idx) => {
-                const product = item.product || item
-                const itemPrice = Number(product.price ?? item.price ?? 0)
+              {itemsToCheckout.map((item) => {
+                const product = item.product || {}
+                const itemPrice = Number(item.amount ?? product.price ?? 0)
                 const itemQty = Number(item.qty || 1)
                 const variantText = [item.size, item.color?.name].filter(Boolean).join(' • ')
                 return (
-                  <div key={idx} className="py-2.5 flex items-center justify-between gap-3 text-sm">
+                  <div
+                    key={item.cartItemId}
+                    className="py-2.5 flex items-center justify-between gap-3 text-sm"
+                  >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <img
                         src={getImageUrl(item.color?.image || product.images?.[0] || product.image)}
@@ -811,24 +739,24 @@ function CheckoutPlaceholder() {
           <div className="p-4 bg-orange-50/60 rounded-lg space-y-1.5 text-sm">
             <div className="flex justify-between text-gray-600 font-medium">
               <span>Items Subtotal</span>
-              <span>₱{orderSubtotal.toFixed(2)}</span>
+              <span>₱{(serverPreview?.subtotal ?? orderSubtotal).toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-gray-600 font-medium">
+              <span>{feeRowLabel}</span>
               <span>
-                {dispatchType === 'pickup'
-                  ? 'Fulfillment Fee'
-                  : `Delivery Fee (${tierInfo.label})`}
-              </span>
-              <span>
-                {serverDue != null
-                  ? serverPreview?.dispatch_fee != null
-                    ? `₱${Number(serverPreview.dispatch_fee).toFixed(2)}`
-                    : 'From server'
+                {serverPreview?.dispatch_fee != null
+                  ? `₱${Number(serverPreview.dispatch_fee).toFixed(2)}`
                   : clientFee > 0
                   ? `₱${clientFee.toFixed(2)}`
                   : 'FREE (Pickup)'}
               </span>
             </div>
+            {feeSource === 'lalamove' && (
+              <p className="text-[11px] text-gray-400">
+                Live courier quote — this is the delivery fee charged with your order, not the
+                store's tier price.
+              </p>
+            )}
             <div className="flex justify-between items-baseline text-sm font-bold text-gray-900 pt-2 border-t border-orange-200/60">
               <span>Total Due</span>
               <span className="text-lg font-bold text-brand-orange">
@@ -837,48 +765,28 @@ function CheckoutPlaceholder() {
             </div>
           </div>
 
-          {/* Payment Gateway Selector */}
+          {/* Payment: preorders settle online (rule 55) - pickup AND delivery,
+              delivery fee included. There is no pay-at-store tender left, so
+              the gateway is not a choice. */}
           <div className="space-y-2 pt-2 border-t border-slate-100">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Payment Method</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setGateway('pay_ref')}
-                className={`py-2.5 rounded-lg font-semibold text-sm border transition-colors cursor-pointer ${
-                  gateway === 'pay_ref'
-                    ? 'bg-brand-orange text-white border-brand-orange'
-                    : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
-                }`}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-                    <line x1="1" y1="10" x2="23" y2="10" />
-                  </svg>
-                  Pay at Store / Manual
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setGateway('paymongo')}
-                className={`py-2.5 rounded-lg font-semibold text-sm border transition-colors cursor-pointer ${
-                  gateway === 'paymongo'
-                    ? 'bg-brand-orange text-white border-brand-orange'
-                    : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
-                }`}
-              >
-                <span className="flex items-center justify-center gap-1.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M21 12V7H5V7M21 17V7M3 17H21M5 17V12M19 17V12" />
-                  </svg>
-                  PayMongo (Online)
-                </span>
-              </button>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Payment Details
+            </p>
+            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-slate-50/60">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange shrink-0 mt-0.5">
+                <path d="M21 12V7H5V7M21 17V7M3 17H21M5 17V12M19 17V12" />
+              </svg>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800">PayMongo (Online)</p>
+                <p className="text-xs text-gray-500">
+                  You will be redirected to PayMongo to complete payment securely. Pickup and
+                  courier delivery are both paid online with the order.
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-gray-500">
-              {gateway === 'paymongo'
-                ? 'You will be redirected to PayMongo to complete payment securely.'
-                : 'Pay in person at the store or via manual payment reference.'}
+            <p className="text-[11px] text-gray-400">
+              Amount due: <span className="font-bold text-gray-600">₱{totalDue.toFixed(2)}</span> —
+              a one-time phone code is required before the order is saved.
             </p>
           </div>
 
@@ -895,15 +803,17 @@ function CheckoutPlaceholder() {
                   : 'bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98'
               }`}
             >
-              {busy
-                  ? <><LoadingSpinner size={18} /> Processing…</>
-                  : gateway === 'paymongo'
-                  ? `Proceed to PayMongo • ₱${totalDue.toFixed(2)}`
-                  : `Pay Now • ₱${totalDue.toFixed(2)}`}
+              {busy ? (
+                <>
+                  <LoadingSpinner size={18} /> Processing…
+                </>
+              ) : (
+                `Proceed to PayMongo • ₱${totalDue.toFixed(2)}`
+              )}
             </Button>
             <button
               type="button"
-              onClick={() => navigate('/cart')}
+              onClick={() => navigate('/bag')}
               className="w-full py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
             >
               Back to Bag / Cancel
@@ -911,6 +821,70 @@ function CheckoutPlaceholder() {
           </div>
         </div>
       </div>
+
+      {/* FLOW-CHECKOUT-09: five-second confirmation before the order is written. */}
+      {confirmOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[130000] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setConfirmOpen(false)}
+              aria-hidden="true"
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative w-full max-w-sm bg-white rounded-2xl p-6 border border-gray-200 shadow-xl animate-scale-in"
+            >
+              <h3 className="text-base font-bold text-gray-900">Confirm your order</h3>
+              <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+                <span className="font-bold text-gray-800">₱{totalDue.toFixed(2)}</span> due ·{' '}
+                {itemsToCheckout.length} {itemsToCheckout.length === 1 ? 'item' : 'items'} ·{' '}
+                {dispatchType === 'pickup' ? 'Store pickup' : 'Courier delivery'}.
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                This confirmation closes in{' '}
+                <span className="font-bold text-brand-orange">{Math.max(0, confirmSeconds)}s</span>.
+              </p>
+              <div className="grid grid-cols-2 gap-2 mt-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmOpen(false)
+                    setConfirmSeconds(CONFIRM_SECONDS)
+                    runPlacement()
+                  }}
+                  className="h-11 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-sm font-bold transition-colors cursor-pointer"
+                >
+                  Looks good
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmOpen(false)
+                    setConfirmSeconds(CONFIRM_SECONDS)
+                  }}
+                  className="h-11 rounded-lg bg-white border border-slate-200 text-gray-700 text-sm font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Go back
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* FLOW-CHECKOUT-08: the phone code that gates the placement call. */}
+      <OtpVerifyModal
+        isOpen={otpOpen}
+        purpose="checkout"
+        title="Verify it's you"
+        onClose={() => {
+          setOtpOpen(false)
+          setOtpFlow(null)
+        }}
+        onVerified={handleOtpVerified}
+      />
 
       <BottomNav />
     </AppShell>

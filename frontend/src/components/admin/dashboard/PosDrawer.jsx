@@ -128,7 +128,11 @@ export default function PosDrawer({ isOpen, onClose, onCompleted }) {
                     </div>
                     <button
                       type="button"
-                      onClick={() => posAddToCart(p, 'Standard', 1)}
+                      onClick={() => {
+                        // Ring up the product's main variation, as the register does
+                        const v = (p.variants || []).find((x) => x.main) || (p.variants || [])[0]
+                        posAddToCart(p, v?.label || 'Standard', 1, v?.prodvarId ?? null, v?.price ?? null)
+                      }}
                       disabled={atLimit}
                       className="h-8 px-2.5 rounded-md border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                     >

@@ -89,7 +89,7 @@ function DesktopHeader() {
     // Wishlist and Profile live in the Menu drawer only, so the ribbon stays
     // exactly: Home · Bag · Appointments · Notifications · Menu.
     { to: '/home', label: 'Home', icon: Painted, src: homeIcon, active: ['/', '/home'] },
-    { to: '/cart', label: 'Bag', icon: Painted, src: cartIcon, active: ['/cart', '/checkout'], badge: cartCount },
+    { to: '/bag', label: 'Bag', icon: Painted, src: cartIcon, active: ['/bag', '/cart', '/checkout'], badge: cartCount },
     { to: '/appointments', label: 'Appointments', icon: CalendarIcon },
     { to: '/notifications', label: 'Notifications', icon: Painted, src: notificationIcon, badge: unreadNotifCount },
   ]

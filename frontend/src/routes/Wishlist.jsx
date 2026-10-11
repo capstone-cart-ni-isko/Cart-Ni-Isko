@@ -6,12 +6,25 @@ import AppShell from '../components/layout/AppShell.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
-import { LockIcon, HeartIcon } from '../components/ui/Icons.jsx'
+import { LockIcon, HeartIcon, CartIcon } from '../components/ui/Icons.jsx'
 
 function Wishlist() {
   const { currentUser } = useAuth()
-  const { wishlistItems } = useWishlist()
+  const { wishlistItems, canAddToCart, addToBag } = useWishlist()
   const [showLogin, setShowLogin] = useState(false)
+  const [addingId, setAddingId] = useState(null)
+
+  // FLOW-WISHLIST-06: every card carries its own "add to bag" action, which
+  // posts /wishlist/to_order and refreshes the bag badge through the response.
+  const handleAddToBag = async (product) => {
+    if (addingId) return
+    setAddingId(product.id)
+    try {
+      await addToBag(product)
+    } finally {
+      setAddingId(null)
+    }
+  }
 
   return (
     <AppShell>
@@ -31,7 +44,7 @@ function Wishlist() {
           >
             <span>Explore Campus Store</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-              <path d="M5 12h14M12 5l7 7-7 7" />
+              <path d="M5 12h14M12 5l7 7-7-7" />
             </svg>
           </Link>
         </div>
@@ -72,9 +85,40 @@ function Wishlist() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {wishlistItems.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
+            {/* Server order (wish_created DESC) is rendered as-is; every row
+                stays visible even when it can no longer be bought. */}
+            {wishlistItems.map((product) => {
+              const offered = canAddToCart(product)
+              const adding = addingId === product.id
+              return (
+                <div key={product.id} className="flex flex-col">
+                  <div className="relative">
+                    <ProductCard product={product} />
+                    {!offered && (
+                      <span className="absolute top-2.5 left-2.5 z-10 px-2 py-0.5 rounded-md bg-slate-900/80 text-white text-[10px] font-black uppercase tracking-wider">
+                        Unavailable
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!offered || Boolean(addingId)}
+                    onClick={() => handleAddToBag(product)}
+                    className={`mt-2 w-full h-9 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-colors ${
+                      !offered
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : adding
+                        ? 'bg-orange-100 text-brand-orange cursor-wait'
+                        : 'bg-brand-orange hover:bg-orange-600 text-white cursor-pointer'
+                    }`}
+                    title={offered ? `Add ${product.name} to your bag` : 'This item is unavailable'}
+                  >
+                    <CartIcon className="w-3.5 h-3.5" />
+                    {!offered ? 'Unavailable' : adding ? 'Adding…' : 'Add to Bag'}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
