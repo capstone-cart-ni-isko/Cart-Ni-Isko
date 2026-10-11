@@ -19,14 +19,19 @@ const initialsFor = (name) =>
     .map((word) => word[0].toUpperCase())
     .join('') || '?'
 
-const roleLabel = (empType) => {
-  const type = String(empType || '').toUpperCase()
-  if (type.includes('SUPER')) return 'Super Admin'
-  if (type === 'ADMIN') return 'Admin'
-  return 'Student Officer'
+// The store's three employee categories, exactly as emp_categ spells them.
+const ROLE_LABEL = {
+  'super admin': 'Super Admin',
+  admin: 'Admin',
+  staff: 'Staff',
 }
 
-const isOnDuty = (value) => value === true || value === 1 || value === '1'
+const roleLabel = (empType) => {
+  const type = String(empType || '').trim().toLowerCase()
+  return ROLE_LABEL[type] || 'Staff'
+}
+
+const isOnDuty = (value) => value === true || value === 1 || value === '1' || value === 'true'
 
 // Maps one employee row into the shape every schedule component expects
 const toOfficer = (row, index) => {
@@ -44,8 +49,8 @@ const toOfficer = (row, index) => {
     available: inStore,
     // NB: avoid the word "available" — StatusPill matches it as green.
     availability: inStore ? 'On Duty' : 'Off Duty',
-    roleLabel: roleLabel(row.emp_type),
-    empType: row.emp_type,
+    roleLabel: roleLabel(row.emp_categ || row.emp_type),
+    empType: row.emp_categ || row.emp_type,
     raw: row,
   }
 }

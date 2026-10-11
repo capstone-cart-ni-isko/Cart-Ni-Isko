@@ -290,7 +290,7 @@ export function mapProduct(row) {
 
 export async function fetchCatalog(params = {}) {
   const data = await apiGet('/products/filter', { status: 'active', ...params })
-  const rows = (data.data || []).map(mapProduct)
+  const rows = Array.isArray(data.data) ? data.data.map(mapProduct) : []
   writeCatalogCache(params, rows)
   return rows
 }

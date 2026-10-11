@@ -117,6 +117,24 @@ export default function AdminPos() {
     })
   }, [products, selectedCategory, searchQuery])
 
+  /**
+   * FLOW-WALKIN-04: the register must be able to ring up any VARIATION of a
+   * product. `variants` is built from the product's real prodvar rows
+   * (mapAdminProduct), so the picker lists the sizes/colours that exist and the
+   * chosen line carries the prodvar_id the /pos endpoints need.
+   *
+   * Declared BEFORE the useMemo that uses it: an arrow function bound to a
+   * `const` is in the temporal dead zone until that line runs, so reading it
+   * any earlier throws "Cannot access 'productVariants' before
+   * initialization" and takes the whole walk-in screen down.
+   */
+  const productVariants = (product) => {
+    const list = Array.isArray(product?.variants) ? product.variants : []
+    return list.filter((v) => v && (v.stock === undefined || Number(v.stock) > 0))
+  }
+
+  const hasVariants = (product) => productVariants(product).length > 1
+
   // Recent Sales list: the shared order rows mapped to display rows, keeping
   // only walk-in/POS sales. The server already returns them newest-first.
   const posSales = useMemo(() => mapOrderRows(rawOrders).filter((o) => o.isPos), [rawOrders])
@@ -185,19 +203,6 @@ export default function AdminPos() {
   const tenderedNum = parseFloat(amountTendered) || 0
   const changeDue = Math.max(0, tenderedNum - total)
   const cartCount = posCart.reduce((s, i) => s + i.qty, 0)
-
-  /**
-   * FLOW-WALKIN-04: the register must be able to ring up any VARIATION of a
-   * product. `variants` is built from the product's real prodvar rows
-   * (mapAdminProduct), so the picker lists the sizes/colours that exist and the
-   * chosen line carries the prodvar_id the /pos endpoints need.
-   */
-  const productVariants = (product) => {
-    const list = Array.isArray(product?.variants) ? product.variants : []
-    return list.filter((v) => v && (v.stock === undefined || Number(v.stock) > 0))
-  }
-
-  const hasVariants = (product) => productVariants(product).length > 1
 
   // 1. Trigger product click -> open Variant Picker Modal if variations exist, else add directly
   const handleProductClick = (product) => {

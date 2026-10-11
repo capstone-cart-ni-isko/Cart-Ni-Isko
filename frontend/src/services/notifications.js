@@ -18,7 +18,7 @@ export async function fetchNotifications(recipientType, recipientId) {
     recipient_type: recipientType,
     recipient_id: recipientId,
   })
-  const rows = data.data || []
+  const rows = Array.isArray(data.data) ? data.data : []
   writeNotificationsCache(recipientType, recipientId, rows)
   return rows
 }

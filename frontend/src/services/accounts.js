@@ -3,7 +3,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from './api.js'
 /** GET /accounts/display - customer + employee directory (User Management). */
 export async function fetchAccounts(params = {}) {
   const data = await apiGet('/accounts/display', params)
-  return data.data || []
+  return Array.isArray(data.data) ? data.data : []
 }
 
 export function searchAccounts(q, params = {}) {

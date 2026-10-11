@@ -137,6 +137,10 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/access/log', [SystemAPI::class, 'logAction'])->middleware('role:staff');
     // DOMAIN 32 - FLOW-ACCESS_LOG-07: the merged access log is super-admin only
     Route::get('/access/logs', [SystemAPI::class, 'accessLog'])->middleware('role:super_admin');
+    // DOMAIN 32 retention override: a super admin may purge every log entry
+    // older than 24 months in one action (the 60-month sweep would delete
+    // them anyway - see DatabaseAPI::purgeAccessLogs).
+    Route::delete('/access/logs', [SystemAPI::class, 'purgeAccessLogs'])->middleware('role:super_admin');
 
     // Accounts API Routes
     Route::get('/accounts/me', [UserAPI::class, 'displayMyAccount']);

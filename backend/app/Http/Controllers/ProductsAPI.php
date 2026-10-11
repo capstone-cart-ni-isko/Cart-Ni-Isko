@@ -62,6 +62,13 @@ class ProductsAPI extends Controller
                 : collect($variations);
 
             $stock = (int) $vars->sum('prodvar_stock');
+            // Pictures are stored host-agnostic and resolved against whatever
+            // backend answers the request, so the seeded rows, the rows an
+            // admin uploads later and the admin's own preview all agree.
+            $vars->each(function (Prodvar $v) {
+                $v->prodvar_pic = self::publicPicture($v->prodvar_pic);
+            });
+
             $images = $vars->pluck('prodvar_pic')
                 ->filter(fn ($pic) => filled($pic))
                 ->unique()
@@ -276,6 +283,31 @@ class ProductsAPI extends Controller
         }
 
         /**
+         * A stored picture as the browser has to load it.
+         *
+         * `prodvar_pic` keeps the host-agnostic form (/storage/uploads/product/x.png,
+         * or the storage-relative uploads/product/x.png the upload endpoint's
+         * `path` field carries) so a seeded row and a row an admin uploads
+         * later resolve to whichever backend is answering the request -
+         * 127.0.0.1:8000 in development, the deployed service in production.
+         * An already-absolute URL or a data URL is passed through untouched, so
+         * nothing is ever prefixed twice.
+         */
+        public static function publicPicture($value)
+        {
+            $value = trim((string) $value);
+            if ($value === '' || preg_match('#^(data:|https?:|//)#i', $value)) {
+                return $value === '' ? null : $value;
+            }
+
+            $path = str_starts_with($value, '/storage/')
+                ? ltrim($value, '/')
+                : 'storage/' . ltrim($value, '/');
+
+            return self::publicUrl($path);
+        }
+
+        /**
          * REQ-ADD_PROD-07: format AND file size are validated before an image
          * is accepted. Uploaded paths are checked by the upload endpoint; this
          * guards the inline base64 form the admin form still sends (a 2 MB
@@ -299,8 +331,12 @@ class ProductsAPI extends Controller
          * spelling the admin UI offers (singular, plural, legacy) folds onto
          * one canonical value, and anything outside the list is rejected with
          * the list itself, so `prod_categ` can never drift into free text.
+         *
+         * Public so every writer of `prod_categ` - the admin form, the
+         * inventory seeder and any future importer - folds its value through
+         * this one list instead of keeping a private copy of it.
          */
-        protected static function categoryWhitelist(): array
+        public static function categoryWhitelist(): array
         {
             return [
                 'Shirts', 'Hoodies', 'Jackets', 'Varsity Jacket', 'Caps',
@@ -310,7 +346,7 @@ class ProductsAPI extends Controller
         }
 
         /** Alias -> canonical category name (lowercase keys). */
-        protected static function normalizeCategory(?string $raw): string
+        public static function normalizeCategory(?string $raw): string
         {
             $value = trim((string) $raw);
             if ($value === '') {
@@ -337,6 +373,12 @@ class ProductsAPI extends Controller
                 'accessory'    => 'Accessories',
                 'accessories'  => 'Accessories',
                 'windbreaker'  => 'Windbreaker',
+                // The catalog directory and the storefront both spell this
+                // category "Windbreakers" (plural). Without the alias the
+                // store's own product sheet sat outside the whitelist and
+                // REQ-ADD_PROD-04 refused every windbreaker row with
+                // "Unknown product category".
+                'windbreakers' => 'Windbreaker',
                 'others'       => 'Others',
             ];
 
@@ -347,7 +389,7 @@ class ProductsAPI extends Controller
          * @return string|null the canonical category, or null (with $message
          *         filled in) when the value is outside the whitelist.
          */
-        protected static function validatedCategory($raw, ?string &$message = null): ?string
+        public static function validatedCategory($raw, ?string &$message = null): ?string
         {
             $categ = self::normalizeCategory($raw);
 
@@ -3142,6 +3184,30 @@ class ProductsAPI extends Controller
     private const RULES = ['required', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:2048'];
 
     /**
+     * The public origin a stored file is addressed through.
+     *
+     * A real request is authoritative (Render fronts the API under its own
+     * service host, and `getSchemeAndHttpHost()` keeps the port when the API
+     * is served from 127.0.0.1:8000 in development). A console run - a seeder
+     * importing the initial catalog - has no request, so it falls back to
+     * APP_URL, which render.yaml pins to the deployed service and .env pins to
+     * the local one. Both writers of `prodvar_pic` therefore produce the very
+     * same absolute URL instead of one of them drifting onto a host that
+     * 404s.
+     */
+    public static function publicUrl(string $path): string
+    {
+        $origin = rtrim((string) config('app.url'), '/');
+        $request = app('request');
+
+        if ($request instanceof Request && $request->getHost() !== '') {
+            $origin = rtrim($request->getSchemeAndHttpHost(), '/');
+        }
+
+        return $origin . '/' . ltrim($path, '/');
+    }
+
+    /**
      * POST /uploads - accept an actual image file, persist it under
      * storage/app/public/uploads/<type>/, and return its public URL.
      *
@@ -3184,7 +3250,7 @@ class ProductsAPI extends Controller
                     'success' => true,
                     'message' => 'File uploaded successfully',
                     'data' => [
-                        'url'     => $request->getSchemeAndHttpHost() . '/storage/' . $path,
+                        'url'     => self::publicUrl('storage/' . $path),
                         'path'    => $path,
                         'storage' => 'public',
                     ],

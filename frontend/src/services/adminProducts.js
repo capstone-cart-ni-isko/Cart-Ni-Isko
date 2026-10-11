@@ -203,7 +203,7 @@ export async function fetchAdminProducts() {
     apiGet('/products/filter', { status: 'active' }),
     apiGet('/products/filter', { status: 'disabled' }),
   ])
-  const rows = [...(active.data || []), ...(unlisted.data || [])]
+  const rows = [...(Array.isArray(active.data) ? active.data : []), ...(Array.isArray(unlisted.data) ? unlisted.data : [])]
   return rows.map(mapAdminProduct).filter(Boolean)
 }
 

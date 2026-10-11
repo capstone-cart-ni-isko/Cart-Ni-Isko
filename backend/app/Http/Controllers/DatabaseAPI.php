@@ -3,13 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\Schedule;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 /**
  * DatabaseAPI
  *
- * SYSTEM RULE 80 - the ONE backend API that talks to the database. Every query built anywhere else in this app is passed to the database here, and it also owns input/query validation plus the 18-month purge of soft-deleted records (system rules 66, 78, 79).
+ * SYSTEM RULE 80 - the ONE backend API that talks to the database. Every query built anywhere else in this app is passed to the database here, and it also owns input/query validation plus the 18-month retention purge of soft-deleted records (system rules 66, 78, 79) and the 24/60-month access-log retention policy (DOMAIN 32).
  *
  * Repackaged from: InputValidator API.
  */
@@ -79,6 +82,427 @@ class DatabaseAPI extends Controller
 
     private static float $slowestQuery = 0.0;
     private static ?string $slowestSql = null;
+
+    // ===== SYSTEM RULE 78 - THE 18-MONTH RETENTION PURGE =====
+    //
+    // "Soft-deleted records must be hard-deleted from the database after 18
+    // months." The purge covers every record the system retires, not only the
+    // ones a deletion marker points at:
+    //
+    //   * soft-delete markers  bag_deleted, wish_hidden, prodvar_deleted,
+    //                          prod_deleted, emp_deleted, cust_deleted and
+    //                          the delivery fixture's deliver_deleted;
+    //   * terminal statuses    cancelled / unclaimed orders and cancelled /
+    //                          absent appointments;
+    //   * review verdicts      a [DELETED] / [REJECTED] marker on a review
+    //                          that was never approved (rev_approved null);
+    //   * read notifications   custnotif_read / empnotif_read stamped;
+    //   * completed dispatch   deliver_completed / parcel_completed stamped.
+    //
+    // A record whose children survive is held back (integrity first - a bag
+    // line an order still references may never vanish under it), so the purge
+    // only removes records nothing points at any more. The one exception is
+    // an order in a terminal status: it is dead by definition, so its own
+    // rows (items, pickup, delivery, parcel) are carried out WITH it instead
+    // of holding it back forever - a cascade target must therefore never
+    // carry held_by guards. Disabled-but-live markers (prod_disabled,
+    // prodvar_disabled, sched_disabled) are NOT deletions and are deliberately
+    // absent, and so are the access logs: those follow the 24/60-month
+    // retention policy below. Scheduled daily from routes/console.php.
+
+    /** How long a soft-deleted record survives before it is hard-deleted. */
+    public const PURGE_AFTER_MONTHS = 18;
+
+    /**
+     * table => [
+     *   'pk'          => primary key,
+     *   'deleted'     => soft-delete / completion column (string or list - each
+     *                    existing column is purged on its own, so a table whose
+     *                    live and fixture spellings differ still gets cleaned),
+     *   'read'        => read-stamp column: the row is retired once STAMPED and
+     *                    the stamp is past the cutoff,
+     *   'status'      => [column => [terminal values]]: the row is retired once
+     *                    the status is terminal and 'since' is past the cutoff,
+     *   'raw'         => fixed SQL extra criteria (hardcoded, never interpolated
+     *                    from input),
+     *   'since'       => timestamp column measuring the row's age,
+     *   'since_expr'  => raw SQL expression measuring the age instead,
+     *   'requires'    => columns that must all exist or the whole target is
+     *                    skipped on this connection (a missing column kills a
+     *                    statement, it never narrows it),
+     *   'held_by'     => [[referencing table, referencing column], ...] - a row
+     *                    still referenced is held back,
+     *   'cascade'     => [[child table, child column], ...] - children of an
+     *                    eligible row are deleted WITH it (terminal orders),
+     * ]
+     *
+     * Children are visited before parents so a parent is only ever evaluated
+     * once its own children have already been cleaned out.
+     */
+    private const PURGE_TARGETS = [
+        'orders' => [
+            'pk'      => 'ord_id',
+            // 'unclaimed' is FLOW-ORD_CLAIM-06's absent order; 'to cancel' is
+            // only a request and never counts.
+            'status'  => ['ord_status' => ['cancelled', 'unclaimed']],
+            'since'   => 'ord_created',
+            'requires' => ['ord_status', 'ord_created'],
+            // The whole dead dispatch leaves with the order: the items, the
+            // pickup link, the delivery and the parcel it spawned at checkout.
+            'cascade' => [
+                ['items', 'ord_id'],
+                ['pickup', 'ord_id'],
+                ['delivery', 'ord_id'],
+                ['parcel', 'ord_id'],
+            ],
+        ],
+        'parcel' => [
+            'pk'      => 'parcel_id',
+            'deleted' => 'parcel_completed',
+        ],
+        'delivery' => [
+            'pk'      => 'deliver_id',
+            // Live: deliver_completed. Legacy fixture: deliver_deleted.
+            'deleted' => ['deliver_completed', 'deliver_deleted'],
+        ],
+        'bag'      => ['pk' => 'bag_id',      'deleted' => 'bag_deleted',      'held_by' => [['items', 'bag_id']]],
+        'wishlist' => ['pk' => 'wish_id',     'deleted' => 'wish_hidden',      'held_by' => []],
+        'prodvar'  => ['pk' => 'prodvar_id',  'deleted' => 'prodvar_deleted',  'held_by' => [
+            ['bag', 'prodvar_id'],
+            ['prodsales', 'prodvar_id'],
+        ]],
+        'reviews' => [
+            'pk'       => 'rev_id',
+            // The delete / reject flows keep the row as its own tombstone
+            // (ProductsAPI); a review that was ever approved keeps its record.
+            'raw'      => "(rev_msg LIKE '[DELETED]%' OR rev_msg LIKE '[REJECTED]%') AND rev_approved IS NULL",
+            'since'    => 'rev_created',
+            'requires' => ['rev_msg', 'rev_approved', 'rev_created'],
+        ],
+        'product'  => ['pk' => 'prod_id',     'deleted' => 'prod_deleted',     'held_by' => [
+            ['prodvar', 'prod_id'],
+            ['reviews', 'prod_id'],
+        ]],
+        'appointments' => [
+            'pk'         => 'appoint_id',
+            'status'     => ['appoint_status' => ['cancelled', 'absent']],
+            // The close stamp marks when the appointment reached its terminal
+            // state; a row that predates the column falls back to creation.
+            'since_expr' => 'COALESCE(appoint_closed, appoint_created)',
+            'requires'   => ['appoint_status', 'appoint_closed', 'appoint_created'],
+            // A pickup still points at its slot until the order above carries
+            // it away, so the link - not the appointment - is the guard.
+            'held_by'    => [['pickup', 'appoint_id']],
+        ],
+        'custnotif' => ['pk' => 'custnotif_id', 'read' => 'custnotif_read'],
+        'empnotif'  => ['pk' => 'empnotif_id',  'read' => 'empnotif_read'],
+        'employee' => ['pk' => 'emp_id',      'deleted' => 'emp_deleted',      'held_by' => [
+            ['appointment', 'emp_id'],
+            ['appointments', 'emp_id'],
+            ['schedules', 'emp_id'],
+            ['duty_shift', 'emp_id'],
+            ['emplog', 'emp_id'],
+            ['empnotif', 'emp_id'],
+        ]],
+        'customer' => ['pk' => 'cust_id',     'deleted' => 'cust_deleted',     'held_by' => [
+            ['orders', 'cust_id'],
+            ['appointment', 'cust_id'],
+            ['appointments', 'cust_id'],
+            ['bag', 'cust_id'],
+            ['wishlist', 'cust_id'],
+            ['delivery', 'cust_id'],
+            ['custlog', 'cust_id'],
+            ['custnotif', 'cust_id'],
+            ['reviews', 'cust_id'],
+        ]],
+    ];
+
+    /**
+     * SYSTEM RULE 78 - hard-delete every record that reached the end of its
+     * life more than $months months ago and is no longer referenced.
+     *
+     * Safe to run on any schedule: it only ever looks at rows whose own
+     * marker / status / stamp is past the cutoff, so an active record can
+     * never be removed and running it twice changes nothing. Returns the
+     * number of rows removed per table (cascade included) for the audit
+     * trail.
+     *
+     * @return array<string, int>
+     */
+    public static function purgeSoftDeleted(?int $months = null): array
+    {
+        $months = $months ?? self::PURGE_AFTER_MONTHS;
+        $cutoff = now()->subMonths($months);
+        $purged = [];
+
+        foreach (self::PURGE_TARGETS as $table => $target) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $target['pk'])) {
+                continue;
+            }
+
+            foreach (self::purgeQueries($table, $target, $cutoff) as $build) {
+                // Cascade first: a terminal record carries its own rows out
+                // with it. The sub-select is exactly the parent's eligibility
+                // - nothing wider - so the children of a LIVE order are never
+                // touched.
+                foreach ($target['cascade'] ?? [] as [$child, $fk]) {
+                    if (! Schema::hasTable($child) || ! Schema::hasColumn($child, $fk)) {
+                        continue;
+                    }
+
+                    $cascaded = DB::table($child)
+                        ->whereIn($fk, $build()->select($target['pk']))
+                        ->delete();
+
+                    if ($cascaded > 0) {
+                        $purged[$child] = ($purged[$child] ?? 0) + $cascaded;
+                    }
+                }
+
+                $count = self::holdHeldBack($build(), $table, $target)->delete();
+
+                if ($count > 0) {
+                    $purged[$table] = ($purged[$table] ?? 0) + $count;
+                }
+            }
+        }
+
+        return $purged;
+    }
+
+    /**
+     * One closure per purge variant of a table; each returns a FRESH query
+     * carrying only the variant's eligibility criteria (no held_by guards -
+     * those belong to the parent delete, and the cascade sub-select must see
+     * the plain eligibility).
+     *
+     * A variant whose columns this connection does not carry is skipped
+     * instead of erroring, which is what keeps the live (Supabase) and the
+     * fixture (sqlite) generations of the same table both purgeable.
+     *
+     * @return array<int, callable>
+     */
+    private static function purgeQueries(string $table, array $target, $cutoff): array
+    {
+        $queries = [];
+
+        foreach ((array) ($target['deleted'] ?? []) as $column) {
+            if (! Schema::hasColumn($table, $column)) {
+                continue;
+            }
+
+            $queries[] = fn () => DB::table($table)
+                ->whereNotNull($column)
+                ->where($column, '<=', $cutoff);
+        }
+
+        if (! empty($target['read']) && Schema::hasColumn($table, $target['read'])) {
+            $column = $target['read'];
+
+            $queries[] = fn () => DB::table($table)
+                ->whereNotNull($column)
+                ->where($column, '<=', $cutoff);
+        }
+
+        if (empty($target['status']) && empty($target['raw'])) {
+            return $queries;
+        }
+
+        // A status / tombstone target reads a fixed set of columns; when any
+        // of them is missing the target does not run at all.
+        foreach ($target['requires'] ?? [] as $column) {
+            if (! Schema::hasColumn($table, $column)) {
+                return [];
+            }
+        }
+
+        $queries[] = function () use ($table, $target, $cutoff) {
+            $query = DB::table($table);
+
+            foreach ($target['status'] ?? [] as $column => $values) {
+                $query->whereRaw(
+                    'LOWER(' . $column . ') IN (' . implode(',', array_fill(0, count($values), '?')) . ')',
+                    array_map('strtolower', $values)
+                );
+            }
+
+            if (! empty($target['raw'])) {
+                $query->whereRaw($target['raw']);
+            }
+
+            if (! empty($target['since_expr'])) {
+                $query->whereRaw($target['since_expr'] . ' <= ?', [$cutoff]);
+            } elseif (! empty($target['since'])) {
+                $query->where($target['since'], '<=', $cutoff);
+            }
+
+            return $query;
+        };
+
+        return $queries;
+    }
+
+    /** Adds the "still referenced" guards to a parent delete. */
+    private static function holdHeldBack($query, string $table, array $target)
+    {
+        foreach ($target['held_by'] ?? [] as [$refTable, $refColumn]) {
+            if (! Schema::hasTable($refTable) || ! Schema::hasColumn($refTable, $refColumn)) {
+                continue;
+            }
+
+            // "still referenced" = at least one child row points here.
+            $query->whereNotExists(function ($sub) use ($table, $target, $refTable, $refColumn) {
+                $sub->selectRaw('1')
+                    ->from($refTable)
+                    ->whereColumn($refTable . '.' . $refColumn, $table . '.' . $target['pk']);
+            });
+        }
+
+        return $query;
+    }
+
+    // ===== DOMAIN 32 - ACCESS-LOG RETENTION (REQ-ACCESS_LOG-01 OVERRIDE) =====
+    //
+    // REQ-ACCESS_LOG-01 calls the trail immutable, and it stays append-only
+    // for every ordinary account. The owner's retention policy carves out two
+    // precise exceptions, both super-admin-only and both leaving a record of
+    // their own in the trail:
+    //
+    //   * once every two weeks the system ASKS all super admins whether one
+    //     of them wants every log row older than 24 months deleted now, and
+    //     says in the same breath that an unanswered question still expires
+    //     the rows at 60 months (promptAccessLogPurge);
+    //   * 60 months after custlog_created / emplog_created a row is deleted
+    //     whether anyone decided or not, and every super admin is told what
+    //     went (sweepAccessLogRetention, daily from routes/console.php).
+    //
+    // The delete itself is purgeAccessLogs($months): one call removes every
+    // custlog and emplog row past the cutoff and notifies the super admins of
+    // the count. No other code path may remove a log row.
+
+    /** The age at which a super admin may purge the trail by hand. */
+    public const ACCESS_LOG_PURGE_MONTHS = 24;
+
+    /** The age at which a log row is deleted whether anyone decided or not. */
+    public const ACCESS_LOG_AUTO_PURGE_MONTHS = 60;
+
+    /** The retention question reaches the super admins this often. */
+    public const ACCESS_LOG_ASK_EVERY_DAYS = 14;
+
+    /** The standing question, one regular notification per super admin. */
+    public const ACCESS_LOG_ASK = 'Access-log retention: does a super admin want every access log entry older than 24 months permanently deleted now? A super admin may decide from Admin > Settings > Access Log. If none of you decides, every entry older than 24 months will be deleted anyway 60 months after it was recorded.';
+
+    /**
+     * Hard-delete every custlog / emplog row older than $months and tell every
+     * super admin how much went. Shared by the 24-month manual purge (the
+     * DELETE /access/logs endpoint) and the 60-month sweep, so both remove
+     * exactly the same shape of row.
+     *
+     * @return array<string, int> rows removed per log table
+     */
+    public function purgeAccessLogs(int $months): array
+    {
+        $cutoff = now()->subMonths($months);
+        $purged = [];
+
+        foreach (['custlog' => 'custlog_created', 'emplog' => 'emplog_created'] as $table => $column) {
+            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $column)) {
+                continue;
+            }
+
+            $count = DB::table($table)->where($column, '<=', $cutoff)->delete();
+
+            if ($count > 0) {
+                $purged[$table] = $count;
+            }
+        }
+
+        if ($purged !== []) {
+            $this->notifyEmployeesByType(['SUPER ADMIN'], $this->accessLogPurgeNotice($purged, $months));
+        }
+
+        return $purged;
+    }
+
+    /** Daily sweep: nothing in the trail survives 60 months. */
+    public function sweepAccessLogRetention(): array
+    {
+        $purged = $this->purgeAccessLogs(self::ACCESS_LOG_AUTO_PURGE_MONTHS);
+
+        if ($purged !== []) {
+            \Log::info('Access-log retention sweep (60 months)', $purged);
+        }
+
+        return $purged;
+    }
+
+    /**
+     * Every two weeks, ask the super admins ONCE whether one of them wants
+     * the 24-month logs gone now - and remind them that an unanswered
+     * question still expires the rows at 60 months.
+     *
+     * A marker file remembers the last question, so no row is added to any
+     * table (system-new.docx SCHEMA has no SETTINGS table). Returns true
+     * when the question actually went out.
+     *
+     * @param string|null $marker override for tests; the production marker
+     *                            lives under storage/framework
+     */
+    public function promptAccessLogPurge(?string $marker = null): bool
+    {
+        $marker = $marker ?? storage_path('framework/access-log-purge-asked');
+
+        $lastAsked = @file_get_contents($marker);
+
+        if ($lastAsked !== false
+            && Carbon::parse($lastAsked)->addDays(self::ACCESS_LOG_ASK_EVERY_DAYS)->isFuture()) {
+            return false;
+        }
+
+        // No super admin to ask: leave the marker unwritten so the question
+        // goes out the moment one exists again.
+        $audience = $this->activeEmployeeQuery()
+            ->whereRaw('UPPER(' . $this->employeeCategoryExpression() . ') IN (?)', ['SUPER ADMIN'])
+            ->count();
+
+        if ($audience === 0) {
+            return false;
+        }
+
+        $this->notifyEmployeesByType(['SUPER ADMIN'], self::ACCESS_LOG_ASK);
+
+        @file_put_contents($marker, now()->toIso8601String());
+
+        return true;
+    }
+
+    /** The "what just went" sentence every purge sends to the super admins. */
+    private function accessLogPurgeNotice(array $purged, int $months): string
+    {
+        $total = array_sum($purged);
+        $breakdown = $this->logBreakdown($purged);
+
+        if ($months >= self::ACCESS_LOG_AUTO_PURGE_MONTHS) {
+            return 'Access-log retention: ' . $total . ' access log entries older than '
+                . $months . ' months were permanently deleted (' . $breakdown . ').';
+        }
+
+        return 'Access-log retention: a super admin ran the ' . $months . '-month purge and '
+            . $total . ' access log entries were permanently deleted (' . $breakdown . ').';
+    }
+
+    private function logBreakdown(array $purged): string
+    {
+        $parts = [];
+
+        foreach (['custlog' => 'customer', 'emplog' => 'employee'] as $table => $label) {
+            if (! empty($purged[$table])) {
+                $parts[] = $purged[$table] . ' ' . $label;
+            }
+        }
+
+        return $parts === [] ? 'none' : implode(', ', $parts);
+    }
 
     // ===== from the InputValidator API file =====
 
@@ -703,6 +1127,8 @@ class DatabaseAPI extends Controller
     // 'HH:MM' 24-hour strings, so the time rules match that format. A status
     // is accepted but never stored: the table has no status column, so the
     // value is validated for completeness and the real status is derived.
+    // `unavailable` is FLOW-EMP_SCHED-04's own exception flag on one block
+    // and is the only spelling that writes `sched_disabled`.
     public function createShift(Request $json)
     {
         $requiredCheck = $this->validateFields($json, [
@@ -741,6 +1167,7 @@ class DatabaseAPI extends Controller
             'shift_start' => 'nullable|date_format:H:i',
             'shift_end'   => 'nullable|date_format:H:i',
             'emp_instore' => 'nullable|boolean',
+            'unavailable' => 'nullable|boolean',
             'shift_type'     => 'nullable|string|max:100',
             'shift_location' => 'nullable|string|max:100',
         ], [
@@ -749,6 +1176,7 @@ class DatabaseAPI extends Controller
             'shift_start.date_format' => 'Shift start time must use the HH:MM 24-hour format.',
             'shift_end.date_format'   => 'Shift end time must use the HH:MM 24-hour format.',
             'emp_instore.boolean'     => 'Availability must be true or false.',
+            'unavailable.boolean'     => 'Unavailable must be true or false.',
         ]);
         if ($requiredCheck) return $requiredCheck;
 
@@ -1335,7 +1763,7 @@ class DatabaseAPI extends Controller
         $validator = Validator::make($json->all(), $rules, $messages);
 
         if ($validator->fails()) {
-            return $this->fail($validator->errors()->first(), 400);
+            return $this->fail((string) $validator->errors()->first(), 400);
         }
 
         return null;

@@ -5,8 +5,8 @@ namespace App\Support;
 use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Setting;
+use App\Support\IdAllocator;
 use Carbon\Carbon;
-
 /**
  * REQ-SS-01: rebuild the shop's baseline duty roster when an academic period
  * opens.
@@ -83,6 +83,15 @@ class AcademicPeriodRoster
             if ($exists) continue;
 
             Schedule::create([
+                // SYSTEM RULE / App\Support\IdAllocator: `schedules.sched_id`
+                // is a bare bigint NOT NULL primary key with no sequence,
+                // identity or column default on the live connection, so the
+                // key has to be allocated in application code or the insert
+                // dies on a NOT NULL violation - which is what used to happen
+                // the first time a term was opened and the whole baseline
+                // roster rebuild failed. Same rule (and the same fix) as
+                // SystemAPI::createShift and UserAPI::prescheduleNewEmployee.
+                'sched_id'         => IdAllocator::next('schedules', 'sched_id'),
                 'emp_id'           => $employee->emp_id,
                 'sched_time_start' => Carbon::parse($day . ' ' . $open),
                 'sched_time_end'   => Carbon::parse($day . ' ' . $close),

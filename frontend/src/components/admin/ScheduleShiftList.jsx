@@ -1,4 +1,5 @@
 import StatusPill from './StatusPill.jsx'
+import { fmtTime } from './scheduleTime.js'
 
 // Status is derived by the API (duty_shift has no status column), so the pill
 // colour only needs the keyword. COMPLETED keeps StatusPill's default grey.
@@ -9,9 +10,9 @@ const STATUS_VARIANT = {
 }
 
 /**
- * The duty blocks the API returned for the selected date, with the cancel
- * action (DELETE /shifts/{id}). Nothing is stored locally, so a reload always
- * repaints from the server.
+ * The duty blocks the API returned for the selected date, with the amend
+ * (PUT /shifts/{id}) and cancel (DELETE /shifts/{id}) actions. Nothing is
+ * stored locally, so a reload always repaints from the server.
  */
 export default function ScheduleShiftList({
   shifts = [],
@@ -19,6 +20,7 @@ export default function ScheduleShiftList({
   error = '',
   busyId = null,
   onRetry,
+  onEdit,
   onCancel,
 }) {
   if (isLoading) {
@@ -64,22 +66,37 @@ export default function ScheduleShiftList({
               {shift.employee_name || `Employee #${shift.emp_id}`}
             </p>
             <p className="text-[11px] text-slate-500">
-              {shift.shift_start} – {shift.shift_end}
+              {fmtTime(shift.shift_start)} – {fmtTime(shift.shift_end)}
               {' · block #'}
               {shift.shift_id}
+              {shift.unavailable ? ' · marked unavailable' : ''}
             </p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
             <StatusPill status={shift.status} variant={STATUS_VARIANT[shift.status]} />
-            <button
-              type="button"
-              onClick={() => onCancel(shift)}
-              disabled={busyId === shift.shift_id}
-              className="h-7 px-2.5 rounded-md text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              {busyId === shift.shift_id ? 'Cancelling…' : 'Cancel'}
-            </button>
+
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => onEdit(shift)}
+                disabled={busyId === shift.shift_id}
+                className="h-7 px-2.5 rounded-md text-[11px] font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                Edit
+              </button>
+            )}
+
+            {onCancel && (
+              <button
+                type="button"
+                onClick={() => onCancel(shift)}
+                disabled={busyId === shift.shift_id}
+                className="h-7 px-2.5 rounded-md text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {busyId === shift.shift_id ? 'Working…' : 'Cancel'}
+              </button>
+            )}
           </div>
         </div>
       ))}

@@ -1,0 +1,229 @@
+{
+  "source": "initial_products/initial_products_directory [DONT EDIT].docx",
+  "photo_folder": "initial_products",
+  "upload_type": "product",
+  "stock_per_variation": 100,
+  "products": [
+    {
+      "prod_name": "Tatak BUEÑO Series",
+      "prod_categ": "Pins",
+      "prod_price": 30,
+      "prod_tag": "TATAK-BUENO-SERIES",
+      "prod_desc": "Tatak BUEÑO Series enamel badge pin from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "Green", "photo": "Pins/tatak_bueno - green.png" },
+        { "color": "Red", "photo": "Pins/tatak_bueno - red.png" },
+        { "color": "Yellow", "photo": "Pins/tatak_bueno - yellow.png" }
+      ]
+    },
+    {
+      "prod_name": "Monochrome Series",
+      "prod_categ": "Pins",
+      "prod_price": 30,
+      "prod_tag": "MONOCHROME-SERIES",
+      "prod_desc": "Monochrome Series enamel badge pin from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "TORCH", "photo": "Pins/monochrome - torch.png" },
+        { "color": "BEUNIQUE", "photo": "Pins/monochrome - be_unique.png" },
+        { "color": "Tatak BUEÑO", "photo": "Pins/monochrome - tatak_bueno.png" }
+      ]
+    },
+    {
+      "prod_name": "Uni-Life Series",
+      "prod_categ": "Pins",
+      "prod_price": 30,
+      "prod_tag": "UNI-LIFE-SERIES",
+      "prod_desc": "Uni-Life Series enamel badge pin from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "BUNIQUE", "photo": "Pins/uni_life - bunique.png" },
+        { "color": "TORCH", "photo": "Pins/uni_life - torch.png" },
+        { "color": "COFFEE", "photo": "Pins/uni_life - coffee.png" }
+      ]
+    },
+    {
+      "prod_name": "Y2K Series",
+      "prod_categ": "Stickers",
+      "prod_price": 10,
+      "prod_tag": "Y2K-SERIES",
+      "prod_desc": "Y2K Series sticker from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "Iskolar ng Bayan", "photo": "Stickers/y2k - iskolar_ng_bayan.png" },
+        { "color": "Tatak BUEÑO", "photo": "Stickers/y2k - tatak_bueno.png" },
+        { "color": "BU is a Public School", "photo": "Stickers/y2k - bu_is_a_public_school.png" },
+        { "color": "Bicol University", "photo": "Stickers/y2k - bicol_university.png" },
+        { "color": "GWA", "photo": "Stickers/y2k - gwa.png" }
+      ]
+    },
+    {
+      "prod_name": "Sketchy Series",
+      "prod_categ": "Stickers",
+      "prod_price": 10,
+      "prod_tag": "SKETCHY-SERIES",
+      "prod_desc": "Sketchy Series sticker from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "Bicol University (Yellow)", "photo": "Stickers/sketchy - bicol_university - yellow.png" },
+        { "color": "Bicol University (Orange)", "photo": "Stickers/sketchy - bicol_university - orange.png" },
+        { "color": "Fine State University", "photo": "Stickers/sketchy - fine_state_university.png" },
+        { "color": "BEUNIQUE", "photo": "Stickers/sketchy - beunique.png" },
+        { "color": "Coffee", "photo": "Stickers/sketchy - coffee.png" }
+      ]
+    },
+    {
+      "prod_name": "Two-Color Series",
+      "prod_categ": "Stickers",
+      "prod_price": 10,
+      "prod_tag": "TWO-COLOR-SERIES",
+      "prod_desc": "Two-Color Series sticker from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "Certified BUEÑO", "photo": "Stickers/two-color - certified_bueno.png" },
+        { "color": "Glaringly", "photo": "Stickers/two-color - glaringly.png" },
+        { "color": "Uno Cutie", "photo": "Stickers/two-color - uno_cutie.png" },
+        { "color": "Padayon", "photo": "Stickers/two-color - padayon.png" },
+        { "color": "BEUNIQUE", "photo": "Stickers/two-color - beunique.png" }
+      ]
+    },
+    {
+      "prod_name": "BUnique BU Labels",
+      "prod_categ": "Caps",
+      "prod_price": 300,
+      "prod_tag": "BUNIQUE-BU-LABELS",
+      "prod_desc": "BUnique BU Labels cap from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "Green", "photo": "Caps/bunique_bu_labels - green.png" },
+        { "color": "Black", "photo": "Caps/bunique_bu_labels - black.png" },
+        { "color": "White", "photo": "Caps/bunique_bu_labels - white.png" }
+      ]
+    },
+    {
+      "prod_name": "Bicol University",
+      "prod_categ": "Caps",
+      "prod_price": 300,
+      "prod_tag": "BICOL-UNIVERSITY",
+      "prod_desc": "Bicol University cap from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "White", "photo": "Caps/bicol_university - white.png" },
+        { "color": "Green", "photo": "Caps/bicol_university - green.png" },
+        { "color": "Black", "photo": "Caps/bicol_university - black.png" }
+      ]
+    },
+    {
+      "prod_name": "Tatak BUEÑO",
+      "prod_categ": "Caps",
+      "prod_price": 300,
+      "prod_tag": "TATAK-BUENO",
+      "prod_desc": "Tatak BUEÑO cap from the BU Labels 2025 merchandise line of Tindahan ni Isko. One size.",
+      "sizes": ["One Size"],
+      "variants": [
+        { "color": "Black", "photo": "Caps/tatak_bueno - black.png" },
+        { "color": "White", "photo": "Caps/tatak_bueno - white.png" },
+        { "color": "Green", "photo": "Caps/tatak_bueno - green.png" }
+      ]
+    },
+    {
+      "prod_name": "BU Labels 2025 Hoodie",
+      "prod_categ": "Hoodies",
+      "prod_price": 750,
+      "prod_tag": "BU-LABELS-2025-HOODIE",
+      "prod_desc": "BU Labels 2025 Hoodie from the BU Labels 2025 merchandise line of Tindahan ni Isko.",
+      "sizes": ["Small", "Medium", "Large", "Extra Large"],
+      "variants": [
+        { "color": "Dark Cygnus (Dark Blue)", "photo": "Hoodies/bu_labels_2025_hoodie - dark_cygnus - dark_blue.png" },
+        { "color": "Ophiuchus (Royal Blue)", "photo": "Hoodies/bu_labels_2025_hoodie - ophiuchus - royal_blue.png" }
+      ]
+    },
+    {
+      "prod_name": "Bicol University Hoodie",
+      "prod_categ": "Hoodies",
+      "prod_price": 750,
+      "prod_tag": "BICOL-UNIVERSITY-HOODIE",
+      "prod_desc": "Bicol University Hoodie from the BU Labels 2025 merchandise line of Tindahan ni Isko.",
+      "sizes": ["Small", "Medium", "Large", "Extra Large"],
+      "variants": [
+        { "color": "Chameleon (Cream)", "photo": "Hoodies/bicol_university_hoodie - chameleon - cream.png" },
+        { "color": "Orion (Black)", "photo": "Hoodies/bicol_university_hoodie - orion - black.png" }
+      ]
+    },
+    {
+      "prod_name": "Minimalist Torch",
+      "prod_categ": "Shirts",
+      "prod_price": 280,
+      "prod_tag": "MINIMALIST-TORCH",
+      "prod_desc": "Minimalist Torch shirt from the BU Labels 2025 merchandise line of Tindahan ni Isko.",
+      "sizes": ["Extra Small", "Small", "Medium", "Large", "Extra Large", "2XL"],
+      "variants": [
+        { "color": "Cream", "photo": "Shirts/minimalist_torch - cream.png" },
+        { "color": "White", "photo": "Shirts/minimalist_torch - white.png" },
+        { "color": "Black", "photo": "Shirts/minimalist_torch - black.png" }
+      ]
+    },
+    {
+      "prod_name": "Lauaan Street",
+      "prod_categ": "Shirts",
+      "prod_price": 280,
+      "prod_tag": "LAUAAN-STREET",
+      "prod_desc": "Lauaan Street shirt from the BU Labels 2025 merchandise line of Tindahan ni Isko.",
+      "sizes": ["Extra Small", "Small", "Medium", "Large", "Extra Large", "2XL"],
+      "variants": [
+        { "color": "White", "photo": "Shirts/lauaan_street - white.png" },
+        { "color": "Black", "photo": "Shirts/lauaan_street - black.png" }
+      ]
+    },
+    {
+      "prod_name": "Baby Tee",
+      "prod_categ": "Shirts",
+      "prod_price": 280,
+      "prod_tag": "BABY-TEE",
+      "prod_desc": "Baby Tee from the BU Labels 2025 merchandise line of Tindahan ni Isko.",
+      "sizes": ["Extra Small", "Small", "Medium", "Large", "Extra Large", "2XL"],
+      "variants": [
+        { "color": "Blue", "photo": "Shirts/baby_tee - blue.png" },
+        { "color": "Red", "photo": "Shirts/baby_tee - red.png" },
+        { "color": "Green", "photo": "Shirts/baby_tee - green.png" }
+      ]
+    },
+    {
+      "prod_name": "BUNIQUE Varsity Jacket",
+      "prod_categ": "Varsity Jacket",
+      "prod_price": 2200,
+      "prod_tag": "BUNIQUE-VARSITY-JACKET",
+      "prod_desc": "BUNIQUE Varsity Jacket from the BU Labels 2025 merchandise line of Tindahan ni Isko.",
+      "sizes": ["Small", "Medium", "Large", "Extra Large"],
+      "variants": [
+        { "color": null, "photo": "Jackets/bunique_varsity_jacket.png" }
+      ]
+    },
+    {
+      "prod_name": "BUNIQUE Windbreaker",
+      "prod_categ": "Windbreakers",
+      "prod_price": 1200,
+      "prod_tag": "BUNIQUE-WINDBREAKER",
+      "prod_desc": "BUNIQUE Windbreaker from the BU Labels 2025 merchandise line of Tindahan ni Isko.",
+      "sizes": ["Extra Small", "Small", "Medium", "Large", "Extra Large", "2XL", "3XL"],
+      "variants": [
+        {
+          "color": "Octans (Blue)",
+          "photo": "Windbreakers/bunique_windbreaker - octans - blue.jpg",
+          "sizes": ["Extra Small", "Small", "Medium", "Large", "Extra Large", "2XL", "3XL"]
+        },
+        {
+          "color": "Fornax (Black)",
+          "photo": "Windbreakers/bunique_windbreaker - fornax - black.jpg",
+          "sizes": ["Extra Small", "Small", "Medium", "Large", "Extra Large", "2XL", "3XL"]
+        },
+        {
+          "color": "Volans (White)",
+          "photo": "Windbreakers/bunique_windbreaker - volans - white.jpg",
+          "sizes": ["Small", "Medium", "Large", "Extra Large", "2XL", "3XL"]
+        }
+      ]
+    }
+  ]
+}

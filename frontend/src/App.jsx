@@ -59,6 +59,8 @@ import AdminAccount from './routes/admin/AdminAccount.jsx'
 import AdminSettings from './routes/admin/AdminSettings.jsx'
 import AdminQr from './routes/admin/AdminQr.jsx'
 import AdminNotifications from './routes/admin/AdminNotifications.jsx'
+import AdminAccessLogs from './routes/admin/AdminAccessLogs.jsx'
+import SetupWizard from './routes/admin/SetupWizard.jsx'
 import ScrollToTop from './components/layout/ScrollToTop.jsx'
 import { useAdmin } from './hooks/useAdmin.js'
 import { empHomePath } from './components/admin/schema.js'
@@ -163,6 +165,11 @@ function App() {
 
                 {/* ── Admin & Staff Routes ── */}
                 <Route path="/admin/login" element={<AdminLogin />} />
+                {/* DOMAIN 1 - FLOW-SETUP-05: the first-run wizard. Public
+                    because an empty roster has no account to sign in with
+                    yet, and under /admin/* because it configures the employee
+                    portal (rule 71). */}
+                <Route path="/admin/setup" element={<SetupWizard />} />
                 <Route element={<RequireAdmin />}>
                   <Route path="/admin" element={<AdminEntryRoute />} />
                   {/* REQ-EMP_HOME-01 — the Dashboard must never show to a
@@ -241,6 +248,13 @@ function App() {
                       The store-wide half inside it stays super-admin only,
                       which SettingsAPI enforces for every system key (rule 40). */}
                   <Route path="/admin/settings" element={<AdminSettings />} />
+                  {/* DOMAIN 32 - FLOW-ACCESS_LOG-07 / REQ-ACCESS_LOG-02:
+                      the merged access log is super admin only, both at the
+                      API (role:super_admin) and here, so typing the URL never
+                      reaches what the sidebar does not offer. */}
+                  <Route element={<RequireRole roles={['SUPER_ADMIN']} />}>
+                    <Route path="/admin/settings/logs" element={<AdminAccessLogs />} />
+                  </Route>
 
                   {/* POS is walked through by admins and super admins (rule 44).
                       FLOW-EMP_HOME-05 lists "Walk-in Orders" as its own sidebar

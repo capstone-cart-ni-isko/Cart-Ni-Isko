@@ -1,9 +1,17 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+﻿import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
-import { fetchAccounts } from '../../services/accounts.js'
+import AdminSchedule from './AdminSchedule.jsx'
+import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
+import StatusPill from '../../components/admin/StatusPill.jsx'
+import {
+  banAccount,
+  deleteAccount,
+  fetchAccounts,
+  recoverAccount,
+} from '../../services/accounts.js'
 import { logAction } from '../../services/access.js'
 import {
   first,
@@ -43,6 +51,9 @@ function mapEmployee(row) {
     created: first(row, 'emp_created'),
     suspended: !!first(row, 'emp_suspended', 'emp_disabled'),
     deleted: !!first(row, 'emp_deleted'),
+    // REQ-SS-01: the employee's own in-store flag, what the schedule calendar
+    // gates its slots on (REQ-AB-03 / REQ-SS-03).
+    inStore: [true, 1, '1', 'true'].includes(first(row, 'emp_instore')),
     raw: row,
   }
 }
@@ -55,6 +66,13 @@ export default function AdminUsers() {
   const [isLoading, setIsLoading] = useState(true)
   const [pageError, setPageError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+
+  // DOMAIN 5 + DOMAIN 7: the Staff tab carries the directory AND the employee
+  // scheduling operations, so every scheduling action is reachable here.
+  const [tab, setTab] = useState('directory')
+
+  // REQ-UM-03: the employee currently awaiting a permanent-delete confirmation.
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   // Filters / search / sort / pagination
   const [searchQuery, setSearchQuery] = useState('')
@@ -156,7 +174,7 @@ export default function AdminUsers() {
   }
 
   const sortIndicator = (key) =>
-    sortBy === key ? (sortOrder === 'asc' ? ' ↑' : ' ↓') : ''
+    sortBy === key ? (sortOrder === 'asc' ? ' â†‘' : ' â†“') : ''
 
   const recordLog = (action, description) => {
     logAction({
@@ -172,14 +190,9 @@ export default function AdminUsers() {
       showToast('Only the Super Admin may suspend accounts.', 'error')
       return
     }
-    // PUT /accounts/disable with a reason (ban flow).
-    const { apiPost } = await import('../../services/api.js')
+    // POST /accounts/disable with a reason (ban flow).
     try {
-      await apiPost('/accounts/disable', {
-        account_type: 'employee',
-        user_id: emp.emp_id,
-        reason: 'Suspended from the staff directory',
-      })
+      await banAccount('employee', emp.emp_id, 'Suspended from the staff directory')
       recordLog('SUSPEND ACCOUNT', `Suspended ${emp.name}`)
       showToast(`${emp.name} has been suspended.`, 'success')
       setReloadKey((k) => k + 1)
@@ -193,17 +206,27 @@ export default function AdminUsers() {
       showToast('Only the Super Admin may recover accounts.', 'error')
       return
     }
-    const { apiPost } = await import('../../services/api.js')
     try {
-      await apiPost('/accounts/recover', {
-        account_type: 'employee',
-        user_id: emp.emp_id,
-      })
+      await recoverAccount('employee', emp.emp_id)
       recordLog('RECOVER ACCOUNT', `Recovered ${emp.name}`)
       showToast(`${emp.name} has been recovered.`, 'success')
       setReloadKey((k) => k + 1)
     } catch (err) {
       showToast(err?.message || 'Failed to recover the account.', 'error')
+    }
+  }
+
+  // REQ-UM-03: deleting an employee is permanent and irreversible, so it is
+  // behind its own confirmation dialog and never offered for the signed-in
+  // super admin's own account (the API refuses it with 409 anyway).
+  const handleDelete = async (emp) => {
+    try {
+      await deleteAccount('employee', emp.emp_id)
+      recordLog('DELETE ACCOUNT', `Permanently deleted ${emp.name} (#${emp.emp_id})`)
+      showToast(`${emp.name} was permanently deleted.`, 'success')
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      showToast(err?.message || 'Failed to delete the account.', 'error')
     }
   }
 
@@ -232,6 +255,31 @@ export default function AdminUsers() {
           </Link>
         </div>
 
+        {/* DOMAIN 5 + DOMAIN 7 â€” the Staff tab owns BOTH halves of employee
+            management: the directory (FLOW-EMP_LIST-*) and the employee
+            scheduling operations (FLOW-EMP_SCHED-01..08), so every scheduling
+            action is reachable from here. */}
+        <div className="flex bg-slate-100 p-0.5 rounded-md border border-slate-200/60 w-fit">
+          {[
+            { key: 'directory', label: 'Directory' },
+            { key: 'schedules', label: 'Schedules' },
+          ].map((entry) => (
+            <button
+              key={entry.key}
+              type="button"
+              onClick={() => setTab(entry.key)}
+              aria-current={tab === entry.key ? 'page' : undefined}
+              className={`h-7 px-3 rounded text-xs font-semibold transition-all cursor-pointer ${
+                tab === entry.key ? 'bg-brand-orange text-white' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'directory' && (
+          <>
         {/* Summary header: total active + category distribution */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
@@ -255,7 +303,7 @@ export default function AdminUsers() {
             </svg>
             <input
               type="text"
-              placeholder="Search by name or email…"
+              placeholder="Search by name or emailâ€¦"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-white border border-slate-200/90 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange shadow-2xs transition-all"
@@ -308,10 +356,10 @@ export default function AdminUsers() {
                 className="appearance-none bg-white border border-slate-200/90 rounded-xl pl-4 pr-9 py-2.5 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:border-brand-orange shadow-2xs cursor-pointer"
                 aria-label="Sort by"
               >
-                <option value="name:asc">Name (A–Z)</option>
-                <option value="name:desc">Name (Z–A)</option>
-                <option value="email:asc">Email (A–Z)</option>
-                <option value="email:desc">Email (Z–A)</option>
+                <option value="name:asc">Name (Aâ€“Z)</option>
+                <option value="name:desc">Name (Zâ€“A)</option>
+                <option value="email:asc">Email (Aâ€“Z)</option>
+                <option value="email:desc">Email (Zâ€“A)</option>
                 <option value="created:desc">Newest first</option>
                 <option value="created:asc">Oldest first</option>
               </select>
@@ -357,7 +405,7 @@ export default function AdminUsers() {
                 title="Dismiss"
                 className="opacity-60 hover:opacity-100 cursor-pointer"
               >
-                ✕
+                âœ•
               </button>
             </div>
           </div>
@@ -366,7 +414,7 @@ export default function AdminUsers() {
         {/* Table */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-visible">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[760px]">
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="border-b border-slate-100 bg-white text-[11px] font-bold uppercase tracking-wider text-slate-400 select-none">
                   <th className="py-4 px-5 w-24">ID</th>
@@ -406,16 +454,16 @@ export default function AdminUsers() {
               <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
                       <span className="inline-flex items-center gap-2">
                         <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-brand-orange animate-spin" />
-                        Loading staff directory…
+                        Loading staff directoryâ€¦
                       </span>
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
                       {employees.length === 0
                         ? 'No employees found. Enroll staff to populate the directory.'
                         : 'No employees match the current filters.'}
@@ -436,13 +484,19 @@ export default function AdminUsers() {
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-full bg-[#DBEAFE] text-[#2563EB] font-bold text-xs flex items-center justify-center shrink-0">
-                              {initials || '—'}
+                              {initials || 'â€”'}
                             </div>
                             <span className="font-bold text-slate-900">{emp.name}</span>
                           </div>
                         </td>
-                        <td className="py-4 px-4 text-slate-600">{emp.email || '—'}</td>
-                        <td className="py-4 px-4 text-slate-600">{emp.phone || '—'}</td>
+                        <td className="py-4 px-4 text-slate-600">{emp.email || 'â€”'}</td>
+                        <td className="py-4 px-4 text-slate-600">{emp.phone || 'â€”'}</td>
+                        <td className="py-4 px-4">
+                          <StatusPill
+                            status={emp.inStore ? 'In Store' : 'Out of Store'}
+                            variant={emp.inStore ? 'green' : 'amber'}
+                          />
+                        </td>
                         <td className="py-4 px-4">
                           <span
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -502,6 +556,22 @@ export default function AdminUsers() {
                                   Recover
                                 </button>
                               )}
+                              {/* REQ-UM-03 - permanent, so it needs the
+                                  confirmation dialog, and a super admin may
+                                  never delete their own account. */}
+                              <button
+                                type="button"
+                                onClick={() => setPendingDelete(emp)}
+                                disabled={String(emp.emp_id) === String(currentAdminUser?.emp_id)}
+                                title={
+                                  String(emp.emp_id) === String(currentAdminUser?.emp_id)
+                                    ? 'You cannot delete your own account.'
+                                    : 'Permanently delete this employee account (REQ-UM-03)'
+                                }
+                                className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                Delete
+                              </button>
                             </>
                           )}
                         </td>
@@ -516,7 +586,7 @@ export default function AdminUsers() {
           {/* Footer: count + pagination (past 50 rows) */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-100">
             <p className="text-xs text-slate-400 font-medium">
-              Showing {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}–
+              Showing {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}â€“
               {Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} employees
             </p>
             {totalPages > 1 && (
@@ -550,7 +620,29 @@ export default function AdminUsers() {
             )}
           </div>
         </div>
+          </>
+        )}
+
+        {/* DOMAIN 7 (EMPLOYEE SCHEDULING) â€” the very screen `/admin/schedules`
+            opens, embedded so every scheduling operation lives in the Staff
+            tab (FLOW-EMP_SCHED-01). */}
+        {tab === 'schedules' && <AdminSchedule embedded />}
       </div>
+
+      {/* REQ-UM-03: permanent deletion is behind a confirmation step and is
+          never reversible. */}
+      <ConfirmModal
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && handleDelete(pendingDelete)}
+        title="Delete this employee account?"
+        message={
+          pendingDelete
+            ? `${pendingDelete.name} (#${pendingDelete.emp_id}) and every record tied to the account will be permanently purged. This cannot be undone.`
+            : ''
+        }
+        confirmText="Delete permanently"
+      />
     </AdminLayout>
   )
 }

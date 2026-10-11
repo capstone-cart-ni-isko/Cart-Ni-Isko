@@ -110,7 +110,10 @@ function Profile() {
   const handleLogout = () => {
     logout()
     showToast('Signed out successfully')
-    navigate('/')
+    // Never "/" - the bare entry rule hands the tab to whichever portal was
+    // signed in last, so an employee session left in this tab would bounce a
+    // customer into the employee portal (rule 71 keeps them separate).
+    navigate('/login', { replace: true })
   }
 
   // Appointments live on their own standalone route (/appointments), so Profile

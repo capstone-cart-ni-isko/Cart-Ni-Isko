@@ -6,6 +6,7 @@ use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Setting;
+use App\Http\Controllers\AppointmentsAPI;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -503,6 +504,87 @@ class ShiftApiTest extends TestCase
     }
 
     // ==========================================
+    // SYSTEM RULE: the primary key of a table with no sequence
+    // ==========================================
+
+    /**
+     * REGRESSION - POST /api/shifts used to answer 500 "Failed to create duty
+     * shift" on the live Supabase connection.
+     *
+     * `schedules.sched_id` is a bare `bigint NOT NULL` primary key there: no
+     * identity, no sequence, no column default. An Eloquent insert that omits
+     * the key therefore dies on "null value in column sched_id violates
+     * not-null constraint", which is what the endpoint did: SystemAPI::
+     * createShift() built the row without a key and `Schedule::$fillable` did
+     * not carry `sched_id`, so even a caller that passed one had it stripped
+     * again. The sqlite fixture this suite runs on auto-increments the key, so
+     * every other test here passed and only production was broken.
+     *
+     * The assertion watches the SQL that actually reaches the connection: the
+     * insert into `schedules` MUST name `sched_id`, which is what proves the
+     * number is allocated in application code (App\Support\IdAllocator).
+     */
+    public function test_creating_a_shift_allocates_its_own_primary_key()
+    {
+        $admin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee();
+
+        $this->assertContains(
+            'sched_id',
+            (new \ReflectionClass(Schedule::class))->getDefaultProperties()['fillable'],
+            'sched_id must be mass-assignable on the Schedule model.'
+        );
+
+        $statements = [];
+        \Illuminate\Support\Facades\DB::listen(function ($query) use (&$statements) {
+            $statements[] = $query->sql;
+        });
+
+        $response = $this->postJson('/api/shifts', $this->shiftPayload($officer), $this->headers($admin));
+        $response->assertStatus(201);
+
+        $insert = collect($statements)->first(
+            fn (string $sql) => str_starts_with($sql, 'insert into "schedules"')
+        );
+        $this->assertNotNull($insert, 'No insert into schedules was recorded.');
+        $this->assertStringContainsString('"sched_id"', $insert);
+
+        $this->assertDatabaseHas('schedules', [
+            'sched_id' => $response->json('data.shift_id'),
+            'emp_id'   => $officer->getKey(),
+        ]);
+    }
+
+    /**
+     * The same class of bug on the other writer of `schedules`: enrollment
+     * preschedules the new employee (FLOW-EMP_ENROLL-06 / REQ-EMP_ENROLL-06),
+     * and that write has to name its key too or the whole enrollment fails.
+     */
+    public function test_prescheduling_a_new_employee_writes_a_keyed_block()
+    {
+        $admin = $this->makeSuperAdmin();
+
+        $statements = [];
+        \Illuminate\Support\Facades\DB::listen(function ($query) use (&$statements) {
+            $statements[] = $query->sql;
+        });
+
+        $this->postJson('/api/auth/emp_signup', [
+            'givname' => 'Batch',
+            'surname' => 'Scheduler',
+            'email'   => 'batchsched' . uniqid() . '@bicol-u.edu.ph',
+            'phone'   => '0951' . random_int(1000000, 9999999),
+            'categ'   => 'STAFF',
+        ], $this->headers($admin))->assertStatus(201);
+
+        $insert = collect($statements)->first(
+            fn (string $sql) => str_starts_with($sql, 'insert into "schedules"')
+        );
+        $this->assertNotNull($insert, 'Enrollment did not preschedule the employee.');
+        $this->assertStringContainsString('"sched_id"', $insert);
+    }
+
+    // ==========================================
     // RBAC + INVENTORY (instructions 60, 72, 75, 76, 78, 79)
     // ==========================================
 
@@ -602,5 +684,274 @@ class ShiftApiTest extends TestCase
         // Reading the default must never add a row to the settings table
         $this->assertDatabaseCount('settings', 0);
         $this->assertSame('2027-08-02', Setting::getValue('academic_period_start', '2027-08-02'));
+    }
+
+    // ==========================================
+    // DOMAIN 7 (EMPLOYEE SCHEDULING) RULES
+    // FLOW-EMP_SCHED-03/05 + REQ-EMP_SCHED-01/03/04
+    // ==========================================
+
+    public function test_create_shift_must_land_on_the_ten_minute_grid()
+    {
+        $admin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee();
+
+        $this->postJson(
+            '/api/shifts',
+            $this->shiftPayload($officer, ['shift_start' => '08:05', 'shift_end' => '13:00']),
+            $this->headers($admin)
+        )->assertStatus(400)->assertJsonPath('success', false);
+
+        $this->postJson(
+            '/api/shifts',
+            $this->shiftPayload($officer, ['shift_start' => '08:00', 'shift_end' => '13:15']),
+            $this->headers($admin)
+        )->assertStatus(400);
+
+        $this->assertDatabaseCount('schedules', 0);
+    }
+
+    public function test_overlapping_blocks_are_refused_but_a_block_inside_a_wider_one_is_not()
+    {
+        $admin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee();
+
+        // The baseline availability block an enrolled employee is prescheduled
+        // with (FLOW-EMP_ENROLL-06): a wide window spanning the whole week.
+        $this->makeShift($officer, ['shift_date' => now()->addDay()->format('Y-m-d')]);
+
+        // A duty slot INSIDE that window is not a conflict.
+        $this->postJson(
+            '/api/shifts',
+            $this->shiftPayload($officer, ['shift_start' => '09:00', 'shift_end' => '10:00']),
+            $this->headers($admin)
+        )->assertStatus(201);
+
+        // A partial cross is (REQ-EMP_SCHED-04): it starts inside and ends
+        // outside the existing block.
+        $this->postJson(
+            '/api/shifts',
+            $this->shiftPayload($officer, ['shift_start' => '17:00', 'shift_end' => '20:00']),
+            $this->headers($admin)
+        )->assertStatus(400);
+
+        $this->assertDatabaseCount('schedules', 2);
+    }
+
+    public function test_weekly_minimum_of_180_minutes_is_enforced_on_every_change()
+    {
+        $admin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee();
+
+        // FLOW-EMP_SCHED-05: an hour a week is under the floor.
+        $this->postJson(
+            '/api/shifts',
+            $this->shiftPayload($officer, ['shift_start' => '08:00', 'shift_end' => '09:00']),
+            $this->headers($admin)
+        )->assertStatus(400);
+
+        // Exactly the floor clears it.
+        $shiftId = $this->postJson(
+            '/api/shifts',
+            $this->shiftPayload($officer, ['shift_start' => '08:00', 'shift_end' => '11:00']),
+            $this->headers($admin)
+        )->assertStatus(201)->json('data.shift_id');
+
+        // Shrinking it below the floor is refused on update too.
+        $this->putJson(
+            '/api/shifts/' . $shiftId,
+            ['shift_start' => '08:00', 'shift_end' => '09:00'],
+            $this->headers($admin)
+        )->assertStatus(400);
+
+        // A plain admin may not cancel the last block of the week (the week
+        // would fall under the floor); a super admin re-plans the roster.
+        $adminOnly = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        $this->deleteJson('/api/shifts/' . $shiftId, [], $this->headers($adminOnly))->assertStatus(400);
+        $this->deleteJson('/api/shifts/' . $shiftId, [], $this->headers($admin))->assertStatus(200);
+
+        $this->assertDatabaseCount('schedules', 0);
+    }
+
+    public function test_blocks_more_than_a_day_in_the_past_need_a_super_admin()
+    {
+        $admin = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee();
+
+        // Two days back, so the block's own start PLUS the 24-hour allowance
+        // is already behind the clock whatever hour the suite runs at.
+        $yesterday = now()->subDays(2);
+
+        // REQ-EMP_SCHED-03: an admin may not write a block more than 24 hours
+        // in the past.
+        $this->postJson(
+            '/api/shifts',
+            $this->shiftPayload($officer, [
+                'shift_date'  => $yesterday->format('Y-m-d'),
+                'shift_start' => '08:00',
+                'shift_end'   => '11:00',
+            ]),
+            $this->headers($admin)
+        )->assertStatus(400);
+
+        // A super admin may still correct the roster.
+        $this->postJson(
+            '/api/shifts',
+            $this->shiftPayload($officer, [
+                'shift_date'  => $yesterday->format('Y-m-d'),
+                'shift_start' => '08:00',
+                'shift_end'   => '11:00',
+            ]),
+            $this->headers($superAdmin)
+        )->assertStatus(201);
+    }
+
+    public function test_batch_scheduling_writes_one_block_per_employee()
+    {
+        $admin = $this->makeSuperAdmin();
+        $first = $this->makeEmployee();
+        $second = $this->makeEmployee();
+        $headers = $this->headers($admin);
+
+        // REQ-EMP_SCHED-06: the schedule screen sends one POST per selected
+        // employee - each block is independent, so one employee's clash never
+        // blocks the rest of the batch.
+        $this->postJson('/api/shifts', $this->shiftPayload($first), $headers)->assertStatus(201);
+        $this->postJson('/api/shifts', $this->shiftPayload($second), $headers)->assertStatus(201);
+
+        $this->assertDatabaseCount('schedules', 2);
+        $this->assertSame(
+            2,
+            Schedule::whereIn('emp_id', [$first->getKey(), $second->getKey()])->count()
+        );
+    }
+
+    // ==========================================
+    // FLOW-EMP_SCHED-04 THE EMPLOYEE'S OWN UNAVAILABLE FLAG
+    // ==========================================
+
+    public function test_an_employee_may_flag_one_block_unavailable()
+    {
+        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        // A week-wide baseline block so the 180-minute floor still clears
+        // when one block inside it is flagged unavailable.
+        $this->makeShift($officer, ['shift_start' => '00:00', 'shift_end' => '23:59']);
+        $block = $this->makeShift($officer, ['shift_start' => '10:00', 'shift_end' => '12:00']);
+
+        $response = $this->putJson(
+            '/api/shifts/' . $block->sched_id,
+            ['unavailable' => true],
+            $this->headers($superAdmin)
+        );
+
+        $response->assertStatus(200)->assertJsonPath('success', true);
+        $response->assertJsonPath('data.unavailable', true);
+
+        $block->refresh();
+        $this->assertNotNull($block->sched_disabled, 'The exception was not stored.');
+        $this->assertFalse($block->isStaffed());
+
+        // The flag is the employee's own exception, so it is reported back and
+        // the block reads as needing a substitute (REQ-SS-03).
+        $this->getJson('/api/shifts?status=PENDING REPLACEMENT', $this->headers($superAdmin))
+            ->assertJsonPath('data.0.shift_id', $block->sched_id);
+    }
+
+    public function test_clearing_the_exception_puts_the_block_back_on_the_roster()
+    {
+        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        $this->makeShift($officer, ['shift_start' => '00:00', 'shift_end' => '23:59']);
+        $block = $this->makeShift($officer, ['shift_start' => '10:00', 'shift_end' => '12:00']);
+
+        $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => true], $this->headers($superAdmin))
+            ->assertStatus(200);
+        $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => false], $this->headers($superAdmin))
+            ->assertStatus(200)
+            ->assertJsonPath('data.unavailable', false);
+
+        $block->refresh();
+        $this->assertNull($block->sched_disabled);
+        $this->assertTrue($block->isStaffed());
+    }
+
+    public function test_flagging_a_block_unavailable_obeys_the_req_ss_02_deadline()
+    {
+        $admin = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        Carbon::setTestNow(Carbon::parse('2026-10-05 10:00:00'));
+
+        $block = $this->makeShift($officer, [
+            'shift_date'  => '2026-10-05',
+            'shift_start' => '09:00',
+            'shift_end'   => '18:00',
+        ]);
+
+        // The block is already running, so only a super admin may override.
+        $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => true], $this->headers($admin))
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'ALR_AVAIL_AFTER_BLOCK_START');
+
+        $block->refresh();
+        $this->assertNull($block->sched_disabled);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_flagging_a_block_unavailable_still_keeps_the_weekly_minimum()
+    {
+        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        $block = $this->makeShift($officer, ['shift_start' => '08:00', 'shift_end' => '11:00']);
+
+        // Removing the only block of the week would drop it under 180 minutes.
+        $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => true], $this->headers($superAdmin))
+            ->assertStatus(400);
+
+        $block->refresh();
+        $this->assertNull($block->sched_disabled);
+    }
+
+    public function test_an_unavailable_block_no_longer_staffs_the_shop()
+    {
+        $superAdmin = $this->makeSuperAdmin();
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:30:00'));
+
+        $day = '2026-10-05';
+        // Every employee also keeps a baseline block later the same week (the
+        // floor is Monday-based), so flagging one block unavailable still clears
+        // the weekly minimum (REQ-EMP_SCHED-01) and only that block loses its
+        // staffing.
+        $baseline = ['shift_date' => '2026-10-06', 'shift_start' => '00:00', 'shift_end' => '23:59'];
+        $wide = ['shift_date' => $day, 'shift_start' => '00:00', 'shift_end' => '23:59'];
+
+        $makeRostered = function () use ($baseline, $wide) {
+            $employee = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+            $this->makeShift($employee, $baseline);
+
+            return $this->makeShift($employee, $wide);
+        };
+
+        $makeRostered();
+        $makeRostered();
+        $flagMe = $makeRostered();
+
+        $headcount = fn () => (new AppointmentsAPI())->rosterHeadcount(
+            Carbon::parse($day . ' 10:00'),
+            Carbon::parse($day . ' 10:10')
+        );
+
+        $this->assertSame(3, $headcount(), 'Three in-store employees hold blocks on this day.');
+
+        // FLOW-EMP_SCHED-06/07: flagging a block unavailable subtracts that
+        // employee from the headcount for exactly those hours.
+        $this->putJson('/api/shifts/' . $flagMe->sched_id, ['unavailable' => true], $this->headers($superAdmin))
+            ->assertStatus(200);
+
+        $this->assertSame(2, $headcount(), 'An unavailable block still staffed the shop.');
+
+        Carbon::setTestNow();
     }
 }

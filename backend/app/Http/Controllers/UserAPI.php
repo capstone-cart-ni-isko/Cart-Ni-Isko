@@ -3143,8 +3143,17 @@ class UserAPI extends Controller
             // REQ-SS-03 / REQ-AB-03: an availability change is cross-checked
             // against open bookings, and customers still holding one are told
             // to reschedule when the in-store minimum is no longer met.
+            //
+            // FLOW-EMP_SCHED-07 / REQ-SS-03: the super admins are told too,
+            // for every block that just lost its assignee. This is the write
+            // the schedule page's On Duty / Off Duty toggle goes through, so
+            // without it the primary roster control raised no cover request
+            // at all - only the block editor did.
             if (! $isCustomer && array_key_exists($availability, $payload)) {
                 $this->notifyStaffShortage();
+                $this->announceBlocksPendingReplacement(
+                    $this->staffBlocksNeedingCover($user)
+                );
             }
 
             $endpoint = $isCustomer

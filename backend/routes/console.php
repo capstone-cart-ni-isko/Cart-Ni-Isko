@@ -81,4 +81,51 @@ Schedule::call(fn () => app(OrdersAPI::class)->sweepUpcomingDeliveries())
     ->name('sweep-upcoming-deliveries')
     ->withoutOverlapping();
 
+/*
+    SYSTEM RULE 78 - "Soft-deleted records must be hard-deleted from the
+    database after 18 months." DatabaseAPI owns the purge (it owns every
+    statement, rule 80) and this is what makes it happen: once a day, every
+    record that reached the end of its life more than 18 months ago - a
+    soft-delete marker, a cancelled/absent order or appointment, a rejected
+    review, a read notification, a completed delivery or parcel - and that
+    nothing points at any more is hard-deleted. The run returns the rows it
+    removed per table so the audit trail shows what happened; an empty result
+    is not logged, which keeps the daily noise at zero while there is nothing
+    to purge.
+*/
+Schedule::call(function () {
+    $purged = \App\Http\Controllers\DatabaseAPI::purgeSoftDeleted();
+
+    if ($purged !== []) {
+        \Log::info('System rule 78 purge', $purged);
+    }
+})->dailyAt('03:30')->name('purge-soft-deleted-records')->withoutOverlapping();
+
+/*
+    DOMAIN 32 - access-log retention, half one of the owner's policy: 60
+    months after custlog_created / emplog_created a log entry is permanently
+    deleted whether any super admin decided or not, and every super admin is
+    notified of what went. The 24-month half - the question a super admin may
+    answer by hand - lives behind DELETE /api/access/logs and the biweekly
+    prompt below. DatabaseAPI::purgeAccessLogs() is the only code path that
+    removes a log row.
+*/
+Schedule::call(fn () => app(\App\Http\Controllers\DatabaseAPI::class)->sweepAccessLogRetention())
+    ->dailyAt('04:00')
+    ->name('access-log-retention-sweep')
+    ->withoutOverlapping();
+
+/*
+    DOMAIN 32 - access-log retention, half two of the owner's policy: once
+    every two weeks the system asks ALL super admins whether one of them
+    wants every log entry older than 24 months deleted now, and reminds them
+    that an unanswered question still expires those entries at 60 months. A
+    marker file remembers the last question, so the daily run only actually
+    asks once per fortnight.
+*/
+Schedule::call(fn () => app(\App\Http\Controllers\DatabaseAPI::class)->promptAccessLogPurge())
+    ->dailyAt('09:00')
+    ->name('access-log-retention-prompt')
+    ->withoutOverlapping();
+
 

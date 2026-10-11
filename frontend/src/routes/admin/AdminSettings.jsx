@@ -437,11 +437,52 @@ export default function AdminSettings() {
                   </>
                 ),
               },
+              /* DOMAIN 32 - FLOW-ACCESS_LOG-07: the merged access log lives at
+                 `/admin/settings/logs`, so it is a destination of this rail
+                 rather than another pane inside it. Super admins only (rule 39),
+                 which is exactly who this "Store" group is rendered for. */
+              /* DOMAIN 1 - FLOW-SETUP-01/02: the setup wizard stays reachable
+                 after the first run, so store-wide configuration (name,
+                 location, contact, operating hours) can be corrected later -
+                 rule 40 keeps the write to super admins, both here and in the
+                 API. */
+              {
+                id: 'store-setup',
+                label: 'Store Setup',
+                href: '/admin/setup',
+                icon: railIcon(
+                  <>
+                    <path d="M3 9l1-5h16l1 5" />
+                    <path d="M4 9v11h16V9" />
+                    <path d="M9 20v-6h6v6" />
+                  </>
+                ),
+              },
+              {
+                id: 'access-log',
+                label: 'Access Log',
+                href: '/admin/settings/logs',
+                icon: railIcon(
+                  <>
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="8" y1="13" x2="16" y2="13" />
+                    <line x1="8" y1="17" x2="16" y2="17" />
+                  </>
+                ),
+              },
             ],
           },
         ]
       : []),
   ]
+
+  /* A rail entry either opens a pane on this page or leaves for its own page
+     (FLOW-ACCESS_LOG-07 routes the access log to `/admin/settings/logs`). */
+  const openSection = (item) => {
+    if (item.href) navigate(item.href)
+    else setActiveSection(item.id)
+  }
 
   const isSystemPane = activeSection === 'store-operations' || activeSection === 'timing'
 
@@ -502,7 +543,7 @@ export default function AdminSettings() {
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setActiveSection(item.id)}
+                        onClick={() => openSection(item)}
                         aria-current={active ? 'page' : undefined}
                         className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-150 cursor-pointer text-left ${
                           active
@@ -550,7 +591,7 @@ export default function AdminSettings() {
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => setActiveSection(item.id)}
+                          onClick={() => openSection(item)}
                           aria-current={active ? 'page' : undefined}
                           className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] font-semibold transition-all duration-150 cursor-pointer text-left ${
                             active

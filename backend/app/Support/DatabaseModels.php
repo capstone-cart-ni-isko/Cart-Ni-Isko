@@ -477,6 +477,14 @@ class Schedule extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        // `sched_id` is a bare bigint NOT NULL primary key on the live
+        // `schedules` table: no sequence, no identity, no column default, so an
+        // insert that omits the key dies with "null value in column sched_id
+        // violates not-null constraint" - which is exactly what POST /shifts
+        // did before SystemAPI::createShift started allocating the number with
+        // App\Support\IdAllocator::next(). It therefore has to be mass
+        // assignable, the same way product.prod_id and prodvar.prodvar_id are.
+        'sched_id',
         'emp_id',
         'sched_time_start',
         'sched_time_end',
@@ -523,30 +531,45 @@ class Schedule extends Model
 
     /*
         REQ-SS-03: how many blocks still need a replacement because the
-        assigned employee is no longer available. Derived, never stored.
-        Tolerates a connection without the schedules table so the slot
-        calendar still answers there.
+        assigned employee is no longer available for them - either the
+        employee logged out of the store (emp_instore) or the block itself
+        carries the employee's own "unavailable" flag (FLOW-EMP_SCHED-04).
+        Derived, never stored. Tolerates a connection without the schedules
+        table so the slot calendar still answers there.
     */
     public static function pendingReplacements(): int
     {
         try {
-            return static::whereNotIn('emp_id', static::availableEmployeeIds())->count();
+            return static::blocked()->count();
         } catch (\Throwable $e) {
             return 0;
         }
     }
 
+    /** Blocks that no longer staff the roster: self-disabled or off-store. */
+    protected static function blocked()
+    {
+        return static::query()->where(function ($query) {
+            $query->whereNotNull('sched_disabled')
+                ->orWhereNotIn('emp_id', static::availableEmployeeIds());
+        });
+    }
+
     /*
         REQ-SS-01: an employee who already holds a block they are not
         available for has logged an explicit exception, so the academic-period
-        job leaves that employee alone. Returns false on a connection without
-        the table, which lets the job treat everyone as up for renewal.
+        job leaves that employee alone. A self-disabled block and an off-store
+        employee are both such an exception. Returns false on a connection
+        without the table, which lets the job treat everyone as up for renewal.
     */
     public static function hasException(int $empId): bool
     {
         try {
             return static::where('emp_id', $empId)
-                ->whereNotIn('emp_id', static::availableEmployeeIds())
+                ->where(function ($query) {
+                    $query->whereNotNull('sched_disabled')
+                        ->orWhereNotIn('emp_id', static::availableEmployeeIds());
+                })
                 ->exists();
         } catch (\Throwable $e) {
             return false;
@@ -556,14 +579,19 @@ class Schedule extends Model
     /*
         REQ-AB-03 / REQ-SS-03: the available duty blocks of one calendar day.
         `schedules` stores one timestamp pair per block, so the day is the
-        calendar date of the block's start. An empty result means no available
-        employee holds a block that day; see hasRosterFor for the distinction
-        between "not rostered" and "not staffed".
+        calendar date of the block's start. A block the employee flagged as
+        unavailable no longer staffs the roster, so FLOW-EMP_SCHED-06/07
+        ("marking a block unavailable instantly subtracts that employee from
+        the active headcount and restricts booking") needs it gone from the
+        day's count. An empty result means no available employee holds a
+        block that day; see hasRosterFor for the distinction between "not
+        rostered" and "not staffed".
     */
     public static function rosterFor(\Carbon\Carbon $day): \Illuminate\Support\Collection
     {
         try {
             return static::whereDate('sched_time_start', $day->toDateString())
+                ->whereNull('sched_disabled')
                 ->whereIn('emp_id', static::availableEmployeeIds())
                 ->get();
         } catch (\Throwable $e) {

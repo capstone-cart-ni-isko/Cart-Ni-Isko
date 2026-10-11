@@ -216,9 +216,12 @@ function SignUp() {
       updateForm({ custType: 'GUEST', role: 'Guest' })
       return
     }
+    // For BUeño, normalize role to one of Student/Alumni/Faculty or empty
+    const validRoles = ['Student', 'Alumni', 'Faculty']
+    const roleValue = validRoles.includes(form.role) ? form.role : ''
     updateForm({
       custType: 'BUENO',
-      role: ['Student', 'Alumni', 'Faculty'].includes(form.role) ? form.role : '',
+      role: roleValue,
     })
   }
 

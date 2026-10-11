@@ -24,6 +24,16 @@ abstract class Controller
     // The single phone value every walk-in customer record carries
     const WALK_IN_PHONE = '0000000000';
 
+    /**
+     * Blocks already announced as PENDING REPLACEMENT in this request.
+     *
+     * One store-wide availability change and one block-level exception can both
+     * name the same block, and announcing it twice would fill the super admins'
+     * queue with duplicates (ISO 25010 usability: an alert that repeats itself
+     * gets ignored). Keyed by sched_id for the lifetime of the request.
+     */
+    protected array $announcedPendingReplacements = [];
+
     // ==========================================
     // PRIMARY KEY ALLOCATION (legacy tables have no sequence)
     // ==========================================
@@ -91,7 +101,7 @@ abstract class Controller
     {
         return response()->json([
             'success' => false,
-            'message' => $message,
+            'message' => (string) $message,
         ], $status);
     }
 
@@ -313,8 +323,7 @@ abstract class Controller
         customers are told to reschedule once. The headcount is per slot, and a
         customer already told about a slot is never told twice.
     */
-    protected function notifyStaffShortage(): void
-    {
+    protected function notifyStaffShortage(): void    {
         $slotMinutes = (int) SystemSettings::get('slot_minutes', 10);
 
         foreach (Visit::where('appoint_status', 'upcoming')
@@ -355,6 +364,68 @@ abstract class Controller
         }
     }
 
+    // ==========================================
+    // PENDING REPLACEMENT (REQ-SS-03 / FLOW-EMP_SCHED-06/07)
+    // ==========================================
+
+    /**
+     * The blocks of an employee that still have to be worked and can no longer
+     * be staffed by them: still prescheduled, not flagged unavailable by the
+     * employee themselves, and not already over. A block that already ended
+     * needs no substitute, so it is never announced.
+     */
+    protected function staffBlocksNeedingCover(Employee $employee): \Illuminate\Support\Collection
+    {
+        return Schedule::where('emp_id', $employee->getKey())
+            ->whereNull('sched_disabled')
+            ->where('sched_time_end', '>=', now())
+            ->orderBy('sched_time_start')
+            ->get();
+    }
+
+    /**
+     * FLOW-EMP_SCHED-07 / REQ-SS-03: tell the super admins exactly which blocks
+     * need a substitute, naming the block, the employee and the window.
+     *
+     * This is the ONE place the alert is written, so every writer that can strip
+     * an employee off the roster - the schedule page's On Duty / Off Duty toggle
+     * (PUT /api/accounts/update), the block editor's own "unavailable" flag and
+     * the availability flip on a block (PUT /api/shifts/{id}) - reaches the
+     * super admins instead of only some of them doing so.
+     */
+    protected function announceBlocksPendingReplacement($blocks): void
+    {
+        foreach ($blocks as $shift) {
+            if (! $shift instanceof Schedule) {
+                continue;
+            }
+
+            // One alert per block per request, however many rules named it.
+            $key = (int) $shift->sched_id;
+            if (isset($this->announcedPendingReplacements[$key])) {
+                continue;
+            }
+            $this->announcedPendingReplacements[$key] = true;
+
+            $employee = $shift->employee;
+            if ($employee === null) {
+                continue;
+            }
+            $employeeName = trim($employee->emp_givname . ' ' . $employee->emp_surname);
+
+            $window = ($shift->sched_time_start ? $shift->sched_time_start->toDateString() : '?')
+                . ' (' . optional($shift->sched_time_start)->format('H:i')
+                . ' - ' . optional($shift->sched_time_end)->format('H:i') . ')';
+
+            $this->notifyEmployeesByType(
+                ['SUPER ADMIN'],
+                '[PRIORITY] Shift block #' . $shift->sched_id . ' assigned to ' . $employeeName
+                . ' on ' . $window
+                . ' is now PENDING REPLACEMENT as of ' . now()->toDateTimeString() . '.'
+            );
+        }
+    }
+
     // Inserts a notification for a single employee
     protected function notifyEmployee(int $empId, string $message): void
     {
@@ -380,7 +451,6 @@ abstract class Controller
      * the lifetime of the process (the schema never changes mid-request).
      */
     private static ?bool $employeeHasDisabledColumn = null;
-
     protected function employeeDisabledColumnExists(): bool
     {
         if (self::$employeeHasDisabledColumn === null) {

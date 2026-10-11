@@ -655,8 +655,8 @@ export async function fetchDashboardSnapshot(date = new Date()) {
   const accounts = normalizeAccounts(accountsPayload)
 
   return {
-    orders: (orderRows || []).filter((row) => !isCartRow(row)).map(mapOrderRow).filter(Boolean),
-    cartRows: ((cartPayload && cartPayload.data) || []).filter((row) => isCartRow(row)),
+    orders: (Array.isArray(orderRows) ? orderRows : []).filter((row) => !isCartRow(row)).map(mapOrderRow).filter(Boolean),
+    cartRows: (Array.isArray(cartPayload?.data) ? cartPayload.data : []).filter((row) => isCartRow(row)),
     appointments: appointments || [],
     accounts,
     products: products || [],

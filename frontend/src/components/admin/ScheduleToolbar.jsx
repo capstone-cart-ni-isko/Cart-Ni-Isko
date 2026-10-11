@@ -1,30 +1,23 @@
 /**
- * Hour columns the timeline shows (store day 7:00 AM – 8:00 PM).
- * Blocks are placed by clamping their window into this range; the
- * underlying granularity is 10 minutes (FLOW-EMP_SCHED-03).
+ * View-mode toggle plus the date navigator. Pure presentation: the page owns
+ * the selected date and the view mode.
+ *
+ * FLOW-EMP_SCHED-01..02 offer the three calendar layouts the schedule calendar
+ * needs - Day, Week (FLOW-EMP_SCHED-02) and Month (the REQ-SS-03 staffing
+ * overview) - so the stepping buttons say which unit they move in.
  */
-const TIME_SLOTS = [
-  '7:00 AM',
-  '8:00 AM',
-  '9:00 AM',
-  '10:00 AM',
-  '11:00 AM',
-  '12:00 PM',
-  '1:00 PM',
-  '2:00 PM',
-  '3:00 PM',
-  '4:00 PM',
-  '5:00 PM',
-  '6:00 PM',
-  '7:00 PM',
-  '8:00 PM',
-]
+export default function ScheduleToolbar({
+  viewMode,
+  dateLabel,
+  isToday,
+  onViewChange,
+  onShiftDate,
+  onToday,
+}) {
+  const isWeek = viewMode === 'Week'
+  const isMonth = viewMode === 'Month'
+  const unit = isMonth ? 'month' : isWeek ? 'week' : 'day'
 
-/**
- * Day / Week / Month toggle plus the date navigator. Pure
- * presentation: the page owns the selected date and the view mode.
- */
-export default function ScheduleToolbar({ viewMode, dateLabel, isToday, onViewChange, onShiftDate }) {
   return (
     <div className="bg-white rounded-lg p-3 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
       <div className="flex bg-slate-100 p-0.5 rounded-md border border-slate-200/60">
@@ -33,6 +26,7 @@ export default function ScheduleToolbar({ viewMode, dateLabel, isToday, onViewCh
             key={tab}
             type="button"
             onClick={() => onViewChange(tab)}
+            aria-current={viewMode === tab ? 'page' : undefined}
             className={`h-7 px-3 rounded text-xs font-semibold transition-all cursor-pointer ${
               viewMode === tab ? 'bg-brand-orange text-white' : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -46,21 +40,28 @@ export default function ScheduleToolbar({ viewMode, dateLabel, isToday, onViewCh
         <button
           type="button"
           onClick={() => onShiftDate(-1)}
-          aria-label="Previous day"
+          aria-label={`Previous ${unit}`}
           className="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <span className="px-2.5 py-1 bg-slate-50 rounded-md text-xs font-semibold text-slate-900 border border-slate-200">
+
+        <button
+          type="button"
+          onClick={() => onToday?.()}
+          title="Jump to today"
+          className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 rounded-md text-xs font-semibold text-slate-900 border border-slate-200 cursor-pointer"
+        >
           {isToday ? 'Today: ' : ''}
           {dateLabel}
-        </span>
+        </button>
+
         <button
           type="button"
           onClick={() => onShiftDate(1)}
-          aria-label="Next day"
+          aria-label={`Next ${unit}`}
           className="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 hover:bg-slate-50 text-slate-500 cursor-pointer"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
@@ -71,5 +72,3 @@ export default function ScheduleToolbar({ viewMode, dateLabel, isToday, onViewCh
     </div>
   )
 }
-
-export { TIME_SLOTS }

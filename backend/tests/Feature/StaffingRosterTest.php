@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\EmpNotif;
 use App\Models\Visit;
 use App\Models\CustNotif;
 use App\Models\Customer;
@@ -12,6 +13,7 @@ use App\Models\Setting;
 use App\Support\AcademicPeriodRoster;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -374,6 +376,41 @@ class StaffingRosterTest extends TestCase
         $this->assertSame('17:00', $mine->sched_time_end->format('H:i'));
     }
 
+    /**
+     * REGRESSION - the baseline roster rebuild used to fail the first time a
+     * term was opened: it wrote `schedules` without a primary key, and on the
+     * live connection `sched_id` is a bare bigint NOT NULL with no sequence,
+     * so every block insert died on a NOT NULL violation and the whole rebuild
+     * aborted.
+     */
+    public function test_the_baseline_roster_allocates_a_key_for_every_block_it_writes()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        Setting::setValue('academic_period_start', '2026-08-04');
+        $officer = $this->makeEmployee();
+
+        $statements = [];
+        DB::listen(function ($query) use (&$statements) {
+            $statements[] = $query->sql;
+        });
+
+        AcademicPeriodRoster::apply();
+
+        // Every block write the rebuild performs names its own key.
+        $inserts = collect($statements)->filter(
+            fn (string $sql) => str_starts_with($sql, 'insert into "schedules"')
+        );
+        $this->assertNotEmpty($inserts->all(), 'The roster rebuild wrote no blocks at all.');
+        foreach ($inserts as $sql) {
+            $this->assertStringContainsString('"sched_id"', $sql);
+        }
+
+        $this->assertSame(
+            AcademicPeriodRoster::DAYS,
+            Schedule::where('emp_id', $officer->getKey())->whereNotNull('sched_id')->count()
+        );
+    }
+
     public function test_the_roster_uses_the_store_operating_hours()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
@@ -439,6 +476,107 @@ class StaffingRosterTest extends TestCase
         $this->assertSame(0, Schedule::where('emp_id', $deleted->getKey())->count());
         $this->assertSame(0, (int) $disabled->fresh()->emp_instore);
         $this->assertSame(0, (int) $deleted->fresh()->emp_instore);
+    }
+
+    // ==========================================
+    // FLOW-EMP_SCHED-06/07 - THE ROSTER CONTROLS MUST ANNOUNCE A SHORTAGE
+    // ==========================================
+
+    /**
+     * REGRESSION - the schedule page's On Duty / Off Duty toggle is
+     * PUT /api/accounts/update, and it used to only notify customers about a
+     * staff shortage: the super admins were never told to find a substitute,
+     * so the primary roster control of DOMAIN 7 raised no cover request at
+     * all. Only the block editor (PUT /api/shifts/{id}) reached them.
+     */
+    public function test_the_duty_toggle_alerts_the_super_admins_about_every_block_that_lost_its_assignee()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+
+        $today = $this->makeShift($officer, ['shift_start' => '09:00', 'shift_end' => '18:00']);
+        $tomorrow = $this->makeShift($officer, ['shift_date' => '2026-10-06', 'shift_start' => '09:00', 'shift_end' => '18:00']);
+        // Already over: it needs no substitute, so it must never be announced.
+        $past = $this->makeShift($officer, ['shift_date' => '2026-10-01', 'shift_start' => '09:00', 'shift_end' => '18:00']);
+
+        $this->putJson('/api/accounts/update', [
+            'user_id'      => $officer->getKey(),
+            'account_type' => 'employee',
+            'emp_instore'  => false,
+        ], $this->headers($superAdmin))->assertStatus(200);
+
+        $alerts = EmpNotif::where('empnotif_msg', 'like', '%PENDING REPLACEMENT%')->get();
+        $superAdmins = Employee::whereRaw('UPPER(emp_categ) = ?', ['SUPER ADMIN'])->count()
+            + Employee::whereNull('emp_categ')->whereRaw('UPPER(emp_type) = ?', ['SUPER ADMIN'])->count();
+
+        // One alert per block that still needs cover, to every super admin.
+        $this->assertSame(2 * $superAdmins, $alerts->count(), 'One alert per block per super admin.');
+        $this->assertGreaterThan(0, $superAdmins);
+
+        foreach ([$today, $tomorrow] as $block) {
+            $this->assertSame(
+                $superAdmins,
+                $this->alertsFor($block->sched_id)->count(),
+                'Block #' . $block->sched_id . ' was not announced to every super admin.'
+            );
+        }
+
+        $this->assertSame(0, $this->alertsFor($past->sched_id)->count(), 'A block that ended needs no substitute.');
+
+        // Every alert went to a super admin and to nobody else.
+        foreach ($alerts as $alert) {
+            $this->assertSame(1, Employee::where('emp_id', $alert->emp_id)
+                ->whereRaw("UPPER(COALESCE(NULLIF(emp_categ, ''), emp_type)) = ?", ['SUPER ADMIN'])->count());
+        }
+
+        // Turning them back on duty keeps the queue as it was and adds nothing.
+        $this->putJson('/api/accounts/update', [
+            'user_id'      => $officer->getKey(),
+            'account_type' => 'employee',
+            'emp_instore'  => true,
+        ], $this->headers($superAdmin))->assertStatus(200);
+
+        $this->assertSame($alerts->count(), EmpNotif::where('empnotif_msg', 'like', '%PENDING REPLACEMENT%')->count());
+    }
+
+    /**
+     * The block editor's own "unavailable" flag and a store-wide availability
+     * flip in the same request must not raise the same alert twice.
+     */
+    public function test_one_request_announces_each_block_once()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        $this->makeShift($officer, ['shift_date' => '2026-10-06', 'shift_start' => '00:00', 'shift_end' => '23:59']);
+        $block = $this->makeShift($officer, ['shift_start' => '10:00', 'shift_end' => '12:00']);
+
+        $this->putJson('/api/shifts/' . $block->sched_id, [
+            'unavailable' => true,
+            'emp_instore' => false,
+        ], $this->headers($superAdmin))->assertStatus(200);
+
+        $superAdmins = Employee::whereRaw('UPPER(emp_categ) = ?', ['SUPER ADMIN'])->count()
+            + Employee::whereNull('emp_categ')->whereRaw('UPPER(emp_type) = ?', ['SUPER ADMIN'])->count();
+
+        $this->assertSame(
+            $superAdmins,
+            $this->alertsFor($block->sched_id)->count(),
+            'The same block was announced more than once in one request.'
+        );
+
+        // Off duty also strips the employee's other block, so it is announced
+        // too - exactly once.
+        $other = Schedule::where('emp_id', $officer->getKey())
+            ->where('sched_id', '!=', $block->sched_id)->first();
+        $this->assertSame($superAdmins, $this->alertsFor($other->sched_id)->count());
+    }
+
+    /** Alerts naming one specific block, past any other block id. */
+    private function alertsFor($schedId): \Illuminate\Support\Collection
+    {
+        return EmpNotif::where('empnotif_msg', 'like', '%Shift block #' . $schedId . ' assigned%')->get();
     }
 
     // ==========================================

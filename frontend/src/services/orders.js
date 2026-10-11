@@ -37,13 +37,13 @@ export async function fetchOrders(custId = null, filter = null) {
   if (custId) params.cust_id = custId
   if (filter && filter !== 'all') params.filter = filter
   const data = await apiGet('/cart/display', params)
-  return data.data || []
+  return Array.isArray(data.data) ? data.data : []
 }
 
 /** GET /cart/display?ord_id - one order with its items. */
 export async function fetchOrder(ordId) {
   const data = await apiGet('/cart/display', { ord_id: ordId })
-  return (data.data || [])[0] || null
+  return Array.isArray(data.data) ? (data.data[0] || null) : null
 }
 
 export function searchOrders(q, custId = null) {

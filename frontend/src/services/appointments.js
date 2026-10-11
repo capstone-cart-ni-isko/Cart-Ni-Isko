@@ -16,7 +16,7 @@ export const APPOINT_TYPE = { VISIT: 'VISIT', CLAIM: 'CLAIM' }
 /** GET /appoint/display - own appointments, or all for staff (REQ-SC-01). */
 export async function fetchAppointments(params = {}) {
   const data = await apiGet('/appoint/display', params)
-  return data.data || []
+  return Array.isArray(data.data) ? data.data : []
 }
 
 /* The ribbon opens the list often, so the last answer for each
