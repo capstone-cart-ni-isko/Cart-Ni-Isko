@@ -187,7 +187,10 @@ class AppointmentsAPI extends Controller
                     'CLAIM' => $this->slotCapacity('CLAIM'),
                     'VISIT' => $this->slotCapacity('VISIT'),
                 ];
-                $minStaff = ['CLAIM' => 1, 'VISIT' => 2]; // REQ-AB-03 / REQ-SC-03
+                // The staffing floor is the SAME for pickup and visit: rule 10
+                // only asks for at least one employee prescheduled in the
+                // timeslot, so neither kind may be gated harder than the other.
+                $minStaff = ['CLAIM' => 1, 'VISIT' => 1]; // REQ-AB-03 / REQ-SC-03
                 // REQ-SS-03: counted once for the whole grid, never per slot.
                 $pendingReplacements = $this->pendingReplacements();
 
@@ -1314,13 +1317,13 @@ class AppointmentsAPI extends Controller
                 ->where('appoint_end', '>', $start)
                 ->count();
 
-            // Staffing: VISIT needs at least two in-store employees,
-            // CLAIM needs at least one (REQ-AB-03 / REQ-SC-03). The count is
-            // per block, not per day: only an employee whose duty_shift block
+            // Staffing: BOTH pickup and visit need at least one in-store
+            // employee (REQ-AB-03 / REQ-SC-03, rule 10). The count is per
+            // block, not per day: only an employee whose duty_shift block
             // spans this slot counts towards it. A null count means the
             // roster source is unavailable on this connection, in which case
             // the staffing rule is skipped and the capacity rule still holds.
-            $minStaff = $type === 'CLAIM' ? 1 : 2;
+            $minStaff = 1;
             $inStore = $this->rosterHeadcount($start, $end);
 
             $reason = null;

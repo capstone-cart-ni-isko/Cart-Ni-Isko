@@ -59,10 +59,11 @@ export function ScheduleHeader({
 }
 
 /**
- * Staffing headcount for the selected date (REQ-AB-03 / REQ-SS-03: a VISIT
- * slot needs two in-store employees, a CLAIM one). The count is the roster's
- * own blocks, so it is the number the schedule calendar gates on. Empty slots
- * means the calendar route is unverified, so nothing is claimed either way.
+ * Staffing headcount for the selected date (REQ-AB-03 / REQ-SS-03: both a
+ * VISIT and a CLAIM slot need at least one in-store employee - rule 10). The
+ * count is the roster's own blocks, so it is the number the schedule calendar
+ * gates on. Empty slots means the calendar route is unverified, so nothing is
+ * claimed either way.
  */
 export function ThresholdBar({
   slots = [],
@@ -87,7 +88,9 @@ export function ThresholdBar({
 
   const openVisits = slots.filter((slot) => slot.type === 'VISIT' && slot.available).length
   const openClaims = slots.filter((slot) => slot.type === 'CLAIM' && slot.available).length
-  const visitOk = slots.length > 0 && openVisits >= 2
+  // Rule 10: the pickup and visit thresholds are identical - one or more
+  // employees prescheduled in the timeslot, never a headcount difference.
+  const visitOk = slots.length > 0 && openVisits >= 1
   const claimOk = slots.length > 0 && openClaims >= 1
   const hasShortfall = slots.length > 0 && (!visitOk || !claimOk)
 
@@ -98,7 +101,7 @@ export function ThresholdBar({
       </span>
 
       <StatusPill
-        status={`VISIT needs 2 · ${slots.length ? `${openVisits} open` : 'no slots loaded'}`}
+        status={`VISIT needs 1 · ${slots.length ? `${openVisits} open` : 'no slots loaded'}`}
         variant={slots.length === 0 ? 'amber' : visitOk ? 'green' : 'red'}
       />
       <StatusPill

@@ -425,12 +425,20 @@ export default function AdminPos() {
         <div className="hidden md:flex gap-4 h-full min-h-0">
 
           {/* ── LEFT: PRODUCT CATALOG & FILTERS ── */}
-          <div className="flex-1 flex flex-col min-h-0 gap-3">
+          {/* min-w-0 is load-bearing: without it `min-width:auto` makes the
+              search box + the category pills a hard 881px floor on the
+              catalog column. flex-1 then cannot shrink it, the row overflows
+              by that floor (585px at 632px available) and the checkout pane
+              is pushed off-screen instead of sitting beside it. */}
+          <div className="flex-1 min-w-0 flex flex-col min-h-0 gap-3">
 
             {/* Toolbar */}
             <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-gray-100/90 shadow-xs shrink-0">
               {/* Search */}
-              <div className="relative w-64 shrink-0">
+              {/* min-w-0 + a flexible track instead of the old fixed w-64: the
+                  register's catalog column is the narrower half of the screen,
+                  so a hard 256px box left the category pills with zero width. */}
+              <div className="relative min-w-0 flex-1 max-w-64">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -453,7 +461,7 @@ export default function AdminPos() {
               <div className="h-5 w-px bg-gray-200 shrink-0" />
 
               {/* Category Pills — standard rounded rectangle, matches search input height (h-8) */}
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none min-w-0">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none min-w-0 flex-1">
                 {categoryPills.map((cat) => (
                   <button
                     key={cat}

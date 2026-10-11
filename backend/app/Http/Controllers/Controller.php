@@ -335,15 +335,16 @@ abstract class Controller
             $end = $appointment->appoint_end ?? $start->copy()->addMinutes($slotMinutes);
 
             // The headcount is the one the calendar and the checkout gate
-            // already apply (REQ-AB-03): a VISIT needs two in-store
-            // employees, a CLAIM one. Reading it through the roster instead
-            // of raw blocks is what makes REQ-SS-03 work - a block whose
-            // assignee just logged off does not staff anything, even though
-            // the row is still there. A null count means the roster source is
-            // unavailable on this connection; the calendar skips the staffing
-            // rule then, so no shortage may be announced either.
+            // already apply (REQ-AB-03): BOTH a visit and a pickup need at
+            // least one in-store employee (rule 10). Reading it through the
+            // roster instead of raw blocks is what makes REQ-SS-03 work - a
+            // block whose assignee just logged off does not staff anything,
+            // even though the row is still there. A null count means the
+            // roster source is unavailable on this connection; the calendar
+            // skips the staffing rule then, so no shortage may be announced
+            // either.
             $inStore   = (new AppointmentsAPI())->rosterHeadcount($start, $end);
-            $minStaff  = strtoupper((string) $appointment->appoint_type) === 'CLAIM' ? 1 : 2;
+            $minStaff  = 1;
 
             if ($inStore === null || $inStore >= $minStaff) continue;
 

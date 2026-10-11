@@ -435,7 +435,7 @@ class SrsRequirementsTest extends TestCase
         $this->assertFalse($claim[0]['available']);
         $this->assertSame('Not enough in-store employees available (minimum 1 required)', $claim[0]['reason']);
         $this->assertFalse($visit[0]['available']);
-        $this->assertSame('Not enough in-store employees available (minimum 2 required)', $visit[0]['reason']);
+        $this->assertSame('Not enough in-store employees available (minimum 1 required)', $visit[0]['reason']);
 
         // --- REQ-SC-03: unavailable slots cannot be booked ---
         $this->json('POST', '/api/appoint/create', [
@@ -444,9 +444,10 @@ class SrsRequirementsTest extends TestCase
             'appoint_type' => 'VISIT',
         ], $this->headers($customer))
             ->assertStatus(409)
-            ->assertJson(['success' => false, 'message' => 'Not enough in-store employees available (minimum 2 required)']);
+            ->assertJson(['success' => false, 'message' => 'Not enough in-store employees available (minimum 1 required)']);
 
-        // One in-store employee unlocks CLAIM slots (minimum is one)
+        // One in-store employee unlocks BOTH types (rule 10: the pickup and
+        // visit thresholds are the same - one or more employees)
         $this->makeEmployee(['emp_instore' => 1]);
 
         // --- REQ-SC-01: customers always book on their own behalf ---

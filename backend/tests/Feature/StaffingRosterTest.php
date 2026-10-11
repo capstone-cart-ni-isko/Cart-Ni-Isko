@@ -206,14 +206,39 @@ class StaffingRosterTest extends TestCase
         $this->assertSame(2, $this->slotAt($slots, '08:00', 'VISIT')['in_store']);
         $this->assertSame(1, $this->slotAt($slots, '11:00', 'VISIT')['in_store']);
 
-        // REQ-AB-03: a visit needs two, so the thin block closes while the
-        // fully covered one stays bookable.
+        // Rule 10: the pickup and visit thresholds are the same, so ONE
+        // rostered employee is already enough - the thin block stays bookable.
         $this->assertTrue($this->slotAt($slots, '08:00', 'VISIT')['available']);
-        $this->assertFalse($this->slotAt($slots, '11:00', 'VISIT')['available']);
+        $this->assertTrue($this->slotAt($slots, '11:00', 'VISIT')['available']);
+        $this->assertNull($this->slotAt($slots, '11:00', 'VISIT')['reason']);
+    }
+
+    public function test_a_slot_with_no_rostered_employee_closes_for_both_types()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
+        $admin = $this->makeSuperAdmin();
+
+        // The day IS rostered (so the day-wide fallback does not kick in), but
+        // the only employee holding a block for it is off duty - so the roster
+        // reports a real headcount of zero for that day.
+        $offDuty = $this->makeEmployee(['emp_instore' => 0]);
+        $this->makeShift($offDuty, ['shift_start' => '08:00', 'shift_end' => '18:00']);
+
+        $slots = $this->getJson('/api/appoint/slots?date=2026-10-05', $this->headers($admin))
+            ->assertStatus(200)
+            ->json('data.slots');
+
+        // Both kinds share the same floor, so both report the same reason.
         $this->assertSame(
-            'Not enough in-store employees available (minimum 2 required)',
-            $this->slotAt($slots, '11:00', 'VISIT')['reason']
+            'Not enough in-store employees available (minimum 1 required)',
+            $this->slotAt($slots, '09:00', 'VISIT')['reason']
         );
+        $this->assertSame(
+            'Not enough in-store employees available (minimum 1 required)',
+            $this->slotAt($slots, '09:00', 'CLAIM')['reason']
+        );
+        $this->assertFalse($this->slotAt($slots, '09:00', 'VISIT')['available']);
+        $this->assertFalse($this->slotAt($slots, '09:00', 'CLAIM')['available']);
     }
 
     public function test_a_day_without_any_roster_falls_back_to_the_day_wide_headcount()
@@ -250,7 +275,7 @@ class StaffingRosterTest extends TestCase
             'appoint_type' => 'VISIT',
         ], $this->headers($customer))
             ->assertStatus(409)
-            ->assertJsonPath('message', 'Not enough in-store employees available (minimum 2 required)');
+            ->assertJsonPath('message', 'Not enough in-store employees available (minimum 1 required)');
     }
 
     // ==========================================
