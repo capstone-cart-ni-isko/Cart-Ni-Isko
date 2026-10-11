@@ -18,7 +18,9 @@ use App\Models\Wishlist;
 use App\Support\ApiToken;
 use App\Support\EmployeePassword;
 use App\Support\IdAllocator;
+use App\Support\SystemSettings;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -254,7 +256,7 @@ class UserAPI extends Controller
             return response()->json([
                 'success'    => true,
                 'message'    => 'Orders retrieved successfully',
-                'data'       => $orders->map(fn ($o) => $this->orderPayload($o))->values()->all(),
+                'data'       => $this->ordersPayload($orders),
                 'cart_count' => $this->orderScopeCartCount($custId),
             ], 200);
 
@@ -300,7 +302,7 @@ class UserAPI extends Controller
                     'success' => true,
                     'message' => 'Cart search completed',
                     'data'    => [
-                        'items'       => $bags->map(fn (Bag $b) => self::cartItemPayload($b))->values()->all(),
+                        'items'       => self::cartItemsPayload($bags),
                         'cart_count'  => $bags->count(),
                         'subtotal'    => round((float) $bags->sum(fn (Bag $b) => (float) $b->bag_amount * (int) $b->bag_qty), 2),
                     ],
@@ -332,8 +334,7 @@ class UserAPI extends Controller
             return response()->json([
                 'success'    => true,
                 'message'    => 'Orders search completed',
-                'data'       => $query->orderByDesc('ord_created')->get()
-                    ->map(fn ($o) => $this->orderPayload($o))->values()->all(),
+                'data'       => $this->ordersPayload($query->orderByDesc('ord_created')->get()),
                 'cart_count' => $this->orderScopeCartCount($custId),
             ], 200);
 
@@ -387,7 +388,7 @@ class UserAPI extends Controller
                     'success' => true,
                     'message' => 'Cart sorted successfully',
                     'data'    => [
-                        'items'      => $bags->map(fn (Bag $b) => self::cartItemPayload($b))->values()->all(),
+                        'items'      => self::cartItemsPayload($bags),
                         'cart_count' => $bags->count(),
                         'subtotal'   => round((float) $bags->sum(fn (Bag $b) => (float) $b->bag_amount * (int) $b->bag_qty), 2),
                     ],
@@ -404,7 +405,7 @@ class UserAPI extends Controller
             return response()->json([
                 'success'    => true,
                 'message'    => 'Orders sorted successfully',
-                'data'       => $orders->map(fn ($o) => $this->orderPayload($o))->values()->all(),
+                'data'       => $this->ordersPayload($orders),
                 'cart_count' => $this->orderScopeCartCount($custId),
             ], 200);
 
@@ -676,6 +677,39 @@ class UserAPI extends Controller
     }
 
     /**
+     * Render a whole set of cart lines. The products behind every line are
+     * primed in one batch first, so the per-line present() is a memo lookup
+     * instead of two aggregate queries each.
+     */
+    public static function cartItemsPayload($bags): array
+    {
+        $bags = collect($bags)->values();
+        self::primeCartProducts($bags);
+
+        return $bags->map(fn (Bag $bag) => self::cartItemPayload($bag))->values()->all();
+    }
+
+    /**
+     * Prime every variation/product behind a set of bag lines in one batch.
+     * Shared by the cart envelope and any other screen that renders bag lines.
+     */
+    public static function primeCartProducts($bags): void
+    {
+        $products = [];
+        foreach (collect($bags) as $bag) {
+            if (! $bag instanceof Bag) {
+                continue;
+            }
+            $bag->loadMissing('prodvar.product');
+            $product = $bag->prodvar?->product;
+            if ($product !== null) {
+                $products[] = $product;
+            }
+        }
+        ProductsAPI::primePresentations($products);
+    }
+
+    /**
      * Every cart response envelope: items (bag_created DESC), cart_count and
      * subtotal = sum(bag_amount * bag_qty) (FLOW-BAG-06).
      */
@@ -684,7 +718,7 @@ class UserAPI extends Controller
         $bags = self::bagQuery($custId)->orderByDesc('bag_created')->get();
 
         return [
-            'items'      => $bags->map(fn (Bag $bag) => self::cartItemPayload($bag))->values()->all(),
+            'items'      => self::cartItemsPayload($bags),
             'cart_count' => $bags->count(),
             'subtotal'   => round((float) $bags->sum(
                 fn (Bag $bag) => (float) $bag->bag_amount * (int) $bag->bag_qty
@@ -1092,6 +1126,30 @@ class UserAPI extends Controller
     }
 
     /**
+     * Render a whole set of orders. Every product behind every order line is
+     * primed in one batch first, so the per-line present() is a memo lookup
+     * rather than two aggregate queries per line.
+     */
+    protected function ordersPayload($orders): array
+    {
+        $orders = collect($orders)->values();
+
+        $products = [];
+        foreach ($orders as $order) {
+            $order->loadMissing('items.bag.prodvar.product');
+            foreach ($order->items as $item) {
+                $product = $item->bag?->prodvar?->product;
+                if ($product !== null) {
+                    $products[] = $product;
+                }
+            }
+        }
+        ProductsAPI::primePresentations($products);
+
+        return $orders->map(fn ($o) => $this->orderPayload($o))->values()->all();
+    }
+
+    /**
      * Render a placed order with all of its relations: status, claiming,
      * created, total and dispatch info (FLOW-ORD_LIST-02/03). Only live
      * columns are read - totals from ord_amount, line detail from
@@ -1115,7 +1173,9 @@ class UserAPI extends Controller
         // REQ-MANAGE_PRE-01: preorder vs walk-in is a first-class field, so
         // the admin list no longer has to infer it from a tag that live rows
         // do not carry (the customer relation ships with it above).
-        $walkIn = $order->isWalkIn();
+        // The pickup/delivery relations are already eager-loaded above, so this
+        // reads them instead of firing two EXISTS queries per order.
+        $walkIn = $order->pickup === null && $order->delivery === null;
         $payload['is_walk_in']  = $walkIn;
         $payload['walk_in']     = $walkIn;
         $payload['customer']    = $order->customer ? [
@@ -1469,6 +1529,9 @@ class UserAPI extends Controller
                 ->whereNull('wish_hidden')
                 ->orderByDesc('wish_created')
                 ->get();
+
+            // Prime the products once so each row's present() is a lookups.
+            ProductsAPI::primePresentations($items->pluck('product')->filter()->all());
 
             $this->syncWishlistCounter($custId);
 
@@ -1894,6 +1957,21 @@ class UserAPI extends Controller
                 ], 409);
             }
 
+            // FLOW-EMP_ENROLL-02: the schedule the super admin entered on the
+            // enrollment form. The blocks are judged BEFORE the account exists,
+            // so a roster that breaks DOMAIN 7 costs the super admin a clear
+            // message instead of a half-enrolled employee.
+            $shiftBlocks = $this->enrollmentShiftBlocks($json);
+            $shiftProblem = $this->enrollmentShiftProblem($shiftBlocks);
+            if ($shiftProblem !== null) {
+                $this->logEnrollment($json, 'FAILED', 'invalid schedule - ' . $shiftProblem);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $shiftProblem,
+                ], 422);
+            }
+
             try {
                 $attributes = [
                     'emp_created' => now(),
@@ -1945,9 +2023,11 @@ class UserAPI extends Controller
                 );
 
                 // FLOW-EMP_ENROLL-05 / REQ-EMP_ENROLL-06: the new account is
-                // prescheduled as available straight away (full availability
-                // for the next seven days clears the 180-minute weekly floor).
-                $this->prescheduleNewEmployee((int) $employee->emp_id);
+                // prescheduled as available straight away. With a schedule on
+                // the enrollment form those blocks are the preschedule; without
+                // one the account opens with full availability (one unbroken
+                // block from now, well past the 180-minute weekly floor).
+                $this->prescheduleNewEmployee((int) $employee->emp_id, $shiftBlocks);
 
                 // FLOW-EMP_ENROLL-04: the generated password goes to the
                 // employee's Bicol University mailbox as well as back to the
@@ -2034,30 +2114,139 @@ class UserAPI extends Controller
          * their first week carries full availability (one unbroken block from
          * now, well past the 180-minute weekly floor of rule 46).
          *
+         * When the enrollment form carries a schedule (`shifts`), THOSE blocks
+         * are the preschedule instead: the form is where the new employee's
+         * duty is decided, and adding or removing their dates and times later
+         * is done from the employee list on the schedule screen
+         * (FLOW-EMP_SCHED-03/04). Every block is written with a freshly
+         * allocated `sched_id`, the same way POST /shifts does it, because the
+         * live column carries no sequence.
+         *
          * The live connection owns a `schedules` table; the pre-migration
          * fixture does not, so the write is skipped there rather than failing
          * the enrollment.
          */
-        private function prescheduleNewEmployee(int $empId): void
+        private function prescheduleNewEmployee(int $empId, array $blocks = []): void
         {
             try {
                 if (! Schema::hasTable('schedules')) {
                     return;
                 }
 
-                $start = now();
-                Schedule::forceCreate([
-                    'sched_id'         => $this->nextId('schedules', 'sched_id'),
-                    'emp_id'           => $empId,
-                    'sched_time_start' => $start,
-                    'sched_time_end'   => $start->copy()->addDays(7),
-                    'sched_created'    => now(),
-                    // null = prescheduled / available (see the Schedule model).
-                    'sched_disabled'   => null,
-                ]);
+                if ($blocks === []) {
+                    $start = now();
+                    Schedule::forceCreate([
+                        'sched_id'         => $this->nextId('schedules', 'sched_id'),
+                        'emp_id'           => $empId,
+                        'sched_time_start' => $start,
+                        'sched_time_end'   => $start->copy()->addDays(7),
+                        'sched_created'    => now(),
+                        // null = prescheduled / available (see the Schedule model).
+                        'sched_disabled'   => null,
+                    ]);
+
+                    return;
+                }
+
+                foreach ($blocks as $block) {
+                    Schedule::forceCreate([
+                        'sched_id'         => $this->nextId('schedules', 'sched_id'),
+                        'emp_id'           => $empId,
+                        'sched_time_start' => Carbon::parse($block['shift_date'] . ' ' . $block['shift_start']),
+                        'sched_time_end'   => Carbon::parse($block['shift_date'] . ' ' . $block['shift_end']),
+                        'sched_created'    => now(),
+                        // null = prescheduled / available (see the Schedule model).
+                        'sched_disabled'   => null,
+                    ]);
+                }
             } catch (\Throwable $e) {
                 // Availability bookkeeping must never undo an enrollment.
             }
+        }
+
+        /**
+         * The normalized duty blocks an enrollment form posted, or an empty
+         * list when the form carried no schedule.
+         *
+         * @return array<int, array{shift_date: string, shift_start: string, shift_end: string}>
+         */
+        private function enrollmentShiftBlocks(Request $json): array
+        {
+            $rows = $json->input('shifts');
+            if (! is_array($rows) || $rows === []) {
+                return [];
+            }
+
+            $blocks = [];
+            foreach ($rows as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+
+                $date = trim((string) ($row['shift_date'] ?? ''));
+                $start = trim((string) ($row['shift_start'] ?? ''));
+                $end = trim((string) ($row['shift_end'] ?? ''));
+
+                if ($date === '' || $start === '' || $end === '') {
+                    continue;
+                }
+
+                $blocks[] = ['shift_date' => $date, 'shift_start' => $start, 'shift_end' => $end];
+            }
+
+            return $blocks;
+        }
+
+        /**
+         * DOMAIN 7 on the enrollment's own schedule: the 10-minute grid
+         * (FLOW-EMP_SCHED-03), no overlapping block (REQ-EMP_SCHED-04) and the
+         * 180-minute weekly floor of rule 46 / REQ-EMP_SCHED-01. Null when the
+         * roster the form asked for is one the system may store.
+         */
+        private function enrollmentShiftProblem(array $blocks): ?string
+        {
+            $floor = (int) SystemSettings::get('min_weekly_minutes', 180);
+
+            /** @var array<string, int> $weekMinutes week key => minutes */
+            $weekMinutes = [];
+            $windows = [];
+
+            foreach ($blocks as $block) {
+                $start = Carbon::parse($block['shift_date'] . ' ' . $block['shift_start']);
+                $end = Carbon::parse($block['shift_date'] . ' ' . $block['shift_end']);
+
+                if ($start->minute % 10 !== 0 || $end->minute % 10 !== 0) {
+                    return 'Duty blocks are set in 10-minute steps (FLOW-EMP_SCHED-03), and '
+                        . $block['shift_start'] . '–' . $block['shift_end'] . ' is not on that grid.';
+                }
+
+                if (! $start->isFuture() && $start->lt(now()->subDay())) {
+                    return 'Duty block ' . $block['shift_date'] . ' ' . $block['shift_start']
+                        . ' is more than 24 hours in the past (REQ-EMP_SCHED-03).';
+                }
+
+                foreach ($windows as $window) {
+                    if ($start->lt($window['end']) && $end->gt($window['start'])) {
+                        return 'Duty block ' . $block['shift_date'] . ' ' . $block['shift_start']
+                            . '–' . $block['shift_end'] . ' overlaps another block on the enrollment schedule.';
+                    }
+                }
+                $windows[] = ['start' => $start, 'end' => $end];
+
+                if ($floor > 0) {
+                    $weekKey = $start->copy()->startOfWeek()->toDateString();
+                    $weekMinutes[$weekKey] = ($weekMinutes[$weekKey] ?? 0) + $start->diffInMinutes($end);
+                }
+            }
+
+            foreach ($weekMinutes as $weekKey => $minutes) {
+                if ($minutes < $floor) {
+                    return 'The week of ' . $weekKey . ' has ' . $minutes . ' scheduled minutes, below the '
+                        . $floor . '-minute weekly minimum (FLOW-EMP_SCHED-05). Add more duty time to that week.';
+                }
+            }
+
+            return null;
         }
 
 

@@ -460,8 +460,13 @@ export default function AdminPos() {
 
               <div className="h-5 w-px bg-gray-200 shrink-0" />
 
-              {/* Category Pills — standard rounded rectangle, matches search input height (h-8) */}
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none min-w-0 flex-1">
+              {/* Category Pills — standard rounded rectangle, matches search input height (h-8).
+                  flex-wrap, NOT a horizontal rail: the register is the narrower half of
+                  the screen, so an `overflow-x-auto` strip forced the cashier to scroll
+                  left-right just to reach a category. Wrapping keeps every category
+                  visible (FLOW-WALKIN-03) with no sideways scrolling anywhere in the
+                  catalog column. */}
+              <div className="flex items-center flex-wrap gap-1.5 min-w-0 flex-1">
                 {categoryPills.map((cat) => (
                   <button
                     key={cat}
@@ -479,8 +484,13 @@ export default function AdminPos() {
               </div>
             </div>
 
-            {/* Product Grid — 5 columns on wide desktop */}
-            <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+            {/* Product Grid — 5 columns on wide desktop.
+                overflow-x-hidden is explicit (overflow-y:auto alone silently computes
+                the x axis to `auto`, which makes the catalog its own left-right
+                scroller), and `min-w-0` on every card keeps a long product word from
+                widening a track — the catalog can never push the checkout pane off
+                screen nor need a sideways scrollbar. */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 pr-1">
               {filteredProducts.length === 0 ? (
                 <div className="h-64 flex flex-col items-center justify-center text-gray-400 font-medium text-xs bg-white rounded-2xl border border-gray-100">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-10 h-10 mb-2 opacity-40">
@@ -490,7 +500,7 @@ export default function AdminPos() {
                   <p>No products found matching filters.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 [&>*]:min-w-0">
                   {filteredProducts.map((product) => {
                     const resolvedImg = getImageUrl(product.image)
                     return (

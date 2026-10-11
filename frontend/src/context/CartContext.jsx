@@ -9,6 +9,7 @@ import {
   updateBagQuantity,
 } from '../services/cart.js'
 import { mapProduct } from '../services/products.js'
+import { onApiChange } from '../services/realtime.js'
 
 export const CartContext = createContext(null)
 
@@ -274,6 +275,17 @@ export function CartProvider({ children }) {
     window.addEventListener(CART_EVENT, handler)
     return () => window.removeEventListener(CART_EVENT, handler)
   }, [refreshCart])
+
+  // Realtime (REQ-BAG-03): the same mutation made on another device - a second
+  // tab, the phone, or the register checking the bag out - pings the `api`
+  // channel and this surface re-reads, so the Bag badge is the server's count
+  // everywhere instead of only on the device that made the change.
+  useEffect(() => {
+    if (!custId) return undefined
+    return onApiChange(['cart', 'orders', 'checkout', 'pos', 'wishlist'], () => {
+      refreshCart()
+    })
+  }, [custId, refreshCart])
 
   /** Fire-and-forget server sync for one line; local state is the fallback. */
   const pushLine = useCallback(

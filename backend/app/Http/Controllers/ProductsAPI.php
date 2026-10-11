@@ -23,6 +23,26 @@ use Illuminate\Support\Str;
 class ProductsAPI extends Controller
 {
 
+    /**
+     * Per-request product presentation memo.
+     *
+     * One request renders the same product from several surfaces (a bag line,
+     * an order line and the wishlist row all point back at one product), and
+     * every default present() re-runs the two aggregate queries behind it
+     * (prodsales SUM + approved-reviews breakdown). The memo lives in the
+     * container rather than in a static property, so it is rebuilt for every
+     * request and never leaks across requests or between tests.
+     */
+    private static function presentMemo(): \ArrayObject
+    {
+        $key = 'products.present.memo';
+        if (! app()->bound($key)) {
+            app()->instance($key, new \ArrayObject());
+        }
+
+        return app($key);
+    }
+
     // ===== from the Products API file =====
 /**
      * DOMAIN 9 / 10 / 23 (CATALOG & INVENTORY).
@@ -54,6 +74,16 @@ class ProductsAPI extends Controller
          */
         public static function present(Product $product, $variations = null, ?array $breakdown = null, ?array $metrics = null): array
         {
+            // A default render (no caller-supplied rows) is deterministic per
+            // product, so it is memoised and reused for the rest of the
+            // request. A caller that passes its own variations/breakdown/metrics
+            // still gets exactly the shape it asked for.
+            $defaultRender = $variations === null && $breakdown === null && $metrics === null;
+            $memo = $defaultRender ? self::presentMemo() : null;
+            if ($defaultRender && $memo->offsetExists((int) $product->prod_id)) {
+                return $memo[(int) $product->prod_id];
+            }
+
             $vars = $variations === null
                 ? Prodvar::where('prod_id', $product->prod_id)
                     ->whereNull('prodvar_deleted')
@@ -165,6 +195,10 @@ class ProductsAPI extends Controller
             $payload['available'] = $product->isBuyable() && $visible->isNotEmpty();
             $payload['unavailable'] = ! $payload['available'];
 
+            if ($defaultRender) {
+                $memo[(int) $product->prod_id] = $payload;
+            }
+
             return $payload;
         }
 
@@ -183,7 +217,7 @@ class ProductsAPI extends Controller
                 ->get()
                 ->groupBy('prod_id');
             $breakdowns = self::ratingBreakdowns($ids);
-            $sold       = self::salesByProduct();
+            $sold       = self::salesForProducts($ids);
 
             return $products->map(function (Product $product) use ($variations, $breakdowns, $sold) {
                 return self::present(
@@ -193,6 +227,34 @@ class ProductsAPI extends Controller
                     ['sold' => $sold[(int) $product->prod_id] ?? 0]
                 );
             })->all();
+        }
+
+        /**
+         * Batch-render a set of products into the per-request memo.
+         *
+         * Callers that are about to render many products one at a time (order
+         * lines, cart lines, wishlist rows) prime once over the whole set, so
+         * each later default present() is an array lookup instead of two more
+         * round trips on the Supabase link.
+         */
+        public static function primePresentations($products): void
+        {
+            $list = collect($products)
+                ->filter(fn ($p) => $p instanceof Product)
+                ->unique(fn (Product $p) => (int) $p->prod_id)
+                ->values();
+
+            if ($list->isEmpty()) {
+                return;
+            }
+
+            $memo = self::presentMemo();
+            foreach (self::presentMany($list) as $index => $payload) {
+                $product = $list[$index] ?? null;
+                if ($product instanceof Product) {
+                    $memo[(int) $product->prod_id] = $payload;
+                }
+            }
         }
 
         /**
@@ -1001,7 +1063,7 @@ class ProductsAPI extends Controller
                     $pid = (int) $row->pid;
                     $byProduct[$pid] ??= [
                         'prod_id'   => $pid,
-                        'prod_name' => Product::where('prod_id', $pid)->value('prod_name'),
+                        'prod_name' => null,
                         'total_qty' => 0,
                         'total_revenue' => 0.0,
                         'days'      => [],
@@ -1017,6 +1079,16 @@ class ProductsAPI extends Controller
                         'preorder' => (int) $row->preorder,
                         'cancelled'=> (int) $row->cancelled,
                     ];
+                }
+
+                // Names are fetched once for the whole window instead of a
+                // SELECT per product row (the per-row query was the N+1 on the
+                // high-latency Supabase link).
+                if ($byProduct !== []) {
+                    $names = Product::whereIn('prod_id', array_keys($byProduct))->pluck('prod_name', 'prod_id');
+                    foreach ($byProduct as $pid => $entry) {
+                        $byProduct[$pid]['prod_name'] = $names[(int) $pid] ?? null;
+                    }
                 }
 
                 // FLOW-MANAGE_INV-08 asks for trends: compare the second half
@@ -2293,6 +2365,41 @@ class ProductsAPI extends Controller
         {
             $rows = DB::table('prodsales')
                 ->join('prodvar', 'prodvar.prodvar_id', '=', 'prodsales.prodvar_id')
+                ->groupBy('prodvar.prod_id')
+                ->select('prodvar.prod_id as pid')
+                ->selectRaw('COALESCE(SUM(prodsales_qty), 0) as sold')
+                ->get();
+
+            $out = [];
+            foreach ($rows as $row) {
+                $out[(int) $row->pid] = (int) $row->sold;
+            }
+
+            return $out;
+        }
+
+        /**
+         * SUM(prodsales_qty) restricted to one set of products.
+         *
+         * presentMany() uses this instead of the global salesByProduct() so a
+         * batch render - including the per-order priming on the orders paths -
+         * reads only the products it is about to show instead of aggregating
+         * the whole prodsales table.
+         */
+        protected static function salesForProducts(array $prodIds): array
+        {
+            $prodIds = array_values(array_unique(array_filter(
+                array_map('intval', $prodIds),
+                fn ($id) => $id > 0
+            )));
+
+            if ($prodIds === []) {
+                return [];
+            }
+
+            $rows = DB::table('prodsales')
+                ->join('prodvar', 'prodvar.prodvar_id', '=', 'prodsales.prodvar_id')
+                ->whereIn('prodvar.prod_id', $prodIds)
                 ->groupBy('prodvar.prod_id')
                 ->select('prodvar.prod_id as pid')
                 ->selectRaw('COALESCE(SUM(prodsales_qty), 0) as sold')

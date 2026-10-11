@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../hooks/useAuth.js'
+import { useApiChange } from '../hooks/useApiChange.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import { apiErrorMessage } from '../hooks/useApi.js'
 import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
@@ -239,10 +240,15 @@ function Appointments() {
     }
   }, [custId, status])
 
+  // Realtime (REQ-MANAGE_BOOKED-02): staff marking an appointment done or
+  // cancelling it on the counter flips this list at once instead of only on the
+  // next visit (this screen has no poll of its own).
+  const version = useApiChange(['appoint', 'orders', 'checkout'])
+
   useEffect(() => {
     setLimit(PAGE_SIZE)
     load()
-  }, [load])
+  }, [load, version])
 
   const refresh = useCallback(() => load(), [load])
   const startAdd = useCallback(() => setForm('new'), [])

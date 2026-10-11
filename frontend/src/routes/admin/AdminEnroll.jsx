@@ -14,6 +14,34 @@ const CATEGORY_OPTIONS = [
   { value: 'super admin', label: 'Super Admin' },
 ]
 
+/** 'YYYY-MM-DD' local date key for today (the date input's floor). */
+const todayKey = () => {
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/** Monday-based week key, so a short week is visible before the server says so. */
+const weekKeyOf = (dateKey) => {
+  const [year, month, day] = String(dateKey).split('-').map(Number)
+  if (!year || !month || !day) return null
+  const date = new Date(year, month - 1, day)
+  const monday = new Date(date)
+  monday.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`
+}
+
+const minutesOf = (hhmm) => {
+  const [hours, minutes] = String(hhmm || '').split(':').map(Number)
+  return Number.isFinite(hours) ? hours * 60 + (Number.isFinite(minutes) ? minutes : 0) : null
+}
+
+/** Rule 46 / FLOW-EMP_SCHED-05: the weekly floor the server enforces too. */
+const MIN_WEEKLY_MINUTES = 180
+
+const emptyShift = () => ({ shift_date: todayKey(), shift_start: '09:00', shift_end: '12:00' })
+
 /**
  * DOMAIN 6 — Employee enrollment (super admin only).
  * The Bicol University email domain is validated in realtime; on
@@ -29,8 +57,12 @@ function AdminEnrollForm() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [category, setCategory] = useState('staff')
+  // FLOW-EMP_ENROLL-02: the schedule of the employee being enrolled is part of
+  // the enrollment form itself. Adding or removing their dates and times later
+  // is done from the employee list on the schedule screen (FLOW-EMP_SCHED-03).
+  const [shifts, setShifts] = useState(() => [emptyShift()])
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [result, setResult] = useState(null) // { tempPassword, name, email }
+  const [result, setResult] = useState(null) // { tempPassword, name, email, category, shifts }
 
   // Realtime @bicol-u.edu.ph domain validation (REQ-EMP_ENROLL).
   const emailValue = email.trim().toLowerCase()
@@ -40,11 +72,76 @@ function AdminEnrollForm() {
   )
   const emailTouched = emailValue.length > 0
 
+  // Realtime validation of every duty row (system rule 66): the 10-minute
+  // grid of FLOW-EMP_SCHED-03, an end after the start, and a date that is not
+  // more than 24 hours in the past (REQ-EMP_SCHED-03).
+  const shiftRowErrors = useMemo(
+    () =>
+      shifts.map((row) => {
+        const date = String(row.shift_date || '').trim()
+        const start = String(row.shift_start || '').trim()
+        const end = String(row.shift_end || '').trim()
+
+        if (!date) return 'Pick the date of the duty block.'
+        if (!start || !end) return 'Set both a start and an end time.'
+
+        const startMinutes = minutesOf(start)
+        const endMinutes = minutesOf(end)
+        if (startMinutes === null || endMinutes === null) return 'Times must use the HH:MM 24-hour format.'
+        if (endMinutes <= startMinutes) return 'The end time must be later than the start time.'
+        if (startMinutes % 10 !== 0 || endMinutes % 10 !== 0) {
+          return 'Duty blocks are set in 10-minute steps (FLOW-EMP_SCHED-03).'
+        }
+        if (date < todayKey()) return 'A duty block cannot be scheduled in the past.'
+
+        return ''
+      }),
+    [shifts]
+  )
+
+  const hasShiftErrors = shiftRowErrors.some((message) => message !== '')
+
+  // Rule 46 / FLOW-EMP_SCHED-05, judged per week so a short week is visible
+  // here instead of coming back from the server.
+  const shortWeeks = useMemo(() => {
+    const totals = new Map()
+    shifts.forEach((row, index) => {
+      if (shiftRowErrors[index]) return
+      const key = weekKeyOf(row.shift_date)
+      if (!key) return
+      const minutes = (minutesOf(row.shift_end) ?? 0) - (minutesOf(row.shift_start) ?? 0)
+      totals.set(key, (totals.get(key) || 0) + Math.max(0, minutes))
+    })
+
+    return [...totals.entries()]
+      .filter(([, minutes]) => minutes < MIN_WEEKLY_MINUTES)
+      .map(([week, minutes]) => ({ week, minutes }))
+  }, [shifts, shiftRowErrors])
+
+  const totalShiftMinutes = useMemo(
+    () =>
+      shifts.reduce(
+        (sum, row) => sum + Math.max(0, (minutesOf(row.shift_end) ?? 0) - (minutesOf(row.shift_start) ?? 0)),
+        0
+      ),
+    [shifts]
+  )
+
+  const updateShift = (index, field, value) => {
+    setShifts((rows) => rows.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
+  }
+
+  const addShift = () => setShifts((rows) => [...rows, emptyShift()])
+  const removeShift = (index) =>
+    setShifts((rows) => (rows.length === 1 ? rows : rows.filter((_, i) => i !== index)))
+
   const canSubmit =
     surname.trim().length > 0 &&
     givname.trim().length > 0 &&
     emailValid &&
     phone.trim().length > 0 &&
+    shifts.length > 0 &&
+    !hasShiftErrors &&
     !isSubmitting
 
   const handleSubmit = async (e) => {
@@ -65,6 +162,14 @@ function AdminEnrollForm() {
         // uppercase alias for the same column.
         categ: category,
         type: category.toUpperCase(),
+        // FLOW-EMP_ENROLL-02: the duty blocks the new employee is enrolled
+        // with. The server validates them against DOMAIN 7 (10-minute grid,
+        // overlaps, the 180-minute weekly floor) before anything is written.
+        shifts: shifts.map((row) => ({
+          shift_date: row.shift_date,
+          shift_start: row.shift_start,
+          shift_end: row.shift_end,
+        })),
       })
 
       const user = res?.data || {}
@@ -80,8 +185,12 @@ function AdminEnrollForm() {
         name: `${givname.trim()} ${surname.trim()}`,
         email: emailValue,
         category,
+        shifts: shifts.map((row) => ({ ...row })),
       })
-      showToast(`Employee enrolled${tempPassword ? ' — temporary password generated' : ''}.`, 'success')
+      showToast(
+        `Employee enrolled${tempPassword ? ' — temporary password generated' : ''} with ${shifts.length} duty block${shifts.length === 1 ? '' : 's'}.`,
+        'success'
+      )
     } catch (err) {
       // REQ-EMP_ENROLL-04: the duplicate answer from POST /auth/emp_signup
       // (409) and every other backend message is surfaced verbatim instead of
@@ -104,6 +213,7 @@ function AdminEnrollForm() {
     setEmail('')
     setPhone('')
     setCategory('staff')
+    setShifts([emptyShift()])
     setResult(null)
   }
 
@@ -205,6 +315,124 @@ function AdminEnrollForm() {
             </div>
           </div>
 
+          {/* ── FLOW-EMP_ENROLL-02: the schedule the new employee is enrolled
+              with. Every row is one duty block (date + 24-hour start/end on the
+              10-minute grid); adding or removing dates and times afterwards is
+              done from the employee list on the schedule screen. ── */}
+          <div className="pt-2 border-t border-slate-100 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                  Initial duty schedule
+                </h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Each row is one duty block · 10-minute steps · at least {MIN_WEEKLY_MINUTES} minutes
+                  per week (rule 46)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={addShift}
+                className="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-3.5 h-3.5">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add block
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {shifts.map((row, index) => {
+                const error = shiftRowErrors[index]
+                return (
+                  <div
+                    key={`shift-row-${index}`}
+                    className={`rounded-xl border p-3 space-y-2 ${
+                      error ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-slate-50/50'
+                    }`}
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] items-end gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Date</label>
+                        <input
+                          type="date"
+                          value={row.shift_date}
+                          min={todayKey()}
+                          onChange={(e) => updateShift(index, 'shift_date', e.target.value)}
+                          className={`w-full bg-white border rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 transition-all cursor-pointer ${
+                            error
+                              ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500'
+                              : 'border-slate-200 focus:border-brand-orange focus:ring-brand-orange'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Start</label>
+                        <input
+                          type="time"
+                          step={600}
+                          value={row.shift_start}
+                          onChange={(e) => updateShift(index, 'shift_start', e.target.value)}
+                          className={`w-32 bg-white border rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 transition-all cursor-pointer ${
+                            error
+                              ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500'
+                              : 'border-slate-200 focus:border-brand-orange focus:ring-brand-orange'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">End</label>
+                        <input
+                          type="time"
+                          step={600}
+                          value={row.shift_end}
+                          onChange={(e) => updateShift(index, 'shift_end', e.target.value)}
+                          className={`w-32 bg-white border rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-1 transition-all cursor-pointer ${
+                            error
+                              ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500'
+                              : 'border-slate-200 focus:border-brand-orange focus:ring-brand-orange'
+                          }`}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeShift(index)}
+                        disabled={shifts.length === 1}
+                        title={shifts.length === 1 ? 'An enrollment needs at least one duty block' : 'Remove this block'}
+                        className="h-10 px-3 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        aria-label={`Remove duty block ${index + 1}`}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {error && <p className="text-[11px] font-semibold text-rose-600">{error}</p>}
+                  </div>
+                )
+              })}
+            </div>
+
+            {shortWeeks.length > 0 && (
+              <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                {shortWeeks
+                  .map(({ week, minutes }) => `week of ${week}: ${minutes} of ${MIN_WEEKLY_MINUTES} minutes`)
+                  .join(' · ')}{' '}
+                — below the weekly minimum, the enrollment will be refused (FLOW-EMP_SCHED-05).
+              </p>
+            )}
+
+            <p className="text-[11px] text-slate-400">
+              {shifts.length} block{shifts.length === 1 ? '' : 's'} · {totalShiftMinutes} scheduled minutes in total.
+              The schedule can be amended from the employee list on the{' '}
+              <span className="font-semibold text-slate-500">Schedules</span> screen (FLOW-EMP_SCHED-03).
+            </p>
+          </div>
+
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
@@ -238,8 +466,10 @@ function AdminEnrollForm() {
                 </h2>
                 <p className="text-xs text-emerald-700">
                   {result.name} ({result.email}) is now a{' '}
-                  <span className="font-semibold">{result.category}</span> with
-                  an active account.
+                  <span className="font-semibold">{result.category}</span> with an active
+                  account, scheduled for{' '}
+                  {result.shifts?.length || 0} duty block
+                  {(result.shifts?.length || 0) === 1 ? '' : 's'}.
                 </p>
               </div>
             </div>

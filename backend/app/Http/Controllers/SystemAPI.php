@@ -439,6 +439,49 @@ class SystemAPI extends Controller
             return response()->json(['success' => false, 'message' => 'Duty shift not found'], 404);
         }
 
+        /*
+            FLOW-EMP_SCHED-04: "Employees must be able to view their own
+            schedule and mark specific time blocks as 'unavailable'".
+
+            Rule 38 keeps the rest of the roster with the super admins, so a
+            non-admin caller may touch ONE field on ONE block - their own
+            `unavailable` exception - and nothing else. Admins and super admins
+            keep every field exactly as before. The block itself is still
+            validated against the same rules (the 10-minute grid, the overlap
+            rule, the weekly floor and the REQ-SS-02 deadline) and still costs
+            the same REQ-SS-03 announcement when it stops staffing the roster.
+        */
+        $actor = $json->user('api');
+        $isAdmin = $actor instanceof Employee && ($this->isSuperAdmin($actor) || $actor->isAdmin());
+
+        if (! $isAdmin) {
+            if (! $actor instanceof Employee || (int) $actor->getKey() !== (int) $shift->emp_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You may only change your own schedule (rule 38).',
+                ], 403);
+            }
+
+            // Every roster field stays with the admins; the employee's own
+            // exception is the single value a non-admin may send.
+            $adminOnly = [
+                'emp_id', 'shift_date', 'shift_start', 'shift_end',
+                'emp_instore', 'shift_type', 'shift_location', 'status',
+            ];
+            $attempted = array_values(array_filter(
+                array_keys($json->all()),
+                fn ($key) => in_array($key, $adminOnly, true)
+            ));
+
+            if ($attempted !== []) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only your own availability exception can be changed here. '
+                        . 'A super admin preschedules and amends duty blocks.',
+                ], 403);
+            }
+        }
+
         // Captured before anything is written so "the block just lost its
         // assignee" is decided against the stored state, not the edited one.
         $wasStaffed = $shift->isStaffed();

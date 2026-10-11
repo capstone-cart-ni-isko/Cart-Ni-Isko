@@ -27,7 +27,6 @@ export default function ScheduleMonthGrid({
   officers = [],
   canEdit = true,
   onPickDay,
-  onAssign,
 }) {
   const [shifts, setShifts] = useState([])
   const [error, setError] = useState('')
@@ -105,15 +104,11 @@ export default function ScheduleMonthGrid({
             weekly floor (FLOW-EMP_SCHED-05)
           </p>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => onAssign?.()}
-            className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md transition-colors cursor-pointer"
-          >
-            Assign Duty
-          </button>
-        </div>
+        {/* No write action lives here: this is the month's staffing overview.
+            A duty date/time is added or removed from the employee list on the
+            Day view (the officer card's "+ Assign Shift" and each block's
+            editor), which is the one place the SRS points at
+            (FLOW-EMP_SCHED-03/04). */}
       </div>
 
       {error ? (

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
+import { useApiChange } from '../hooks/useApiChange.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageTitle from '../components/ui/PageTitle.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -141,9 +142,15 @@ function OrderDetail() {
     }
   }, [id, custId])
 
+  // Realtime (REQ-ORD_LIST-02/03, REQ-ORD_CLAIM-*): this screen has no poll of
+  // its own, so a status change, a claim scan or a cancellation on another
+  // device used to need a manual reload. A ping now re-reads the order (and its
+  // fulfillment track) the moment staff act on it.
+  const version = useApiChange(['orders', 'checkout', 'tracking', 'delivery', 'appoint'])
+
   useEffect(() => {
     load()
-  }, [load])
+  }, [load, version])
 
   /* QR payload: the signed code from POST /tracking/create (staff scanners
      verify it, REQ-APC-01), falling back to the live dispatch codes the order

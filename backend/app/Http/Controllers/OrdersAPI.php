@@ -363,6 +363,19 @@ class OrdersAPI extends Controller
         return $line;
     }
 
+    /**
+     * Render a whole set of bag lines. Every product behind the bags is primed
+     * in one batch first, so the per-line present() is a memo lookup instead of
+     * two aggregate queries each.
+     */
+    public static function bagLinesPayload($bags): array
+    {
+        $bags = collect($bags)->values();
+        UserAPI::primeCartProducts($bags);
+
+        return $bags->map(fn (Bag $bag) => self::lineFromBag($bag))->values()->all();
+    }
+
     /** Same line, reached through its items row (order history detail). */
     public static function lineFromItem(Item $item): array
     {
@@ -402,6 +415,13 @@ class OrdersAPI extends Controller
             'items.bag.prodvar.product', 'pickup.appointment',
             'delivery', 'parcel.delivery', 'parcel.payment',
         ]);
+
+        // Prime the products behind this order's lines in one batch, so the
+        // per-line present() below is a memo lookup instead of two aggregate
+        // queries per line.
+        ProductsAPI::primePresentations(
+            $order->items->map(fn (Item $item) => $item->bag?->prodvar?->product)->filter()->all()
+        );
 
         $items   = $order->items->map(fn (Item $item) => self::lineFromItem($item))->values()->all();
         $payload = $order->toArray();
@@ -508,7 +528,9 @@ class OrdersAPI extends Controller
         $payload['is_preorder'] = $order->pickup !== null
             || $order->delivery !== null
             || $order->parcel !== null;
-        $payload['is_walk_in'] = $order->isWalkIn();
+        // pickup / delivery are eager-loaded above, so read them directly
+        // instead of firing the two EXISTS queries isWalkIn() runs.
+        $payload['is_walk_in'] = $order->pickup === null && $order->delivery === null;
 
         // Rule 55 for both modalities: a preorder is paid online, at checkout.
         // The only exception in the system is the walk-in POS register.
@@ -735,7 +757,7 @@ class OrdersAPI extends Controller
                     'total_due'        => $totalDue,
                     'total'            => $totalDue,
                     'cart_count'       => UserAPI::cartCount($custId),
-                    'items'            => $bags->map(fn ($bag) => OrdersAPI::lineFromBag($bag))->values()->all(),
+                    'items'            => self::bagLinesPayload($bags),
                     'dispatch_details' => $dispatchDetails,
                 ],
             ], 200);

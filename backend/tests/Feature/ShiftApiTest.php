@@ -914,9 +914,153 @@ class ShiftApiTest extends TestCase
         $this->assertNull($block->sched_disabled);
     }
 
-    public function test_an_unavailable_block_no_longer_staffs_the_shop()
+    // ==========================================
+    // FLOW-EMP_SCHED-04 — THE EMPLOYEE'S OWN EXCEPTION
+    // (the docked sidebar's "clock out / time out" request)
+    // ==========================================
+
+    public function test_an_employee_may_flag_their_own_block_unavailable()
     {
-        $superAdmin = $this->makeSuperAdmin();
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        // A week-wide baseline block so the 180-minute floor still clears when
+        // one block inside it is flagged unavailable.
+        $this->makeShift($officer, ['shift_start' => '00:00', 'shift_end' => '23:59']);
+        $block = $this->makeShift($officer, ['shift_start' => '10:00', 'shift_end' => '12:00']);
+
+        $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => true], $this->headers($officer))
+            ->assertStatus(200)
+            ->assertJsonPath('data.unavailable', true);
+
+        $block->refresh();
+        $this->assertNotNull($block->sched_disabled, 'The employee could not log their own exception.');
+        $this->assertFalse($block->isStaffed());
+
+        // Clearing it again is the "clock in" side of the same control.
+        $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => false], $this->headers($officer))
+            ->assertStatus(200)
+            ->assertJsonPath('data.unavailable', false);
+        $this->assertNull($block->refresh()->sched_disabled);
+    }
+
+    public function test_an_employee_may_not_touch_another_employees_block()
+    {
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        $other = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        $block = $this->makeShift($other);
+
+        // Rule 38: the roster belongs to the super admins, and an employee's own
+        // exception only ever applies to their own block.
+        $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => true], $this->headers($officer))
+            ->assertStatus(403);
+
+        $this->assertNull($block->refresh()->sched_disabled);
+    }
+
+    public function test_an_employee_may_not_amend_the_window_of_their_own_block()
+    {
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
+        $block = $this->makeShift($officer);
+
+        // The dates and times are amended from the employee list on the schedule
+        // screen (admins only); the employee's own control is the exception flag.
+        $this->putJson('/api/shifts/' . $block->sched_id, ['shift_start' => '11:00'], $this->headers($officer))
+            ->assertStatus(403);
+
+        $this->assertSame('08:00', $block->refresh()->sched_time_start->format('H:i'));
+    }
+
+    // ==========================================
+    // FLOW-EMP_ENROLL-02 — THE ENROLLMENT FORM'S OWN SCHEDULE
+    // ==========================================
+
+    public function test_enrollment_preschedules_the_blocks_the_form_carries()
+    {
+        $admin = $this->makeSuperAdmin();
+        $email = 'scheduled' . uniqid() . '@bicol-u.edu.ph';
+        $first = now()->addDay()->format('Y-m-d');
+        $second = now()->addDay()->format('Y-m-d');
+
+        $response = $this->postJson('/api/auth/emp_signup', [
+            'givname' => 'Scheduled',
+            'surname' => 'Enrollee',
+            'email'   => $email,
+            'phone'   => '0951' . random_int(1000000, 9999999),
+            'categ'   => 'STAFF',
+            'shifts'  => [
+                ['shift_date' => $first, 'shift_start' => '08:00', 'shift_end' => '11:00'],
+                ['shift_date' => $second, 'shift_start' => '13:00', 'shift_end' => '16:00'],
+            ],
+        ], $this->headers($admin))->assertStatus(201);
+
+        $empId = (int) $response->json('data.emp_id');
+        $blocks = Schedule::where('emp_id', $empId)->orderBy('sched_time_start')->get();
+
+        // Exactly the form's blocks: no seven-day baseline on top of them.
+        $this->assertCount(2, $blocks);
+        $this->assertSame('08:00', $blocks[0]->sched_time_start->format('H:i'));
+        $this->assertSame('11:00', $blocks[0]->sched_time_end->format('H:i'));
+        $this->assertSame('13:00', $blocks[1]->sched_time_start->format('H:i'));
+        $this->assertSame('16:00', $blocks[1]->sched_time_end->format('H:i'));
+        $this->assertSame($first, $blocks[0]->sched_time_start->toDateString());
+    }
+
+    public function test_enrollment_refuses_a_schedule_that_breaks_domain_7()
+    {
+        $admin = $this->makeSuperAdmin();
+        $day = now()->addDay()->format('Y-m-d');
+        $base = [
+            'givname' => 'Roster',
+            'surname' => 'Refused',
+            'email'   => 'refused' . uniqid() . '@bicol-u.edu.ph',
+            'phone'   => '0951' . random_int(1000000, 9999999),
+            'categ'   => 'STAFF',
+        ];
+
+        // Under the 180-minute weekly floor (rule 46 / FLOW-EMP_SCHED-05).
+        $this->postJson('/api/auth/emp_signup', $base + [
+            'shifts' => [['shift_date' => $day, 'shift_start' => '08:00', 'shift_end' => '09:00']],
+        ], $this->headers($admin))->assertStatus(422);
+
+        // Off the 10-minute grid (FLOW-EMP_SCHED-03).
+        $this->postJson('/api/auth/emp_signup', $base + [
+            'shifts' => [['shift_date' => $day, 'shift_start' => '08:05', 'shift_end' => '12:00']],
+        ], $this->headers($admin))->assertStatus(422);
+
+        // Overlapping blocks (REQ-EMP_SCHED-04).
+        $this->postJson('/api/auth/emp_signup', $base + [
+            'shifts' => [
+                ['shift_date' => $day, 'shift_start' => '08:00', 'shift_end' => '12:00'],
+                ['shift_date' => $day, 'shift_start' => '11:00', 'shift_end' => '15:00'],
+            ],
+        ], $this->headers($admin))->assertStatus(422);
+
+        // Nothing was opened and nothing was prescheduled.
+        $this->assertDatabaseMissing('employee', ['emp_email' => $base['email']]);
+        $this->assertDatabaseCount('schedules', 0);
+    }
+
+    public function test_enrollment_without_a_schedule_still_preschedules_availability()
+    {
+        $admin = $this->makeSuperAdmin();
+
+        $this->postJson('/api/auth/emp_signup', [
+            'givname' => 'Baseline',
+            'surname' => 'Enrollee',
+            'email'   => 'baseline' . uniqid() . '@bicol-u.edu.ph',
+            'phone'   => '0951' . random_int(1000000, 9999999),
+            'categ'   => 'STAFF',
+        ], $this->headers($admin))->assertStatus(201);
+
+        // FLOW-EMP_ENROLL-06: full availability for the next seven days.
+        $this->assertDatabaseCount('schedules', 1);
+        $this->assertSame(
+            now()->addDays(7)->format('Y-m-d'),
+            Schedule::first()->sched_time_end->format('Y-m-d')
+        );
+    }
+
+    public function test_an_unavailable_block_no_longer_staffs_the_shop()
+    {        $superAdmin = $this->makeSuperAdmin();
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:30:00'));
 
         $day = '2026-10-05';

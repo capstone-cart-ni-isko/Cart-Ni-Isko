@@ -3,13 +3,20 @@ import ScheduleShiftList from './ScheduleShiftList.jsx'
 import OfficerRosterGrid from './OfficerRosterGrid.jsx'
 import { humanMinutes, minutesOf } from './scheduleTime.js'
 
-/** Page header: title plus the Pending Covers and Assign Duty actions. */
+/**
+ * Page header: title plus the Pending Covers action.
+ *
+ * There is deliberately NO "assign duty" button here: adding or removing an
+ * employee's duty dates and times is done from the employee list itself (the
+ * "+ Assign Shift" action on every officer card, and the block editor behind
+ * each block), which is the single place the SRS points at for that change
+ * (FLOW-EMP_SCHED-03/04). Enrollment carries its own schedule, so a
+ * date-less assign action on the page header was only ever a second, weaker
+ * copy of the per-employee one.
+ */
 export function ScheduleHeader({
   onOpenCovers,
   coverCount = 0,
-  onAssign,
-  canAssign = true,
-  canEdit = true,
 }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -18,7 +25,7 @@ export function ScheduleHeader({
           Employee Scheduling
         </h1>
         <p className="text-xs text-slate-500 font-normal mt-0.5">
-          Tindahan ni Isko • preschedule duty blocks and manage in-store availability
+          Tindahan ni Isko · preschedule duty blocks and manage in-store availability
         </p>
       </div>
 
@@ -35,24 +42,6 @@ export function ScheduleHeader({
             </span>
           )}
         </button>
-
-        {/* Rule 38: only admins and super admins preschedule, so everybody
-            else never sees an action the API would refuse. */}
-        {canAssign && (
-          <button
-            type="button"
-            onClick={onAssign}
-            disabled={!canEdit}
-            title={
-              canEdit
-                ? undefined
-                : 'This date is past the REQ-SS-02 deadline — a super admin may still override.'
-            }
-            className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <span>Assign Duty</span>
-          </button>
-        )}
       </div>
     </div>
   )

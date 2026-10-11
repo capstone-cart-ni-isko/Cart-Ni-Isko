@@ -204,6 +204,9 @@ Route::middleware('auth:api')->group(function () {
     // Duty Shift API Routes (REQ-SS-01 / REQ-SS-02 / REQ-SS-03)
     Route::get('/shifts', [SystemAPI::class, 'displayShifts'])->middleware('role:staff');
     Route::post('/shifts', [SystemAPI::class, 'createShift'])->middleware('role:admin');
-    Route::put('/shifts/{shiftId}', [SystemAPI::class, 'updateShift'])->middleware('role:admin');
+    // FLOW-EMP_SCHED-04: any signed-in employee may reach the block so they can
+    // log their OWN "unavailable" exception on it; SystemAPI::updateShift keeps
+    // every other field admin/super-admin only (rule 38).
+    Route::put('/shifts/{shiftId}', [SystemAPI::class, 'updateShift'])->middleware('role:staff');
     Route::delete('/shifts/{shiftId}', [SystemAPI::class, 'cancelShift'])->middleware('role:admin');
 });

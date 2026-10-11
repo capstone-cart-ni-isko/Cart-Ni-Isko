@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchCatalog, readCatalogCache } from '../services/products.js'
+import { useApiChange } from './useApiChange.js'
 
 /**
  * Active catalog, mapped through mapProduct so the UI sees name/price/images/id/category.
@@ -12,6 +13,11 @@ export function useCatalog(params = {}) {
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
   const query = JSON.stringify(params)
+
+  // Realtime (REQ-MANAGE_INV-02/03): a product added, disabled or re-priced
+  // (or its stock moved by a sale) re-reads the catalog, so the storefront grid
+  // reflects it immediately rather than at the next poll.
+  const version = useApiChange(['products', 'uploads'])
 
   useEffect(() => {
     let cancelled = false
@@ -45,7 +51,7 @@ export function useCatalog(params = {}) {
     return () => {
       cancelled = true
     }
-  }, [query, reloadKey])
+  }, [query, reloadKey, version])
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), [])
 

@@ -4,6 +4,7 @@ import React from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
+import { useApiChange } from '../hooks/useApiChange.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageTitle from '../components/ui/PageTitle.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
@@ -251,7 +252,11 @@ function Orders() {
 
   /* REQ-ORD_LIST-02: refresh the list every ~10s while the tab is visible.
      The interval stops while the document is hidden and is re-armed (with an
-     immediate refresh) when the customer comes back. */
+     immediate refresh) when the customer comes back. A realtime ping (a status
+     change made by staff on another device) re-runs this effect at once, so the
+     list moves without waiting for the poll. */
+  const version = useApiChange(['orders', 'checkout', 'appoint', 'tracking', 'delivery', 'cart'])
+
   useEffect(() => {
     load()
 
@@ -284,7 +289,7 @@ function Orders() {
       stop()
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [custId, load])
+  }, [custId, load, version])
 
   const counts = useMemo(() => {
     const totals = { all: orders.length, 'pre-order': 0 }

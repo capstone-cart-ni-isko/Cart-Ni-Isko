@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
+import { useApiChange } from '../../hooks/useApiChange.js'
 import { CloseIcon } from '../../components/ui/Icons.jsx'
 import {
   fetchAppointments,
@@ -128,9 +129,14 @@ export default function AdminAppointments() {
     setIsLoading(false)
   }, [])
 
+  // Realtime (REQ-MANAGE_APP-02, REQ-EMP_SCHED-02): a booking or a schedule
+  // change made anywhere re-reads the master list and the slot availability for
+  // the selected day at once, so the calendar does not drift from the counter.
+  const version = useApiChange(['appoint', 'shifts', 'orders', 'checkout'])
+
   useEffect(() => {
     loadSchedule(selectedDate)
-  }, [selectedDate, reloadKey, loadSchedule])
+  }, [selectedDate, reloadKey, loadSchedule, version])
 
   // In-store headcount (REQ-AB-03 thresholds drive the summary copy)
   useEffect(() => {

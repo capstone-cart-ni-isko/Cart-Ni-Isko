@@ -10,6 +10,7 @@ import { WishlistProvider } from './context/WishlistContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 
 import { AdminProvider } from './context/AdminContext.jsx'
+import RealtimeBridge from './components/realtime/RealtimeBridge.jsx'
 
 import Welcome from './routes/Welcome.jsx'
 import SignUp from './routes/SignUp.jsx'
@@ -123,6 +124,7 @@ function App() {
             <WishlistProvider>
               <ScrollToTop />
               <GlobalApiLoader />
+              <RealtimeBridge />
               <ApiErrorBoundary>
                 <Routes>
                 {/* ── Customer Routes ── */}

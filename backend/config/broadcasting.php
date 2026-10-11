@@ -64,7 +64,14 @@ return [
                 'encrypted' => false,
             ],
             'client_options' => [
-                // Guzzle client options...
+                // A broadcast is best-effort and already runs after the
+                // response (CacheReads::announce), but the PHP worker stays
+                // busy until the HTTP publish returns. If Reverb is down the
+                // default 10s connect / 30s read would pin that worker for
+                // half a minute, so cap both hard - the ping is simply lost
+                // and the next write retries.
+                'connect_timeout' => 1,
+                'timeout' => 2,
             ],
         ],
 

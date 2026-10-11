@@ -281,9 +281,6 @@ export default function AdminSchedule({ embedded = false }) {
       <ScheduleHeader
         onOpenCovers={() => setShowCovers(true)}
         coverCount={duty.pendingReplacements.length}
-        onAssign={() => openAssignModal(null)}
-        canAssign={canPreschedule}
-        canEdit={canEditAvailability}
       />
 
       <ScheduleToolbar
@@ -310,7 +307,6 @@ export default function AdminSchedule({ embedded = false }) {
             officers={roster.officers}
             canEdit={canEditAvailability}
             onPickDay={openDay}
-            onAssign={canPreschedule ? () => openAssignModal(null) : null}
           />
         </>
       ) : isWeek ? (

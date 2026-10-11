@@ -25,6 +25,26 @@ const tokens = { customer: null, staff: null }
 let preconnected = false
 const cache = new Map()
 const CACHE_TTL = 5 * 60 * 1000
+// A signed-in read is cached briefly too: navigation between screens on the
+// same portal replays the answer instead of re-hitting the high-latency backend
+// for data that is at most a few seconds old. Short enough that a fresh write
+// (which clears the whole cache anyway) can never be masked for long.
+const AUTH_CACHE_TTL = 15 * 1000
+// Single-flight map: many components mount at once and ask for the same URL;
+// the first call performs the request and the rest await its answer.
+const inFlightGets = new Map()
+
+/** Every in-memory read cache is dropped together (key set, not just data). */
+function clearGetCache() {
+  cache.clear()
+  inFlightGets.clear()
+}
+
+function getCacheKey(kind, token, url) {
+  // The bearer is part of the key, so one portal or account can never be served
+  // another's row (rule 71) even though the cache is process-wide.
+  return `${kind}:${token || 'anon'}:${url}`
+}
 
 /* ── 60-second localStorage mirror for non-sensitive lists (appointments,
    products, notifications). The screen paints from the mirror right away and
@@ -71,7 +91,7 @@ export function activePortal() {
 export function setApiToken(token, kind) {
   const slot = kind || activePortal()
   const next = token || null
-  if (tokens[slot] !== next) cache.clear()
+  if (tokens[slot] !== next) clearGetCache()
   tokens[slot] = next
 }
 
@@ -162,7 +182,7 @@ export async function apiRequest(path, { method = 'GET', body, headers, silent =
       throw new ApiError(data?.message || 'Request failed', response.status, data)
     }
 
-    if (method !== 'GET') cache.clear()
+    if (method !== 'GET') clearGetCache()
     return data
   } catch (error) {
     if (error instanceof ApiError) throw error
@@ -190,16 +210,28 @@ function withQuery(path, params) {
 
 export async function apiGet(path, params = {}, options = {}) {
   const url = withQuery(path, params)
-  // A signed-in portal always bypasses the shared anonymous cache, so one
-  // portal's read can never be replayed to the other (rule 71).
-  if (tokens[activePortal()]) return apiRequest(url, options)
+  const kind = activePortal()
+  const token = tokens[kind] || null
+  const key = getCacheKey(kind, token, url)
+  const ttl = token ? AUTH_CACHE_TTL : CACHE_TTL
 
-  const cached = cache.get(url)
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data
+  const cached = cache.get(key)
+  if (cached && Date.now() - cached.timestamp < ttl) return cached.data
 
-  const data = await apiRequest(url, options)
-  cache.set(url, { data, timestamp: Date.now() })
-  return data
+  const pending = inFlightGets.get(key)
+  if (pending) return pending
+
+  const request = apiRequest(url, options)
+    .then((data) => {
+      cache.set(key, { data, timestamp: Date.now() })
+      return data
+    })
+    .finally(() => {
+      inFlightGets.delete(key)
+    })
+
+  inFlightGets.set(key, request)
+  return request
 }
 
 export function apiPost(path, body) {
@@ -215,7 +247,7 @@ export function apiDelete(path, body) {
 }
 
 export function invalidateCache() {
-  cache.clear()
+  clearGetCache()
 }
 
 /**

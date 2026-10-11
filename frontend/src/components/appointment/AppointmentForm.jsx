@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../../hooks/useToast.js'
+import { useApiChange } from '../../hooks/useApiChange.js'
 import OtpVerifyModal from '../ui/OtpVerifyModal.jsx'
 import {
   createAppointment,
@@ -155,14 +156,18 @@ export default function AppointmentForm({
   }, [date])
 
   // Picking a day resets the selection; while the grid is open it re-polls so a
-  // slot flips to "unavailable" the moment it fills up (REQ-SC-04).
+  // slot flips to "unavailable" the moment it fills up (REQ-SC-04). A realtime
+  // ping (REQ-EMP_SCHED-02: a schedule change, or another customer booking the
+  // same block) re-reads the grid at once instead of waiting for the 5s poll.
+  const version = useApiChange(['appoint', 'shifts'])
+
   useEffect(() => {
     setSlot('')
     loadSlots()
     if (!date) return undefined
     const timer = setInterval(loadSlots, 5000)
     return () => clearInterval(timer)
-  }, [date, loadSlots])
+  }, [date, loadSlots, version])
 
   // Slots arrive as "YYYY-MM-DD HH:MM"; a bare "HH:MM" gets the picked date.
   const slotStamp = stampOf(date, slot)

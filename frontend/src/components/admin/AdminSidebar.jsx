@@ -1,10 +1,8 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
-import { mapOrderRows } from '../../services/dashboard.js'
-import { empCateg, empHomePath, empIsStaff } from './schema.js'
-import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import { empCateg, empIsStaff } from './schema.js'
+import ClockInOut from './ClockInOut.jsx'
 
 const ICON = 'w-4 h-4'
 
@@ -169,17 +167,12 @@ const staffAliases = ['/admin/staff', '/admin/users']
 export default function AdminSidebar({ onCloseMobile }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { orders: rawOrders = [], products = [], currentAdminUser, logoutAdmin } = useAdmin()
-  // Live rows for the ⌘K search palette (server-backed, refreshed by context).
-  const liveOrders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
+  const { currentAdminUser, logoutAdmin } = useAdmin()
 
   const roleKey = currentAdminUser?.roleKey || (empCateg(currentAdminUser) === 'super admin' ? 'SUPER_ADMIN' : empCateg(currentAdminUser) === 'admin' ? 'ADMIN' : 'STAFF')
   // REQ-EMP_HOME-01 — a 'staff' category employee is a regular staff member,
   // so the Dashboard / Walk-in / Reviews / Sales entries never render for them.
   const isStaff = empIsStaff(currentAdminUser)
-  // Where this employee's "home" leads (Dashboard for admins, Orders for
-  // staff) - every logo/home link in the portal uses the same answer.
-  const homePath = empHomePath(currentAdminUser)
 
   // FLOW-EMP_HOME-05 + REQ-EMP_HOME-01 — one pass over the grouped items, so
   // an entry is filtered with exactly the same rule the route guard uses.
@@ -194,114 +187,7 @@ export default function AdminSidebar({ onCloseMobile }) {
     })).filter((section) => section.items.length > 0)
   }, [isStaff, roleKey])
 
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedIndex, setSelectedIndex] = useState(0)
   const [confirmLogout, setConfirmLogout] = useState(false)
-  const searchInputRef = useRef(null)
-
-  const smallIcon = 'w-4 h-4'
-
-  const displayedItems = searchQuery.trim()
-    ? [
-        ...liveOrders
-          .filter((o) =>
-            o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            o.customer.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-          .slice(0, 3)
-          .map((o) => ({
-            id: o.id, type: 'order', title: o.id, subtitle: o.customer,
-            link: `/admin/orders?search=${encodeURIComponent(o.id)}`,
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={smallIcon}>
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <path d="M16 10a4 4 0 0 1-8 0" />
-              </svg>
-            ),
-            iconBg: 'bg-blue-50 text-blue-600',
-          })),
-        ...products
-          .filter((p) => (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()))
-          .slice(0, 3)
-          .map((p) => ({
-            id: p.id, type: 'product', title: p.name, subtitle: `In Stock (${p.totalStock ?? 0})`,
-            link: `/admin/inventory?search=${encodeURIComponent(p.name)}`,
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={smallIcon}>
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                <line x1="12" y1="22.08" x2="12" y2="12" />
-              </svg>
-            ),
-            iconBg: 'bg-slate-100 text-slate-600',
-          })),
-        // Schedule deep link so the page stays reachable from the ribbon search.
-        {
-          id: 'schedule', type: 'page', title: 'Employee Schedule', subtitle: 'Schedules & availability',
-          link: '/admin/schedules',
-          icon: (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={smallIcon}>
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-          ),
-          iconBg: 'bg-orange-50 text-brand-orange',
-        },
-      ]
-    : []
-
-  const handleSelectItem = (item) => {
-    navigate(item.link)
-    setIsSearchModalOpen(false)
-    setSearchQuery('')
-  }
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault()
-    if (displayedItems[selectedIndex]) {
-      handleSelectItem(displayedItems[selectedIndex])
-    } else if (searchQuery.trim()) {
-      navigate(`/admin/orders?search=${encodeURIComponent(searchQuery.trim())}`)
-      setIsSearchModalOpen(false)
-      setSearchQuery('')
-    }
-  }
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setSelectedIndex((prev) => (prev + 1) % Math.max(displayedItems.length, 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setSelectedIndex((prev) => (prev - 1 + displayedItems.length) % Math.max(displayedItems.length, 1))
-    } else if (e.key === 'Escape') {
-      setIsSearchModalOpen(false)
-    }
-  }
-
-  useEffect(() => {
-    if (isSearchModalOpen) {
-      setTimeout(() => {
-        searchInputRef.current?.focus()
-        setSelectedIndex(0)
-      }, 50)
-    }
-  }, [isSearchModalOpen])
-
-  useEffect(() => {
-    function handleGlobalKeyDown(e) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setIsSearchModalOpen((prev) => !prev)
-      }
-    }
-    window.addEventListener('keydown', handleGlobalKeyDown)
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [])
 
   // DOMAIN 16 — confirmation dialog, then logout and redirect to the login page.
   const handleLogout = () => {
@@ -322,19 +208,20 @@ export default function AdminSidebar({ onCloseMobile }) {
        pushing the page. Same visual language as the settings rail. */
     <aside className="w-full h-full bg-white rounded-xl border border-slate-200 flex flex-col min-h-0 select-none overflow-hidden">
       <div className="flex flex-col flex-1 min-h-0">
-        {/* Brand Header */}
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <Link to={homePath} className="flex items-center min-w-0" title="Tindahan ni Isko">
-            <img src={brandLogo} alt="Tindahan ni Isko" className="h-8 w-auto object-contain" />
-            <span className="ml-2 hidden lg:block text-xs font-extrabold text-slate-900 tracking-tight truncate">
-              Tindahan ni Isko
-            </span>
-          </Link>
-          {onCloseMobile && (
+        {/* Small-screen drawer close.
+
+            FLOW-EMP_HOME-05 lists the sidebar's contents exactly: the labelled
+            navigation entries plus the logout entry - no logo and no search bar.
+            Both of those belong to the ribbon, which rule 72/73 and
+            FLOW-EMP_HOME-02/03 already place at the top of every employee page,
+            so the docked rail is navigation only. On the phone drawer the close
+            affordance therefore moves here, where the brand header used to be. */}
+        {onCloseMobile && (
+          <div className="md:hidden px-3 pt-2 pb-1 flex items-center justify-end shrink-0 border-b border-slate-100">
             <button
               type="button"
               onClick={onCloseMobile}
-              className="md:hidden p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer"
+              className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer"
               aria-label="Close menu"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
@@ -342,111 +229,6 @@ export default function AdminSidebar({ onCloseMobile }) {
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-          )}
-        </div>
-
-        {/* Sidebar Search */}
-        <div className="px-3 pt-2.5 pb-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => setIsSearchModalOpen(true)}
-            className="w-full h-8 flex items-center gap-2 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-400 hover:border-slate-300 hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 shrink-0">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <span className="flex-1 text-left truncate">Search...</span>
-            <kbd className="hidden lg:inline-flex items-center px-1 py-0.5 rounded border border-slate-200 text-[9px] font-semibold text-slate-400 bg-white">
-              ⌘K
-            </kbd>
-          </button>
-        </div>
-
-        {/* Search Command Palette Modal */}
-        {isSearchModalOpen && (
-          <div
-            className="fixed inset-0 z-[99999] bg-black/60 flex items-start justify-center pt-20 sm:pt-28 px-4 animate-fade-in"
-            onClick={() => setIsSearchModalOpen(false)}
-          >
-            <div
-              className="bg-white w-full max-w-lg sm:max-w-xl rounded-lg border border-slate-200 overflow-hidden animate-scale-in"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <form onSubmit={handleSearchSubmit} className="flex items-center px-3.5 py-2.5 gap-2.5 border-b border-slate-100">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-400 shrink-0">
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search orders, products, customers..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    setSelectedIndex(0)
-                  }}
-                  onKeyDown={handleKeyDown}
-                  className="w-full text-xs text-slate-900 placeholder-slate-400 bg-transparent focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsSearchModalOpen(false)}
-                  className="px-1.5 py-0.5 text-[10px] font-medium text-slate-400 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200/80 transition-colors uppercase cursor-pointer shrink-0"
-                >
-                  ESC
-                </button>
-              </form>
-
-              <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
-                <span className="text-[10px] font-medium text-slate-400 uppercase">
-                  {searchQuery.trim() ? 'Search results' : 'Start typing to search'}
-                </span>
-                <span className="text-[10px] text-slate-400 font-medium">Quick jump</span>
-              </div>
-
-              <div className="px-2.5 pb-2.5 space-y-0.5 max-h-64 overflow-y-auto">
-                {displayedItems.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-5 text-center">
-                    {searchQuery.trim() ? 'No matching results found.' : 'Search orders and products by name or ID.'}
-                  </p>
-                ) : (
-                  displayedItems.map((item, index) => (
-                    <div
-                      key={`${item.id}-${index}`}
-                      onClick={() => handleSelectItem(item)}
-                      onMouseEnter={() => setSelectedIndex(index)}
-                      className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
-                        selectedIndex === index ? 'bg-slate-50' : 'hover:bg-slate-50/80'
-                      }`}
-                    >
-                      <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${item.iconBg}`}>
-                        {item.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-900 truncate">{item.title}</p>
-                        <p className="text-[11px] text-slate-400 font-normal truncate">{item.subtitle}</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50/40 text-[10px] text-slate-400 font-medium select-none">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1">
-                    <span className="px-1 py-0.5 rounded border border-slate-200/90 font-mono bg-white text-slate-500">↑</span>
-                    <span className="px-1 py-0.5 rounded border border-slate-200/90 font-mono bg-white text-slate-500">↓</span>
-                    <span className="ml-0.5">Navigate</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="px-1 py-0.5 rounded border border-slate-200/90 font-mono bg-white text-slate-500">↵</span>
-                    <span className="ml-0.5">Select</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -481,6 +263,14 @@ export default function AdminSidebar({ onCloseMobile }) {
             </div>
           ))}
         </nav>
+
+        {/* Clock In / Clock Out — directly above Logout, so the signed-in
+            employee can always see whether they are scheduled to be in store
+            right now and can request to time out ahead of their scheduled end
+            (FLOW-EMP_SCHED-04, REQ-SS-02/03). */}
+        <div className="shrink-0 px-2 pt-1.5 pb-1.5 border-t border-slate-100 space-y-1">
+          <ClockInOut />
+        </div>
 
         {/* Logout — last entry, pinned to the foot of the card so it is
             always reachable, with a confirmation (DOMAIN 16). */}

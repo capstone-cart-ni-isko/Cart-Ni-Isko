@@ -11,6 +11,15 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    // Realtime push (DOMAIN 31 / REQ-SD-02 and the "real-time" requirements):
+    // registers GET|POST /broadcasting/auth and the channels file. The
+    // endpoint carries `auth:api`, so the WebSocket handshake for the private
+    // `api` channel is authorized with the same cni_token bearer every other
+    // API call uses - a signed-out browser can never subscribe.
+    ->withBroadcasting(
+        __DIR__.'/../routes/channels.php',
+        ['middleware' => ['auth:api']],
+    )
     ->withMiddleware(function (Middleware $middleware) {
         // First in the stack: every later stage benefits from the wider clock.
         $middleware->append(App\Http\Middleware\ApiTimeLimit::class);

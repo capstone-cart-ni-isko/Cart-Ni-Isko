@@ -6,7 +6,7 @@ $allowedOrigins = array_values(array_filter(array_map(
 )));
 
 return [
-    'paths' => ['api/*'],
+    'paths' => ['api/*', 'broadcasting/auth'],
     'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     'allowed_origins' => $allowedOrigins,
     'allowed_origins_patterns' => [],

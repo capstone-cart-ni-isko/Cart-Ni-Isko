@@ -779,6 +779,34 @@ class DatabaseAPI extends Controller
             return $optionalCheck;
         }
 
+        /*
+            FLOW-EMP_ENROLL-02: the enrollment form also carries the schedule of
+            the employee being enrolled, so `shifts` is the list of duty blocks
+            to preschedule them with. The shape is checked here (date format,
+            24-hour times, an end after the start); the DOMAIN 7 rules on the
+            values themselves - the 10-minute grid, the past limit, overlapping
+            blocks and the 180-minute weekly floor - are judged in
+            UserAPI::employeeSignup before a single row is written.
+        */
+        $shiftCheck = $this->validateFields($json, [
+            'shifts'                    => 'nullable|array|max:30',
+            'shifts.*.shift_date'       => 'required_with:shifts|date_format:Y-m-d',
+            'shifts.*.shift_start'      => 'required_with:shifts|date_format:H:i',
+            'shifts.*.shift_end'        => 'required_with:shifts|date_format:H:i',
+        ], [
+            'shifts.array'              => 'The schedule must be a list of duty blocks.',
+            'shifts.max'                => 'An enrollment can preschedule at most 30 duty blocks.',
+            'shifts.*.shift_date.required_with' => 'Every duty block needs a date.',
+            'shifts.*.shift_date.date_format'  => 'Every duty block date must use the YYYY-MM-DD format.',
+            'shifts.*.shift_start.required_with' => 'Every duty block needs a start time.',
+            'shifts.*.shift_start.date_format'  => 'Duty block times must use the HH:MM 24-hour format.',
+            'shifts.*.shift_end.required_with' => 'Every duty block needs an end time.',
+            'shifts.*.shift_end.date_format'  => 'Duty block times must use the HH:MM 24-hour format.',
+        ]);
+        if ($shiftCheck) {
+            return $shiftCheck;
+        }
+
         return $this->validateAllFormats($json);
     }
 

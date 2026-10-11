@@ -8,6 +8,7 @@ import { fetchOrders, updateOrder } from '../services/orders.js'
 import { addPosItem, removePosItem, checkoutPos } from '../services/pos.js'
 import { fetchAdminProducts, createAdminProduct, updateAdminProduct as updateAdminProductAPI, saveAdminVariant, removeAdminProduct as removeAdminProductAPI, unlistAdminProduct as unlistAdminProductAPI, sellAdminProduct as sellAdminProductAPI } from '../services/adminProducts.js'
 import { buildAlerts } from '../services/dashboard.js'
+import { onApiChange } from '../services/realtime.js'
 
 export const AdminContext = createContext(null)
 
@@ -153,6 +154,28 @@ export function AdminProvider({ children }) {
   const refreshOrders = useCallback(() => {
     setOrdersRefreshKey((k) => k + 1)
   }, [])
+
+  // Realtime (DOMAIN 31 / REQ-SD-02). A write from any device - a customer
+  // ordering, a POS sale on another till, an inventory edit - pushes a ping
+  // and both shared lists re-read at once, so the Dashboard, Orders, Pickup,
+  // Delivery, Analytics and POS screens all move the moment it happens instead
+  // of waiting out their 30s poll. Only active while an employee is signed in;
+  // the poll underneath stays as the fallback.
+  useEffect(() => {
+    if (!currentAdminUser) return undefined
+    return onApiChange(
+      [
+        'orders', 'products', 'pos', 'checkout', 'delivery', 'tracking',
+        'appoint', 'uploads', 'reviews', 'shifts', 'accounts', 'access',
+        'reports', 'notif', 'settings',
+      ],
+      () => {
+        refreshOrders()
+        refreshProducts()
+      },
+      { debounce: 500 }
+    )
+  }, [currentAdminUser, refreshOrders, refreshProducts])
 
   // Derived alert feed (out-of-stock + pending cancel/return requests).
   const dismissedAlertIds = useMemo(
