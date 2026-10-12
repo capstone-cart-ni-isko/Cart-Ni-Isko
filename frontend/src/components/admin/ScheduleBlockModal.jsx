@@ -65,7 +65,7 @@ export default function ScheduleBlockModal({
     }
     if (!onGrid(startTime) || !onGrid(endTime)) {
       setFormError(
-        `Blocks move in ${GRID_MINUTES}-minute steps (FLOW-EMP_SCHED-03). Use 08:00, 08:10, 08:20 …`
+        `Blocks move in ${GRID_MINUTES}-minute steps. Use 08:00, 08:10, 08:20 …`
       )
       return
     }
@@ -166,7 +166,7 @@ export default function ScheduleBlockModal({
           </div>
           <p className="text-[10px] text-slate-400 font-normal">
             {fmtTime(startTime)} – {fmtTime(endTime)} · blocks land on {GRID_MINUTES}-minute steps and
-            may not overlap another block of the same employee (REQ-EMP_SCHED-03/04).
+            may not overlap another block for the same employee.
           </p>
 
           <label className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 cursor-pointer">
@@ -185,9 +185,9 @@ export default function ScheduleBlockModal({
                 {unavailable ? 'Unavailable' : 'Available'} on this block
               </span>
               <span className="block text-[10px] text-slate-400 font-normal">
-                The employee&apos;s own class or conflict exception (FLOW-EMP_SCHED-04). Marking it
-                unavailable stops the block staffing the shop, tells affected customers to
-                reschedule and alerts the super admins to find a substitute (REQ-SS-03).
+                Their class or personal conflict. Marking it
+                unavailable stops the block from covering the shop, tells affected customers to
+                reschedule, and alerts the admins to find a substitute.
               </span>
             </span>
           </label>

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import AdminAccount from './AdminAccount.jsx'
+import AdminAccessLogs from './AdminAccessLogs.jsx'
+import SetupWizard from './SetupWizard.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import { useTheme } from '../../context/ThemeContext.jsx'
@@ -233,11 +235,27 @@ function NumberField({ label, hint, value, min, max, step = 1, suffix, onSave })
  */
 export default function AdminSettings() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { showToast } = useToast()
   const { isSuperAdmin, logoutAdmin } = useAdmin()
   const { dark, set: setTheme } = useTheme()
 
-  const [activeSection, setActiveSection] = useState('account')
+  // FLOW-ACCESS_LOG-07: `/admin/settings/logs` is the deep link straight to the
+  // Access Log pane; every other settings URL lands on the profile tab.
+  // The active section persists across navigation and is always derived from
+  // the current URL so the chrome (sidebar/ribbon) never reappears.
+  const [activeSection, setActiveSection] = useState(() => {
+    if (location.pathname.endsWith('/logs')) return 'access-log'
+    if (location.pathname === '/admin/settings' || location.pathname === '/admin/settings/account') return 'account'
+    return 'account'
+  })
+
+  // Keep activeSection in sync when the URL changes (e.g. back/forward browser
+  // buttons, or external links) so the settings page never switches its chrome.
+  useEffect(() => {
+    if (location.pathname.endsWith('/logs')) setActiveSection('access-log')
+    else if (location.pathname === '/admin/settings' || location.pathname === '/admin/settings/account') setActiveSection('account')
+  }, [location.pathname])
 
   // Real settings (GET /settings/display)
   const [settings, setSettings] = useState({})
@@ -361,7 +379,7 @@ export default function AdminSettings() {
       setHasUnsavedChanges(false)
       showToast('Settings saved successfully!', 'success')
     } catch (err) {
-      showToast(err?.message || 'Failed to save settings.', 'error')
+      showToast('Failed to save settings.', 'error')
     } finally {
       setIsSaving(false)
     }
@@ -390,7 +408,7 @@ export default function AdminSettings() {
       items: [
         {
           id: 'account',
-          label: 'Profile & Security',
+          label: 'Profile',
           icon: railIcon(
             <>
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -437,19 +455,14 @@ export default function AdminSettings() {
                   </>
                 ),
               },
-              /* DOMAIN 32 - FLOW-ACCESS_LOG-07: the merged access log lives at
-                 `/admin/settings/logs`, so it is a destination of this rail
-                 rather than another pane inside it. Super admins only (rule 39),
-                 which is exactly who this "Store" group is rendered for. */
               /* DOMAIN 1 - FLOW-SETUP-01/02: the setup wizard stays reachable
                  after the first run, so store-wide configuration (name,
                  location, contact, operating hours) can be corrected later -
                  rule 40 keeps the write to super admins, both here and in the
-                 API. */
+                 API. It renders inside this shell instead of leaving the page. */
               {
                 id: 'store-setup',
                 label: 'Store Setup',
-                href: '/admin/setup',
                 icon: railIcon(
                   <>
                     <path d="M3 9l1-5h16l1 5" />
@@ -458,10 +471,13 @@ export default function AdminSettings() {
                   </>
                 ),
               },
+              /* DOMAIN 32 - FLOW-ACCESS_LOG-07: the merged access log renders
+                 inside this shell too; `/admin/settings/logs` is its deep link.
+                 Super admins only (rule 39), which is exactly who this "Store"
+                 group is rendered for. */
               {
                 id: 'access-log',
                 label: 'Access Log',
-                href: '/admin/settings/logs',
                 icon: railIcon(
                   <>
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -477,8 +493,8 @@ export default function AdminSettings() {
       : []),
   ]
 
-  /* A rail entry either opens a pane on this page or leaves for its own page
-     (FLOW-ACCESS_LOG-07 routes the access log to `/admin/settings/logs`). */
+  /* Every rail entry opens a pane on this page; the `href` branch stays for
+     any future entry that owns a full page of its own. */
   const openSection = (item) => {
     if (item.href) navigate(item.href)
     else setActiveSection(item.id)
@@ -504,16 +520,24 @@ export default function AdminSettings() {
         ? 'Store Operations'
         : activeSection === 'timing'
           ? 'Appointments & Scheduling'
-          : 'Profile & Security'
+          : activeSection === 'access-log'
+            ? 'Access Log'
+            : activeSection === 'store-setup'
+              ? 'Store Setup'
+              : 'Profile'
 
   const sectionBlurb =
     activeSection === 'preferences'
-      ? 'Your notification reminders and your theme, stored with your account the moment you change them.'
+      ? 'Your notification reminders and your theme. Changes save to your account right away.'
       : activeSection === 'store-operations'
-        ? 'Control when your store accepts orders and how customers can purchase items.'
+        ? 'Control when your store accepts orders and how customers can pay.'
         : activeSection === 'timing'
-          ? 'Store-wide timing parameters from FLOW-EMP_SET-07. They apply to every user immediately.'
-          : 'Your account, your password and your backup contacts.'
+          ? 'Store-wide appointment and scheduling settings. They apply to everyone right away.'
+          : activeSection === 'access-log'
+            ? 'A complete record of every sign-in, view and change made by customers and staff, newest first.'
+            : activeSection === 'store-setup'
+              ? 'The store name, location, contact and operating hours that both portals read.'
+              : 'Your account, your password and your backup contacts.'
 
   return (
     <div className="admin-portal h-screen bg-[#F8F9FA] flex flex-col w-full font-sans antialiased text-gray-900 overflow-hidden">
@@ -560,11 +584,7 @@ export default function AdminSettings() {
               </div>
             ))}
 
-            <div className="pt-3 mt-3 border-t border-slate-100">
-              <p className="px-2.5 text-[11px] font-semibold text-slate-400">
-                Signed in as <span className="text-slate-600 font-bold">{prefs.emp_email || 'employee'}</span>
-              </p>
-            </div>
+            
           </div>
         </aside>
 
@@ -632,9 +652,15 @@ export default function AdminSettings() {
             {/* ── FLOW-EMP_PROF-01 / FLOW-EMP_SET-02/03 — the employee's own
                   profile, password and backup contacts (DOMAIN 4 + DOMAIN 15). */}
             {activeSection === 'account' && <AdminAccount embedded />}
-            {/* ── FLOW-EMP_PROF-01 / FLOW-EMP_SET-02/03 — the employee's own
-                  profile, password and backup contacts (DOMAIN 4 + DOMAIN 15). */}
-            {activeSection === 'account' && <AdminAccount embedded />}
+
+            {/* ── FLOW-ACCESS_LOG-07 — the audit trail renders inside the settings
+                  shell, so no home-page chrome (sidebar / ribbon) ever surrounds it. ── */}
+            {isSuperAdmin && activeSection === 'access-log' && <AdminAccessLogs embedded />}
+
+            {/* ── DOMAIN 1 / FLOW-SETUP-01/02 — the setup wizard renders inside
+                  the settings shell for super admins, so store configuration
+                  never leaves this page. ── */}
+            {isSuperAdmin && activeSection === 'store-setup' && <SetupWizard embedded />}
 
             {/* ── FLOW-EMP_SET-04 / FLOW-EMP_SET-05 — personal preferences ── */}
             {activeSection === 'preferences' && (

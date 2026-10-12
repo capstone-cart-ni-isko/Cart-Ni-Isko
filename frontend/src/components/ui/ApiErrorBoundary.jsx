@@ -73,7 +73,8 @@ export class ApiErrorBoundary extends Component {
         <div className="w-full max-w-sm bg-white rounded-lg border border-slate-200 p-6 text-center space-y-3">
           <h1 className="text-base font-extrabold text-slate-900">This page hit an error</h1>
           <p className="text-sm text-slate-600 break-words">
-            {error.message || 'An unexpected problem occurred.'}
+            Something unexpected went wrong while showing this page. Please try
+            again in a moment.
           </p>
           <p className="text-xs text-slate-400">
             Nothing was lost - your session is still signed in. You can go back or

@@ -20,7 +20,7 @@ class EnsureRole
             ], 403);
         }
 
-        // The system-new SCHEMA names the category `emp_categ`; the legacy
+        // The schema names the category `emp_categ`; the legacy
         // fixture (and older rows) still carry it as `emp_type`. Reading
         // either keeps the rank identical on the live table, where
         // `emp_categ` is always present, and correct on a connection that

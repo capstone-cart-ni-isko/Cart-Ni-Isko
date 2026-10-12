@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
-import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import SalesBarChart from '../../components/admin/SalesBarChart.jsx'
 import Panel from '../../components/admin/kit/Panel.jsx'
@@ -11,13 +10,11 @@ import { ICON_BTN, PAGE_ROOT } from '../../components/admin/kit/ui.js'
 import FulfillmentBars from '../../components/admin/dashboard/FulfillmentBars.jsx'
 import RecentOrdersTable from '../../components/admin/dashboard/RecentOrdersTable.jsx'
 import QuickActions from '../../components/admin/dashboard/QuickActions.jsx'
-import OnDutyWidget from '../../components/admin/dashboard/OnDutyWidget.jsx'
 import PosDrawer from '../../components/admin/dashboard/PosDrawer.jsx'
 import RestockDrawer from '../../components/admin/dashboard/RestockDrawer.jsx'
 import AddProductDrawer from '../../components/admin/dashboard/AddProductDrawer.jsx'
 import ExportSalesDrawer from '../../components/admin/dashboard/ExportSalesDrawer.jsx'
-import StaffScheduleDrawer from '../../components/admin/dashboard/StaffScheduleDrawer.jsx'
-import { updateAccount } from '../../services/accounts.js'
+
 import {
   fetchDashboardSnapshot,
   mapOrderRows,
@@ -28,7 +25,6 @@ import {
   buildBookingSummary,
   buildCategorySales,
   buildFulfillmentStages,
-  buildDutyRoster,
 } from '../../services/dashboard.js'
 
 // SRS refresh cadence for the staff dashboard (REQ-SD-02)
@@ -74,13 +70,11 @@ function BookingMeter({ row }) {
 }
 
 export default function AdminDashboard() {
-  const { showToast } = useToast()
-  const { orders: rawOrders = [], refreshOrders, currentAdminUser, isSuperAdmin } = useAdmin()
+  const { orders: rawOrders = [], refreshOrders, currentAdminUser } = useAdmin()
   const [timeRange, setTimeRange] = useState('Today')
   const [snapshot, setSnapshot] = useState(null)
   const [orderFilter, setOrderFilter] = useState(null) // { key, label, match }
-  const [drawer, setDrawer] = useState(null) // 'pos' | 'restock' | 'product' | 'export' | 'schedule'
-  const [clockOverrides, setClockOverrides] = useState({}) // empId -> bool while a change is in flight
+  const [drawer, setDrawer] = useState(null) // 'pos' | 'restock' | 'product' | 'export'
   const [now, setNow] = useState(() => Date.now())
 
   const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(currentAdminUser?.roleKey)
@@ -120,17 +114,9 @@ export default function AdminDashboard() {
     [snapshot, timeRange]
   )
   const categorySales = useMemo(() => buildCategorySales(rangeOrders), [rangeOrders])
-  const roster = useMemo(() => {
-    const base = buildDutyRoster(snapshot?.accounts || {}, snapshot?.shifts || [])
-    return base.map((staff) =>
-      staff.empId in clockOverrides ? { ...staff, clockedIn: clockOverrides[staff.empId] } : staff
-    )
-  }, [snapshot, clockOverrides])
 
   const preOrderRows = rangeOrders.filter((o) => o.preorder && !OPEN_STATUSES.includes(o.rawStatus))
   const readyForPickup = countByStatus(rangeOrders, 'TO CLAIM')
-  const onShiftCount = roster.filter((s) => s.onShiftNow).length
-  const clockedInCount = roster.filter((s) => s.clockedIn).length
 
   const recentOrders = useMemo(
     () => (orderFilter ? rangeOrders.filter(orderFilter.match) : rangeOrders).slice(0, 25),
@@ -147,24 +133,6 @@ export default function AdminDashboard() {
   }
   const preorderFilter = () =>
     toggleFilter({ key: 'preorder', label: 'Open pre-orders', match: (o) => o.preorder && !OPEN_STATUSES.includes(o.rawStatus) })
-
-  // ── Clock in / out (PUT /accounts/update emp_instore), optimistic ──
-  const handleToggleClock = async (empId, next) => {
-    setClockOverrides((prev) => ({ ...prev, [empId]: next }))
-    try {
-      await updateAccount('employee', empId, { emp_instore: next })
-      showToast(next ? 'Clocked in.' : 'Clocked out.', 'success')
-      await syncData()
-    } catch (err) {
-      showToast(err?.message || 'Could not update clock status.', 'error')
-    } finally {
-      setClockOverrides((prev) => {
-        const copy = { ...prev }
-        delete copy[empId]
-        return copy
-      })
-    }
-  }
 
   const closeDrawer = () => setDrawer(null)
 
@@ -236,7 +204,7 @@ export default function AdminDashboard() {
 
         {/* ── Body: one grid with the same row proportions at every desktop size ──
             Left: pipeline + sales on top, recent orders below.
-            Right: actions, bookings and the duty roster in one column. */}
+            Right: actions and bookings in one column. */}
         <div className="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-[minmax(0,1.2fr)_minmax(0,1fr)] gap-3 lg:flex-1 lg:min-h-0">
           <Panel
             title="Fulfillment"
@@ -273,21 +241,6 @@ export default function AdminDashboard() {
               {bookings.rows.map((row) => (
                 <BookingMeter key={row.type} row={row} />
               ))}
-            </Panel>
-            <Panel
-              title="On duty"
-              meta={`${clockedInCount} in · ${onShiftCount}/${roster.length} on shift`}
-              actionLabel="Schedule"
-              onAction={() => setDrawer('schedule')}
-              className="flex-1 min-h-[14rem] lg:min-h-0"
-            >
-              <OnDutyWidget
-                roster={roster}
-                currentEmpId={currentAdminUser?.id}
-                canManageAll={isSuperAdmin}
-                pendingIds={Object.keys(clockOverrides).map(Number)}
-                onToggleClock={handleToggleClock}
-              />
             </Panel>
           </div>
 
@@ -327,7 +280,7 @@ export default function AdminDashboard() {
       <RestockDrawer isOpen={drawer === 'restock'} onClose={closeDrawer} onCompleted={syncData} />
       <AddProductDrawer isOpen={drawer === 'product'} onClose={closeDrawer} onCompleted={syncData} />
       <ExportSalesDrawer isOpen={drawer === 'export'} onClose={closeDrawer} orders={orders} initialRange={timeRange} />
-      <StaffScheduleDrawer isOpen={drawer === 'schedule'} onClose={closeDrawer} />
+      
     </AdminLayout>
   )
 }

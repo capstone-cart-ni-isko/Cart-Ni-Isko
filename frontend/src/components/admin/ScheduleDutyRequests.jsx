@@ -27,7 +27,7 @@ export default function ScheduleDutyRequests({
       isOpen={isOpen}
       onClose={onClose}
       title={`Pending Covers (${requests.length})`}
-      subtitle="Blocks whose assignee is unavailable — find a substitute (REQ-SS-03)"
+      subtitle="Blocks whose assignee is unavailable — find a substitute"
     >
       {isLoading ? (
         <p className="text-xs font-semibold text-slate-500 text-center py-8 flex items-center justify-center gap-2">

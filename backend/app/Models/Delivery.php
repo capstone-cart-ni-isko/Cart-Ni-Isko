@@ -36,8 +36,7 @@ class Delivery extends Model
         'deliver_timestamp',
         'deliver_pickedup',
         'deliver_completed',
-        // LalaMove integration (system-new.docx "LALAMOVE INTEGRATION
-        // SUGGESTIONS"). All of these already exist on the live table - no DDL
+        // LalaMove integration. All of these already exist on the live table - no DDL
         // was needed - but they were not mass-assignable, so `Delivery::create`
         // / `->update()` silently dropped every courier attribute.
         'deliver_env',

@@ -91,7 +91,7 @@ export default function OfficerRosterGrid({
               <StatusPill status={officer.availability} />
               {!officer.available && (
                 <span className="text-[10px] font-semibold text-slate-400">
-                  Needs a substitute (REQ-SS-03)
+                  Needs a substitute
                 </span>
               )}
             </div>
@@ -134,7 +134,7 @@ export default function OfficerRosterGrid({
                 </button>
               ) : (
                 <p className="text-[10px] text-slate-400 font-semibold text-center py-2">
-                  Only an admin can preschedule this employee (rule 38).
+                  Only an admin can schedule this employee.
                 </p>
               )}
 
@@ -145,8 +145,8 @@ export default function OfficerRosterGrid({
                   disabled={isSaving || !canEdit || !canToggleOfficer}
                   title={
                     canToggleOfficer
-                      ? 'Mark this employee out of the store. Their blocks read as PENDING REPLACEMENT (REQ-SS-03).'
-                      : 'Only this employee or an admin can change their availability (rule 38).'
+                      ? 'Mark this employee out of the store. Their shifts will need a substitute.'
+                      : 'Only this employee or an admin can change their availability.'
                   }
                   className="w-full py-1 text-[10px] font-semibold text-slate-500 hover:text-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
@@ -160,7 +160,7 @@ export default function OfficerRosterGrid({
                   title={
                     canToggleOfficer
                       ? 'Mark this employee back in the store.'
-                      : 'Only this employee or an admin can change their availability (rule 38).'
+                      : 'Only this employee or an admin can change their availability.'
                   }
                   className="w-full py-2 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 font-bold text-xs rounded-md border border-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >

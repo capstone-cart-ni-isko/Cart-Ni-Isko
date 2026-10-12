@@ -246,7 +246,7 @@ export default function AdminReviews() {
       setDetailOpen(false)
       showToast('Review approved and published.', 'success')
     } catch (err) {
-      showToast(errMsg(err, 'Failed to approve the review.'), 'error')
+      showToast('Failed to approve the review.', 'error')
     } finally {
       setIsModerating(false)
     }
@@ -260,7 +260,7 @@ export default function AdminReviews() {
       setDetailOpen(false)
       showToast('Review rejected.', 'success')
     } catch (err) {
-      showToast(errMsg(err, 'Failed to reject the review.'), 'error')
+      showToast('Failed to reject the review.', 'error')
     } finally {
       setIsModerating(false)
     }
@@ -282,7 +282,7 @@ export default function AdminReviews() {
       setDetailOpen(false)
       showToast('Review deleted.', 'success')
     } catch (err) {
-      showToast(errMsg(err, 'Failed to delete the review.'), 'error')
+      showToast('Failed to delete the review.', 'error')
     } finally {
       setIsModerating(false)
     }

@@ -48,7 +48,7 @@ class AppointmentsAPI extends Controller
                 $appointment = Visit::where('appoint_id', $appointId)->first();
 
                 if (!$appointment) {
-                    return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
+                    return response()->json(['success' => false, 'message' => 'Appointment not found.'], 404);
                 }
 
                 // A done or cancelled appointment is final: it can never be
@@ -149,7 +149,7 @@ class AppointmentsAPI extends Controller
                 if (!is_string($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'A valid date (YYYY-MM-DD) is required'
+                        'message' => 'Please provide a valid date (YYYY-MM-DD).'
                     ], 400);
                 }
 
@@ -158,7 +158,7 @@ class AppointmentsAPI extends Controller
                 } catch (\Throwable $e) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'A valid date (YYYY-MM-DD) is required'
+                        'message' => 'Please provide a valid date (YYYY-MM-DD).'
                     ], 400);
                 }
 
@@ -349,7 +349,7 @@ class AppointmentsAPI extends Controller
                 if ($minutes < self::OPEN_MINUTES || $minutes + $duration > self::CLOSE_MINUTES) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Selected time is outside operating hours (08:00 - 18:00)'
+                        'message' => 'Selected time is outside operating hours (8:00 AM - 6:00 PM).'
                     ], 409);
                 }
 
@@ -755,13 +755,13 @@ class AppointmentsAPI extends Controller
                 $appointment = Visit::where('appoint_id', $appointId)->first();
 
                 if (! $appointment) {
-                    return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
+                    return response()->json(['success' => false, 'message' => 'Appointment not found.'], 404);
                 }
 
                 $customerId = $this->customerId($json);
                 if ($customerId !== null) {
                     if ((int) $appointment->cust_id !== $customerId) {
-                        return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
+                        return response()->json(['success' => false, 'message' => 'Appointment not found.'], 404);
                     }
                 } elseif (! $this->isAdmin($json->user('api'))) {
                     return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
@@ -1039,7 +1039,7 @@ class AppointmentsAPI extends Controller
 
             $appointment = Visit::where('appoint_id', $appointId)->first();
             if (! $appointment) {
-                return response()->json(['success' => false, 'message' => 'Appointment not found'], 404);
+                return response()->json(['success' => false, 'message' => 'Appointment not found.'], 404);
             }
 
             if ($appointment->appoint_status !== 'upcoming' || $appointment->appoint_closed) {
@@ -1438,7 +1438,7 @@ class AppointmentsAPI extends Controller
         }
 
         // ==========================================
-        // BOOKING VOCABULARY (system-new D21/D22)
+        // BOOKING VOCABULARY (DOMAIN 21 / DOMAIN 22)
         // ==========================================
 
         /**

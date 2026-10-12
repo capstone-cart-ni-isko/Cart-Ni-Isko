@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
-import AdminSchedule from './AdminSchedule.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import {
@@ -67,10 +66,8 @@ export default function AdminUsers() {
   const [pageError, setPageError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
 
-  // DOMAIN 5 + DOMAIN 7: the Staff tab carries the directory AND the employee
-  // scheduling operations, so every scheduling action is reachable here.
-  const [tab, setTab] = useState('directory')
-
+  // DOMAIN 5: the Staff tab is the employee directory. Employee scheduling
+  // (DOMAIN 7) now lives on its own "Schedules" tab in the sidebar.
   // REQ-UM-03: the employee currently awaiting a permanent-delete confirmation.
   const [pendingDelete, setPendingDelete] = useState(null)
 
@@ -197,7 +194,7 @@ export default function AdminUsers() {
       showToast(`${emp.name} has been suspended.`, 'success')
       setReloadKey((k) => k + 1)
     } catch (err) {
-      showToast(err?.message || 'Failed to suspend the account.', 'error')
+      showToast('Failed to suspend the account.', 'error')
     }
   }
 
@@ -212,7 +209,7 @@ export default function AdminUsers() {
       showToast(`${emp.name} has been recovered.`, 'success')
       setReloadKey((k) => k + 1)
     } catch (err) {
-      showToast(err?.message || 'Failed to recover the account.', 'error')
+      showToast('Failed to recover the account.', 'error')
     }
   }
 
@@ -226,7 +223,7 @@ export default function AdminUsers() {
       showToast(`${emp.name} was permanently deleted.`, 'success')
       setReloadKey((k) => k + 1)
     } catch (err) {
-      showToast(err?.message || 'Failed to delete the account.', 'error')
+      showToast('Failed to delete the account.', 'error')
     }
   }
 
@@ -255,31 +252,6 @@ export default function AdminUsers() {
           </Link>
         </div>
 
-        {/* DOMAIN 5 + DOMAIN 7 â€” the Staff tab owns BOTH halves of employee
-            management: the directory (FLOW-EMP_LIST-*) and the employee
-            scheduling operations (FLOW-EMP_SCHED-01..08), so every scheduling
-            action is reachable from here. */}
-        <div className="flex bg-slate-100 p-0.5 rounded-md border border-slate-200/60 w-fit">
-          {[
-            { key: 'directory', label: 'Directory' },
-            { key: 'schedules', label: 'Schedules' },
-          ].map((entry) => (
-            <button
-              key={entry.key}
-              type="button"
-              onClick={() => setTab(entry.key)}
-              aria-current={tab === entry.key ? 'page' : undefined}
-              className={`h-7 px-3 rounded text-xs font-semibold transition-all cursor-pointer ${
-                tab === entry.key ? 'bg-brand-orange text-white' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
-
-        {tab === 'directory' && (
-          <>
         {/* Summary header: total active + category distribution */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
@@ -620,13 +592,6 @@ export default function AdminUsers() {
             )}
           </div>
         </div>
-          </>
-        )}
-
-        {/* DOMAIN 7 (EMPLOYEE SCHEDULING) â€” the very screen `/admin/schedules`
-            opens, embedded so every scheduling operation lives in the Staff
-            tab (FLOW-EMP_SCHED-01). */}
-        {tab === 'schedules' && <AdminSchedule embedded />}
       </div>
 
       {/* REQ-UM-03: permanent deletion is behind a confirmation step and is

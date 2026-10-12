@@ -109,7 +109,7 @@ export function ThresholdBar({
 
       {hasShortfall && (
         <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
-          ⚠ Shortfall — super admins notified (REQ-SS-03)
+          ⚠ Shortfall — admins notified
         </span>
       )}
       {!canEditAvailability && (
@@ -209,7 +209,7 @@ export function RosterSection({
       <div>
         <h2 className="text-sm font-bold text-slate-900">Officer Availability</h2>
         <p className="text-[11px] text-slate-400 font-normal mt-0.5">
-          REQ-SS-01: every active employee is prescheduled available until they log a conflict ·
+          Every active employee is available until they log a conflict ·
           {roster.onDutyCount} in store, {roster.offDutyCount} out
         </p>
       </div>

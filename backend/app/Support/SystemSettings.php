@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\File;
 /**
  * System-wide configuration (DOMAIN 1 / DOMAIN 15).
  *
- * system-new.docx SCHEMA lists no SETTINGS table, so nothing here may be
+ * SCHEMA lists no SETTINGS table, so nothing here may be
  * written to the database. Settings live in a JSON document under
  * storage/app, which every worker on the same host reads, so a super admin's
  * change is live for everyone on the next request.

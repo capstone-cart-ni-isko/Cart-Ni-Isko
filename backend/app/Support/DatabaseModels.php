@@ -10,9 +10,9 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 /**
- * Supporting tables behind the seven system-new.docx models.
+ * Supporting tables behind the seven models.
  *
- * system-new.docx MODELS lists exactly Customer, Delivery, Employee, Order,
+ MODELS lists exactly Customer, Delivery, Employee, Order,
  * Pickup, Product and Visit, so these legacy classes no longer live in a file
  * of their own under app/Models. They keep the App\Models namespace (nothing
  * had to change at any call site) and are loaded by the fallback autoloader in
@@ -651,7 +651,7 @@ class Schedule extends Model
 /**
  * Compatibility facade over SystemSettings.
  *
- * system-new.docx SCHEMA has no SETTINGS table, so nothing is ever read from
+ * SCHEMA has no SETTINGS table, so nothing is ever read from
  * or written to the database here - the settings document lives on disk.
  * Every legacy `Setting::getValue()` / `Setting::setValue()` call site keeps
  * working unchanged.

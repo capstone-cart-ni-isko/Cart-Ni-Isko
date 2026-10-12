@@ -10,8 +10,8 @@ use Illuminate\Support\Str;
 /**
  * Stateless bearer tokens.
  *
- * The live database has no `personal_access_tokens` table (system-new.docx
- * SCHEMA does not list one), so Sanctum's stored tokens are unusable. Tokens
+ * The live database has no `personal_access_tokens` table
+ * (the schema does not list one), so Sanctum's stored tokens are unusable. Tokens
  * are therefore self-describing: the payload is signed with HMAC-SHA256 over
  * APP_KEY and carries the account id, the session nonce held in
  * `*_login_active` and the issued-at stamp. Nothing has to be written anywhere

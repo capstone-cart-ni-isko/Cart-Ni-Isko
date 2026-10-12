@@ -62,7 +62,7 @@ function stamp(value) {
   })
 }
 
-export default function AdminAccessLogs() {
+export default function AdminAccessLogs({ embedded = false }) {
   const navigate = useNavigate()
   const { showToast } = useToast()
 
@@ -109,7 +109,7 @@ export default function AdminAccessLogs() {
       .catch((err) => {
         if (cancelled) return
         setRows([])
-        setError(err?.message || 'Could not load the access log.')
+        setError(err?.message || "We couldn't load the access log. Please try again.")
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -138,11 +138,11 @@ export default function AdminAccessLogs() {
 
   const purgeOldLogs = async () => {
     const confirmed = window.confirm(
-      'Permanently delete EVERY access log entry older than 24 months?\n\n' +
-        'This cannot be undone and every super admin will be notified. ' +
-        'Entries younger than 24 months are never touched, and if nobody ' +
-        'ever decides, entries older than 24 months are deleted anyway once ' +
-        'they reach 60 months.'
+      'Delete every access log entry older than 24 months?\n\n' +
+        "This can't be undone, and every admin will be notified. " +
+        'Entries younger than 24 months are never deleted. If no one acts, ' +
+        'entries older than 24 months are removed on their own once they ' +
+        'reach 60 months.'
     )
     if (!confirmed) return
 
@@ -155,17 +155,18 @@ export default function AdminAccessLogs() {
         .then((r) => setRows(Array.isArray(r?.data) ? r.data : []))
         .catch(() => {})
     } catch (err) {
-      showToast(err?.message || 'Could not delete the old log entries.', 'error')
+      showToast(err?.message || "We couldn't delete the old log entries. Please try again.", 'error')
     } finally {
       setPurging(false)
     }
   }
 
-  return (
-    <AdminLayout>
-      <div className="max-w-6xl mx-auto space-y-5">
-        {/* Rule 69 - a working "back" button sits at the top left. */}
-        <div className="flex items-start justify-between gap-3">
+  const content = (
+    <div className="max-w-6xl mx-auto space-y-5">
+      {/* "Back" (rule 69) belongs only on the standalone page; embedded in
+          Settings, the shell already carries its own back and exit controls. */}
+      <div className="flex items-start justify-between gap-3">
+        {!embedded && (
           <div className="flex items-start gap-2 min-w-0">
             <button
               type="button"
@@ -181,45 +182,44 @@ export default function AdminAccessLogs() {
             <div className="min-w-0">
               <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Access Log</h1>
               <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
-                Every authentication, view and edit action by customers and employees, newest first. No row can ever be
-                edited or individually deleted (REQ-ACCESS_LOG-01) - the only removal is the retention purge below,
-                which deletes every entry older than 24 months in one action (entries older than 60 months are deleted
-                automatically anyway).
+                A complete record of every sign-in, view and change made by customers and staff, newest first.
+                Entries can never be edited or removed one by one — the only cleanup is the option below.
               </p>
             </div>
           </div>
+        )}
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* DOMAIN 32 retention override - super admin only (rule 39). */}
-            <button
-              type="button"
-              onClick={purgeOldLogs}
-              disabled={purging}
-              title="Permanently delete every access log entry older than 24 months"
-              className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-wait"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-              </svg>
-              {purging ? 'Deleting…' : 'Delete logs older than 24 months'}
-            </button>
+        <div className={`flex items-center gap-2 shrink-0 ${embedded ? 'ml-auto' : ''}`}>
+          {/* One-action cleanup for very old entries — admins only. */}
+          <button
+            type="button"
+            onClick={purgeOldLogs}
+            disabled={purging}
+            title="Delete every access log entry older than 24 months"
+            className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-wait"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+            </svg>
+            {purging ? 'Deleting…' : 'Delete logs older than 24 months'}
+          </button>
 
-            <button
-              type="button"
-              onClick={() => fetchAccessLogs(params).catch((err) => showToast(err?.message || 'Refresh failed.', 'error'))}
-              className="hidden sm:flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                <polyline points="21 3 21 9 15 9" />
-              </svg>
-              Refresh
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => fetchAccessLogs(params).catch((err) => showToast(err?.message || "We couldn't refresh the list. Please try again.", 'error'))}
+            className="hidden sm:flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer shrink-0"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <polyline points="21 3 21 9 15 9" />
+            </svg>
+            Refresh
+          </button>
         </div>
+      </div>
 
         {/* FLOW-ACCESS_LOG-09 - all / customers / employees */}
         <div className="flex items-center gap-2.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
@@ -251,7 +251,7 @@ export default function AdminAccessLogs() {
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Name, email or endpoint…"
+                placeholder="Name or email…"
                 className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-orange"
               />
             </label>
@@ -338,7 +338,7 @@ export default function AdminAccessLogs() {
                     <th className="px-4 py-3 font-bold">Account</th>
                     <th className="px-4 py-3 font-bold">Type</th>
                     <th className="px-4 py-3 font-bold">Action</th>
-                    <th className="px-4 py-3 font-bold">Endpoint</th>
+                    <th className="px-4 py-3 font-bold">Page</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -376,10 +376,12 @@ export default function AdminAccessLogs() {
         )}
 
         <p className="text-[11px] text-slate-400 font-medium">
-          Showing {rows.length} of at most 200 entries · combined custlog + emplog, descending by creation time
-          (FLOW-ACCESS_LOG-08).
+          Showing {rows.length} of up to 200 entries · customers and staff together, newest first.
         </p>
       </div>
-    </AdminLayout>
   )
+
+  // Embedded in the Settings shell the shell supplies the layout; on its own
+  // page this screen brings its own.
+  return embedded ? content : <AdminLayout>{content}</AdminLayout>
 }

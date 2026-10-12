@@ -314,7 +314,7 @@ export default function AdminAccount({ embedded = false }) {
       )
     } catch (err) {
       // Inputs stay as typed so the employee can correct and retry.
-      showToast(err?.message || 'Failed to update the account profile.', 'error')
+      showToast('Failed to update the account profile.', 'error')
     } finally {
       setIsSaving(false)
     }
@@ -455,8 +455,11 @@ export default function AdminAccount({ embedded = false }) {
     <Wrapper>
       <div className="max-w-4xl mx-auto space-y-5">
         {/* Header - FLOW-EMP_LIST-06: while another employee's record is
-            open, name it and link back to the staff directory. */}
-        <div>
+            open, name it and link back to the staff directory. Embedded in
+            the Settings shell the section header is already on screen, so
+            this one is hidden to keep the page title from showing twice. */}
+        {(!embedded || viewingOther) && (
+          <div>
           {viewingOther ? (
             <>
               <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
@@ -482,7 +485,8 @@ export default function AdminAccount({ embedded = false }) {
               </p>
             </>
           )}
-        </div>
+          </div>
+        )}
 
         {isLoadingRecord ? (
           <div className="bg-white rounded-2xl border border-slate-200/80 p-8 flex items-center justify-center">

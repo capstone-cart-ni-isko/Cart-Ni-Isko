@@ -72,7 +72,7 @@ function VerifyOtp() {
       // REQ-CUST_LOGIN-02's sibling rule: a rejected code never empties the
       // field the customer just typed - only the message changes.
       setServerError(error || 'Unable to verify the code')
-      showToast(error || 'Unable to verify the code', 'error')
+      showToast('Unable to verify the code.', 'error')
       return
     }
 

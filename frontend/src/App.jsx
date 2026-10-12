@@ -60,7 +60,6 @@ import AdminAccount from './routes/admin/AdminAccount.jsx'
 import AdminSettings from './routes/admin/AdminSettings.jsx'
 import AdminQr from './routes/admin/AdminQr.jsx'
 import AdminNotifications from './routes/admin/AdminNotifications.jsx'
-import AdminAccessLogs from './routes/admin/AdminAccessLogs.jsx'
 import SetupWizard from './routes/admin/SetupWizard.jsx'
 import ScrollToTop from './components/layout/ScrollToTop.jsx'
 import { useAdmin } from './hooks/useAdmin.js'
@@ -257,7 +256,7 @@ function App() {
                       API (role:super_admin) and here, so typing the URL never
                       reaches what the sidebar does not offer. */}
                   <Route element={<RequireRole roles={['SUPER_ADMIN']} />}>
-                    <Route path="/admin/settings/logs" element={<AdminAccessLogs />} />
+                    <Route path="/admin/settings/logs" element={<AdminSettings />} />
                   </Route>
 
                   {/* POS is walked through by admins and super admins (rule 44).

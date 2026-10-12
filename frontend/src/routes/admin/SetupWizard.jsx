@@ -82,7 +82,7 @@ const inputClass = (bad) =>
     bad ? 'border-red-400 focus:ring-2 focus:ring-red-100' : 'border-gray-200 focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange'
   }`
 
-export default function SetupWizard() {
+export default function SetupWizard({ embedded = false }) {
   const navigate = useNavigate()
   const { currentAdminUser } = useAdmin()
 
@@ -179,34 +179,45 @@ export default function SetupWizard() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-[#F8F9FA] flex flex-col">
-      {/* Rule 69 - the working back button sits at the top left. */}
-      <header className="w-full px-4 py-3">
-        <button
-          type="button"
-          onClick={() => navigate(canInitialize ? '/admin/login' : '/admin')}
-          title="Back"
-          aria-label="Back"
-          className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-          Back
-        </button>
-      </header>
+  // A nested <main> is invalid when embedded inside the Settings shell, so the
+  // wrapper downgrades to a <div> there.
+  const Shell = embedded ? 'div' : 'main'
 
-      <main className="flex-1 flex items-start justify-center px-4 pb-10">
+  return (
+    <div className={embedded ? 'w-full' : 'min-h-screen bg-[#F8F9FA] flex flex-col'}>
+      {/* Rule 69 - the working back button sits at the top left (standalone
+          only: embedded inside Settings, that shell already carries a back). */}
+      {!embedded && (
+        <header className="w-full px-4 py-3">
+          <button
+            type="button"
+            onClick={() => navigate(canInitialize ? '/admin/login' : '/admin')}
+            title="Back"
+            aria-label="Back"
+            className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Back
+          </button>
+        </header>
+      )}
+
+      <Shell className={embedded ? 'w-full' : 'flex-1 flex items-start justify-center px-4 pb-10'}>
         <div className="w-full max-w-2xl">
-          <div className="text-center mb-6">
-            <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Store Setup</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              {canInitialize
-                ? 'The wizard that prepares Tindahan ni Isko for its first customers (FLOW-SETUP-05).'
-                : 'The store configuration both portals read (FLOW-SETUP-01).'}
-            </p>
-          </div>
+          {/* Embedded in Settings the shell already names this section, so the
+              wizard only titles itself on its own standalone page. */}
+          {!embedded && (
+            <div className="text-center mb-6">
+              <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Store Setup</h1>
+              <p className="text-sm text-slate-500 mt-1">
+                {canInitialize
+                  ? 'The wizard that prepares Tindahan ni Isko for its first customers (FLOW-SETUP-05).'
+                  : 'The store configuration both portals read (FLOW-SETUP-01).'}
+              </p>
+            </div>
+          )}
 
           {loading ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 flex items-center justify-center">
@@ -229,13 +240,15 @@ export default function SetupWizard() {
                   : 'The store configuration is live across both portals.'}
               </p>
               <div className="mt-5 flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin/login')}
-                  className="px-5 h-10 rounded-xl bg-brand-orange text-white text-sm font-bold hover:opacity-90 transition-opacity cursor-pointer"
-                >
-                  Go to sign in
-                </button>
+                {!embedded && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/admin/login')}
+                    className="px-5 h-10 rounded-xl bg-brand-orange text-white text-sm font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                  >
+                    Go to sign in
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setDone(false)}
@@ -367,10 +380,21 @@ export default function SetupWizard() {
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => navigate(canInitialize ? '/admin/login' : '/admin')}
+                  onClick={() => {
+                    // Embedded in Settings this stays on the page: it just
+                    // discards the unsaved edits instead of leaving the shell.
+                    if (embedded) {
+                      setStore((prev) => ({ ...prev, ...(status?.store || {}) }))
+                      setTouched({})
+                      setServerError('')
+                      setDone(false)
+                    } else {
+                      navigate(canInitialize ? '/admin/login' : '/admin')
+                    }
+                  }}
                   className="px-5 h-10 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
                 >
-                  Cancel
+                  {embedded ? 'Reset' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
@@ -383,7 +407,7 @@ export default function SetupWizard() {
             </form>
           )}
         </div>
-      </main>
+      </Shell>
     </div>
   )
 }

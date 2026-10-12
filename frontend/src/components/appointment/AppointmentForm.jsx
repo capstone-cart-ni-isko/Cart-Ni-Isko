@@ -9,7 +9,7 @@ import {
 } from '../../services/appointments.js'
 
 /**
- * New-schema appointment kinds (system-new.docx D8/D21/D22):
+ * New-schema appointment kinds
  *   visit - 10 minutes, 1 customer per slot
  *   pickup - 10 minutes, up to 5 customers per slot
  */

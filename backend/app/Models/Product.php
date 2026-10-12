@@ -61,7 +61,7 @@ class Product extends Model
     }
 
     /**
-     * system-new.docx MODELS: product variants aggregate onto Product
+     * MODELS: product variants aggregate onto Product
      * (prodvar rows live in App\Support\DatabaseModels; only DatabaseAPI
      * touches them, rule 80).
      */

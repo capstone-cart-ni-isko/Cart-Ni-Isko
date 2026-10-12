@@ -23,7 +23,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         /*
-            system-new.docx MODELS lists exactly seven files under app/Models:
+            MODELS lists exactly seven files under app/Models:
             Customer, Delivery, Employee, Order, Pickup, Product, Visit. The
             supporting tables (bag, custlog, custnotif, wishlist, emplog,
             empnotif, schedules, items, parcel, payment, prodsales, prodvar,
@@ -110,7 +110,7 @@ class AppServiceProvider extends ServiceProvider
         /*
             The `api` guard answers `auth:api` and `$request->user('api')`.
             It resolves the account straight from the signed bearer token, so
-            no token table is required (system-new.docx SCHEMA has none).
+            no token table is required (the SCHEMA has none).
         */
         Auth::extend('cni_token', function ($app, $name, array $config) {
             return new RequestGuard(

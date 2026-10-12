@@ -65,7 +65,7 @@ export async function signUpUser(details) {
         .filter((part) => part && part.toUpperCase() !== 'N/A')
         .join(', ')
 
-  // No fabricated defaults: the system-new.docx schema keeps cust_bday and
+  // No fabricated defaults: the schema keeps cust_bday and
   // cust_address nullable, so a birthday or address the customer never gave
   // stays NULL instead of being invented (the legacy table shape still gets
   // its own fallback inside the backend).
@@ -183,7 +183,7 @@ export async function recoverCredentials(identifier, accountType = 'customer') {
     })
     return { data, error: null }
   } catch (err) {
-    return { data: null, error: err.message || 'Unable to start password recovery' }
+    return { data: null, error: err.message || 'Could not start password recovery.' }
   }
 }
 
@@ -195,7 +195,7 @@ export async function updateCredentials(payload) {
   } catch (err) {
     return {
       data: null,
-      error: err.message || 'Unable to update password',
+      error: err.message || 'Could not update the password.',
       // DOMAIN 29 - the machine code (OTP_REQUIRED / CHALLENGE_EXPIRED ...)
       // travels with the message so the caller can branch on it instead of
       // matching text.
@@ -216,7 +216,7 @@ export async function updateBackupCredentials(payload) {
   } catch (err) {
     return {
       data: null,
-      error: err.message || 'Unable to update backup contacts',
+      error: err.message || 'Could not update backup contacts.',
       code: err?.payload?.code || null,
       status: err?.status || null,
     }
@@ -349,6 +349,6 @@ export async function employeeSignUp(details) {
     })
     return { user: data.data, error: null }
   } catch (err) {
-    return { user: null, error: err.message || 'Employee signup failed' }
+    return { user: null, error: err.message || 'Employee signup could not be completed.' }
   }
 }

@@ -146,7 +146,7 @@ function BackupContacts() {
       )
       showToast('Backup contacts updated')
     } catch (err) {
-      showToast(err.message || 'Unable to save your backup contacts.', 'error')
+      showToast('Unable to save your backup contacts.', 'error')
     } finally {
       setPending(null)
       setBusyIndex(null)

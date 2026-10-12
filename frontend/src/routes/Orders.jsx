@@ -336,7 +336,7 @@ function Orders() {
       showToast('Cancellation requested. The store will review it shortly.', 'success')
       await load()
     } catch (err) {
-      showToast(err?.message || 'Unable to request cancellation.', 'error')
+      showToast('Unable to request cancellation.', 'error')
     } finally {
       setBusyId(null)
     }

@@ -203,7 +203,7 @@ function OrderDetail() {
       showToast('Cancellation requested. The store will review it shortly.', 'success')
       load()
     } catch (err) {
-      showToast(err?.message || 'Unable to request cancellation.', 'error')
+      showToast('Unable to request cancellation.', 'error')
     } finally {
       setBusy(false)
     }
@@ -220,7 +220,7 @@ function OrderDetail() {
       showToast(res?.message || 'Order marked as received.', 'success')
       load()
     } catch (err) {
-      showToast(err?.message || 'Unable to confirm receipt.', 'error')
+      showToast('Unable to confirm receipt.', 'error')
     } finally {
       setBusy(false)
     }

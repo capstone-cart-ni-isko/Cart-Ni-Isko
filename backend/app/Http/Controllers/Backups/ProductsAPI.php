@@ -192,7 +192,7 @@
                     $product->delete();
                     return response()->json([
                         'success' => true,
-                        'message' => 'Product permanently removed from database'
+                        'message' => 'Product permanently removed'
                     ], 200);
                 } else {
                     $product->update([

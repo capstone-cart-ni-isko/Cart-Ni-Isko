@@ -186,7 +186,7 @@ export default function AdminOrders() {
         })
         showToast(`${order.id} is now ${titleCaseStatus(nextStatus)}.`, 'success')
       } else {
-        showToast(result.error || 'Failed to update the order.', 'error')
+        showToast('Failed to update the order.', 'error')
       }
       return result
     },

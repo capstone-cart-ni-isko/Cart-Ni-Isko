@@ -255,7 +255,7 @@ export function AuthProvider({ children }) {
 
     const account = result.user
     if (result.error || !account) {
-      return { user: null, error: result.error || 'Unable to connect to server', requiresOtp: false }
+      return { user: null, error: result.error || 'Could not connect to the server. Please check your connection and try again.', requiresOtp: false }
     }
 
     if (account.token) setApiToken(account.token, 'customer')
@@ -303,7 +303,7 @@ export function AuthProvider({ children }) {
 
     const account = result.user
     if (result.error || !account) {
-      return { user: null, error: result.error || 'Unable to connect to server', requiresOtp: false }
+      return { user: null, error: result.error || 'Could not connect to the server. Please check your connection and try again.', requiresOtp: false }
     }
     if (account.token) setApiToken(account.token, 'customer')
     // cust_id is the key every backend endpoint keys off - it must come from

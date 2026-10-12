@@ -76,7 +76,7 @@ export default function ScheduleAssignModal({
     }
     if (start % GRID_MINUTES !== 0 || end % GRID_MINUTES !== 0) {
       setFormError(
-        `Times are scheduled in ${GRID_MINUTES}-minute steps (FLOW-EMP_SCHED-03). Use 08:00, 08:10, 08:20 …`
+        `Times are scheduled in ${GRID_MINUTES}-minute steps. Use 08:00, 08:10, 08:20 …`
       )
       return
     }
@@ -208,8 +208,8 @@ export default function ScheduleAssignModal({
 
           <p className="text-[10px] text-slate-400 font-normal">
             {fmtTime(startTime)} – {fmtTime(endTime)} ({humanMinutes(blockMinutes())}) · blocks move in{' '}
-            {GRID_MINUTES}-minute steps. The server also checks the weekly 180-minute minimum, the
-            overlap rule and the REQ-SS-02 deadline before saving.
+            {GRID_MINUTES}-minute steps. The weekly 180-minute minimum, overlapping shifts and the
+            same-day deadline are also checked before saving.
           </p>
 
           {formError && (

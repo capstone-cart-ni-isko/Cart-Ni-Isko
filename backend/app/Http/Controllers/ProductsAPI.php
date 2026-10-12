@@ -29,18 +29,29 @@ class ProductsAPI extends Controller
      * One request renders the same product from several surfaces (a bag line,
      * an order line and the wishlist row all point back at one product), and
      * every default present() re-runs the two aggregate queries behind it
-     * (prodsales SUM + approved-reviews breakdown). The memo lives in the
-     * container rather than in a static property, so it is rebuilt for every
-     * request and never leaks across requests or between tests.
+     * (prodsales SUM + approved-reviews breakdown). The memo is hung off the
+     * current request rather than the container: the container outlives a
+     * request under a long-lived worker (and in the test harness), so a memo
+     * kept there served a pre-write payload to a later read of the same
+     * product. Keyed to the request it is rebuilt for every request in every
+     * runtime.
      */
     private static function presentMemo(): \ArrayObject
     {
-        $key = 'products.present.memo';
-        if (! app()->bound($key)) {
-            app()->instance($key, new \ArrayObject());
+        $request = app()->bound('request') ? app('request') : null;
+
+        // No request context (e.g. a console caller): skip memoisation rather
+        // than risk serving stale data from a shared instance.
+        if ($request === null) {
+            return new \ArrayObject();
         }
 
-        return app($key);
+        $key = 'products.present.memo';
+        if (! $request->attributes->has($key)) {
+            $request->attributes->set($key, new \ArrayObject());
+        }
+
+        return $request->attributes->get($key);
     }
 
     // ===== from the Products API file =====
@@ -1543,7 +1554,7 @@ class ProductsAPI extends Controller
                     // product from scratch.
                     $variantInput = $json->input('variant');
                     if (! is_array($variantInput)) {
-                        return response()->json(['success' => false, 'message' => 'variant must be an object.'], 422);
+                        return response()->json(['success' => false, 'message' => 'The variant details are not valid.'], 422);
                     }
                     $applied = $this->applyVariant($product, $variantInput);
                     if ($applied instanceof \Illuminate\Http\JsonResponse) {
@@ -1792,13 +1803,13 @@ class ProductsAPI extends Controller
             $raw = $json->input('variations') ?? $json->input('prodvar') ?? $json->input('vars');
 
             if ($raw !== null && ! is_array($raw)) {
-                return response()->json(['success' => false, 'message' => 'variations must be an array.'], 422);
+                return response()->json(['success' => false, 'message' => 'The variations list is not valid.'], 422);
             }
 
             $rows = [];
             foreach ((array) $raw as $index => $row) {
                 if (! is_array($row)) {
-                    return response()->json(['success' => false, 'message' => 'Each variation must be an object.'], 422);
+                    return response()->json(['success' => false, 'message' => 'One of the variations is not valid.'], 422);
                 }
 
                 $stock = $row['prodvar_stock'] ?? $row['stock'] ?? 0;

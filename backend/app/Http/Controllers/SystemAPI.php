@@ -41,7 +41,7 @@ class SystemAPI extends Controller
  * that already holds a staff roster it answers 409 and changes nothing.
  *
  * Configuration is written to the SystemSettings JSON document, never to the
- * database - the system-new.docx SCHEMA lists no settings table (FLOW-SETUP-01).
+ * database - the SCHEMA lists no settings table (FLOW-SETUP-01).
  */
 
     // ===== from the Setup API file =====
@@ -419,7 +419,7 @@ class SystemAPI extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to create duty shift',
+                'message' => 'Failed to create duty shift.',
                 'error'   => $e->getMessage(),
             ], 500);
         }
@@ -604,7 +604,7 @@ class SystemAPI extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update duty shift',
+                'message' => 'Failed to update duty shift.',
                 'error'   => $e->getMessage(),
             ], 500);
         }
@@ -1019,7 +1019,7 @@ class SystemAPI extends Controller
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to create notification',
+                    'message' => 'Failed to create notification.',
                     'error'   => $e->getMessage()
                 ], 500);
             }
@@ -1114,7 +1114,7 @@ class SystemAPI extends Controller
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to distribute notifications',
+                    'message' => 'Failed to distribute notifications.',
                     'error'   => $e->getMessage()
                 ], 500);
             }
@@ -1162,7 +1162,7 @@ class SystemAPI extends Controller
             Log::error('SystemAPI index error', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to retrieve reports',
+                'message' => 'Failed to retrieve reports.',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -1403,7 +1403,7 @@ class SystemAPI extends Controller
         if (! $json->user('api') instanceof Employee) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only employee accounts may access this endpoint',
+                'message' => 'Access denied. Employee accounts only.',
             ], 403);
         }
 

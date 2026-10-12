@@ -1,6 +1,6 @@
 import { apiGet, apiPost, apiPut, cacheRead, cacheWrite } from './api.js'
 
-/** Timeslot geometry (system-new D8/D21/D22): pickup and visit slots are both
+/** Timeslot geometry (DOMAIN 8 / DOMAIN 21 / DOMAIN 22): pickup and visit slots are both
  *  10 minutes; a pickup block holds up to 5 open bookings, a visit exactly 1. */
 export const SLOT_RULES = {
   CLAIM: { minutes: 10, capacity: 5 },

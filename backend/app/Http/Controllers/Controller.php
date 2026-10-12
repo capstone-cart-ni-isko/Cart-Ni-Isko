@@ -62,7 +62,7 @@ abstract class Controller
 
     /**
      * Keeps the subset of $attributes whose columns exist on the connected
-     * schema. The system-new.docx SCHEMA (live) and the pre-migration
+     * schema. The live schema and the pre-migration
      * fixture phpunit runs on do not carry the same names, and writing a
      * column the connection does not have - or omitting one it requires -
      * fails the whole statement.
@@ -161,7 +161,7 @@ abstract class Controller
         if (!$this->isEmployee($json->user('api'))) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only employee accounts may access this endpoint'
+                'message' => 'Access denied. Employee accounts only.'
             ], 403);
         }
 
@@ -174,7 +174,7 @@ abstract class Controller
         if (!$this->isSuperAdmin($json->user('api'))) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only super admin employees may perform this action'
+                'message' => 'Super admin only.'
             ], 403);
         }
 
@@ -193,7 +193,7 @@ abstract class Controller
         if ($stamp && $stamp->copy()->addDays(30)->isFuture()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Sensitive credentials cannot be changed within thirty days of the most recent change'
+                'message' => 'This change is locked within 30 days of the last update.'
             ], 409);
         }
 
@@ -237,7 +237,7 @@ abstract class Controller
 
         return response()->json([
             'success' => false,
-            'message' => 'Availability is locked: schedule block #' . $block->sched_id
+            'message' => 'Availability is locked for block #' . $block->sched_id
                 . ' started at ' . $block->sched_time_start->toDateTimeString()
                 . '. A super admin must override this change.',
             'code'    => 'ALR_AVAIL_AFTER_BLOCK_START',
@@ -844,7 +844,7 @@ abstract class Controller
         return response()->json([
             'success' => false,
             'code'    => 'OTP_REQUIRED',
-            'message' => 'Verification is required before this change can be saved.',
+            'message' => 'Verification is required before saving.',
             'data'    => [
                 'purpose' => $purpose,
                 // Which channel the code went to: customers get SMS/phone

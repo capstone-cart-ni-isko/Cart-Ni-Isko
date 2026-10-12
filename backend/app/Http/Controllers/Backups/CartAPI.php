@@ -53,7 +53,7 @@
                 } else {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Product details or items array is required to create an order'
+                        'message' => 'Add at least one product before placing the order.'
                     ], 400);
                 }
 

@@ -131,7 +131,7 @@ export function WishlistProvider({ children }) {
               : [...prev, product]
             : prev.filter((item) => item.id !== product.id)
         )
-        showToast(err.message || 'Could not update wishlist. Please try again.', 'error')
+        showToast('Could not update the wishlist. Please try again.', 'error')
       }
     },
     [custId, wishlistItems, showToast]
@@ -167,7 +167,7 @@ export function WishlistProvider({ children }) {
         showToast(`Added "${product.name}" to your bag.`, 'success')
         return true
       } catch (err) {
-        showToast(err.message || 'Could not add this item to your bag.', 'error')
+        showToast('Could not add this item to your bag. Please try again.', 'error')
         return false
       }
     },

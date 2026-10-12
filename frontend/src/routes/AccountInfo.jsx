@@ -171,7 +171,7 @@ function AccountInfo() {
       showToast('Profile updated successfully')
     } catch (error) {
       setSaveState(error.message || 'Unable to save changes.')
-      showToast(error.message || 'Unable to save changes.', 'error')
+      showToast('Unable to save changes.', 'error')
     }
   }
 

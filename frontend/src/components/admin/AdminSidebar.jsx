@@ -12,9 +12,10 @@ const ICON = 'w-4 h-4'
  * the "Dashboard" label, the "walk-in" icon with the "Walk-in Orders" label,
  * the "appointments" icon with the "Appointments" label, the "orders" icon
  * with the "Orders" label, the "products" icon with the "Products" label, the
- * "reviews" icon with the "Reviews" label, the "sales" icon with the "Sales"
- * label, the "staff" icon with the "Staff" label, and the "logout" icon with
- * the "Logout" label.
+ * "reviews" icon with the "Reviews" label, the "sales" icon with the
+ * "Sales" label, the "staff" icon with the "Staff" label, the "schedules"
+ * icon with the "Schedules" label, and the "logout" icon with the
+ * "Logout" label.
  *
  * Every entry therefore carries BOTH its icon and its label - the array can no
  * longer collapse to icons, so the two are always rendered together.
@@ -154,6 +155,22 @@ const NAV_GROUPS = [
             <circle cx="9" cy="7" r="4" />
             <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        ),
+      },
+      {
+        to: '/admin/schedules',
+        label: 'Schedules',
+        // FLOW-EMP_SCHED-01/04: the scheduling screen is reachable by every
+        // employee - super admins preschedule the roster and each employee can
+        // review their own availability - so this entry stays visible to all.
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <polyline points="12 14 12 16.5 13.5 17.5" />
           </svg>
         ),
       },

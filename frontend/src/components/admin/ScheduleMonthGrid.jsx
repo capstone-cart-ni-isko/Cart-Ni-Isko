@@ -100,8 +100,8 @@ export default function ScheduleMonthGrid({
         <div>
           <h2 className="text-sm font-bold text-slate-900">Monthly Staffing Overview</h2>
           <p className="text-[11px] text-slate-400 font-normal mt-0.5">
-            {monthLabel} · in-store headcount per day (REQ-SS-03) and the {MIN_WEEKLY_MINUTES}-minute
-            weekly floor (FLOW-EMP_SCHED-05)
+            {monthLabel} · in-store headcount per day and the {MIN_WEEKLY_MINUTES}-minute
+            weekly minimum
           </p>
         </div>
         {/* No write action lives here: this is the month's staffing overview.
@@ -159,7 +159,7 @@ export default function ScheduleMonthGrid({
                     day: 'numeric',
                     year: 'numeric',
                   })} · ${headcount} in store of ${officers.length} employees${
-                    locked && !canEdit ? ' · locked (REQ-SS-02)' : ''
+                    locked && !canEdit ? ' · locked' : ''
                   }`}
                   className={`min-h-[74px] rounded-md border p-1.5 text-left transition-colors ${
                     canEdit ? 'cursor-pointer' : 'cursor-default'

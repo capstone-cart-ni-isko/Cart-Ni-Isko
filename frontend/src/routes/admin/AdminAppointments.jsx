@@ -320,7 +320,7 @@ export default function AdminAppointments() {
       reload()
       showToast('Appointment cancelled and the customer notified.', 'success')
     } catch (err) {
-      showToast(errMsg(err, 'Failed to cancel the appointment.'), 'error')
+      showToast('Failed to cancel the appointment.', 'error')
     } finally {
       setIsCancelling(false)
     }

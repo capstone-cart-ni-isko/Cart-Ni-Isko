@@ -126,7 +126,7 @@ class UserAPI extends Controller
             } else {
                 return response()->json([
                     'success' => false,
-                    'message' => 'prod_id or items array is required.',
+                    'message' => 'Add at least one product to continue.',
                 ], 400);
             }
 
@@ -1821,7 +1821,7 @@ class UserAPI extends Controller
 
         /**
          * Builds the CUSTOMER row for the schema that is actually connected:
-         * the live system-new.docx columns when they exist, the pre-migration
+         * the live columns when they exist, the pre-migration
          * columns otherwise (the legacy fixtures used by the test suite).
          * No column outside either generation is ever written.
          */
@@ -1874,7 +1874,7 @@ class UserAPI extends Controller
                     'cust_backup_email'        => strtolower(trim((string) ($json->input('backup_email') ?: $json->input('backupemail')))) ?: null,
                     'cust_backup_ques'         => null,
                     'cust_backup_answer'       => null,
-                    // NOT NULL on the live system-new.docx schema with the
+                    // NOT NULL on the live schema with the
                     // default "/", so the marker is written explicitly - an
                     // explicit NULL here would abort the insert (23502).
                     'cust_backup_code'         => '/',
@@ -2011,7 +2011,7 @@ class UserAPI extends Controller
                 ];
 
                 // The connected schema decides which of those columns exist:
-                // the live employee table carries the system-new.docx set
+                // the live employee table carries the current set
                 // (no emp_birthday / emp_brgy / emp_type ...), while the
                 // pre-migration fixture phpunit runs on still declares its own
                 // NOT NULL columns. forceCreate writes exactly the intersection
@@ -2093,7 +2093,7 @@ class UserAPI extends Controller
         /**
          * FLOW-EMP_ENROLL-02 - the initial category posted by the enrolment
          * form, folded onto rule 32's vocabulary ("staff", "admin", "super
-         * admin"). `categ` is the system-new spelling, `type` the legacy alias.
+         * admin"). `categ` is the current spelling, `type` the legacy alias.
          */
         private function employeeCategory(Request $json): string
         {
@@ -2329,7 +2329,7 @@ class UserAPI extends Controller
             /*
                 DOMAIN 15 / FLOW-EMP_SET-03 (and its DOMAIN 29 twin).
 
-                system-new.docx SCHEMA keeps backup contacts in the single
+                The schema keeps backup contacts in the single
                 `*_backup_phone` / `*_backup_email` column pair - there is no
                 `*_backupcallcode` column any more - so the country code the
                 form still sends is folded into the stored number instead of
@@ -2863,7 +2863,7 @@ class UserAPI extends Controller
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to display settings',
+                    'message' => 'Failed to display settings.',
                     'error'   => $e->getMessage()
                 ], 500);
             }
@@ -2945,7 +2945,7 @@ class UserAPI extends Controller
                         if ($column !== null) {
                             // A preference key whose column is not part of this
                             // schema (e.g. `emp_notif_prod` on the employee row,
-                            // which system-new.docx SCHEMA does not list) is
+                            // which SCHEMA does not list) is
                             // skipped instead of producing invalid SQL - and it
                             // is NOT counted as a change below, because nothing
                             // was written for it.
@@ -3018,7 +3018,7 @@ class UserAPI extends Controller
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to update settings',
+                    'message' => 'Failed to update settings.',
                     'error'   => $e->getMessage()
                 ], 500);
             }
@@ -3095,7 +3095,7 @@ class UserAPI extends Controller
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to display notifications',
+                    'message' => 'Failed to display notifications.',
                     'error'   => $e->getMessage()
                 ], 500);
             }
@@ -3177,7 +3177,7 @@ class UserAPI extends Controller
         if (! $user instanceof Customer && ! $user instanceof Employee) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only signed-in accounts may read this endpoint',
+                'message' => 'Please sign in to continue.',
             ], 403);
         }
 
@@ -3200,7 +3200,7 @@ class UserAPI extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to retrieve account',
+                'message' => 'Failed to retrieve account.',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -3366,7 +3366,7 @@ class UserAPI extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update account details',
+                'message' => 'Failed to update account details.',
                 'error' => $e->getMessage(),
             ], 500);
         }

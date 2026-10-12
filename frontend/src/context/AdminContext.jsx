@@ -398,7 +398,7 @@ export function AdminProvider({ children }) {
       return { success: true, prodId }
     } catch (e) {
       console.error('Failed to add product:', e)
-      showToast(e.message || 'Failed to add product.', 'error')
+      showToast(e.message || 'Could not add the product. Please try again.', 'error')
       return { success: false, error: e.message || 'Failed to add product.' }
     }
   }, [refreshProducts, showToast])
@@ -413,7 +413,7 @@ export function AdminProvider({ children }) {
       return { success: true }
     } catch (e) {
       console.error('Failed to update product:', e)
-      showToast(e.message || 'Failed to update product.', 'error')
+      showToast(e.message || 'Could not update the product. Please try again.', 'error')
       refreshProducts()
       return { success: false, error: e.message || 'Failed to update product.' }
     }
@@ -429,7 +429,7 @@ export function AdminProvider({ children }) {
       return { success: true }
     } catch (e) {
       console.error('Failed to delete product:', e)
-      showToast(e.message || 'Failed to remove product.', 'error')
+      showToast(e.message || 'Could not remove the product. Please try again.', 'error')
       refreshProducts()
       return { success: false, error: e.message || 'Failed to remove product.' }
     }
@@ -445,7 +445,7 @@ export function AdminProvider({ children }) {
       return { success: true }
     } catch (e) {
       console.error('Failed to unlist product:', e)
-      showToast(e.message || 'Failed to unlist product.', 'error')
+      showToast(e.message || 'Could not unlist the product. Please try again.', 'error')
       refreshProducts()
       return { success: false, error: e.message || 'Failed to unlist product.' }
     }
@@ -461,7 +461,7 @@ export function AdminProvider({ children }) {
       return { success: true }
     } catch (e) {
       console.error('Failed to list product for sale:', e)
-      showToast(e.message || 'Failed to list product for sale.', 'error')
+      showToast(e.message || 'Could not list products for sale. Please try again.', 'error')
       refreshProducts()
       return { success: false, error: e.message || 'Failed to list product for sale.' }
     }
@@ -506,7 +506,7 @@ export function AdminProvider({ children }) {
         return { success: true }
       } catch (e) {
         console.error('Failed to add variation:', e)
-        showToast(e.message || 'Failed to add the variation.', 'error')
+        showToast(e.message || 'Could not add the variation. Please try again.', 'error')
         return { success: false, error: e.message || 'Failed to add the variation.' }
       }
     },
@@ -525,7 +525,7 @@ export function AdminProvider({ children }) {
         return { success: true }
       } catch (e) {
         console.error('Failed to update variation:', e)
-        showToast(e.message || 'Failed to update the variation.', 'error')
+        showToast(e.message || 'Could not update the variation. Please try again.', 'error')
         return { success: false, error: e.message || 'Failed to update the variation.' }
       }
     },

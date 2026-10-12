@@ -29,7 +29,7 @@ class Employee extends Authenticatable
         });
     }
 
-    // system-new.docx SCHEMA -> EMPLOYEE
+    // SCHEMA -> EMPLOYEE
     protected $fillable = [
         'emp_givname',
         'emp_surname',
@@ -83,7 +83,7 @@ class Employee extends Authenticatable
     /**
      * Rule 32: employees are "staff", "admin" or "super admin".
      *
-     * The system-new SCHEMA names the category `emp_categ`; the pre-migration
+     * The schema names the category `emp_categ`; the pre-migration
      * fixture (and older rows) still carry it as `emp_type`, so reading either
      * keeps the rank identical wherever the account is judged - the same
      * fallback EnsureRole already applies to every route guard.
@@ -94,7 +94,7 @@ class Employee extends Authenticatable
     }
 
     /*
-        AVAILABILITY (system-new SCHEMA `emp_present` / legacy `emp_instore`).
+        AVAILABILITY (schema `emp_present` / legacy `emp_instore`).
 
         The live employee table carries `emp_present` and no `emp_instore`;
         the pre-migration fixture phpunit runs on is the exact opposite. Every
@@ -151,7 +151,7 @@ class Employee extends Authenticatable
     }
 
     /*
-        system-new.docx MODELS: the supporting tables keyed by `emp_id`
+        MODELS: the supporting tables keyed by `emp_id`
         aggregate onto the employee model (they stay in App\Support
         DatabaseModels and are touched only through DatabaseAPI, rule 80).
     */

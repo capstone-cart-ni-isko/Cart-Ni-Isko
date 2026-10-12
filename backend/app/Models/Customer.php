@@ -15,13 +15,13 @@
 
         // Define the fillable attributes for mass assignment.
         //
-        // Two generations live side by side on purpose: the system-new.docx
+        // Two generations live side by side on purpose: the
         // SCHEMA (the live Supabase columns - cust_givname, cust_surname,
         // cust_bday, cust_categ, cust_dept, ...) is what the application
         // writes, while the legacy names stay listed because the pre-migration
         // test fixtures still create rows with them.
         protected $fillable = [
-            // --- system-new.docx SCHEMA (live database) ---
+            // --- SCHEMA (live database) ---
             'cust_id',
             'cust_givname',
             'cust_surname',
@@ -89,7 +89,7 @@
         ];
 
         /*
-            system-new.docx MODELS aggregates the supporting tables onto their
+            MODELS aggregates the supporting tables onto their
             owner: everything keyed by `cust_id` hangs off this model (the
             tables themselves are read/written through DatabaseAPI, rule 80).
         */

@@ -1,41 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import Avatar from '../../components/ui/Avatar.jsx'
 import { fetchNotifications, unreadCount } from '../../services/notifications.js'
 import { fetchMyPreferences, updateMyPreferences } from '../../services/settings.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import { empHomePath } from './schema.js'
-
-/* ── Breadcrumb map ── */
-const BREADCRUMB_MAP = {
-  '/admin/dashboard': ['Overview', 'Dashboard'],
-  '/admin': ['Overview', 'Dashboard'],
-  '/admin/walkin': ['Sales & Operations', 'Walk-in Orders'],
-  '/admin/pos': ['Sales & Operations', 'Walk-in Orders'],
-  '/admin/orders': ['Sales & Operations', 'Orders'],
-  '/admin/schedules': ['Sales & Operations', 'Schedule'],
-  '/admin/schedule': ['Sales & Operations', 'Schedule'],
-  '/admin/appointments': ['Sales & Operations', 'Appointments'],
-  '/admin/fulfillment': ['Fulfillment', 'Pickup & Delivery'],
-  '/admin/pickup': ['Fulfillment', 'Pickup'],
-  '/admin/delivery': ['Fulfillment', 'Delivery'],
-  '/admin/inventory': ['Store & Catalog', 'Products'],
-  '/admin/reviews': ['Store & Catalog', 'Reviews'],
-  '/admin/customization': ['Store & Catalog', 'Storefront'],
-  '/admin/analytics': ['Management', 'Sales'],
-  '/admin/users': ['Management', 'Staff'],
-  '/admin/staff': ['Management', 'Staff'],
-  '/admin/enroll': ['Management', 'Enroll Staff'],
-  '/admin/settings': ['Management', 'Settings'],
-  '/admin/settings/logs': ['Management', 'Access Logs'],
-  '/admin/setup': ['Management', 'Store Setup'],
-  '/admin/account': ['Overview', 'Account Settings'],
-  '/admin/profile': ['Overview', 'Account Settings'],
-  '/admin/notifications': ['Overview', 'Notifications'],
-  '/admin/qr': ['Overview', 'QR Scanner'],
-}
 
 /** The employee whose saved theme has already been applied this session.
     Module scope (not component state) so a route change cannot re-fetch it -
@@ -76,24 +46,24 @@ function RibbonIcon({ label, onClick, active, badge, children }) {
  * DOMAIN 3 / DOMAIN 31 - the navigation ribbon:
  *   left  = "Tindahan ni Isko" logo (FLOW-EMP_HOME-02)
  *   center = search bar, centermost (FLOW-EMP_HOME-03)
- *   right = home · QR · notifications · dark mode · settings, in that order
+ *   right = home · QR · notifications · dark mode · profile, in that order
  *           (FLOW-EMP_HOME-04, exactly five icons)
  *
  * The dark-mode icon flips to a light-mode icon while dark mode is on
  * (FLOW-EMP_HOME-09/10) and the choice is saved to `emp_darkmode`
  * (FLOW-EMP_SET-05 / REQ-EMP_SET-05).
  *
- * The ribbon itself, its spacing, its tooltip chips and its badge geometry
- * mirror the customer portal's DesktopHeader, so both portals share one set
- * of fonts and one visual language (REQ-CUST_HOME-01's admin twin).
+ * This is the single header row of the employee portal. The profile icon
+ * opens the focused settings page, which lands on its "Profile"
+ * tab. On a small screen the ribbon also carries the menu opener for the
+ * docked sidebar, so the sidebar stays reachable without a second bar.
  */
-export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
+export default function AdminTopBar({ onToggleMobileMenu }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { currentAdminUser, logoutAdmin } = useAdmin()
+  const { currentAdminUser } = useAdmin()
   const { dark, set: setTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
-  const [confirmExit, setConfirmExit] = useState(false)
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
 
   const empId = currentAdminUser?.id ?? null
@@ -156,16 +126,6 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
     }
   }
 
-  const breadcrumb =
-    BREADCRUMB_MAP[location.pathname] ||
-    BREADCRUMB_MAP[
-      Object.keys(BREADCRUMB_MAP)
-        .filter((key) => key !== '/admin' && location.pathname.startsWith(key))
-        .sort((a, b) => b.length - a.length)[0]
-    ] || ['Overview', 'Dashboard']
-
-  const trail = activeTabLabel ? [breadcrumb[0], breadcrumb[1], activeTabLabel] : breadcrumb
-
   const homePath = empHomePath(currentAdminUser)
 
   // FLOW-EMP_HOME-06: the "home" icon goes to THIS employee's home page, which
@@ -178,18 +138,27 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
     if (q) navigate(`/admin/orders?search=${encodeURIComponent(q)}`)
   }
 
-  const handleLogout = () => {
-    logoutAdmin()
-    setConfirmExit(false)
-    navigate('/admin/login')
-  }
-
   return (
     <header className="shrink-0 z-30 select-none">
       {/* ── Ribbon (DOMAIN 3) ── */}
       {/* Full page width: the ribbon is the top row of the portal (rule 72), so
           it never starts after the docked sidebar. */}
-      <div className="h-14 bg-white border-b border-gray-100 w-full px-4 md:px-6 flex items-center gap-4">
+      <div className="h-14 bg-white border-b border-gray-100 w-full px-4 md:px-6 flex items-center gap-3">
+        {/* Small-screen menu opener: the docked sidebar cannot sit beside the
+            content on a phone, so this one control opens it as a drawer. */}
+        <button
+          type="button"
+          onClick={onToggleMobileMenu}
+          className="md:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer shrink-0"
+          aria-label="Open menu"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-5 h-5">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+
         {/* LEFT — brand logo (FLOW-EMP_HOME-02) */}
         <Link to={homePath} className="flex items-center gap-2 shrink-0 min-w-0" title="Tindahan ni Isko">
           <img src={brandLogo} alt="Tindahan ni Isko" className="h-9 object-contain hover:opacity-90 transition-opacity" />
@@ -205,9 +174,6 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
-          {/* The docked rail no longer carries its own command palette, so the
-              search bar is the one place to search from (FLOW-EMP_HOME-03) and
-              no keyboard shortcut is promised here. */}
           <input
             type="search"
             value={searchQuery}
@@ -246,9 +212,8 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
             </svg>
           </RibbonIcon>
 
-          {/* 3 — notifications (FLOW-EMP_HOME-08: clicking the icon REDIRECTS
-              to the notification tab; the popover it used to toggle held no
-              notifications of its own.) */}
+          {/* 3 — notifications (FLOW-EMP_HOME-08: clicking the icon opens the
+              notification tab). */}
           <RibbonIcon
             label="Notifications"
             onClick={() => {
@@ -289,127 +254,20 @@ export default function AdminTopBar({ onToggleMobileMenu, activeTabLabel }) {
             )}
           </RibbonIcon>
 
-          {/* 5 — settings (FLOW-EMP_PROF-01 / FLOW-EMP_SET-01) */}
+          {/* 5 — profile (FLOW-EMP_PROF-01 / FLOW-EMP_SET-01): opens the
+              focused settings page, which lands on its "Profile" tab. */}
           <RibbonIcon
-            label="Settings"
+            label="Profile"
             onClick={() => navigate('/admin/settings')}
             active={location.pathname.startsWith('/admin/settings')}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
             </svg>
           </RibbonIcon>
         </div>
       </div>
-
-      {/* ── Sub-ribbon: back (top-left) · breadcrumb · exit (top-right) ── */}
-      <div className="h-10 bg-white/80 backdrop-blur border-b border-slate-100 px-4 md:px-6 flex items-center gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <button
-            type="button"
-            onClick={onToggleMobileMenu}
-            className="md:hidden p-1.5 rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
-            aria-label="Open menu"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-
-          {!isHome && (
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer"
-              title="Back"
-              aria-label="Back"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-            </button>
-          )}
-
-          <nav className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-medium truncate">
-            {trail.map((crumb, i) => (
-              <React.Fragment key={`${crumb}-${i}`}>
-                {i > 0 && (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 text-slate-300 shrink-0">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                )}
-                <span className={i === trail.length - 1 ? 'text-slate-900 font-semibold truncate' : 'text-slate-500 font-medium'}>
-                  {crumb}
-                </span>
-              </React.Fragment>
-            ))}
-          </nav>
-        </div>
-
-        {/* EXIT — top-right (DOMAIN 16: confirmation dialog, then logout) */}
-        <div className="ml-auto relative flex items-center gap-2">
-          {confirmExit && (
-            <div className="absolute right-0 top-8 w-64 bg-white rounded-lg border border-slate-200 shadow-lg p-3 z-50 animate-slide-up">
-              <p className="text-xs font-semibold text-slate-900">Sign out of the admin portal?</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Your session ends on all devices.</p>
-              <div className="flex justify-end gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={() => setConfirmExit(false)}
-                  className="h-7 px-3 rounded-md bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="h-7 px-3 rounded-md bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 cursor-pointer"
-                >
-                  Sign out
-                </button>
-              </div>
-            </div>
-          )}
-          {/* Profile chip (FLOW-EMP_PROF-01 — the settings screen holds the profile) */}
-          <button
-            type="button"
-            onClick={() => navigate('/admin/account')}
-            className="flex items-center gap-2 p-1 rounded-md hover:bg-gray-100 transition-colors cursor-pointer"
-            title="Account"
-            aria-label="Account"
-          >
-            <Avatar
-              src={currentAdminUser?.avatarImage}
-              name={currentAdminUser?.name || 'Admin'}
-              size={26}
-              className="border border-slate-200"
-              userId={currentAdminUser?.id}
-            />
-          </button>
-
-          {/* Rule 70 — the exit button sits at the TOP RIGHT, i.e. it is the
-              last (rightmost) control of the ribbon, and rule 68 keeps it on
-              screen at every width (it used to vanish below `sm`). */}
-          <button
-            type="button"
-            onClick={() => setConfirmExit((prev) => !prev)}
-            className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
-            title="Exit"
-            aria-label="Exit"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            <span className="hidden sm:inline">Exit</span>
-          </button>
-        </div>
-      </div>
-
     </header>
   )
 }

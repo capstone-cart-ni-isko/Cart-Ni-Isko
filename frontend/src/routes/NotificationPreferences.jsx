@@ -78,7 +78,7 @@ function NotificationPreferences() {
       onOk?.(next)
       showToast('Preference saved')
     } catch (err) {
-      showToast(err.message || 'Unable to save that preference.', 'error')
+      showToast('Unable to save that preference.', 'error')
     } finally {
       setSavingField('')
     }

@@ -149,7 +149,7 @@ export default function AdminStoreCustomization() {
       showToast('Banner image replaced. Click Save Changes to publish it.', 'success')
     } catch (err) {
       // Uploads can fail for non-super-admin sessions — surface, don't crash.
-      showToast(err?.message || 'Unable to upload the image.', 'error')
+      showToast('Unable to upload the image.', 'error')
     } finally {
       setUploadingSlideId(null)
     }
@@ -183,7 +183,7 @@ export default function AdminStoreCustomization() {
       setIsSavedToast(true)
       setTimeout(() => setIsSavedToast(false), 3500)
     } catch (err) {
-      showToast(err?.message || 'Failed to save the slideshow.', 'error')
+      showToast('Failed to save the slideshow.', 'error')
     } finally {
       setIsSaving(false)
     }

@@ -19,7 +19,7 @@ use Carbon\Carbon;
  * the settings document and falls back to a code default that sits in the
  * future, so nothing happens until a real term is configured. A marker file
  * then records the period it already applied, so the job runs once per term
- * and no row is inserted into any settings table (system-new.docx SCHEMA has
+ * and no row is inserted into any settings table (SCHEMA has
  * no SETTINGS table).
  *
  * An employee who logged an unavailability keeps it: a block whose assignee is

@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
  *
  * WHY THE SUFFIX EXISTS
  * ---------------------
- * The system-new.docx EMPLOYEE schema has no "credential changed" /
+ * The EMPLOYEE schema has no "credential changed" /
  * "temporary password" column, and adding one is out of bounds (no column,
  * table or sequence may be added). REQ-EMP_ENROLL-03 still requires the
  * temporary password issued at enrollment to be *marked* for a required

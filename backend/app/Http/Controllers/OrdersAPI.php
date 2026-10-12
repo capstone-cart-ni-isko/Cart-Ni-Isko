@@ -76,13 +76,13 @@ class OrdersAPI extends Controller
                 ->first();
 
             if (! $order) {
-                return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
             }
 
             if (! $json->has('ord_status')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No updatable fields provided',
+                    'message' => 'No updatable fields provided.',
                 ], 400);
             }
 
@@ -131,7 +131,7 @@ class OrdersAPI extends Controller
     protected function customerStatusUpdate(Order $order, int $customerId, string $status, string $rawStatus, string $priorStatus)
     {
         if ((int) $order->cust_id !== $customerId) {
-            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+            return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
         }
 
         $rawLabel = strtoupper(trim($rawStatus));
@@ -161,7 +161,7 @@ class OrdersAPI extends Controller
         $requesting = $status === 'to cancel';
         $priorKey   = $this->normalizeStatus($priorStatus) ?? strtolower(trim($priorStatus));
         // FLOW-ORD_LIST-04: cancellation is the only customer request, asked
-        // while the order still reads `processing`. system-new has no return
+        // while the order still reads `processing`. The schema has no return
         // flow, and parking a fulfilled order on `to cancel` would let a
         // rejection (FLOW-ORD_LIST-07) push it back to `processing`.
         $isReturn = $rawLabel === 'RETURN REQUESTED';
@@ -292,7 +292,7 @@ class OrdersAPI extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Order status updated successfully',
+            'message' => 'Order status updated successfully.',
             'data'    => self::orderPayload($order->fresh()),
         ], 200);
     }
@@ -871,7 +871,7 @@ class OrdersAPI extends Controller
             if (! PayMongoService::isConfigured()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Online payment is not configured yet, so no order was placed. '
+                    'message' => 'Online payment is not yet configured. '
                         . 'Your bag is unchanged - please try again once the store enables online payments.',
                     'code'    => 'PAYMENT_GATEWAY_UNAVAILABLE',
                 ], 503);
@@ -1099,7 +1099,7 @@ class OrdersAPI extends Controller
 
         $order = Order::find((int) $json->input('ord_id'));
         if (! $order || (int) $order->cust_id !== (int) $custId) {
-            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+            return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
         }
 
         $state = [
@@ -1332,7 +1332,7 @@ class OrdersAPI extends Controller
 
         $order = $this->resolveOrderFromIds($json);
         if (! $order) {
-            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+            return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
         }
 
         if (($order->ord_claiming ?? '') !== 'delivery') {
@@ -1380,7 +1380,7 @@ class OrdersAPI extends Controller
 
         $order = $this->resolveOrderFromIds($json);
         if (! $order) {
-            return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+            return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
         }
 
         $delivery = $this->deliveryForOrder($order);
@@ -3711,12 +3711,12 @@ class OrdersAPI extends Controller
 
             $order = $this->findOrder($json->input('ord_id'));
             if (! $order) {
-                return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
             }
 
             $customerId = $this->customerId($json);
             if ($customerId !== null && (int) $order->cust_id !== $customerId) {
-                return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
             }
             if ($customerId === null && ! $this->isEmployee($json->user('api'))) {
                 return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
@@ -3823,7 +3823,7 @@ class OrdersAPI extends Controller
             // FLOW-ORD_CLAIM-07: legacy delivery rows may carry no ord_id
             $order = $this->resolveDeliveryOrder($delivery, $employee);
             if (! $order) {
-                return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+                return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
             }
 
             $status = $this->normalizeStatus((string) $json->input('status'));

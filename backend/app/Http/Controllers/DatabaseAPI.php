@@ -442,7 +442,7 @@ class DatabaseAPI extends Controller
      * question still expires the rows at 60 months.
      *
      * A marker file remembers the last question, so no row is added to any
-     * table (system-new.docx SCHEMA has no SETTINGS table). Returns true
+     * table. Returns true
      * when the question actually went out.
      *
      * @param string|null $marker override for tests; the production marker
@@ -574,7 +574,7 @@ class DatabaseAPI extends Controller
     }
 
     /**
-     * Folds the signup aliases onto their canonical (system-new.docx) names
+     * Folds the signup aliases onto their canonical names
      * so one rule set covers both payload generations: the new form posts
      * `cust_categ` / `cust_college` / `cust_dept` / `bday` / `backup_phone`,
      * the legacy one posts `categ` / `college` / `dept` / `birthday` /
@@ -716,7 +716,7 @@ class DatabaseAPI extends Controller
         // number and the initial category. Nothing else is required to open an
         // account, so the legacy academic fields (student number, college,
         // program, year, bloc) are accepted but never demanded - the live
-        // system-new.docx EMPLOYEE schema does not even carry those columns.
+        // EMPLOYEE schema does not even carry those columns.
         $requiredCheck = $this->validateFields($json, [
             'email' => 'required',
             'phone' => 'required',
