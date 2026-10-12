@@ -6,6 +6,7 @@ import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { uploadImage } from '../../services/upload.js'
+import { empIsStaff } from '../../components/admin/schema.js'
 
 /**
  * REQ-ADD_PROD-04: the product categories are a predefined, system-wide set.
@@ -113,7 +114,11 @@ function cartesian(axes) {
 }
 
 export default function AdminInventory() {
-  const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, updateVariant, removeVariant, products: backendProducts } = useAdmin()
+  const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, updateVariant, removeVariant, products: backendProducts, currentAdminUser } = useAdmin()
+
+  // Staff may VIEW the inventory but cannot add, edit, or delete products.
+  // The management buttons are hidden for staff (read-only mode).
+  const isStaff = empIsStaff(currentAdminUser)
 
   const [searchParams] = useSearchParams()
 
@@ -674,16 +679,23 @@ export default function AdminInventory() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {isStaff && (
+              <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                View only
+              </span>
+            )}
             {/* REQ-ADD_PROD-04: categories are a predefined, system-wide set, so
                 there is nothing for an admin to add here. The button used to
                 open a modal that closed without calling any endpoint. */}
-            <button
-              type="button"
-              onClick={() => setShowAddProductModal(true)}
-              className="h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <span>+ Add Product</span>
-            </button>
+            {!isStaff && (
+              <button
+                type="button"
+                onClick={() => setShowAddProductModal(true)}
+                className="h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>+ Add Product</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1083,29 +1095,33 @@ export default function AdminInventory() {
                                 </svg>
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => (prod.disabled ? sellProduct(prod.id) : unlistProduct(prod.id))}
-                              title={prod.disabled ? 'Sell (relist in catalog)' : 'Unlist from customer catalog'}
-                              className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
-                            >
-                              {prod.disabled ? 'Sell' : 'Unlist'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(prod)}
-                              className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(prod)}
-                              title="Delete product"
-                              className="p-1 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
-                            >
-                              ···
-                            </button>
+                            {!isStaff && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => (prod.disabled ? sellProduct(prod.id) : unlistProduct(prod.id))}
+                                  title={prod.disabled ? 'Sell (relist in catalog)' : 'Unlist from customer catalog'}
+                                  className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
+                                >
+                                  {prod.disabled ? 'Sell' : 'Unlist'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(prod)}
+                                  className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteTarget(prod)}
+                                  title="Delete product"
+                                  className="p-1 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                >
+                                  ···
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

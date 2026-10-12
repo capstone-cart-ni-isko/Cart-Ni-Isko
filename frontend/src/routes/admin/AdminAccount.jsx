@@ -616,12 +616,12 @@ export default function AdminAccount({ embedded = false }) {
                     disabled={!isEmailEditable}
                     aria-invalid={!!liveError(profileErrors, 'email', email)}
                     placeholder="name@bicol-u.edu.ph"
-                    title={isEmailEditable ? undefined : 'Regular staff cannot change their email address (REQ-EMP_PROF-01)'}
+                    title={isEmailEditable ? undefined : 'Regular staff cannot change their email address'}
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                   {isRegularStaff ? (
                     <p className="text-[10px] text-slate-400 mt-1">
-                      Locked — regular staff cannot change their email (REQ-EMP_PROF-01).
+                      Locked — regular staff cannot change their email address.
                     </p>
                   ) : (
                     <FieldError message={liveError(profileErrors, 'email', email)} />

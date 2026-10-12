@@ -89,7 +89,7 @@ export default function ScheduleWeekGrid({
         <div>
           <h2 className="text-sm font-bold text-slate-900">Weekly Preschedule</h2>
           <p className="text-[11px] text-slate-400 font-normal mt-0.5">
-            {weekLabel} · every employee’s prescheduled availability (FLOW-EMP_SCHED-02)
+            {weekLabel} · employee prescheduled availability
           </p>
         </div>
         {onAssignOfficer && (
@@ -222,8 +222,8 @@ export default function ScheduleWeekGrid({
                           }`}
                           title={
                             weekMinutes >= MIN_WEEKLY_MINUTES
-                              ? 'Clears the 180-minute weekly minimum (FLOW-EMP_SCHED-05)'
-                              : 'Below the 180-minute weekly minimum — add a block before saving (FLOW-EMP_SCHED-05)'
+                              ? 'Meets the 180-minute weekly minimum'
+                              : 'Below the 180-minute weekly minimum — add a block before saving'
                           }
                         >
                           {humanMinutes(weekMinutes)} / {MIN_WEEKLY_MINUTES} min
@@ -240,8 +240,7 @@ export default function ScheduleWeekGrid({
 
       {!isLoading && !error && (
         <p className="text-[11px] text-slate-400">
-          Blocks are read from GET /shifts?date_from={dateFrom}&amp;date_to={dateTo} — REQ-EMP_SCHED-07
-          keeps every week queryable by date range for payroll and reporting.
+          Shifts are organized by date range for weekly scheduling and reporting.
         </p>
       )}
     </section>

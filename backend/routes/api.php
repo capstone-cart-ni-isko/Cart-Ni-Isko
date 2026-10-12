@@ -130,7 +130,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/tracking/create', [OrdersAPI::class, 'createFulfillmentTrack']);
     Route::put('/tracking/update', [OrdersAPI::class, 'updateFulfillmentStatus'])->middleware('role:staff');
     Route::put('/tracking/close', [OrdersAPI::class, 'closeFulfillmentTrack'])->middleware('role:staff');
-    Route::post('/tracking/scan', [OrdersAPI::class, 'scanCode']);
+    Route::post('/tracking/scan', [OrdersAPI::class, 'scanCode'])->middleware('role:admin');
 
     // Access API Routes
     Route::post('/access/flag', [SystemAPI::class, 'flagIrregularity'])->middleware('role:staff');

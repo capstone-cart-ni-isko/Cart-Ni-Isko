@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
@@ -538,7 +538,7 @@ export default function AdminUsers() {
                                 title={
                                   String(emp.emp_id) === String(currentAdminUser?.emp_id)
                                     ? 'You cannot delete your own account.'
-                                    : 'Permanently delete this employee account (REQ-UM-03)'
+                                    : 'Permanently delete this employee account'
                                 }
                                 className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                               >

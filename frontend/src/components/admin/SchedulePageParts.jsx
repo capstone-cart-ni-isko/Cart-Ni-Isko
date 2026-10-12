@@ -167,8 +167,7 @@ export function ShiftBlocksSection({
         <div>
           <h2 className="text-sm font-bold text-slate-900">Assigned Duty Blocks</h2>
           <p className="text-[11px] text-slate-400 font-normal mt-0.5">
-            Every block below is read back from GET /shifts · click one to amend or flag it
-            unavailable
+            Click any block below to view details, modify schedule, or mark it unavailable
           </p>
         </div>
         <FilterPills

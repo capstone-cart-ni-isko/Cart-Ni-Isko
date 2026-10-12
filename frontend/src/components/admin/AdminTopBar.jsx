@@ -5,7 +5,7 @@ import { useTheme } from '../../context/ThemeContext.jsx'
 import { fetchNotifications, unreadCount } from '../../services/notifications.js'
 import { fetchMyPreferences, updateMyPreferences } from '../../services/settings.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
-import { empHomePath } from './schema.js'
+import { empHomePath, empIsStaff } from './schema.js'
 
 /** The employee whose saved theme has already been applied this session.
     Module scope (not component state) so a route change cannot re-fetch it -
@@ -194,23 +194,26 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
             </svg>
           </RibbonIcon>
 
-          {/* 2 — QR scanner (FLOW-EMP_HOME-07) */}
-          <RibbonIcon
-            label="QR scanner"
-            onClick={() => navigate('/admin/qr')}
-            active={location.pathname === '/admin/qr'}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <path d="M14 14h3v3h-3z" />
-              <path d="M21 14v1" />
-              <path d="M21 21v-4" />
-              <path d="M14 21h1" />
-              <path d="M18 18h3v3h-3z" />
-            </svg>
-          </RibbonIcon>
+          {/* 2 — QR scanner (FLOW-EMP_HOME-07). Only admins and super admins
+              may scan codes; staff never see the icon. */}
+          {!empIsStaff(currentAdminUser) && (
+            <RibbonIcon
+              label="QR scanner"
+              onClick={() => navigate('/admin/qr')}
+              active={location.pathname === '/admin/qr'}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <path d="M14 14h3v3h-3z" />
+                <path d="M21 14v1" />
+                <path d="M21 21v-4" />
+                <path d="M14 21h1" />
+                <path d="M18 18h3v3h-3z" />
+              </svg>
+            </RibbonIcon>
+          )}
 
           {/* 3 — notifications (FLOW-EMP_HOME-08: clicking the icon opens the
               notification tab). */}

@@ -839,7 +839,7 @@ export default function AdminSettings() {
                 <div className="px-6 py-2">
                   <NumberField
                     label="Appointment duration"
-                    hint="Length of one appointment timeslot (business rule 11: exactly 10 minutes)."
+                    hint="Length of one appointment timeslot (exactly 10 minutes)."
                     value={slotMinutes}
                     min={1}
                     max={120}
@@ -851,7 +851,7 @@ export default function AdminSettings() {
                   />
                   <NumberField
                     label="Visit timeslot capacity"
-                    hint="How many visit appointments one timeslot may hold (business rule 12)."
+                    hint="Maximum number of visit appointments allowed per timeslot."
                     value={visitCapacity}
                     min={1}
                     max={20}
@@ -863,7 +863,7 @@ export default function AdminSettings() {
                   />
                   <NumberField
                     label="Pickup timeslot capacity"
-                    hint="How many pickup appointments one timeslot may hold (business rule 12)."
+                    hint="Maximum number of pickup appointments allowed per timeslot."
                     value={pickupCapacity}
                     min={1}
                     max={50}
@@ -875,7 +875,7 @@ export default function AdminSettings() {
                   />
                   <NumberField
                     label="Minimum weekly hours"
-                    hint="Every employee must be prescheduled for at least this long per week (business rule 46)."
+                    hint="Minimum scheduled hours required for each employee per week."
                     value={weeklyHours}
                     min={0}
                     max={80}

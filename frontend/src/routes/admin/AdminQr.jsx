@@ -1,7 +1,10 @@
 import { useCallback, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import QRScanner from '../../components/ui/QRScanner.jsx'
 import { useToast } from '../../hooks/useToast.js'
+import { useAdmin } from '../../hooks/useAdmin.js'
+import { empIsStaff, empHomePath } from '../../components/admin/schema.js'
 import { scanQr } from '../../services/tracking.js'
 
 /**
@@ -15,6 +18,14 @@ import { scanQr } from '../../services/tracking.js'
  */
 export default function AdminQr() {
   const { showToast } = useToast()
+  const { currentAdminUser } = useAdmin()
+
+  // QR scanning is an admin capability (FLOW-MANAGE_APP-06); staff are
+  // redirected to their own home page.
+  if (empIsStaff(currentAdminUser)) {
+    return <Navigate to={empHomePath(currentAdminUser)} replace />
+  }
+
   const [busy, setBusy] = useState(false)
   const [lastScan, setLastScan] = useState(null) // { ok, code, message }
 

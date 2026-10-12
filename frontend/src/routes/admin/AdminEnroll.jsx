@@ -90,7 +90,7 @@ function AdminEnrollForm() {
         if (startMinutes === null || endMinutes === null) return 'Times must use the HH:MM 24-hour format.'
         if (endMinutes <= startMinutes) return 'The end time must be later than the start time.'
         if (startMinutes % 10 !== 0 || endMinutes % 10 !== 0) {
-          return 'Duty blocks are set in 10-minute steps (FLOW-EMP_SCHED-03).'
+          return 'Duty blocks must be set in 10-minute steps. For example: 09:00, 09:10, 09:20.'
         }
         if (date < todayKey()) return 'A duty block cannot be scheduled in the past.'
 
@@ -327,7 +327,7 @@ function AdminEnrollForm() {
                 </h2>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Each row is one duty block · 10-minute steps · at least {MIN_WEEKLY_MINUTES} minutes
-                  per week (rule 46)
+                  per week (minimum 180 minutes)
                 </p>
               </div>
               <button
@@ -422,14 +422,14 @@ function AdminEnrollForm() {
                 {shortWeeks
                   .map(({ week, minutes }) => `week of ${week}: ${minutes} of ${MIN_WEEKLY_MINUTES} minutes`)
                   .join(' · ')}{' '}
-                — below the weekly minimum, the enrollment will be refused (FLOW-EMP_SCHED-05).
+                — these weeks are below the 180-minute weekly minimum and will be rejected.
               </p>
             )}
 
             <p className="text-[11px] text-slate-400">
               {shifts.length} block{shifts.length === 1 ? '' : 's'} · {totalShiftMinutes} scheduled minutes in total.
-              The schedule can be amended from the employee list on the{' '}
-              <span className="font-semibold text-slate-500">Schedules</span> screen (FLOW-EMP_SCHED-03).
+              The schedule can be changed later from the{' '}
+              <span className="font-semibold text-slate-500">Schedules</span> screen.
             </p>
           </div>
 

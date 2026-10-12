@@ -91,7 +91,7 @@ export default function AdminSchedule({ embedded = false }) {
   const lockedDay = isLockedDay(selectedDate)
   const canEditAvailability = isSuperAdmin || !lockedDay
   const lockMessage =
-    'Availability can no longer be changed for this date (locked after the store opened — REQ-SS-02).'
+    'This date is locked and can no longer be changed. Only a super admin can override it.'
 
   const filteredOfficers = useMemo(
     () =>
@@ -114,7 +114,7 @@ export default function AdminSchedule({ embedded = false }) {
 
   const openAssignModal = (officerId) => {
     if (!canPreschedule) {
-      showToast('Only admins and super admins can preschedule other employees (rule 38).', 'error')
+      showToast('Only admins and super admins can assign schedules to other employees.', 'error')
       return
     }
     if (!canEditAvailability) {

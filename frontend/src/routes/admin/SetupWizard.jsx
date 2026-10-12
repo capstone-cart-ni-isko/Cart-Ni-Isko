@@ -213,8 +213,8 @@ export default function SetupWizard({ embedded = false }) {
               <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Store Setup</h1>
               <p className="text-sm text-slate-500 mt-1">
                 {canInitialize
-                  ? 'The wizard that prepares Tindahan ni Isko for its first customers (FLOW-SETUP-05).'
-                  : 'The store configuration both portals read (FLOW-SETUP-01).'}
+                  ? 'Set up Tindahan ni Isko for your store.'
+                  : 'Manage store configuration settings.'}
               </p>
             </div>
           )}
@@ -262,14 +262,14 @@ export default function SetupWizard({ embedded = false }) {
             <form onSubmit={submit} className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 space-y-6 shadow-xs">
               {status?.missing_critical?.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs font-semibold text-amber-800">
-                  REQ-SETUP-02: these critical fields are still empty -{' '}
+                  Required fields are still empty:{' '}
                   {status.missing_critical.join(', ')}. The store cannot go live until they are filled.
                 </div>
               )}
 
               {!canInitialize && !isSuperAdminRow(currentAdminUser) && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-slate-600">
-                  Read-only: only a super admin can change store-wide settings (rule 40).{' '}
+                  Read-only: only a super admin can change store-wide settings.{' '}
                   <button type="button" onClick={() => navigate('/admin/login')} className="text-brand-orange hover:underline cursor-pointer">
                     Sign in
                   </button>{' '}
@@ -307,8 +307,7 @@ export default function SetupWizard({ embedded = false }) {
                   <div>
                     <h2 className="text-sm font-black text-slate-800 uppercase tracking-wide">First super admin</h2>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      FLOW-SETUP-04 - leave the password blank and a secure temporary one is generated for you
-                      (REQ-EMP_ENROLL-03).
+                      Leave the password blank to automatically generate a secure temporary password.
                     </p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -353,7 +352,7 @@ export default function SetupWizard({ embedded = false }) {
                     <div className="sm:col-span-2">
                       <Field
                         label="Password (optional)"
-                        hint="At least 16 characters with an uppercase, a lowercase, a number and a symbol (REQ-SETUP-03)."
+                        hint="At least 16 characters with an uppercase letter, lowercase letter, number, and symbol."
                         touched={touched.password}
                         error={errors.account.password}
                       >
