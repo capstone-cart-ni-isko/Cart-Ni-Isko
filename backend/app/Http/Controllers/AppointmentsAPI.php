@@ -419,7 +419,9 @@ class AppointmentsAPI extends Controller
                             ($customer->cust_givname ?? '') . ' ' . ($customer->cust_surname ?? '')
                         );
                         $extra['cust_email'] = $customer->cust_email;
-                        $extra['cust_nickname'] = $customer->cust_nickname;
+                        // Spec section 6: `cust_nickname` is the derived
+                        // full-name alias, not a stored column.
+                        $extra['cust_nickname'] = $extra['customer_name'];
                     }
                     if ($link !== null) {
                         $extra['ord_id'] = $link['ord_id'];
@@ -492,7 +494,9 @@ class AppointmentsAPI extends Controller
                             ($customer->cust_givname ?? '') . ' ' . ($customer->cust_surname ?? '')
                         );
                         $extra['cust_email'] = $customer->cust_email;
-                        $extra['cust_nickname'] = $customer->cust_nickname;
+                        // Spec section 6: `cust_nickname` is the derived
+                        // full-name alias, not a stored column.
+                        $extra['cust_nickname'] = $extra['customer_name'];
                     }
 
                     return array_merge($appointment->toArray(), $extra);

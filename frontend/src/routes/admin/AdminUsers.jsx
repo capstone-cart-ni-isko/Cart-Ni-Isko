@@ -193,7 +193,7 @@ export default function AdminUsers() {
       recordLog('SUSPEND ACCOUNT', `Suspended ${emp.name}`)
       showToast(`${emp.name} has been suspended.`, 'success')
       setReloadKey((k) => k + 1)
-    } catch (err) {
+    } catch {
       showToast('Failed to suspend the account.', 'error')
     }
   }
@@ -208,7 +208,7 @@ export default function AdminUsers() {
       recordLog('RECOVER ACCOUNT', `Recovered ${emp.name}`)
       showToast(`${emp.name} has been recovered.`, 'success')
       setReloadKey((k) => k + 1)
-    } catch (err) {
+    } catch {
       showToast('Failed to recover the account.', 'error')
     }
   }
@@ -222,7 +222,7 @@ export default function AdminUsers() {
       recordLog('DELETE ACCOUNT', `Permanently deleted ${emp.name} (#${emp.emp_id})`)
       showToast(`${emp.name} was permanently deleted.`, 'success')
       setReloadKey((k) => k + 1)
-    } catch (err) {
+    } catch {
       showToast('Failed to delete the account.', 'error')
     }
   }

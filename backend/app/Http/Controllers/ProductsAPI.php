@@ -814,7 +814,7 @@ class ProductsAPI extends Controller
                     ->selectRaw('COALESCE(SUM(prodsales_walkin), 0) as walkin')
                     ->selectRaw('COALESCE(SUM(prodsales_preorder), 0) as preorder')
                     ->selectRaw('COALESCE(SUM(prodsales_cancelled), 0) as cancelled')
-                    ->groupBy('prodvar.prod_id', 'DATE(prodsales.prodsales_date)')
+                    ->groupBy('prodvar.prod_id', DB::raw('DATE(prodsales.prodsales_date)'))
                     ->orderBy('day')
                     ->get();
 
@@ -2376,8 +2376,12 @@ class ProductsAPI extends Controller
                             $pq->where('prod_name', 'like', "%{$needle}%")
                                ->orWhere('prod_tag', 'like', "%{$needle}%");
                         })->orWhereHas('customer', function ($cq) use ($needle) {
-                            $cq->where('cust_nickname', 'like', "%{$needle}%")
-                               ->orWhere('cust_email', 'like', "%{$needle}%")
+                            // The live `customer` table carries no
+                            // `cust_nickname` column (spec section 6: the
+                            // nickname is the derived full-name alias the shared
+                            // response re-exports), so filtering on it failed on
+                            // Postgres. Name matches use the stored name columns.
+                            $cq->where('cust_email', 'like', "%{$needle}%")
                                ->orWhere('cust_givname', 'like', "%{$needle}%")
                                ->orWhere('cust_surname', 'like', "%{$needle}%");
                         });

@@ -912,15 +912,15 @@ class UserAPI extends Controller
         $payload['walk_in']     = $walkIn;
         $payload['customer']    = $order->customer ? [
             'cust_id'       => $order->customer->cust_id,
-            'cust_nickname' => $order->customer->cust_nickname,
+            // Spec section 6: `cust_nickname` is the derived full-name alias.
+            'cust_nickname' => trim(($order->customer->cust_givname ?? '') . ' ' . ($order->customer->cust_surname ?? '')),
             'cust_email'    => $order->customer->cust_email,
             'cust_phone'    => $order->customer->cust_phone,
             'cust_givname'  => $order->customer->cust_givname,
             'cust_surname'  => $order->customer->cust_surname,
         ] : null;
         $payload['customer_name'] = $payload['customer']
-            ? trim(($payload['customer']['cust_nickname'] ?: $payload['customer']['cust_givname'])
-                . ' ' . $payload['customer']['cust_surname'])
+            ? $payload['customer']['cust_nickname']
             : null;
 
         $lineTotal = round((float) array_sum(array_column($items, 'line_total')), 2);

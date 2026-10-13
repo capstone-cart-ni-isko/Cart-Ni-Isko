@@ -368,7 +368,7 @@ export default function AdminSettings() {
       setSettings((prev) => ({ ...prev, ...payload }))
       setHasUnsavedChanges(false)
       showToast('Settings saved successfully!', 'success')
-    } catch (err) {
+    } catch {
       showToast('Failed to save settings.', 'error')
     } finally {
       setIsSaving(false)

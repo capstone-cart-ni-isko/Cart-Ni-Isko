@@ -9,27 +9,43 @@ use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Item;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
 class ReportBuilder
 {
     public function buildSalesReport(array $filters): array
     {
-        $query = Order::with(['items.product', 'customer'])
-            ->whereNotNull('ord_completed')
-            ->where('ord_status', '!=', 'CANCELLED');
+        // The live `orders` table records the sale timestamp in `ord_created`
+        // and completion through `ord_status`; the legacy `ord_completed`
+        // column is absent, so fall back to `ord_created`.
+        $completedColumn = Schema::hasColumn('orders', 'ord_completed') ? 'ord_completed' : 'ord_created';
+
+        // REQ-ANALYTICS-04: revenue counts only realised sales. The statuses the
+        // storefront treats as "not purchased" are excluded, case-insensitively.
+        $notSold = [
+            'processing', 'to process', 'pending', 'to cancel',
+            'cancel requested', 'cancellation requested', 'cancelled', 'canceled',
+        ];
+
+        $query = Order::with(['items.bag.prodvar.product', 'customer'])
+            ->whereNotNull($completedColumn)
+            ->whereRaw(
+                'LOWER(TRIM(ord_status)) NOT IN (' . implode(',', array_fill(0, count($notSold), '?')) . ')',
+                $notSold
+            );
 
         // Date range filter
         if (!empty($filters['date_from'])) {
-            $query->where('ord_completed', '>=', $filters['date_from']);
+            $query->where($completedColumn, '>=', $filters['date_from']);
         }
         if (!empty($filters['date_to'])) {
-            $query->where('ord_completed', '<=', $filters['date_to'] . ' 23:59:59');
+            $query->where($completedColumn, '<=', $filters['date_to'] . ' 23:59:59');
         }
 
-        // Product filter
+        // Product filter - line items hang off the items -> bag -> prodvar chain.
         if (!empty($filters['prod_id'])) {
-            $query->whereHas('items', function ($q) use ($filters) {
+            $query->whereHas('items.bag.prodvar', function ($q) use ($filters) {
                 $q->where('prod_id', $filters['prod_id']);
             });
         }
@@ -46,45 +62,43 @@ class ReportBuilder
             });
         }
 
-        $orders = $query->orderBy('ord_completed', 'desc')->get();
+        $orders = $query->orderBy($completedColumn, 'desc')->get();
 
         // Group by date
-        $byDate = $orders->groupBy(function ($order) {
-            return Carbon::parse($order->ord_completed)->format('Y-m-d');
-        })->map(function ($dayOrders) {
-            $revenue = $dayOrders->sum(function ($order) {
-                return $order->items->sum(function ($item) {
-                    return (float) $item->item_amount;
-                });
-            });
+        $byDate = $orders->groupBy(function ($order) use ($completedColumn) {
+            return Carbon::parse($order->getAttribute($completedColumn))->format('Y-m-d');
+        })->map(function ($dayOrders) use ($completedColumn) {
             return [
-                'date' => $dayOrders->first()->ord_completed,
+                'date' => $dayOrders->first()->getAttribute($completedColumn),
                 'transactions' => $dayOrders->count(),
-                'revenue' => round($revenue, 2),
-                'orders' => $dayOrders->map(function ($order) {
+                'revenue' => round($dayOrders->sum(fn ($order) => $this->orderRevenue($order)), 2),
+                'orders' => $dayOrders->map(function ($order) use ($completedColumn) {
                     return [
                         'ord_id' => $order->ord_id,
                         'ord_tag' => $order->ord_tag,
-                        'customer' => $order->customer?->cust_nickname,
-                        'total' => $order->items->sum(function ($item) {
-                            return (float) $item->item_amount;
-                        }),
+                        'customer' => $this->customerName($order->customer),
+                        'total' => $this->orderRevenue($order),
                         'status' => $order->ord_status,
-                        'completed_at' => $order->ord_completed,
+                        'completed_at' => $order->getAttribute($completedColumn),
                     ];
                 })->values()->all(),
             ];
         })->values()->all();
 
         // Group by product
-        $byProduct = $orders->flatMap(function ($order) {
-            return $order->items->map(function ($item) use ($order) {
+        $byProduct = $orders->flatMap(function ($order) use ($completedColumn) {
+            $date = $order->getAttribute($completedColumn);
+
+            return $order->items->map(function ($item) use ($date) {
+                $bag = $item->bag;
+                $product = $bag?->prodvar?->product;
+
                 return [
-                    'prod_id' => $item->prod_id,
-                    'prod_name' => $item->product->prod_name ?? 'Unknown',
-                    'qty' => (int) $item->item_qty,
-                    'amount' => (float) $item->item_amount,
-                    'order_date' => $order->ord_completed,
+                    'prod_id' => $product?->prod_id ?? $bag?->prodvar?->prod_id,
+                    'prod_name' => $product?->prod_name ?? 'Unknown',
+                    'qty' => (int) ($bag->bag_qty ?? 0),
+                    'amount' => $this->itemLineAmount($item),
+                    'order_date' => $date,
                 ];
             });
         })->groupBy('prod_id')->map(function ($items) {
@@ -101,21 +115,13 @@ class ReportBuilder
         $byStaff = $orders->groupBy('cust_id')->map(function ($custOrders) {
             return [
                 'cust_id' => $custOrders->first()->cust_id,
-                'customer' => $custOrders->first()->customer?->cust_nickname,
+                'customer' => $this->customerName($custOrders->first()->customer),
                 'orders_count' => $custOrders->count(),
-                'total_revenue' => round($custOrders->sum(function ($order) {
-                    return $order->items->sum(function ($item) {
-                        return (float) $item->item_amount;
-                    });
-                }), 2),
+                'total_revenue' => round($custOrders->sum(fn ($order) => $this->orderRevenue($order)), 2),
             ];
         })->values()->all();
 
-        $totalRevenue = round($orders->sum(function ($order) {
-            return $order->items->sum(function ($item) {
-                return (float) $item->item_amount;
-            });
-        }), 2);
+        $totalRevenue = round($orders->sum(fn ($order) => $this->orderRevenue($order)), 2);
 
         return [
             'summary' => [
@@ -130,6 +136,27 @@ class ReportBuilder
             'by_product' => $byProduct,
             'by_staff' => $byStaff,
         ];
+    }
+
+    /**
+     * Unit price x quantity for one order line. Line items live in `items`,
+     * which links to the priced `bag` row (the live schema carries no
+     * `item_amount`/`item_qty` columns).
+     */
+    private function itemLineAmount($item): float
+    {
+        $bag = $item->bag;
+
+        if (! $bag) {
+            return 0.0;
+        }
+
+        return round((float) $bag->bag_amount * (int) $bag->bag_qty, 2);
+    }
+
+    private function orderRevenue($order): float
+    {
+        return round($order->items->sum(fn ($item) => $this->itemLineAmount($item)), 2);
     }
 
     /**
@@ -236,14 +263,19 @@ class ReportBuilder
 
     public function buildAppointmentsReport(array $filters): array
     {
-        $query = Visit::with('customer')
-            ->whereNull('appoint_deleted');
+        // Cancellations are tracked through `appoint_status`; the live
+        // `appointments` table has no soft-delete column. The scheduled window
+        // lives in `appoint_start` on the current schema, with `appoint_date`
+        // only on the legacy table.
+        $dateColumn = Schema::hasColumn('appointments', 'appoint_date') ? 'appoint_date' : 'appoint_start';
+
+        $query = Visit::with('customer');
 
         if (!empty($filters['date_from'])) {
-            $query->where('appoint_date', '>=', $filters['date_from']);
+            $query->where($dateColumn, '>=', $filters['date_from']);
         }
         if (!empty($filters['date_to'])) {
-            $query->where('appoint_date', '<=', $filters['date_to'] . ' 23:59:59');
+            $query->where($dateColumn, '<=', $filters['date_to'] . ' 23:59:59');
         }
         if (!empty($filters['appoint_type'])) {
             $query->where('appoint_type', $filters['appoint_type']);
@@ -256,7 +288,7 @@ class ReportBuilder
             }
         }
 
-        $appointments = $query->orderBy('appoint_date', 'desc')->get();
+        $appointments = $query->orderBy($dateColumn, 'desc')->get();
 
         $byStatus = $appointments->groupBy(function ($appt) {
             return $appt->appoint_closed ? 'CLOSED' : 'OPEN';
@@ -274,8 +306,8 @@ class ReportBuilder
             ];
         })->values()->all();
 
-        $byDate = $appointments->groupBy(function ($appt) {
-            return Carbon::parse($appt->appoint_date)->format('Y-m-d');
+        $byDate = $appointments->groupBy(function ($appt) use ($dateColumn) {
+            return Carbon::parse($appt->getAttribute($dateColumn))->format('Y-m-d');
         })->map(function ($dayAppts, $date) {
             return [
                 'date' => $date,
@@ -307,14 +339,15 @@ class ReportBuilder
             'by_status' => $byStatus,
             'by_type' => $byType,
             'by_date' => $byDate,
-            'items' => $appointments->map(function ($appt) {
+            'items' => $appointments->map(function ($appt) use ($dateColumn) {
                 return [
                     'appoint_id' => $appt->appoint_id,
                     'appoint_qr' => $appt->appoint_qr,
                     'appoint_type' => $appt->appoint_type,
-                    'appoint_date' => $appt->appoint_date,
+                    'appoint_date' => $appt->getAttribute($dateColumn),
+                    'appoint_start' => $appt->getAttribute($dateColumn),
                     'appoint_status' => $appt->appoint_closed ? 'CLOSED' : 'OPEN',
-                    'customer' => $appt->customer?->cust_nickname,
+                    'customer' => $this->customerName($appt->customer),
                     'customer_phone' => $appt->customer?->cust_phone,
                 ];
             })->values()->all(),
@@ -323,11 +356,18 @@ class ReportBuilder
 
     public function buildStaffingReport(array $filters): array
     {
-        $query = Employee::whereNull('emp_deleted')
-            ->whereNull('emp_disabled');
+        // The live `employee` table marks suspension with `emp_suspended` and
+        // carries the role in `emp_categ`; `emp_disabled`/`emp_type` are only on
+        // the legacy shape.
+        $hasDisabled = Schema::hasColumn('employee', 'emp_disabled');
+        $categoryColumn = Schema::hasColumn('employee', 'emp_categ') ? 'emp_categ' : 'emp_type';
 
-        if (!empty($filters['emp_type'])) {
-            $query->where('emp_type', $filters['emp_type']);
+        $query = Employee::whereNull('emp_deleted');
+        $query->whereNull($hasDisabled ? 'emp_disabled' : 'emp_suspended');
+
+        $typeFilter = $filters['emp_categ'] ?? $filters['emp_type'] ?? null;
+        if (!empty($typeFilter)) {
+            $query->where($categoryColumn, $typeFilter);
         }
 
         $employees = $query->get();
@@ -338,7 +378,7 @@ class ReportBuilder
             ->get()
             ->groupBy('emp_id');
 
-        $staffData = $employees->map(function ($emp) use ($blocks) {
+        $staffData = $employees->map(function ($emp) use ($blocks, $categoryColumn) {
             $shifts = $blocks->get($emp->emp_id) ?? collect();
             $totalHours = $shifts->sum(function ($shift) {
                 if (! $shift->sched_time_start || ! $shift->sched_time_end) return 0;
@@ -352,7 +392,7 @@ class ReportBuilder
             return [
                 'emp_id' => $emp->emp_id,
                 'name' => trim(($emp->emp_givname ?? '') . ' ' . ($emp->emp_surname ?? '')),
-                'emp_type' => $emp->emp_type,
+                'emp_type' => $emp->getAttribute($categoryColumn),
                 'emp_email' => $emp->emp_email,
                 'emp_phone' => $emp->emp_phone,
                 'emp_instore' => $emp->inStore(),
@@ -365,7 +405,7 @@ class ReportBuilder
 
         $totalStaff = $employees->count();
         $inStoreStaff = $employees->filter(fn ($emp) => $emp->inStore())->count();
-        $byType = $employees->groupBy('emp_type')->map(function ($group, $type) {
+        $byType = $employees->groupBy($categoryColumn)->map(function ($group, $type) {
             return [
                 'type' => $type,
                 'count' => $group->count(),
@@ -399,5 +439,21 @@ class ReportBuilder
             'staff' => $staffData,
             'coverage' => $coverage,
         ];
+    }
+
+    /**
+     * The live `customer` table has no `cust_nickname` column; the nickname is
+     * the derived full-name alias (spec section 6). Reports therefore present
+     * the given + surname the same way the shared responses do.
+     */
+    private function customerName($customer): ?string
+    {
+        if (! $customer) {
+            return null;
+        }
+
+        $name = trim(($customer->cust_givname ?? '') . ' ' . ($customer->cust_surname ?? ''));
+
+        return $name !== '' ? $name : null;
     }
 }

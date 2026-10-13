@@ -145,7 +145,7 @@ function BackupContacts() {
         pending.kind === 'email' ? pending.value.next : emails
       )
       showToast('Backup contacts updated')
-    } catch (err) {
+    } catch {
       showToast('Unable to save your backup contacts.', 'error')
     } finally {
       setPending(null)

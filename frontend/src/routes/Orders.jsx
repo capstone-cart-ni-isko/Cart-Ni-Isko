@@ -335,7 +335,7 @@ function Orders() {
       await requestCancel(order.id)
       showToast('Cancellation requested. The store will review it shortly.', 'success')
       await load()
-    } catch (err) {
+    } catch {
       showToast('Unable to request cancellation.', 'error')
     } finally {
       setBusyId(null)

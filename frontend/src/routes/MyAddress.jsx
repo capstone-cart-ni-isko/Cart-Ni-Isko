@@ -129,7 +129,7 @@ function MyAddress() {
       setShowForm(false)
       setEditingId(null)
       setForm(EMPTY_FORM)
-    } catch (error) {
+    } catch {
       showToast('Unable to save that address.', 'error')
     } finally {
       setSaving(false)
@@ -140,7 +140,7 @@ function MyAddress() {
     try {
       await deleteAddress(id)
       showToast('Address removed')
-    } catch (error) {
+    } catch {
       showToast('Unable to remove that address.', 'error')
     }
     setDeleteTarget(null)
@@ -150,7 +150,7 @@ function MyAddress() {
     try {
       await updateAddress(id, { isDefault: true })
       showToast('Default address updated!')
-    } catch (error) {
+    } catch {
       showToast('Unable to set the default address.', 'error')
     }
   }

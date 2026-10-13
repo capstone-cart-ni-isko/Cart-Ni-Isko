@@ -245,7 +245,7 @@ export default function AdminReviews() {
       await applyModeration(review, true)
       setDetailOpen(false)
       showToast('Review approved and published.', 'success')
-    } catch (err) {
+    } catch {
       showToast('Failed to approve the review.', 'error')
     } finally {
       setIsModerating(false)
@@ -259,7 +259,7 @@ export default function AdminReviews() {
       await applyModeration(review, false)
       setDetailOpen(false)
       showToast('Review rejected.', 'success')
-    } catch (err) {
+    } catch {
       showToast('Failed to reject the review.', 'error')
     } finally {
       setIsModerating(false)
@@ -281,7 +281,7 @@ export default function AdminReviews() {
       setReviews((list) => list.filter((r) => r.id !== review.id))
       setDetailOpen(false)
       showToast('Review deleted.', 'success')
-    } catch (err) {
+    } catch {
       showToast('Failed to delete the review.', 'error')
     } finally {
       setIsModerating(false)

@@ -320,7 +320,7 @@ export default function AdminAppointments() {
       setCancelReason('')
       reload()
       showToast('Appointment cancelled and the customer notified.', 'success')
-    } catch (err) {
+    } catch {
       showToast('Failed to cancel the appointment.', 'error')
     } finally {
       setIsCancelling(false)

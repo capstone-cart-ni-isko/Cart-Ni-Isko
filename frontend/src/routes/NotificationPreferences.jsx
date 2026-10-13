@@ -50,7 +50,7 @@ function NotificationPreferences() {
       const next = await updateMyPreferences(patch)
       onOk?.(next)
       showToast('Preference saved')
-    } catch (err) {
+    } catch {
       showToast('Unable to save that preference.', 'error')
     } finally {
       setSavingField('')

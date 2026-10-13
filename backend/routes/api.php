@@ -130,7 +130,13 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/tracking/create', [OrdersAPI::class, 'createFulfillmentTrack']);
     Route::put('/tracking/update', [OrdersAPI::class, 'updateFulfillmentStatus'])->middleware('role:staff');
     Route::put('/tracking/close', [OrdersAPI::class, 'closeFulfillmentTrack'])->middleware('role:staff');
-    Route::post('/tracking/scan', [OrdersAPI::class, 'scanCode'])->middleware('role:admin');
+    // REQ-ORD_CLAIM-01 / REQ-ORD_CLAIM-02: QR scanning belongs to the owning
+    // customer (delivery receipt, FLOW-ORD_CLAIM-07) and to store employees
+    // (pickup verification, FLOW-ORD_CLAIM-01). The route therefore admits any
+    // authenticated account and lets OrdersAPI::scanCode() decide per code,
+    // exactly as it did before the role gate was added. Gating it to admins
+    // locked customers and staff out of their own scan flows.
+    Route::post('/tracking/scan', [OrdersAPI::class, 'scanCode']);
 
     // Access API Routes
     Route::post('/access/flag', [SystemAPI::class, 'flagIrregularity'])->middleware('role:staff');

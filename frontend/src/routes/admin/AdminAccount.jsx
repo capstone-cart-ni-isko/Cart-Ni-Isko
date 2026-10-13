@@ -314,7 +314,7 @@ export default function AdminAccount({ embedded = false }) {
           : 'Account profile updated successfully!',
         'success'
       )
-    } catch (err) {
+    } catch {
       // Inputs stay as typed so the employee can correct and retry.
       showToast('Failed to update the account profile.', 'error')
     } finally {

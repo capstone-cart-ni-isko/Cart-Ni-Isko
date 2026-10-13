@@ -202,7 +202,7 @@ function OrderDetail() {
       await requestCancel(order.id)
       showToast('Cancellation requested. The store will review it shortly.', 'success')
       load()
-    } catch (err) {
+    } catch {
       showToast('Unable to request cancellation.', 'error')
     } finally {
       setBusy(false)
@@ -219,7 +219,7 @@ function OrderDetail() {
       const res = await scanQr(qrPayload, 'customer')
       showToast(res?.message || 'Order marked as received.', 'success')
       load()
-    } catch (err) {
+    } catch {
       showToast('Unable to confirm receipt.', 'error')
     } finally {
       setBusy(false)

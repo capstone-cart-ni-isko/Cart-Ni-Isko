@@ -160,7 +160,7 @@ export default function AdminProductDetail() {
       else await unlistProduct(row.prodId ?? prodId)
       showToast(row.disabled ? 'Product relisted in the catalog.' : 'Product unlisted from the catalog.', 'success')
       load()
-    } catch (err) {
+    } catch {
       showToast('Failed to change the listing.', 'error')
     }
   }
@@ -173,7 +173,7 @@ export default function AdminProductDetail() {
       showToast('Product removed from the catalog.', 'success')
       refreshProducts()
       navigate('/admin/inventory')
-    } catch (err) {
+    } catch {
       showToast('Failed to remove the product.', 'error')
     }
   }
@@ -254,7 +254,7 @@ export default function AdminProductDetail() {
     try {
       const url = await uploadImage(file, 'product')
       if (url) setComboDraft((draft) => ({ ...draft, pic: url }))
-    } catch (err) {
+    } catch {
       showToast('Unable to upload the image.', 'error')
     } finally {
       setIsUploadingPhoto(false)

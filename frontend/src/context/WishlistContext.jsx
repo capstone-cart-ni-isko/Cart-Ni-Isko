@@ -123,7 +123,7 @@ export function WishlistProvider({ children }) {
         } else {
           await addWishlistItem(custId, key, 1, product.price)
         }
-      } catch (err) {
+      } catch {
         setWishlistItems((prev) =>
           exists
             ? prev.some((item) => item.id === product.id)
@@ -166,7 +166,7 @@ export function WishlistProvider({ children }) {
         notifyCartChanged()
         showToast(`Added "${product.name}" to your bag.`, 'success')
         return true
-      } catch (err) {
+      } catch {
         showToast('Could not add this item to your bag. Please try again.', 'error')
         return false
       }
