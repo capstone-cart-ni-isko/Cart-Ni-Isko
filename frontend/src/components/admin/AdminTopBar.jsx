@@ -143,7 +143,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
       {/* ── Ribbon (DOMAIN 3) ── */}
       {/* Full page width: the ribbon is the top row of the portal (rule 72), so
           it never starts after the docked sidebar. */}
-      <div className="h-14 bg-white border-b border-gray-100 w-full px-4 md:px-6 flex items-center gap-3">
+      <div className="h-14 bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 flex items-center gap-3">
         {/* Small-screen menu opener: the docked sidebar cannot sit beside the
             content on a phone, so this one control opens it as a drawer. */}
         <button
@@ -162,7 +162,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
         {/* LEFT — brand logo (FLOW-EMP_HOME-02) */}
         <Link to={homePath} className="flex items-center gap-2 shrink-0 min-w-0" title="Tindahan ni Isko">
           <img src={brandLogo} alt="Tindahan ni Isko" className="h-9 object-contain hover:opacity-90 transition-opacity" />
-          <span className="hidden lg:block text-sm font-extrabold text-slate-900 tracking-tight truncate">
+          <span className="hidden lg:block text-sm font-extrabold text-slate-900 dark:text-[var(--ink)] tracking-tight truncate">
             Tindahan ni Isko
           </span>
         </Link>
@@ -180,7 +180,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search orders, products, customers..."
             aria-label="Search"
-            className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-50 border border-slate-200 text-xs placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:bg-white transition-all shadow-2xs"
+            className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-50 dark:bg-[var(--surface-2)] border border-slate-200 dark:border-[var(--line)] text-xs text-slate-900 dark:text-[var(--ink)] placeholder-gray-400 dark:placeholder-[var(--muted-2)] focus:outline-none focus:border-brand-orange focus:bg-white dark:focus:bg-[var(--surface)] transition-all shadow-2xs"
           />
         </form>
 

@@ -21,7 +21,7 @@ export default function BackButton({ to = null, onClick = null, label = 'Back', 
       type="button"
       onClick={goBack}
       aria-label={label}
-      className={`inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-brand-orange transition-colors cursor-pointer ${className}`}
+      className={`inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-[var(--muted)] hover:text-brand-orange transition-colors cursor-pointer ${className}`}
     >
       <BackArrowIcon className="w-4 h-4" />
       <span>{label}</span>

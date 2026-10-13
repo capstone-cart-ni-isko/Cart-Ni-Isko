@@ -35,7 +35,7 @@ function AppShell({ children, showNav = true, showBottomNav = true, showHeader =
   if (!showNav) {
     return (
       <MenuProvider>
-        <div className="min-h-screen bg-white md:bg-[#F8F9FA] flex flex-col w-full customer-desktop-scale">
+        <div className="min-h-screen bg-white dark:bg-[var(--surface)] md:bg-[#F8F9FA] md:dark:bg-[var(--surface)] flex flex-col w-full customer-desktop-scale">
           {isOffline && (
             <div className="bg-amber-500 text-white text-xs font-bold py-2 px-4 text-center sticky top-0 z-[99999] shadow-sm">
               You are currently offline. Browsing in cached mode.
@@ -48,7 +48,7 @@ function AppShell({ children, showNav = true, showBottomNav = true, showHeader =
           {/* Card wrapper centered on desktop background */}
           <div className="flex-1 flex items-center justify-center p-4 pt-8 md:py-16">
             <div
-              className={`app-container relative w-full bg-white md:max-w-lg md:rounded-3xl border-none overflow-hidden ${className}`}
+              className={`app-container relative w-full bg-white dark:bg-[var(--surface)] md:max-w-lg md:rounded-3xl border border-slate-200 dark:border-[var(--line)] md:border-none overflow-hidden ${className}`}
             >
               {children}
             </div>

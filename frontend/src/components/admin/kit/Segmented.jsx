@@ -8,7 +8,7 @@ export default function Segmented({ options = [], value, onChange, label, size =
   const inner = size === 'sm' ? 'h-6 px-2.5 text-[11px]' : 'h-7 px-3 text-xs'
 
   return (
-    <div className={`inline-flex ${height} p-0.5 bg-slate-100 rounded-md max-w-full overflow-x-auto ${className}`} role="radiogroup" aria-label={label}>
+    <div className={`inline-flex ${height} p-0.5 bg-slate-100 dark:bg-[var(--surface-3)] rounded-md max-w-full overflow-x-auto ${className}`} role="radiogroup" aria-label={label}>
       {items.map((item) => {
         const active = item.value === value
         return (
@@ -19,7 +19,7 @@ export default function Segmented({ options = [], value, onChange, label, size =
             aria-checked={active}
             onClick={() => onChange?.(item.value)}
             className={`${inner} shrink-0 inline-flex items-center gap-1.5 rounded font-semibold whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-isko-orange ${
-              active ? 'bg-isko-blue text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              active ? 'bg-isko-blue text-white shadow-sm' : 'text-slate-600 dark:text-[var(--muted)] hover:text-slate-900 dark:hover:text-[var(--ink)]'
             }`}
           >
             {item.icon}

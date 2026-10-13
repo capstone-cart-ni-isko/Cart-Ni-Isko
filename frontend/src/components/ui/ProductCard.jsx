@@ -35,10 +35,10 @@ function ProductCard({ product }) {
     <>
       <Link
         to={`/product/${product.id}`}
-        className="block bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-slate-300 transition-colors select-none relative group"
+        className="block bg-white dark:bg-[var(--surface)] rounded-lg border border-slate-200 dark:border-[var(--line)] overflow-hidden hover:border-slate-300 dark:hover:border-[var(--line-2)] transition-colors select-none relative group"
       >
         {/* Product image container */}
-        <div className="aspect-square w-full bg-white relative overflow-hidden flex items-center justify-center border-b border-slate-200">
+        <div className="aspect-square w-full bg-white dark:bg-[var(--surface)] relative overflow-hidden flex items-center justify-center border-b border-slate-200 dark:border-[var(--line)]">
           {hasValidImage ? (
             <img
               src={resolvedImage}
@@ -60,7 +60,7 @@ function ProductCard({ product }) {
           <button
             type="button"
             onClick={handleWishlistClick}
-            className="absolute top-2.5 right-2.5 w-7 h-7 rounded-md bg-white flex items-center justify-center border border-slate-200 hover:bg-slate-50 active:scale-90 transition-transform z-10 cursor-pointer"
+            className="absolute top-2.5 right-2.5 w-7 h-7 rounded-md bg-white dark:bg-[var(--surface)] flex items-center justify-center border border-slate-200 dark:border-[var(--line)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] active:scale-90 transition-transform z-10 cursor-pointer"
           >
             <svg
               viewBox="0 0 24 24"
@@ -77,10 +77,10 @@ function ProductCard({ product }) {
 
         {/* Product details */}
         <div className="p-3">
-          <span className="text-[10px] font-normal text-gray-400 uppercase tracking-wider">
+          <span className="text-[10px] font-normal text-gray-400 dark:text-[var(--muted-2)] uppercase tracking-wider">
             {product.category}
           </span>
-          <h3 className="text-xs sm:text-sm font-normal text-gray-900 mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
+          <h3 className="text-xs sm:text-sm font-normal text-gray-900 dark:text-[var(--ink)] mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
             {product.name}
           </h3>
           <div className="mt-1 flex items-center justify-between">

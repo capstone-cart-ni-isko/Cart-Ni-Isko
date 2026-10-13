@@ -18,9 +18,9 @@ function Button({
 }) {
   const variants = {
     primary: 'btn--primary text-white',
-    secondary: 'btn--secondary',
-    outline: 'btn--secondary',
-    ghost: 'btn--ghost',
+    secondary: 'btn--secondary dark:text-[var(--ink-2)]',
+    outline: 'btn--secondary dark:text-[var(--ink-2)]',
+    ghost: 'btn--ghost dark:text-[var(--ink-3)]',
     pill: 'btn--primary text-white',
     danger: 'btn--danger text-white',
   }

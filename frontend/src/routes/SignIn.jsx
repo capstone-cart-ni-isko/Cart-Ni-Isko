@@ -236,14 +236,14 @@ function SignIn() {
               className="h-14 w-auto object-contain"
             />
             <div>
-              <h1 className="page-title text-gray-900">Sign In</h1>
-              <p className="text-sm text-gray-500 font-medium mt-1">
+              <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">Sign In</h1>
+              <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium mt-1">
                 Access your orders, bag, and favorite products anytime, anywhere.
               </p>
             </div>
           </div>
 
-          <div className="bg-white rounded-md border border-slate-200 p-5 space-y-5">
+          <div className="bg-white dark:bg-[var(--surface)] rounded-md border border-slate-200 dark:border-[var(--line)] p-5 space-y-5">
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
               {phoneField(
                 'mobile'
@@ -256,7 +256,7 @@ function SignIn() {
               <div className="flex items-center justify-end">
                 <Link
                   to="/forgot-password"
-                  className="text-xs font-semibold text-gray-500 hover:text-brand-orange transition-colors"
+                  className="text-xs font-semibold text-gray-500 dark:text-[var(--muted)] hover:text-brand-orange transition-colors"
                 >
                   Forgot password?
                 </Link>
@@ -283,7 +283,7 @@ function SignIn() {
           </div>
         </div>
 
-        <p className="text-center text-sm text-gray-500 font-semibold pt-6">
+        <p className="text-center text-sm text-gray-500 dark:text-[var(--muted)] font-semibold pt-6">
           Don&apos;t have an account?{' '}
           <Link to="/signup/role" className="text-brand-orange font-bold hover:underline">
             Sign up
@@ -293,7 +293,7 @@ function SignIn() {
 
       {/* DESKTOP LOGIN LAYOUT (Image 3 Wireframe) */}
       <div className="hidden md:flex flex-col justify-center min-h-[460px] px-4 py-10 animate-fade-in">
-        <div className="w-full max-w-md mx-auto bg-white rounded-md border border-slate-200 p-6 space-y-5">
+        <div className="w-full max-w-md mx-auto bg-white dark:bg-[var(--surface)] rounded-md border border-slate-200 dark:border-[var(--line)] p-6 space-y-5">
           <div className="space-y-3 text-center">
             <img
               src={brandLogo}
@@ -301,8 +301,8 @@ function SignIn() {
               className="h-16 w-auto object-contain mx-auto"
             />
             <div>
-              <h1 className="page-title text-gray-900">Log In</h1>
-              <p className="text-sm text-gray-500 font-medium mt-1 leading-relaxed">
+              <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">Log In</h1>
+              <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium mt-1 leading-relaxed">
                 Access your orders, bag, and favorite products anytime, anywhere.
               </p>
             </div>
@@ -345,7 +345,7 @@ function SignIn() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 font-semibold">
+          <p className="text-center text-sm text-gray-500 dark:text-[var(--muted)] font-semibold">
             Don&apos;t have an account?{' '}
             <Link to="/signup/role" className="text-brand-orange font-bold hover:underline">
               Sign Up

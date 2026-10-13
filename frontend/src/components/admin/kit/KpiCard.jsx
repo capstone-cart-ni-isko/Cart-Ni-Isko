@@ -46,17 +46,17 @@ export default function KpiCard({ label, value, subtext, tone = 'neutral', icon,
       onClick={onClick}
       aria-pressed={onClick ? active : undefined}
       title={hint}
-      className={`text-left w-full h-full bg-white rounded-lg border p-3 flex flex-col gap-1 transition-colors ${
-        active ? 'border-isko-blue ring-1 ring-isko-blue' : 'border-slate-200'
+      className={`text-left w-full h-full bg-white dark:bg-[var(--surface)] rounded-lg border p-3 flex flex-col gap-1 transition-colors ${
+        active ? 'border-isko-blue ring-1 ring-isko-blue' : 'border-slate-200 dark:border-[var(--line)]'
       } ${onClick ? 'cursor-pointer hover:border-isko-blue/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-isko-orange' : ''}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-slate-500">{label}</span>
+        <span className="text-xs font-medium text-slate-500 dark:text-[var(--muted)]">{label}</span>
         <span className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 [&>svg]:w-4 [&>svg]:h-4 ${ACCENT_CHIP[accent] || ACCENT_CHIP.blue}`}>
           {icon}
         </span>
       </div>
-      <span className="text-2xl font-bold text-slate-900 tracking-tight tabular-nums leading-tight">{value}</span>
+      <span className="text-2xl font-bold text-slate-900 dark:text-[var(--ink)] tracking-tight tabular-nums leading-tight">{value}</span>
       <span className={`flex items-center gap-1 text-[11px] font-medium truncate ${TONE_TEXT[tone] || TONE_TEXT.neutral}`}>
         <ToneIcon tone={tone} />
         <span className="truncate">{subtext}</span>

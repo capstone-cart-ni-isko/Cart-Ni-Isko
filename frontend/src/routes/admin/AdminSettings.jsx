@@ -530,11 +530,11 @@ export default function AdminSettings() {
               : 'Your account, your password and your backup contacts.'
 
   return (
-    <div className="admin-portal h-screen bg-[#F8F9FA] flex flex-col w-full font-sans antialiased text-gray-900 overflow-hidden">
+    <div className="admin-portal h-screen bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full font-sans antialiased text-gray-900 dark:text-[var(--ink)] overflow-hidden">
       {/* ── Focused-page header: back (top-left, rule 69) · exit (top-right, rule 70) ── */}
-      <header className="h-14 shrink-0 z-30 select-none bg-white border-b border-gray-100 w-full px-4 md:px-6 flex items-center gap-3">
+      <header className="h-14 shrink-0 z-30 select-none bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 flex items-center gap-3">
         <BackButton onClick={handleBack} />
-        <h1 className="text-base font-extrabold text-gray-900 tracking-tight truncate">Settings</h1>
+        <h1 className="text-base font-extrabold text-gray-900 dark:text-[var(--ink)] tracking-tight truncate">Settings</h1>
         <div className="ml-auto flex items-center gap-2">
           <ExitButton onClick={handleExit} />
         </div>
@@ -544,7 +544,7 @@ export default function AdminSettings() {
         {/* LEFT — the docked settings card, the same left-docked card language
             the menu sidebar uses */}
         <aside className="hidden md:block shrink-0 w-72 h-full min-h-0 p-3 z-20">
-          <div className="w-full h-full bg-white rounded-xl border border-slate-200 flex flex-col min-h-0 p-3 overflow-hidden">
+          <div className="w-full h-full bg-white dark:bg-[var(--surface)] rounded-xl border border-slate-200 dark:border-[var(--line)] flex flex-col min-h-0 p-3 overflow-hidden">
             {navSections.map((section) => (
               <div key={section.group} className="mb-4 last:mb-0">
                 <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -562,7 +562,7 @@ export default function AdminSettings() {
                         className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-150 cursor-pointer text-left ${
                           active
                             ? 'bg-brand-orange/10 text-brand-orange'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            : 'text-slate-600 dark:text-[var(--muted)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] hover:text-slate-900 dark:hover:text-[var(--ink)]'
                         }`}
                       >
                         <span className="shrink-0">{item.icon}</span>
@@ -582,16 +582,16 @@ export default function AdminSettings() {
         <main className="flex-1 min-w-0 overflow-y-auto p-4 md:p-5">
           <div className="pb-28">
             {/* ── Section header ── */}
-            <div className="mb-6 pb-5 border-b border-slate-200">
-              <h2 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">{sectionTitle}</h2>
-              <p className="text-sm text-slate-500 mt-1">{sectionBlurb}</p>
+            <div className="mb-6 pb-5 border-b border-slate-200 dark:border-[var(--line)]">
+              <h2 className="text-2xl lg:text-3xl font-black text-gray-900 dark:text-[var(--ink)] tracking-tight">{sectionTitle}</h2>
+              <p className="text-sm text-slate-500 dark:text-[var(--muted)] mt-1">{sectionBlurb}</p>
             </div>
 
             {/* Mobile settings rail — the same entries, stacked on a small screen */}
-            <div className="md:hidden mb-5 bg-white rounded-xl border border-slate-200 p-3 space-y-3">
+            <div className="md:hidden mb-5 bg-white dark:bg-[var(--surface)] rounded-xl border border-slate-200 dark:border-[var(--line)] p-3 space-y-3">
               {navSections.map((section) => (
                 <div key={section.group}>
-                  <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 dark:text-[var(--muted-2)] uppercase tracking-widest">
                     {section.group}
                   </p>
                   <div className="space-y-0.5">
@@ -964,10 +964,10 @@ export default function AdminSettings() {
 
       {/* ── Sticky Bottom Bar (system panes only) ── */}
       {isSuperAdmin && isSystemPane && (
-        <div className="fixed bottom-0 right-0 left-0 md:left-72 bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
+        <div className="fixed bottom-0 right-0 left-0 md:left-72 bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-md border-t border-slate-200 dark:border-[var(--line)] px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-slate-400' : hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
-            <span className="text-xs font-semibold text-slate-600">
+            <span className="text-xs font-semibold text-slate-600 dark:text-[var(--muted)]">
               {isLoading ? 'Loading settings…' : hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
             </span>
           </div>
@@ -977,7 +977,7 @@ export default function AdminSettings() {
               type="button"
               disabled={!hasUnsavedChanges || isLoading}
               onClick={handleDiscard}
-              className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 text-xs font-semibold text-slate-700 transition-colors"
+              className="px-4 py-2 rounded-lg border border-slate-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] disabled:opacity-40 text-xs font-semibold text-slate-700 dark:text-[var(--ink-2)] transition-colors"
             >
               Cancel
             </button>

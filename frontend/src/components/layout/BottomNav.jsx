@@ -90,7 +90,7 @@ function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-[110000] safe-bottom md:bottom-4 lg:hidden">
       <div className="mx-auto max-w-lg md:max-w-xl px-4">
-        <div className="flex items-center justify-around bg-white rounded-lg px-2 py-1.5 border border-slate-200">
+        <div className="flex items-center justify-around bg-white dark:bg-[var(--surface)] rounded-lg px-2 py-1.5 border border-slate-200 dark:border-[var(--line)]">
           {ROUTE_TABS.map(({ to, label, icon, end, badge, glyph, active }) => {
             // Bag badge = bag quantity; bell badge = unread notifications.
             const count = to === '/bag' ? bagCount : badge ? unread : 0
@@ -107,7 +107,7 @@ function BottomNav() {
                 to={to}
                 end={end}
                 onClick={(e) => guard(e, to)}
-                className={`${TAB_CLASS} ${isActive ? 'text-brand-orange font-bold bg-orange-50/50' : 'text-text-muted'}`}
+                className={`${TAB_CLASS} ${isActive ? 'text-brand-orange font-bold bg-orange-50/50 dark:bg-[var(--tint-brand-bg)]' : 'text-text-muted dark:text-[var(--muted)]'}`}
               >
                 <>
                   <span className="relative">
@@ -129,7 +129,7 @@ function BottomNav() {
             onClick={openMenu}
             aria-label="Open menu"
             aria-expanded={isMenuOpen}
-            className={`${TAB_CLASS} text-text-muted cursor-pointer`}
+            className={`${TAB_CLASS} text-text-muted dark:text-[var(--muted)] cursor-pointer`}
           >
             <MenuIcon />
             <span className="text-[11px] font-medium leading-tight whitespace-nowrap">Menu</span>

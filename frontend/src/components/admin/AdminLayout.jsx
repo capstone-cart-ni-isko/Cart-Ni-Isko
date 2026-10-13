@@ -22,7 +22,7 @@ export default function AdminLayout({ children, className = '' }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <div className="admin-portal h-screen bg-[#F8F9FA] flex flex-col w-full font-sans antialiased text-gray-900 overflow-hidden">
+    <div className="admin-portal h-screen bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full font-sans antialiased text-gray-900 dark:text-[var(--ink)] overflow-hidden">
       {/* ── ROW 1 — the navigation ribbon, full page width (rule 72) ── */}
       <AdminTopBar onToggleMobileMenu={() => setMobileMenuOpen(true)} />
 

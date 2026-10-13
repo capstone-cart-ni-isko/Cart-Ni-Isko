@@ -225,7 +225,7 @@ export default function AdminSidebar({ onCloseMobile }) {
     /* Settings-like left-docked card: white surface, soft border, rounded
        corners, full height so the nav scrolls inside the card instead of
        pushing the page. Same visual language as the settings rail. */
-    <aside className="w-full h-full bg-white rounded-xl border border-slate-200 flex flex-col min-h-0 select-none overflow-hidden">
+    <aside className="w-full h-full bg-white dark:bg-[var(--surface)] rounded-xl border border-slate-200 dark:border-[var(--line)] flex flex-col min-h-0 select-none overflow-hidden">
       <div className="flex flex-col flex-1 min-h-0">
         {/* Small-screen drawer close.
 
@@ -236,11 +236,11 @@ export default function AdminSidebar({ onCloseMobile }) {
             so the docked rail is navigation only. On the phone drawer the close
             affordance therefore moves here, where the brand header used to be. */}
         {onCloseMobile && (
-          <div className="md:hidden px-3 pt-2 pb-1 flex items-center justify-end shrink-0 border-b border-slate-100">
+          <div className="md:hidden px-3 pt-2 pb-1 flex items-center justify-end shrink-0 border-b border-slate-100 dark:border-[var(--line)]">
             <button
               type="button"
               onClick={onCloseMobile}
-              className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer"
+              className="p-1 rounded-md text-gray-400 dark:text-[var(--muted)] hover:text-gray-600 dark:hover:text-[var(--ink-3)] hover:bg-gray-100 dark:hover:bg-[var(--surface-3)] cursor-pointer"
               aria-label="Close menu"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
@@ -255,7 +255,7 @@ export default function AdminSidebar({ onCloseMobile }) {
         <nav aria-label="Employee navigation" className="px-2.5 py-1.5 space-y-2 overflow-y-auto flex-1 scrollbar-none">
           {navGroups.map((section) => (
             <div key={section.id} className="space-y-0.5">
-              <div className="px-2.5 pt-0.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 select-none">
+              <div className="px-2.5 pt-0.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[var(--muted-2)] select-none">
                 {section.group}
               </div>
               <div className="space-y-0.5">
@@ -270,7 +270,7 @@ export default function AdminSidebar({ onCloseMobile }) {
                       className={`flex items-center w-full gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-150 cursor-pointer ${
                         isActive
                           ? 'bg-brand-orange/10 text-brand-orange'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          : 'text-gray-600 dark:text-[var(--muted)] hover:bg-gray-100 dark:hover:bg-[var(--surface-3)] hover:text-gray-900 dark:hover:text-[var(--ink)]'
                       }`}
                     >
                       <span className="shrink-0">{icon}</span>
@@ -287,13 +287,13 @@ export default function AdminSidebar({ onCloseMobile }) {
             employee can always see whether they are scheduled to be in store
             right now and can request to time out ahead of their scheduled end
             (FLOW-EMP_SCHED-04, REQ-SS-02/03). */}
-        <div className="shrink-0 px-2 pt-1.5 pb-1.5 border-t border-slate-100 space-y-1">
+        <div className="shrink-0 px-2 pt-1.5 pb-1.5 border-t border-slate-100 dark:border-[var(--line)] space-y-1">
           <ClockInOut />
         </div>
 
         {/* Logout — last entry, pinned to the foot of the card so it is
             always reachable, with a confirmation (DOMAIN 16). */}
-        <div className="shrink-0 px-2 pt-1.5 pb-1.5 border-t border-slate-100">
+        <div className="shrink-0 px-2 pt-1.5 pb-1.5 border-t border-slate-100 dark:border-[var(--line)]">
           <button
             type="button"
             onClick={() => setConfirmLogout(true)}

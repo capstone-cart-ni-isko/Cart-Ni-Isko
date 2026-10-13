@@ -361,18 +361,18 @@ function Home() {
 
         {/* 4. How It Works Section (Mobile) - rounder corners */}
         <div className="px-4 pt-8">
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-xs space-y-4">
+          <div className="bg-white dark:bg-[var(--surface)] rounded-2xl p-5 border border-gray-100 dark:border-[var(--line)] shadow-xs space-y-4">
             <div className="text-center space-y-1">
               <span className="text-[10px] font-black uppercase text-brand-orange tracking-wider">Simple Process</span>
-              <h2 className="text-lg font-black text-gray-900">How It Works</h2>
+              <h2 className="text-lg font-black text-gray-900 dark:text-[var(--ink)]">How It Works</h2>
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80">
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 dark:bg-[var(--surface-3)]">
                 <span className="text-lg font-black text-brand-orange shrink-0">01</span>
                 <div>
-                  <h3 className="text-xs font-black text-gray-900">Shop</h3>
-                  <p className="text-[11px] text-gray-600">Browse official BU merchandise and choose what you want.</p>
+                  <h3 className="text-xs font-black text-gray-900 dark:text-[var(--ink)]">Shop</h3>
+                  <p className="text-[11px] text-gray-600 dark:text-[var(--muted)]">Browse official BU merchandise and choose what you want.</p>
                 </div>
               </div>
 
@@ -397,13 +397,13 @@ function Home() {
 
         {/* 5. Noticeable but Compact About Us Section (Mobile) - rounder corners */}
         <div className="px-4 pt-6">
-          <div className="rounded-xl bg-white border border-slate-200 text-slate-900 p-5 space-y-2.5">
+          <div className="rounded-xl bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-slate-900 dark:text-[var(--ink)] p-5 space-y-2.5">
             <span className="inline-block text-[10px] font-bold uppercase text-brand-orange tracking-wider">About Us</span>
             <h2 className="text-base font-extrabold leading-snug">
               More than merchandise. <br />
               <span className="text-brand-orange">It's BU pride you can wear.</span>
             </h2>
-            <p className="text-slate-600 text-xs leading-relaxed">
+            <p className="text-slate-600 dark:text-[var(--muted)] text-xs leading-relaxed">
               Tindahan ni Isko is the official merchandise line of the Bicol University–University Student Council, created to celebrate BU identity and serve the university community.
             </p>
             <div className="pt-1">
@@ -579,7 +579,7 @@ function Home() {
           <span className="flex items-center justify-center w-10 h-10 shrink-0 rounded-full border border-orange-200 bg-orange-50 text-sm font-extrabold text-brand-orange">
             {step.num}
           </span>
-          {i < arr.length - 1 && <div className="flex-1 h-px bg-slate-200 ml-4" />}
+          {i < arr.length - 1 && <div className="flex-1 h-px bg-slate-200 dark:bg-[var(--line)] ml-4" />}
         </div>
 
         <h3 className="text-base font-bold text-slate-900 mb-1.5">{step.title}</h3>
@@ -600,14 +600,14 @@ function Home() {
 </section>
 
         {/* 5. Noticeable but Compact About Us Section (Desktop) - rounder corners */}
-        <section className="mb-8 rounded-xl bg-white border border-slate-200 text-slate-900 p-6 lg:p-8 relative overflow-hidden">
+        <section className="mb-8 rounded-xl bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-slate-900 dark:text-[var(--ink)] p-6 lg:p-8 relative overflow-hidden">
           <div className="relative z-10 max-w-2xl space-y-3">
             <span className="inline-block text-xs font-bold uppercase text-brand-orange tracking-wider">About Us</span>
             <h2 className="text-2xl lg:text-3xl font-extrabold leading-tight tracking-tight">
               More than merchandise. <br />
               <span className="text-brand-orange">It's BU pride you can wear.</span>
             </h2>
-            <p className="text-slate-600 text-xs lg:text-sm leading-relaxed">
+            <p className="text-slate-600 dark:text-[var(--muted)] text-xs lg:text-sm leading-relaxed">
               Tindahan ni Isko is the official merchandise line of the Bicol University–University Student Council, created to celebrate BU identity and serve the university community.
             </p>
             <div className="pt-1">

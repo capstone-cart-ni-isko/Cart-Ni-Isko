@@ -122,7 +122,7 @@ function DesktopHeader() {
   }
 
   return (
-    <header className="hidden md:block w-full bg-white border-b border-gray-100 sticky top-0 z-50">
+    <header className="hidden md:block w-full bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] sticky top-0 z-50">
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
         {/* Logo Left - shifted slightly left */}
         <Link to="/home" className="flex items-center shrink-0">
@@ -137,7 +137,7 @@ function DesktopHeader() {
             placeholder="Search products, apparel, essentials..."
             value={searchVal}
             onChange={(e) => setSearchVal(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-50 border border-slate-200 text-xs placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:bg-white transition-all shadow-2xs"
+            className="w-full h-9 pl-9 pr-3 rounded-lg bg-slate-50 dark:bg-[var(--surface-2)] border border-slate-200 dark:border-[var(--line)] text-xs text-slate-900 dark:text-[var(--ink)] placeholder-gray-400 dark:placeholder-[var(--muted-2)] focus:outline-none focus:border-brand-orange focus:bg-white dark:focus:bg-[var(--surface)] transition-all shadow-2xs"
           />
         </form>
 
@@ -151,7 +151,7 @@ function DesktopHeader() {
                   to={to}
                   onClick={to === '/home' ? undefined : guardGuest}
                   aria-label={label}
-                  className={`p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center ${on ? 'bg-orange-50 text-brand-orange' : 'text-[#757575]'}`}
+                  className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[var(--surface-3)] transition-all relative flex items-center justify-center ${on ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
                 >
                   <Glyph active={on} src={src} alt={label} />
                   {badge > 0 && (
@@ -174,7 +174,7 @@ function DesktopHeader() {
               onClick={openMenu}
               aria-label="Menu"
               aria-expanded={isMenuOpen}
-              className={`p-2 rounded-lg hover:bg-slate-100 transition-all flex items-center justify-center cursor-pointer ${isMenuOpen ? 'bg-orange-50 text-brand-orange' : 'text-[#757575]'}`}
+              className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[var(--surface-3)] transition-all flex items-center justify-center cursor-pointer ${isMenuOpen ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
             >
               <MenuIcon />
             </button>

@@ -37,18 +37,18 @@ export default function Panel({
 }) {
   const hasHeader = title || actions || actionLabel
   return (
-    <section className={`bg-white border border-slate-200 rounded-lg p-3 flex flex-col min-h-0 ${className}`}>
+    <section className={`bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] rounded-lg p-3 flex flex-col min-h-0 ${className}`}>
       {hasHeader && (
         <header className="min-h-8 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             {title && (
               <>
                 <span className="w-1 h-4 rounded-full bg-isko-orange shrink-0" aria-hidden="true" />
-                <h2 className="text-sm font-semibold text-slate-900 whitespace-nowrap shrink-0">{title}</h2>
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-[var(--ink)] whitespace-nowrap shrink-0">{title}</h2>
               </>
             )}
             {meta && (
-              <span className="text-[11px] text-slate-500 truncate min-w-0" title={typeof meta === 'string' ? meta : undefined}>
+              <span className="text-[11px] text-slate-500 dark:text-[var(--muted)] truncate min-w-0" title={typeof meta === 'string' ? meta : undefined}>
                 {meta}
               </span>
             )}

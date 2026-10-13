@@ -41,7 +41,7 @@ function ConfirmModal({
         </>
       }
     >
-      <p className="text-sm text-gray-600 font-medium leading-relaxed">{message}</p>
+      <p className="text-sm text-gray-600 dark:text-[var(--muted)] font-medium leading-relaxed">{message}</p>
     </Modal>
   )
 }
