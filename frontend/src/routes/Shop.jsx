@@ -260,7 +260,7 @@ function Shop() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 animate-fade-in">
+            <div className="grid-catalog animate-fade-in">
               {filteredProducts.map((prod) => (
                 <ProductCard key={prod.id} product={prod} />
               ))}

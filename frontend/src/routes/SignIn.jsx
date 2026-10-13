@@ -5,6 +5,7 @@ import { useApiWarmup } from '../hooks/useApi.js'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
+import brandLogo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 /**
  * Shown the instant Login is clicked, before the response lands. Keeps the
@@ -138,11 +139,11 @@ function SignIn() {
     navigate('/home')
   }
 
-  const phoneField = (idPrefix, inputClassName, errorClassName) => (
+  const phoneField = (idPrefix) => (
     <div>
       <label
         htmlFor={`${idPrefix}-identifier`}
-        className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 md:text-sm md:text-gray-700 md:normal-case md:tracking-normal"
+        className="field-label"
       >
         Phone Number
       </label>
@@ -161,34 +162,31 @@ function SignIn() {
             setTouched((prev) => (prev.identifier ? prev : { ...prev, identifier: true }))
           }}
           onBlur={() => setTouched((prev) => ({ ...prev, identifier: true }))}
-          className={`${inputClassName} ${
-            identifierError
-              ? 'border-red-400'
-              : identifierOk
-                ? 'border-green-500'
-                : 'border-gray-200'
+          aria-invalid={identifierError ? 'true' : undefined}
+          className={`field-input field-input--lg pr-10 ${
+            identifierError ? 'field-input--error' : ''
           }`}
         />
         {identifierOk && (
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#16A34A] text-white text-xs font-black animate-scale-in">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#16A34A] text-white text-xs font-black animate-scale-in">
             ✓
           </span>
         )}
       </div>
-      {identifierError && <p className={errorClassName}>{identifierError}</p>}
+      {identifierError && <p className="field-error">{identifierError}</p>}
       {!identifierError && (
-        <p className="text-xs text-gray-400 mt-1 font-medium md:block hidden">
+        <p className="field-hint">
           Enter the phone number registered to your account.
         </p>
       )}
     </div>
   )
 
-  const passwordField = (idPrefix, inputClassName) => (
+  const passwordField = (idPrefix) => (
     <div>
       <label
         htmlFor={`${idPrefix}-password`}
-        className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 md:text-sm md:text-gray-700 md:normal-case md:tracking-normal"
+        className="field-label"
       >
         Password
       </label>
@@ -206,80 +204,87 @@ function SignIn() {
             setTouched((prev) => (prev.password ? prev : { ...prev, password: true }))
           }}
           onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
-          className={`${inputClassName} pr-12 ${
-            passwordError || (form.password.length > 0 && form.password.length < 8)
-              ? 'border-red-400 focus:ring-red-250 focus:border-red-500'
-              : 'focus:ring-brand-orange/40 focus:border-brand-orange'
-          }`}
+          aria-invalid={passwordError ? 'true' : undefined}
+          className="field-input field-input--lg pr-20"
         />
         <button
           type="button"
           onClick={() => setShowPassword((prev) => !prev)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500 hover:text-brand-orange transition-colors"
         >
           {showPassword ? 'Hide' : 'Show'}
         </button>
       </div>
-      {passwordError && (
-        <p className="text-red-500 text-xs mt-1 font-semibold">{passwordError}</p>
-      )}
+      {passwordError && <p className="field-error">{passwordError}</p>}
     </div>
   )
 
   return (
     <AppShell showNav={false} showHeader={false} showBottomNav={false}>
       {/* MOBILE LOGIN LAYOUT */}
-      <div className="flex flex-col justify-between min-h-[580px] p-8 md:hidden animate-fade-in">
+      <div className="flex flex-col justify-between min-h-[580px] px-4 py-8 md:hidden animate-fade-in">
         <div>
-          <div className="flex items-center justify-between mb-8">
-            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Sign In</h1>
-            <BackButton to="/home" label="Back to Homepage" />
+          <div className="flex items-center gap-3 mb-8">
+            {/* Rule 69: a "back" button sits at the TOP LEFT. */}
+            <BackButton to="/home" label="Back to Homepage" className="shrink-0" />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-            {phoneField(
-              'mobile',
-              'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all',
-              'text-red-500 text-xs mt-1 font-semibold'
-            )}
-
-            {passwordField(
-              'mobile',
-              'w-full h-12 px-4 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all'
-            )}
-
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-sm text-gray-400 font-medium"></span>
-              <Link
-                to="/forgot-password"
-                className="text-sm text-gray-400 hover:text-brand-orange font-bold transition-colors"
-              >
-                Forgot password?
-              </Link>
-            </div>
-
-            {serverError && (
-              <p className="text-red-500 text-sm font-semibold" role="alert">
-                {serverError}
+          <div className="flex flex-col items-center text-center gap-3 mb-8">
+            <img
+              src={brandLogo}
+              alt="Tindahan ni Isko"
+              className="h-14 w-auto object-contain"
+            />
+            <div>
+              <h1 className="page-title text-gray-900">Sign In</h1>
+              <p className="text-sm text-gray-500 font-medium mt-1">
+                Access your orders, bag, and favorite products anytime, anywhere.
               </p>
-            )}
+            </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={!formValid || isSubmitting}
-              className={`w-full h-12 text-white font-bold rounded-full transition-all shadow-md hover:shadow-lg active:scale-98 mt-6 ${
-                formValid
-                  ? 'bg-brand-orange hover:bg-brand-orange-dark cursor-pointer'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-              }`}
-            >
-              {isSubmitting ? <AuthenticatingSkeleton /> : 'Sign In'}
-            </button>
-          </form>
+          <div className="bg-white rounded-md border border-slate-200 p-5 space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+              {phoneField(
+                'mobile'
+              )}
+
+              {passwordField(
+                'mobile'
+              )}
+
+              <div className="flex items-center justify-end">
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-semibold text-gray-500 hover:text-brand-orange transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+
+              {serverError && (
+                <p className="field-error" role="alert">
+                  {serverError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={!formValid || isSubmitting}
+                className={`btn btn--lg btn--block ${
+                  formValid && !isSubmitting
+                    ? 'btn--primary text-white'
+                    : 'btn--secondary cursor-not-allowed opacity-60'
+                }`}
+              >
+                {isSubmitting ? <AuthenticatingSkeleton /> : 'Sign In'}
+              </button>
+            </form>
+          </div>
         </div>
 
-        <p className="text-center text-sm text-gray-400 font-semibold pt-6">
-          Don't have an account?{' '}
+        <p className="text-center text-sm text-gray-500 font-semibold pt-6">
+          Don&apos;t have an account?{' '}
           <Link to="/signup/role" className="text-brand-orange font-bold hover:underline">
             Sign up
           </Link>
@@ -287,32 +292,42 @@ function SignIn() {
       </div>
 
       {/* DESKTOP LOGIN LAYOUT (Image 3 Wireframe) */}
-      <div className="hidden md:flex flex-col justify-between min-h-[460px] p-10 animate-fade-in bg-white">
-        <div>
-          <div className="mb-8 flex items-start justify-between gap-4">
+      <div className="hidden md:flex flex-col justify-center min-h-[460px] px-4 py-10 animate-fade-in">
+        <div className="w-full max-w-md mx-auto bg-white rounded-md border border-slate-200 p-6 space-y-5">
+          <div className="space-y-3 text-center">
+            <img
+              src={brandLogo}
+              alt="Tindahan ni Isko"
+              className="h-16 w-auto object-contain mx-auto"
+            />
             <div>
-              <h1 className="text-3xl font-black text-gray-900 leading-tight">Log In</h1>
-              <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
-                Access your orders, cart, and favorite products anytime, anywhere.
+              <h1 className="page-title text-gray-900">Log In</h1>
+              <p className="text-sm text-gray-500 font-medium mt-1 leading-relaxed">
+                Access your orders, bag, and favorite products anytime, anywhere.
               </p>
             </div>
-            <BackButton to="/home" label="Back to Homepage" className="shrink-0 mt-1" />
+          </div>
+
+          {/* Rule 69: the "back" button sits at the top left of the page. */}
+          <div className="flex justify-start">
+            <BackButton to="/home" label="Back to Homepage" />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-            {phoneField(
-              'desktop',
-              'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white transition-all',
-              'text-red-500 text-xs mt-1.5 font-semibold'
-            )}
+            {phoneField('desktop')}
+            {passwordField('desktop')}
 
-            {passwordField(
-              'desktop',
-              'w-full h-12 px-4 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white transition-all'
-            )}
+            <div className="flex items-center justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-semibold text-gray-500 hover:text-brand-orange transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
 
             {serverError && (
-              <p className="text-red-500 text-sm font-semibold" role="alert">
+              <p className="field-error" role="alert">
                 {serverError}
               </p>
             )}
@@ -320,23 +335,23 @@ function SignIn() {
             <button
               type="submit"
               disabled={!formValid || isSubmitting}
-              className={`w-full h-12 text-white font-bold rounded-lg transition-all shadow-md active:scale-98 mt-6 cursor-pointer ${
-                formValid
-                  ? 'bg-brand-orange hover:bg-brand-orange-dark'
-                  : 'bg-brand-orange opacity-90'
+              className={`btn btn--lg btn--block ${
+                formValid && !isSubmitting
+                  ? 'btn--primary text-white'
+                  : 'btn--secondary cursor-not-allowed opacity-60'
               }`}
             >
               {isSubmitting ? <AuthenticatingSkeleton /> : 'Log In'}
             </button>
           </form>
-        </div>
 
-        <p className="text-center text-sm text-gray-500 font-semibold pt-8">
-          Don't have an account?{' '}
-          <Link to="/signup/role" className="text-brand-orange font-bold hover:underline">
-            Sign Up
-          </Link>
-        </p>
+          <p className="text-center text-sm text-gray-500 font-semibold">
+            Don&apos;t have an account?{' '}
+            <Link to="/signup/role" className="text-brand-orange font-bold hover:underline">
+              Sign Up
+            </Link>
+          </p>
+        </div>
       </div>
     </AppShell>
   )

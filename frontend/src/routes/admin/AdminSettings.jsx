@@ -7,30 +7,20 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { fetchSettings, updateSettings, fetchMyPreferences, updateMyPreferences } from '../../services/settings.js'
+import UiToggle from '../../components/ui/Toggle.jsx'
 
 // ── Reusable inline toggle ──────────────────────────────────────────────────
-function Toggle({ checked, onChange, size = 'md' }) {
-  const sizes = {
-    lg: { track: 'h-6 w-11', thumb: 'h-5 w-5', on: 'translate-x-5' },
-    md: { track: 'h-5 w-9',  thumb: 'h-4 w-4', on: 'translate-x-4' },
-  }
-  const s = sizes[size] || sizes.md
+// The shared Toggle from the UI kit: one switch look for the admin portal and
+// the customer portal (index.css primitives). `size` only changes the metrics.
+function Toggle({ checked, onChange, size = 'md', label, description }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex ${s.track} shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/50 ${
-        checked ? 'bg-brand-orange' : 'bg-slate-300'
-      }`}
-    >
-      <span
-        className={`pointer-events-none inline-block ${s.thumb} transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-          checked ? s.on : 'translate-x-0'
-        }`}
-      />
-    </button>
+    <UiToggle
+      checked={checked}
+      onChange={onChange}
+      size={size}
+      label={label}
+      description={description}
+    />
   )
 }
 

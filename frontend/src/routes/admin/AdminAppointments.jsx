@@ -4,7 +4,6 @@ import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import { useApiChange } from '../../hooks/useApiChange.js'
-import { CloseIcon } from '../../components/ui/Icons.jsx'
 import {
   fetchAppointments,
   fetchSlots,
@@ -12,6 +11,8 @@ import {
   SLOT_RULES,
 } from '../../services/appointments.js'
 import { fetchAccounts } from '../../services/accounts.js'
+import Modal from '../../components/ui/Modal.jsx'
+import Button from '../../components/ui/Button.jsx'
 import { logAction } from '../../services/access.js'
 
 // ── Date / time helpers (Schedule Calendar, REQ-SC-01 master view) ─────────
@@ -837,74 +838,69 @@ export default function AdminAppointments() {
           </div>
         </div>
 
-        {/* Decline Modal */}
+        {/* Cancel Appointment - shared popup shell (index.css primitives) */}
         {showDeclineModal && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in">
-            <div className="bg-white rounded-lg p-5 max-w-md w-full border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-extrabold text-slate-900">Cancel Appointment</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowDeclineModal(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                >
-                  <CloseIcon className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <p className="text-xs text-slate-600">
-                {cancelTarget ? (
-                  <>
-                    You are about to close the{' '}
-                    <strong>
-                      {String(cancelTarget.appoint_type || '').toUpperCase() === 'CLAIM'
-                        ? 'CLAIM'
-                        : 'VISIT'}{' '}
-                      appointment
-                    </strong>{' '}
-                    booked for{' '}
-                    <strong>
-                      {cancelTarget.appoint_date
-                        ? new Date(cancelTarget.appoint_date).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })
-                        : 'this day'}
-                    </strong>{' '}
-                    (Customer #{cancelTarget.cust_id}). The customer will be notified.
-                  </>
-                ) : (
-                  'Select a booking to cancel.'
-                )}
-              </p>
-              <textarea
-                placeholder="e.g. Shop closed for inventory on this date..."
-                rows={3}
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                className="w-full p-2.5 rounded-md border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-brand-orange resize-none"
-              />
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowDeclineModal(false)}
-                  className="h-8 px-3 rounded-md text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
-                >
+          <Modal
+            isOpen={showDeclineModal}
+            onClose={() => setShowDeclineModal(false)}
+            title="Cancel Appointment"
+            size="wide"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setShowDeclineModal(false)} className="px-3.5">
                   Keep Appointment
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="danger"
                   onClick={handleConfirmCancel}
                   disabled={!cancelReason.trim() || isCancelling}
-                  className="h-8 px-3 rounded-md text-xs font-bold text-white bg-red-600 hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3.5"
                 >
                   {isCancelling ? 'Cancelling…' : 'Cancel Appointment'}
-                </button>
-              </div>
-            </div>
-          </div>
+                </Button>
+              </>
+            }
+          >
+            <p className="text-sm text-gray-600">
+              {cancelTarget ? (
+                <>
+                  You are about to close the{' '}
+                  <strong>
+                    {String(cancelTarget.appoint_type || '').toUpperCase() === 'CLAIM'
+                      ? 'CLAIM'
+                      : 'VISIT'}{' '}
+                    appointment
+                  </strong>{' '}
+                  booked for{' '}
+                  <strong>
+                    {cancelTarget.appoint_date
+                      ? new Date(cancelTarget.appoint_date).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })
+                      : 'this day'}
+                  </strong>{' '}
+                  (Customer #{cancelTarget.cust_id}). The customer will be notified.
+                </>
+              ) : (
+                'Select a booking to cancel.'
+              )}
+            </p>
+            <label className="field-label" htmlFor="appoint-cancel-reason">
+              Reason
+            </label>
+            <textarea
+              id="appoint-cancel-reason"
+              placeholder="e.g. Shop closed for inventory on this date..."
+              rows={3}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="field-input resize-none"
+            />
+          </Modal>
         )}
       </div>
     </AdminLayout>

@@ -5,6 +5,8 @@ import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import Avatar from '../../components/ui/Avatar.jsx'
 import OtpVerifyModal from '../../components/ui/OtpVerifyModal.jsx'
+import Modal from '../../components/ui/Modal.jsx'
+import Button from '../../components/ui/Button.jsx'
 import { fetchAccounts, updateAccount } from '../../services/accounts.js'
 import { updateCredentials, updateBackupCredentials } from '../../services/auth.js'
 import { first, empCateg, empFullName } from '../../components/admin/schema.js'
@@ -791,33 +793,30 @@ export default function AdminAccount({ embedded = false }) {
         )}
 
         {confirmLogout && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-            <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-100 p-5 shadow-2xl animate-scale-in">
-              <h2 className="text-sm font-bold text-slate-900">Sign out of the admin portal?</h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Your session ends immediately on all devices.
-              </p>
-              <div className="flex justify-end gap-2 mt-4">
-                <button
-                  type="button"
-                  onClick={() => setConfirmLogout(false)}
-                  className="h-8 px-3 rounded-md bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer"
-                >
+          <Modal
+            isOpen={confirmLogout}
+            onClose={() => setConfirmLogout(false)}
+            title="Sign out of the admin portal?"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setConfirmLogout(false)} className="px-3.5">
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="danger"
                   onClick={() => {
                     setConfirmLogout(false)
                     logoutAdmin()
                   }}
-                  className="h-8 px-3 rounded-md bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 cursor-pointer"
+                  className="px-3.5"
                 >
                   Sign out
-                </button>
-              </div>
-            </div>
-          </div>
+                </Button>
+              </>
+            }
+          >
+            <p className="text-sm text-gray-600">Your session ends immediately on all devices.</p>
+          </Modal>
         )}
       </div>
 
@@ -834,95 +833,80 @@ export default function AdminAccount({ embedded = false }) {
         onVerified={handleOtpVerified}
       />
 
-      {/* Password change modal */}
+      {/* Password change modal — shared popup shell + shared field classes */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-sm w-full border border-slate-100 p-5 shadow-2xl animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-sm font-bold text-slate-900">Change password</h2>
-              <button
-                type="button"
-                onClick={() => setShowPasswordModal(false)}
-                className="w-7 h-7 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-                aria-label="Close"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+        <Modal
+          isOpen={showPasswordModal}
+          onClose={() => setShowPasswordModal(false)}
+          title="Change password"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowPasswordModal(false)} className="px-3.5">
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" form="admin-change-password" disabled={isUpdatingPassword} className="px-3.5">
+                {isUpdatingPassword ? 'Updating…' : 'Update password'}
+              </Button>
+            </>
+          }
+        >
+          <form id="admin-change-password" onSubmit={handleChangePassword} className="space-y-3">
+            {passwordError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-md">
+                {passwordError}
+              </div>
+            )}
+            <div>
+              <label className="field-label" htmlFor="emp-current-password">
+                Current password <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="emp-current-password"
+                type="password"
+                required
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                onBlur={() => touch('currentPassword')}
+                aria-invalid={!!liveError(passwordErrors, 'currentPassword', currentPassword)}
+                className="field-input"
+              />
+              <FieldError message={liveError(passwordErrors, 'currentPassword', currentPassword)} />
             </div>
-            <form onSubmit={handleChangePassword} className="pt-4 space-y-3">
-              {passwordError && (
-                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium rounded-lg">
-                  {passwordError}
-                </div>
-              )}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Current password <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  onBlur={() => touch('currentPassword')}
-                  aria-invalid={!!liveError(passwordErrors, 'currentPassword', currentPassword)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
-                />
-                <FieldError message={liveError(passwordErrors, 'currentPassword', currentPassword)} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  New password <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  onBlur={() => touch('newPassword')}
-                  aria-invalid={!!liveError(passwordErrors, 'newPassword', newPassword)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
-                />
-                <FieldError message={liveError(passwordErrors, 'newPassword', newPassword)} />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Confirm new password <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  onBlur={() => touch('confirmPassword')}
-                  aria-invalid={!!liveError(passwordErrors, 'confirmPassword', confirmPassword)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
-                />
-                <FieldError message={liveError(passwordErrors, 'confirmPassword', confirmPassword)} />
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordModal(false)}
-                  className="h-8 px-3 rounded-md bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUpdatingPassword}
-                  className="h-8 px-3 rounded-md bg-[#F97316] text-white text-xs font-semibold hover:bg-[#EA580C] cursor-pointer disabled:opacity-50"
-                >
-                  {isUpdatingPassword ? 'Updating…' : 'Update password'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div>
+              <label className="field-label" htmlFor="emp-new-password">
+                New password <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="emp-new-password"
+                type="password"
+                required
+                minLength={8}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                onBlur={() => touch('newPassword')}
+                aria-invalid={!!liveError(passwordErrors, 'newPassword', newPassword)}
+                className="field-input"
+              />
+              <FieldError message={liveError(passwordErrors, 'newPassword', newPassword)} />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="emp-confirm-password">
+                Confirm new password <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="emp-confirm-password"
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onBlur={() => touch('confirmPassword')}
+                aria-invalid={!!liveError(passwordErrors, 'confirmPassword', confirmPassword)}
+                className="field-input"
+              />
+              <FieldError message={liveError(passwordErrors, 'confirmPassword', confirmPassword)} />
+            </div>
+          </form>
+        </Modal>
       )}
     </Wrapper>
   )

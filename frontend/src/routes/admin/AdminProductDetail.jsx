@@ -4,6 +4,8 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
+import Modal from '../../components/ui/Modal.jsx'
+import Button from '../../components/ui/Button.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { apiGet } from '../../services/api.js'
 import { fetchProductSales, mapAdminProduct, optionLabel } from '../../services/adminProducts.js'
@@ -637,36 +639,36 @@ export default function AdminProductDetail() {
             backend de-duplicates on them, so (cream, medium) can never be
             minted twice for the same shirt. */}
         {comboEditorOpen && row && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-md rounded-lg bg-white shadow-xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                <div className="min-w-0">
-                  <h2 className="text-sm font-bold text-slate-900">
-                    {comboTarget ? 'Edit Combination' : 'Add Combination'}
-                  </h2>
-                  <p className="text-[11px] text-slate-400 truncate">{row.name}</p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Close combination editor"
-                  onClick={closeComboEditor}
-                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
+          <Modal
+            isOpen={comboEditorOpen && !!row}
+            onClose={closeComboEditor}
+            title={comboTarget ? 'Edit Combination' : 'Add Combination'}
+            subtitle={row.name}
+            size="wide"
+            bodyClassName="modal-scroll space-y-2.5 text-xs"
+            footer={
+              <>
+                <Button variant="secondary" onClick={closeComboEditor} className="px-3.5">
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleComboSave}
+                  disabled={!!comboDuplicate}
+                  className="px-3.5"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="space-y-2.5 px-4 py-3 text-xs">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="font-semibold text-slate-700">Ways to vary</label>
-                    <span className="text-[10px] text-slate-400">
-                      {axisSummary.length}/{MAX_OPTION_AXES} axes in use
-                    </span>
-                  </div>
+                  {comboTarget ? 'Save Changes' : 'Add Combination'}
+                </Button>
+              </>
+            }
+          >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="field-label mb-0">Ways to vary</label>
+                  <span className="text-[10px] text-slate-400">
+                    {axisSummary.length}/{MAX_OPTION_AXES} axes in use
+                  </span>
+                </div>
                   <p className="text-[11px] text-slate-500">
                     One combination is one row. Pick a value on each axis you want
                     this row to cover — color&nbsp;×&nbsp;size, or
@@ -815,27 +817,7 @@ export default function AdminProductDetail() {
                     />
                   )}
                 </div>
-              </div>
-
-              <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3">
-                <button
-                  type="button"
-                  onClick={closeComboEditor}
-                  className="h-8 px-3 rounded-md border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleComboSave}
-                  disabled={!!comboDuplicate}
-                  className="h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {comboTarget ? 'Save Changes' : 'Add Combination'}
-                </button>
-              </div>
-            </div>
-          </div>
+          </Modal>
         )}
 
         <ConfirmModal

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { GRID_MINUTES, fmtTime, humanMinutes, minutesOf } from './scheduleTime.js'
+import Modal from '../ui/Modal.jsx'
+import Button from '../ui/Button.jsx'
 
 /**
  * Assign Duty dialog (FLOW-EMP_SCHED-03 / REQ-EMP_SCHED-06).
@@ -94,25 +96,36 @@ export default function ScheduleAssignModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-      <div className="bg-white rounded-lg p-4 max-w-sm w-full max-h-[90vh] overflow-y-auto border border-slate-200 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Schedule Duty</h3>
-            <p className="text-[11px] text-slate-400">{dateLabel}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="w-6 h-6 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Schedule Duty"
+      subtitle={dateLabel}
+      size="wide"
+      bodyClassName="modal-scroll"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            type="submit"
+            form="schedule-assign-form"
+            disabled={isSaving || selectedIds.size === 0}
+            className="px-3.5"
           >
-            ✕
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="space-y-2.5 text-xs font-medium">
-          <div>
+            {isSaving
+              ? 'Scheduling…'
+              : selectedIds.size > 1
+                ? `Schedule ${selectedIds.size} employees`
+                : 'Schedule Shift'}
+          </Button>
+        </>
+      }
+    >
+      <form id="schedule-assign-form" onSubmit={submit} className="space-y-2.5 text-xs font-medium">
+        <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block font-semibold text-slate-700">
                 Employees <span className="text-slate-400 font-normal">(pick one or more)</span>
@@ -220,29 +233,7 @@ export default function ScheduleAssignModal({
               {formError}
             </p>
           )}
-
-          <div className="flex justify-end gap-2 pt-1.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 px-3 bg-slate-100 rounded-md font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer text-xs"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving || selectedIds.size === 0}
-              className="h-8 px-3 bg-brand-orange rounded-md font-semibold text-white hover:bg-brand-orange-dark cursor-pointer text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving
-                ? 'Scheduling…'
-                : selectedIds.size > 1
-                  ? `Schedule ${selectedIds.size} employees`
-                  : 'Schedule Shift'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }

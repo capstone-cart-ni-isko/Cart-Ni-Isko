@@ -175,28 +175,30 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
-      <div className="w-full max-w-xl bg-white rounded-lg p-8 sm:p-10 border border-gray-100 shadow-lg space-y-7 animate-fade-in">
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 font-sans">
+      {/* One login card for both portals: same surface, same corner, same
+          padding, same fields and the same primary button (index.css). */}
+      <div className="w-full max-w-md bg-white rounded-md p-6 border border-slate-200 space-y-5 animate-fade-in">
         {/* Brand Header */}
         <div className="text-center space-y-3">
-          <div className="flex justify-center mb-2">
+          <div className="flex justify-center">
             <img
               src={brandLogo}
               alt="Tindahan ni Isko"
-              className="h-20 w-auto object-contain"
+              className="h-16 w-auto object-contain"
             />
           </div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-            Staff & Admin Portal
-          </h1>
-          <p className="text-sm text-gray-500 font-medium">
-            Authorized Bicol University Staff & Officer Access Only
-          </p>
+          <div>
+            <h1 className="page-title text-gray-900">Staff &amp; Admin Portal</h1>
+            <p className="text-sm text-gray-500 font-medium mt-1">
+              Authorized Bicol University Staff &amp; Officer Access Only
+            </p>
+          </div>
         </div>
 
         {/* Error notification (account level, never a field message) */}
         {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium rounded-xl flex items-center gap-2 animate-slide-up">
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium rounded-md flex items-center gap-2 animate-slide-up" role="alert">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
@@ -209,11 +211,11 @@ export default function AdminLogin() {
         {/* Login Form - FLOW-EMP_LOGIN-01 */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label htmlFor="emp-email" className="block text-xs font-bold text-gray-700 mb-1.5">
+            <label htmlFor="emp-email" className="field-label">
               Staff ID / University Email
             </label>
             <div className="relative">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
@@ -231,23 +233,24 @@ export default function AdminLogin() {
                   setEmail(e.target.value)
                   clearSubmitMsgs()
                 }}
-                className="w-full h-14 pl-11 pr-4 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 transition-all"
+                aria-invalid={emailMsg ? 'true' : undefined}
+                className="field-input field-input--lg pl-10"
               />
             </div>
             {/* FLOW-EMP_LOGIN-02/03 - "User not found" under the email field */}
             {emailMsg && (
-              <p className="text-[11px] font-semibold text-rose-600 mt-1.5 animate-slide-up" role="alert">
+              <p className="field-error" role="alert">
                 {emailMsg}
               </p>
             )}
           </div>
 
           <div>
-            <label htmlFor="emp-password" className="block text-xs font-bold text-gray-700 mb-1.5">
+            <label htmlFor="emp-password" className="field-label">
               Security Password
             </label>
             <div className="relative">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
@@ -268,7 +271,8 @@ export default function AdminLogin() {
                   setPassword(e.target.value)
                   clearSubmitMsgs()
                 }}
-                className="w-full h-14 pl-11 pr-11 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 transition-all"
+                aria-invalid={passwordMsg ? 'true' : undefined}
+                className="field-input field-input--lg pl-10 pr-11"
               />
               <button
                 type="button"
@@ -295,7 +299,7 @@ export default function AdminLogin() {
             {/* FLOW-EMP_LOGIN-04..08 - "Provide a valid email" / "Wrong
                 password" under the password field */}
             {passwordMsg && (
-              <p className="text-[11px] font-semibold text-rose-600 mt-1.5 animate-slide-up" role="alert">
+              <p className="field-error" role="alert">
                 {passwordMsg}
               </p>
             )}
@@ -304,14 +308,14 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-12 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-lg transition-all btn-press cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
+            className="btn btn--lg btn--block btn--primary text-white btn-press cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? (
               <span>Authenticating...</span>
             ) : (
               <>
                 <span>Sign In</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4" aria-hidden="true">
                   <line x1="5" y1="12" x2="19" y2="12" />
                   <polyline points="12 5 19 12 12 19" />
                 </svg>

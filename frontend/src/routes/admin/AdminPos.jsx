@@ -4,6 +4,8 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import QRScanner from '../../components/ui/QRScanner.jsx'
+import Modal from '../../components/ui/Modal.jsx'
+import Button from '../../components/ui/Button.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { mapOrderRows } from '../../services/dashboard.js'
 import { normalizeProductCategory, PRODUCT_CATEGORIES } from '../../data/productCategories.js'
@@ -498,17 +500,17 @@ export default function AdminPos() {
                   <p>No products found matching filters.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 [&>*]:min-w-0">
+                <div className="grid-catalog [&>*]:min-w-0">
                   {filteredProducts.map((product) => {
                     const resolvedImg = getImageUrl(product.image)
                     return (
                       <div
                         key={product.id}
                         onClick={() => handleProductClick(product)}
-                        className="bg-white rounded-2xl p-3 border border-gray-100 hover:border-gray-300 transition-colors cursor-pointer group flex flex-col justify-between"
+                        className="bg-white rounded-md p-3 border border-gray-100 hover:border-gray-300 transition-colors cursor-pointer group flex flex-col justify-between"
                       >
                         {/* Image sits directly on the card — no inner border/shadow box, no floating "+" */}
-                        <div className="aspect-square w-full rounded-xl bg-gray-50 flex items-center justify-center overflow-hidden mb-2.5 relative">
+                        <div className="aspect-square w-full rounded-md bg-gray-50 flex items-center justify-center overflow-hidden mb-2.5 relative">
                           <img
                             src={resolvedImg}
                             alt={product.name}
@@ -1251,35 +1253,33 @@ export default function AdminPos() {
           3. PRODUCT VARIANT PICKER MODAL
       =================================================================== */}
       {variantModalProduct && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4 animate-scale-in">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-3 pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <img
-                  src={getImageUrl(variantModalProduct.image)}
-                  alt={variantModalProduct.name}
-                  className="w-12 h-12 rounded-xl object-contain bg-gray-50 p-1 shrink-0"
-                />
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900 leading-tight">{variantModalProduct.name}</h3>
-                  <p className="text-[10px] text-gray-400 mt-0.5">
-                    {variantModalProduct.category}
-                    {chosenVariant ? ` • ${chosenVariant.stock ?? 0} in stock` : ''}
-                  </p>
-                  <p className="text-xs font-black text-gray-900 mt-0.5">
-                    ₱{(Number(chosenVariant?.price ?? variantModalProduct.price) || 0).toFixed(2)}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setVariantModalProduct(null)}
-                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
+        <Modal
+          isOpen={!!variantModalProduct}
+          onClose={() => setVariantModalProduct(null)}
+          title={variantModalProduct.name}
+          subtitle={`${variantModalProduct.category}${
+            chosenVariant ? ` • ${chosenVariant.stock ?? 0} in stock` : ''
+          }`}
+          footer={
+            <>
+              {chosenVariant && (
+                <span className="mr-auto text-xs font-black text-gray-900">
+                  ₱{((Number(chosenVariant.price ?? variantModalProduct.price) || 0) * variantQty).toFixed(2)}
+                </span>
+              )}
+              <Button variant="secondary" onClick={() => setVariantModalProduct(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmVariantAdd}
+                disabled={!chosenVariant}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
+                Add to Sale
+              </Button>
+            </>
+          }
+        >
 
             {/* Variations options - FLOW-WALKIN-04: the product real variations */}
             <div className="space-y-3 text-xs">
@@ -1360,70 +1360,57 @@ export default function AdminPos() {
               )}
             </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                <span className="font-bold text-gray-700">Quantity</span>
-                <div className="flex items-center border border-gray-200 rounded-xl px-3 py-1 gap-3 bg-gray-50">
-                  <button
-                    type="button"
-                    onClick={() => setVariantQty((q) => Math.max(1, q - 1))}
-                    className="text-gray-600 font-bold text-sm w-4 flex items-center justify-center cursor-pointer"
-                  >
-                    -
-                  </button>
-                  <span className="text-xs font-bold text-gray-900">{variantQty}</span>
-                  <button
-                    type="button"
-                    onClick={() => setVariantQty((q) => q + 1)}
-                    className="text-gray-600 font-bold text-sm w-4 flex items-center justify-center cursor-pointer"
-                  >
-                    +
-                  </button>
+                <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                  <span className="font-bold text-gray-700">Quantity</span>
+                  <div className="flex items-center border border-gray-200 rounded-md px-3 py-1 gap-3 bg-gray-50">
+                    <button
+                      type="button"
+                      onClick={() => setVariantQty((q) => Math.max(1, q - 1))}
+                      aria-label="Decrease quantity"
+                      className="text-gray-600 font-bold text-sm w-4 flex items-center justify-center cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <span className="text-xs font-bold text-gray-900">{variantQty}</span>
+                    <button
+                      type="button"
+                      onClick={() => setVariantQty((q) => q + 1)}
+                      aria-label="Increase quantity"
+                      className="text-gray-600 font-bold text-sm w-4 flex items-center justify-center cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setVariantModalProduct(null)}
-                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmVariantAdd}
-                disabled={!chosenVariant}
-                className="flex-1 py-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
-              >
-                Add to Sale • ₱{((Number(chosenVariant?.price ?? variantModalProduct.price) || 0) * variantQty).toFixed(2)}
-              </button>
-            </div>
-          </div>
+        </Modal>
       )}
 
       {/* ===================================================================
           4. STAFF ORDER CONFIRMATION VIEW MODAL
       =================================================================== */}
       {showConfirmSaleModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div>
-                <h3 className="text-base font-black text-gray-900">Review &amp; Confirm POS Sale</h3>
-                <p className="text-xs text-gray-500">Confirm order details before completing transaction</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConfirmSaleModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
+        <Modal
+          isOpen={showConfirmSaleModal}
+          onClose={() => setShowConfirmSaleModal(false)}
+          title="Review & Confirm POS Sale"
+          subtitle="Confirm order details before completing transaction"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowConfirmSaleModal(false)} className="flex-1 py-2.5">
+                Go Back &amp; Edit
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleFinalConfirmCheckout}
+                disabled={checkoutBusy}
+                className="flex-1 py-2.5"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                {checkoutBusy ? 'Placing Sale…' : 'Confirm & Place Sale'}
+              </Button>
+            </>
+          }
+        >
+            <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 p-3 rounded-md border border-gray-100">
               <div>
                 <p className="text-[10px] text-gray-400 font-bold uppercase">Customer</p>
                 <p className="font-bold text-gray-900">{customerName.trim() || 'Walk-in'}</p>
@@ -1442,7 +1429,7 @@ export default function AdminPos() {
 
             <div className="space-y-1.5">
               <p className="text-xs font-bold text-gray-900">Items ({cartCount})</p>
-              <div className="max-h-40 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-2xl px-3 py-1 bg-white scrollbar-none">
+              <div className="max-h-40 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-md px-3 py-1 bg-white scrollbar-none">
                 {posCart.map((item, i) => (
                   <div key={i} className="py-2 flex items-center justify-between text-xs">
                     <div className="min-w-0 pr-2">
@@ -1462,114 +1449,96 @@ export default function AdminPos() {
               </div>
             )}
 
-            <div className="flex justify-between items-center p-3 bg-orange-50/70 border border-orange-100 rounded-2xl">
+            <div className="flex justify-between items-center p-3 bg-orange-50/70 border border-orange-100 rounded-md">
               <span className="text-xs font-black text-gray-900">TOTAL SALE</span>
               <span className="text-lg font-black text-gray-900">₱{total.toFixed(2)}</span>
             </div>
 
             {checkoutError && (
-              <p className="text-[11px] font-semibold text-rose-600 -mt-1">{checkoutError}</p>
+              <p className="text-[11px] font-semibold text-rose-600">{checkoutError}</p>
             )}
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowConfirmSaleModal(false)}
-                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer"
-              >
-                Go Back &amp; Edit
-              </button>
-              <button
-                type="button"
-                onClick={handleFinalConfirmCheckout}
-                disabled={checkoutBusy}
-                className="flex-1 py-3 bg-brand-orange hover:bg-orange-600 disabled:opacity-60 disabled:cursor-wait text-white font-black text-xs rounded-xl shadow-xs cursor-pointer"
-              >
-                {checkoutBusy ? 'Placing Sale…' : 'Confirm & Place Sale'}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ===================================================================
           APPLY DISCOUNT DIALOG - writes orders.ord_discount at checkout
       =================================================================== */}
       {showDiscountModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-xs w-full shadow-2xl border border-gray-100 space-y-4">
-            <div className="text-center space-y-1">
-              <h3 className="text-base font-black text-gray-900">Apply Discount</h3>
-              <p className="text-xs text-gray-500">
-                Amount taken off this sale. Subtotal ₱{subtotal.toFixed(2)}.
-              </p>
-            </div>
-
-            <label className="block space-y-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Discount (₱)</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                autoFocus
-                value={discountInput}
-                onChange={(e) => setDiscountInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleApplyDiscount()
-                }}
-                placeholder="0.00"
-                className="w-full text-sm font-bold text-gray-900 p-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-brand-orange"
-              />
-            </label>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleApplyDiscount}
-                className="flex-1 py-2.5 bg-brand-orange hover:bg-orange-500 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
+        <Modal
+          isOpen={showDiscountModal}
+          onClose={() => {
+            setShowDiscountModal(false)
+            setDiscountInput('')
+          }}
+          title="Apply Discount"
+          subtitle={`Amount taken off this sale. Subtotal ₱${subtotal.toFixed(2)}.`}
+          footer={
+            <>
+              <Button variant="primary" onClick={handleApplyDiscount} className="flex-1">
                 Apply
-              </button>
+              </Button>
               {discountAmount > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearDiscount}
-                  className="flex-1 py-2.5 border border-rose-200 text-rose-600 font-bold text-xs rounded-xl hover:bg-rose-50 transition-colors cursor-pointer"
-                >
+                <Button variant="ghost" onClick={handleClearDiscount} className="flex-1 border border-rose-200 text-rose-600 hover:bg-rose-50">
                   Remove
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setShowDiscountModal(false)
                   setDiscountInput('')
                 }}
-                className="px-3 py-2.5 border border-gray-200 text-gray-600 font-bold text-xs rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </>
+          }
+        >
+          <label className="block space-y-1">
+            <span className="field-label">Discount (₱)</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              value={discountInput}
+              onChange={(e) => setDiscountInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleApplyDiscount()
+              }}
+              placeholder="0.00"
+              className="field-input font-bold"
+            />
+          </label>
+        </Modal>
       )}
 
       {showReceiptModal && lastPlacedOrder && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-gray-100 space-y-5 print:shadow-none print:border-none">
-            {/* Header */}
-            <div className="text-center space-y-1">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center mb-2">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-6 h-6">
-                  <polyline points="20 6 9 17 4 12" />
+        <Modal
+          isOpen={showReceiptModal && !!lastPlacedOrder}
+          onClose={() => setShowReceiptModal(false)}
+          title="Sale Complete!"
+          subtitle="Tindahan ni Isko • Bicol University"
+          footer={
+            <>
+              <Button variant="secondary" onClick={handlePrint} className="flex-1">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect x="6" y="14" width="12" height="8" />
                 </svg>
-              </div>
-              <h3 className="text-base font-black text-gray-900">Sale Complete!</h3>
-              <p className="text-xs text-gray-500">Tindahan ni Isko • Bicol University</p>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                {lastPlacedOrder.id} • {lastPlacedOrder.fulfillment}
-              </p>
-            </div>
+                Print Receipt
+              </Button>
+              <Button variant="primary" onClick={() => setShowReceiptModal(false)} className="flex-1">
+                Done
+              </Button>
+            </>
+          }
+        >
+          <div className="modal-scroll space-y-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">
+              {lastPlacedOrder.id} • {lastPlacedOrder.fulfillment}
+            </p>
 
             {/* Receipt Details */}
             <div className="border-t border-b border-dashed border-gray-200 py-3 space-y-2 text-xs">
@@ -1628,82 +1597,45 @@ export default function AdminPos() {
                 </div>
               )}
             </div>
-
-            {/* Actions */}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                  <polyline points="6 9 6 2 18 2 18 9" />
-                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                  <rect x="6" y="14" width="12" height="8" />
-                </svg>
-                Print Receipt
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowReceiptModal(false)}
-                className="flex-1 py-2.5 bg-brand-orange hover:bg-brand-orange-dark text-white font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-              >
-                Done
-              </button>
-            </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* ===================================================================
           5. RECENT WALK-IN (POS) SALES MODAL
       =================================================================== */}
       {showRecentSalesModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div>
-                <h3 className="text-base font-black text-gray-900">Recent Walk-in Sales</h3>
-                <p className="text-xs text-gray-500">POS transactions from this register</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRecentSalesModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-
-            {posSales.length === 0 ? (
-              <p className="text-xs font-bold text-gray-400 text-center py-8">No walk-in sales yet.</p>
-            ) : (
-              <div className="max-h-72 overflow-y-auto divide-y divide-gray-100 scrollbar-none">
-                {posSales.map((sale) => (
-                  <div key={sale.ordId} className="py-2.5 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-black text-gray-900 truncate">{sale.id}</p>
-                      <p className="text-[10px] text-gray-400 truncate">
-                        {sale.customer} • {sale.date}
-                      </p>
-                    </div>
-                    <p className="text-xs font-black text-gray-900 shrink-0">
-                      ₱{(Number(sale.total) || 0).toFixed(2)}
+        <Modal
+          isOpen={showRecentSalesModal}
+          onClose={() => setShowRecentSalesModal(false)}
+          title="Recent Walk-in Sales"
+          subtitle="POS transactions from this register"
+          footer={
+            <Button variant="secondary" onClick={() => setShowRecentSalesModal(false)} className="w-full">
+              Close
+            </Button>
+          }
+        >
+          {posSales.length === 0 ? (
+            <p className="text-xs font-bold text-gray-400 text-center py-8">No walk-in sales yet.</p>
+          ) : (
+            <div className="modal-scroll divide-y divide-gray-100 scrollbar-none">
+              {posSales.map((sale) => (
+                <div key={sale.ordId} className="py-2.5 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-gray-900 truncate">{sale.id}</p>
+                    <p className="text-[10px] text-gray-400 truncate">
+                      {sale.customer} • {sale.date}
                     </p>
                   </div>
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setShowRecentSalesModal(false)}
-              className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+                  <p className="text-xs font-black text-gray-900 shrink-0">
+                    ₱{(Number(sale.total) || 0).toFixed(2)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
       )}
 
       {/* ===================================================================
@@ -1711,34 +1643,20 @@ export default function AdminPos() {
              exact SKU match — QRScanner surfaces camera errors itself too)
       =================================================================== */}
       {showScanModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4 animate-scale-in">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div>
-                <h3 className="text-base font-black text-gray-900">Scan Barcode</h3>
-                <p className="text-xs text-gray-500">Point the camera at the product barcode</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowScanModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-
-            <QRScanner onScan={handleBarcodeScan} onError={setScanError} className="w-full aspect-video" />
-            {scanError && <p className="text-[11px] font-semibold text-rose-600">{scanError}</p>}
-
-            <button
-              type="button"
-              onClick={() => setShowScanModal(false)}
-              className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer"
-            >
+        <Modal
+          isOpen={showScanModal}
+          onClose={() => setShowScanModal(false)}
+          title="Scan Barcode"
+          subtitle="Point the camera at the product barcode"
+          footer={
+            <Button variant="secondary" onClick={() => setShowScanModal(false)} className="w-full">
               Close
-            </button>
-          </div>
-        </div>
+            </Button>
+          }
+        >
+          <QRScanner onScan={handleBarcodeScan} onError={setScanError} className="w-full aspect-video" />
+          {scanError && <p className="field-error">{scanError}</p>}
+        </Modal>
       )}
       </div>
     </AdminLayout>

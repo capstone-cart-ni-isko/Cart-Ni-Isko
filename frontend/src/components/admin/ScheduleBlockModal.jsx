@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { GRID_MINUTES, fmtTime, minutesOf } from './scheduleTime.js'
+import Modal from '../ui/Modal.jsx'
+import Button from '../ui/Button.jsx'
 
 /**
  * Schedule block editor (FLOW-EMP_SCHED-04 / 08).
@@ -87,32 +89,40 @@ export default function ScheduleBlockModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`Block #${shift.shift_id} · ${shift.employee_name || `Employee #${shift.emp_id}`}`}
+      subtitle={`${dateLabel || shift.shift_date} · ${shift.status}`}
+      size="wide"
+      bodyClassName="modal-scroll space-y-2.5 text-xs font-medium"
+      footer={
+        <>
+          {onCancelBlock && (
+            <Button
+              variant="ghost"
+              disabled={isSaving}
+              onClick={() => onCancelBlock(shift)}
+              className="text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white mr-auto"
+            >
+              {isSaving ? 'Working…' : 'Cancel block'}
+            </Button>
+          )}
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+          <Button variant="primary" type="submit" form="schedule-block-form" disabled={isSaving || locked} className="px-3.5">
+            {isSaving ? 'Saving…' : 'Save block'}
+          </Button>
+        </>
+      }
+    >
       <form
+        id="schedule-block-form"
         onSubmit={submit}
-        className="bg-white rounded-lg border border-slate-200 w-full max-w-md max-h-[90vh] overflow-y-auto p-4 space-y-3"
+        className="space-y-2.5 text-xs font-medium"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">
-              Block #{shift.shift_id} · {shift.employee_name || `Employee #${shift.emp_id}`}
-            </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {dateLabel || shift.shift_date} · {shift.status}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="w-6 h-6 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 flex items-center justify-center cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="space-y-2.5 text-xs font-medium">
-          <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-3 gap-2.5">
             <div className="col-span-3 sm:col-span-1">
               <label htmlFor="block-date" className="block font-semibold text-slate-700 mb-1">
                 Date
@@ -206,35 +216,7 @@ export default function ScheduleBlockModal({
               {formError}
             </p>
           )}
-
-          <div className="flex flex-wrap justify-end gap-2 pt-1.5">
-            {onCancelBlock && (
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={() => onCancelBlock(shift)}
-                className="h-8 px-3 rounded-md font-semibold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white transition-colors cursor-pointer text-xs disabled:opacity-50"
-              >
-                {isSaving ? 'Working…' : 'Cancel block'}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 px-3 bg-slate-100 rounded-md font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer text-xs"
-            >
-              Close
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving || locked}
-              className="h-8 px-3 bg-brand-orange rounded-md font-semibold text-white hover:bg-brand-orange-dark cursor-pointer text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? 'Saving…' : 'Save block'}
-            </button>
-          </div>
-        </div>
       </form>
-    </div>
+    </Modal>
   )
 }

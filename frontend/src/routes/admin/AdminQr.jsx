@@ -11,6 +11,11 @@ import { scanQr } from '../../services/tracking.js'
  * FLOW-EMP_HOME-07 — the "QR" icon in the navigation ribbon opens the
  * "QR scanner" page.
  *
+ * STAFF: this capability does not exist for a 'staff' employee anywhere in the
+ * portal - the ribbon icon is not rendered for them (AdminTopBar) and the route
+ * itself is role-gated in App.jsx, so the guard below is the last of the three
+ * layers and lands a staff member on their own home page instead of a scanner.
+ *
  * Every scan is handed to POST /tracking/scan (the same endpoint the pickup
  * and appointment claims use), so the result the employee sees is whatever
  * the backend decided - a claim, an appointment close, or a rejection - and
@@ -19,13 +24,6 @@ import { scanQr } from '../../services/tracking.js'
 export default function AdminQr() {
   const { showToast } = useToast()
   const { currentAdminUser } = useAdmin()
-
-  // QR scanning is an admin capability (FLOW-MANAGE_APP-06); staff are
-  // redirected to their own home page.
-  if (empIsStaff(currentAdminUser)) {
-    return <Navigate to={empHomePath(currentAdminUser)} replace />
-  }
-
   const [busy, setBusy] = useState(false)
   const [lastScan, setLastScan] = useState(null) // { ok, code, message }
 
@@ -48,6 +46,14 @@ export default function AdminQr() {
     },
     [busy, showToast]
   )
+
+  // Staff has no QR capability (rule 33/41): three layers redirect them away
+  // from this screen - the hidden ribbon icon, the role guard on /admin/qr in
+  // App.jsx, and this one. Staff land on their own home page. The guard runs
+  // AFTER every hook so the hook order never changes between renders.
+  if (empIsStaff(currentAdminUser)) {
+    return <Navigate to={empHomePath(currentAdminUser)} replace />
+  }
 
   return (
     <AdminLayout>

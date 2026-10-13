@@ -4,6 +4,7 @@ import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import LoadingSpinner from '../../components/ui/LoadingSpinner.jsx'
 import Button from '../../components/ui/Button.jsx'
+import Modal from '../../components/ui/Modal.jsx'
 import { DownloadIcon, FileTextIcon, CalendarIcon, UsersIcon, PackageIcon, SaveIcon } from '../../components/ui/Icons.jsx'
 import { apiPost, apiGet } from '../../services/api.js'
 import { empCateg, empIsActive, first, fmtDateTime, productStock, toNumber } from '../../components/admin/schema.js'
@@ -776,23 +777,38 @@ function AdminReports() {
       </div>
 
       {showSaveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 p-6 animate-scale-in">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Save Report Template</h3>
-            <p className="text-sm text-slate-500 mb-4">Give this filter combination a name for quick reuse.</p>
-            <input
-              type="text"
-              value={templateName}
-              onChange={e => setTemplateName(e.target.value)}
-              placeholder="e.g., Weekly Sales Report"
-              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-orange focus:ring-1 focus:ring-brand-orange mb-4"
-            />
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowSaveModal(false)} className="px-4 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSaveTemplate} disabled={isGenerating || !templateName.trim()} className="px-4 py-2 rounded-lg bg-brand-orange text-white text-sm font-semibold hover:bg-orange-600 disabled:opacity-50">Save Template</button>
-            </div>
-          </div>
-        </div>
+        <Modal
+          isOpen={showSaveModal}
+          onClose={() => setShowSaveModal(false)}
+          title="Save Report Template"
+          subtitle="Give this filter combination a name for quick reuse."
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowSaveModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleSaveTemplate}
+                disabled={isGenerating || !templateName.trim()}
+              >
+                Save Template
+              </Button>
+            </>
+          }
+        >
+          <label className="field-label" htmlFor="report-template-name">
+            Template name
+          </label>
+          <input
+            id="report-template-name"
+            type="text"
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            placeholder="e.g., Weekly Sales Report"
+            className="field-input"
+          />
+        </Modal>
       )}
     </AdminLayout>
   )

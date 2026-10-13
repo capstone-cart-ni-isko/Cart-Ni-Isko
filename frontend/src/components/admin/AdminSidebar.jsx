@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { empCateg, empIsStaff } from './schema.js'
 import ClockInOut from './ClockInOut.jsx'
+import Modal from '../ui/Modal.jsx'
+import Button from '../ui/Button.jsx'
 
 const ICON = 'w-4 h-4'
 
@@ -309,32 +311,28 @@ export default function AdminSidebar({ onCloseMobile }) {
         </div>
       </div>
 
-      {/* Logout confirmation dialog (DOMAIN 16) */}
+      {/* Logout confirmation dialog (DOMAIN 16) — one shared popup shell, so
+          the admin logout reads exactly like every other dialog in the system. */}
       {confirmLogout && (
-        <div className="fixed inset-0 z-[99999] bg-black/50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-xl max-w-sm w-full border border-slate-200 p-5 shadow-xl animate-scale-in">
-            <h3 className="text-sm font-bold text-slate-900">Sign out?</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Your staff session ends immediately and you will be redirected to the login page.
-            </p>
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setConfirmLogout(false)}
-                className="h-8 px-3 rounded-md bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer"
-              >
+        <Modal
+          isOpen={confirmLogout}
+          onClose={() => setConfirmLogout(false)}
+          title="Sign out?"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setConfirmLogout(false)} className="px-3.5">
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="h-8 px-3 rounded-md bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 cursor-pointer"
-              >
+              </Button>
+              <Button variant="danger" onClick={handleLogout} className="px-3.5">
                 Sign out
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-600 font-medium leading-relaxed">
+            Your staff session ends immediately and you will be redirected to the login page.
+          </p>
+        </Modal>
       )}
     </aside>
   )

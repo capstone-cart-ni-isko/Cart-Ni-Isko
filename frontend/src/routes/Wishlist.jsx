@@ -84,7 +84,7 @@ function Wishlist() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div className="grid-catalog">
             {/* Server order (wish_created DESC) is rendered as-is; every row
                 stays visible even when it can no longer be bought. */}
             {wishlistItems.map((product) => {

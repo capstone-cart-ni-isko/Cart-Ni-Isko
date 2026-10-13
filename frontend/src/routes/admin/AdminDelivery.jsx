@@ -5,6 +5,8 @@ import { getTrack, updateTrack } from '../../services/tracking.js'
 import { bookDelivery, cancelDelivery } from '../../services/checkout.js'
 import { mapOrderRows, parseDate } from '../../services/dashboard.js'
 import LiveDate from '../../components/ui/LiveDate.jsx'
+import Modal from '../../components/ui/Modal.jsx'
+import Button from '../../components/ui/Button.jsx'
 
 // ─── Delivery Workflow (live data) ────────────────────────────────────────
 // Queue      = "TO RECEIVE" orders whose delivery track is not confirmed TRANSIT.
@@ -146,70 +148,56 @@ function Avatar({ initials, size = 'sm' }) {
 // ─── Dispatch Confirmation Modal ───────────────────────────────────────────
 function DispatchConfirmModal({ order, onClose, onConfirm }) {
   return (
-    <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
-      <div className="bg-white rounded-xl border border-slate-200 w-full max-w-sm animate-scale-in overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Dispatch this order?</h3>
-            <p className="text-xs text-slate-500 mt-0.5">{order?.customer} · {order?.id}</p>
-          </div>
-          <button type="button" onClick={onClose} className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-        <div className="px-5 py-4">
-          <p className="text-xs text-slate-600 leading-relaxed">
-            The delivery track moves to In Transit so the order leaves the dispatch queue.
-            The courier booking reference stays attached to the tracking record.
-          </p>
-          <p className="text-[11px] text-slate-400 mt-2 truncate">Deliver to: {order?.address}</p>
-        </div>
-        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/40">
-          <button type="button" onClick={onClose} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer">Cancel</button>
-          <button type="button" onClick={onConfirm} className="h-8 px-4 rounded-md text-xs font-bold bg-brand-orange hover:bg-orange-600 text-white transition-colors cursor-pointer">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Dispatch this order?"
+      subtitle={`${order?.customer} · ${order?.id}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} className="px-3.5">
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={onConfirm} className="px-3.5">
             Confirm dispatch
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-gray-600 leading-relaxed">
+        The delivery track moves to In Transit so the order leaves the dispatch queue.
+        The courier booking reference stays attached to the tracking record.
+      </p>
+      <p className="field-hint truncate">Deliver to: {order?.address}</p>
+    </Modal>
   )
 }
 
 // ─── Cancel Booking Confirmation Modal ─────────────────────────────────────
 function CancelBookingConfirmModal({ order, onClose, onConfirm, busy }) {
   return (
-    <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
-      <div className="bg-white rounded-xl border border-slate-200 w-full max-w-sm animate-scale-in overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Cancel this courier booking?</h3>
-            <p className="text-xs text-slate-500 mt-0.5">{order?.customer} · {order?.id}</p>
-          </div>
-          <button type="button" onClick={onClose} className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-        <div className="px-5 py-4">
-          <p className="text-xs text-slate-600 leading-relaxed">
-            The LalaMove rider is released for this order. Fulfillment stays on Delivery — book
-            the courier again once a new rider is needed.
-          </p>
-          <p className="text-[11px] text-slate-400 mt-2 truncate">
-            Courier order: {order?.courier?.order_id || '—'}
-          </p>
-        </div>
-        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/40">
-          <button type="button" onClick={onClose} className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer">Keep booking</button>
-          <button type="button" disabled={busy} onClick={onConfirm} className="h-8 px-4 rounded-md text-xs font-bold bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white transition-colors cursor-pointer">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Cancel this courier booking?"
+      subtitle={`${order?.customer} · ${order?.id}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} className="px-3.5">
+            Keep booking
+          </Button>
+          <Button variant="danger" onClick={onConfirm} disabled={busy} className="px-3.5">
             Cancel booking
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-gray-600 leading-relaxed">
+        The LalaMove rider is released for this order. Fulfillment stays on Delivery — book
+        the courier again once a new rider is needed.
+      </p>
+      <p className="field-hint truncate">Courier order: {order?.courier?.order_id || '—'}</p>
+    </Modal>
   )
 }
 

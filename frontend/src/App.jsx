@@ -230,10 +230,18 @@ function App() {
                   <Route path="/admin/account" element={<AdminAccount />} />
                   <Route path="/admin/profile" element={<AdminAccount />} />
 
-                  {/* DOMAIN 3 - FLOW-EMP_HOME-07 / FLOW-EMP_HOME-08: the QR
-                      scanner and the notification tab are reachable from the
-                      ribbon by every employee (staff included). */}
-                  <Route path="/admin/qr" element={<AdminQr />} />
+                  {/* DOMAIN 3 - FLOW-EMP_HOME-07 / FLOW-EMP_HOME-08: the
+                      notification tab is reachable from the ribbon by every
+                      employee (staff included). The "QR" scanner is NOT:
+                      staff employees have no QR capability anywhere in the
+                      portal - the ribbon icon is hidden (AdminTopBar), the page
+                      guard inside AdminQr redirects them, and this route is
+                      wrapped in the same role guard the other admin-only
+                      surfaces use (rule 33/41, REQ-EMP_HOME-01), so typing the
+                      URL is not a way around it either. */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                    <Route path="/admin/qr" element={<AdminQr />} />
+                  </Route>
                   <Route path="/admin/notifications" element={<AdminNotifications />} />
 
                   {/* DOMAIN 15 - FLOW-EMP_SET-01: every employee opens the

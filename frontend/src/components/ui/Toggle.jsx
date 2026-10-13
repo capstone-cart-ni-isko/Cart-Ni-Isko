@@ -1,25 +1,30 @@
-function Toggle({ checked, onChange, label, description }) {
+/**
+ * The system's one toggle switch.
+ *
+ * Every switch in the customer portal and the admin portal renders through this
+ * component, which reads the shared `.switch` primitives from index.css: one
+ * track size, one thumb size, one travel, one colour and one focus ring. The
+ * `md`/`lg` sizes keep a dense list row and a roomy settings row readable
+ * without ever making the switch look like a different control.
+ */
+function Toggle({ checked, onChange, label, description, disabled = false, size = 'md', className = '' }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900">{label}</p>
-        {description && <p className="text-xs text-gray-500 mt-0.5">{description}</p>}
-      </div>
+    <div className={`switch-row ${className}`}>
+      {(label || description) && (
+        <div className="flex-1 min-w-0">
+          {label && <p className="switch-row__label">{label}</p>}
+          {description && <p className="switch-row__hint">{description}</p>}
+        </div>
+      )}
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={label || 'Toggle'}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-          checked ? 'bg-brand-orange' : 'bg-gray-300'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
-        />
-      </button>
+        className={`switch ${size === 'lg' ? 'switch--lg' : ''}`}
+      />
     </div>
   )
 }

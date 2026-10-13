@@ -10,6 +10,7 @@ import AdminPageHeader from '../../components/admin/kit/AdminPageHeader.jsx'
 import Segmented from '../../components/admin/kit/Segmented.jsx'
 import { BTN_PRIMARY_SM, BTN_SECONDARY_SM, ICON_BTN, INPUT, SCROLL_FADE, PAGE_ROOT } from '../../components/admin/kit/ui.js'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { empIsStaff } from '../../components/admin/schema.js'
 import {
   fetchAppointments,
   fetchSlots,
@@ -19,6 +20,8 @@ import {
 import { fetchAccounts } from '../../services/accounts.js'
 import { getTrack, scanQr } from '../../services/tracking.js'
 import LiveDate from '../../components/ui/LiveDate.jsx'
+import Modal from '../../components/ui/Modal.jsx'
+import Button from '../../components/ui/Button.jsx'
 import {
   mapOrderRows,
   parseDate,
@@ -91,42 +94,40 @@ function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
   const capacity = slots[0]?.capacity || SLOT_RULES.CLAIM.capacity
 
   return (
-    <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
-      <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Schedule Pickup Appointment</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {order ? `${order.customer} · ${order.id}` : 'Select a time slot'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Schedule Pickup Appointment"
+      subtitle={order ? `${order.customer} · ${order.id}` : 'Select a time slot'}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} className="px-3.5">
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!selectedSlot || busy}
+            onClick={() => selectedSlot && onConfirm(selectedSlot)}
+            className="px-3.5"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+            {busy ? 'Scheduling…' : 'Confirm Slot'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex items-center gap-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400 shrink-0">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+        <span className="text-xs font-semibold text-slate-700"><LiveDate /></span>
+        <span className="ml-auto text-[10px] text-slate-400">Showing available slots</span>
+      </div>
 
-        {/* Date selector */}
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400 shrink-0">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-            <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          <span className="text-xs font-semibold text-slate-700"><LiveDate /></span>
-          <span className="ml-auto text-[10px] text-slate-400">Showing available slots</span>
-        </div>
-
-        {/* Slot grid */}
-        <div className="px-5 py-4 max-h-72 overflow-y-auto space-y-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-            Select a time slot — max {capacity} appointments per slot
-          </p>
+      <div className="modal-scroll space-y-1.5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+          Select a time slot — max {capacity} appointments per slot
+        </p>
           {slots.map((slot) => {
             const isFull = slot.booked >= slot.capacity
             const disabled = isFull || !slot.available || busy
@@ -165,34 +166,8 @@ function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
           {slots.length === 0 && (
             <p className="text-xs text-slate-400 py-4 text-center">No bookable slots for today.</p>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-3 bg-slate-50/40">
-          <p className="text-[10px] text-slate-400">
-            Availability based on store hours &amp; staff coverage
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!selectedSlot || busy}
-              onClick={() => selectedSlot && onConfirm(selectedSlot)}
-              className={`h-8 px-4 rounded-md text-xs font-bold transition-colors cursor-pointer
-                ${selectedSlot && !busy ? 'bg-isko-orange hover:bg-isko-orange-dark text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-            >
-              {busy ? 'Scheduling...' : 'Confirm Slot'}
-            </button>
-          </div>
-        </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -606,12 +581,19 @@ const TABS = ['Overview', 'Unscheduled', 'Scheduled', 'Completed', 'No-show']
 const REFRESH_MS = 30000 // REQ-SD-02: keep the queues fresh
 
 export default function AdminPickup() {
-  const { orders: rawOrders = [], refreshOrders, updateOrderStatus } = useAdmin()
+  const { orders: rawOrders = [], refreshOrders, updateOrderStatus, currentAdminUser } = useAdmin()
   const [activeTab, setActiveTab] = useState('Overview')
   const [scheduleModal, setScheduleModal] = useState({ open: false, order: null })
   const [scheduling, setScheduling] = useState(false)
   const [busyId, setBusyId] = useState(null)
   const [toast, setToast] = useState('')
+
+  // REQ-APC-02 is picked up by admins and super admins (rules 41-44): a 'staff'
+  // employee has no QR capability in the portal at all, so this screen shows
+  // them no code field, no camera button and no scanner modal. One flag keeps
+  // the three in sync, and it also stops the camera (a device permission) from
+  // being requested for a role that may never verify a code.
+  const canScanQr = !empIsStaff(currentAdminUser)
 
   // Live auxiliary data: appointments, today's slots, customer directory.
   const [appointments, setAppointments] = useState([])
@@ -924,33 +906,39 @@ export default function AdminPickup() {
 
         {/* ── Header with QR verification (REQ-APC-02) ── */}
         <AdminPageHeader title="Pickup" subtitle="Manage in-store pickups, schedule appointments, and track handovers.">
-          <div className="relative w-56">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <line x1="14" y1="14" x2="14" y2="14.01" /><line x1="21" y1="14" x2="21" y2="21" /><line x1="14" y1="21" x2="17" y2="21" />
-            </svg>
-            <input
-              type="text"
-              ref={scanInputRef}
-              value={scanCode}
-              onChange={(e) => { setScanCode(e.target.value); setScanMsg(null) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
-              placeholder="Scan or enter QR code"
-              aria-label="QR code"
-              className={`${INPUT} h-8 pl-8 text-xs`}
-            />
-          </div>
-          <button type="button" onClick={handleScan} className={BTN_PRIMARY_SM}>
-            Scan QR
-          </button>
-          <button type="button" onClick={() => setScanModalOpen(true)} className={ICON_BTN} title="Open camera scanner" aria-label="Open camera scanner">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
-          </button>
+          {canScanQr && (
+            <div className="relative w-56">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <line x1="14" y1="14" x2="14" y2="14.01" /><line x1="21" y1="14" x2="21" y2="21" /><line x1="14" y1="21" x2="17" y2="21" />
+              </svg>
+              <input
+                type="text"
+                ref={scanInputRef}
+                value={scanCode}
+                onChange={(e) => { setScanCode(e.target.value); setScanMsg(null) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleScan() }}
+                placeholder="Scan or enter QR code"
+                aria-label="QR code"
+                className={`${INPUT} h-8 pl-8 text-xs`}
+              />
+            </div>
+          )}
+          {canScanQr && (
+            <button type="button" onClick={handleScan} className={BTN_PRIMARY_SM}>
+              Scan QR
+            </button>
+          )}
+          {canScanQr && (
+            <button type="button" onClick={() => setScanModalOpen(true)} className={ICON_BTN} title="Open camera scanner" aria-label="Open camera scanner">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </button>
+          )}
         </AdminPageHeader>
 
         {scanMsg && (
@@ -966,46 +954,31 @@ export default function AdminPickup() {
           </p>
         )}
 
-        {/* QR Camera Scanner Modal */}
-        {scanModalOpen && (
-          <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
-            <div className="bg-white rounded-lg border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">QR code scanner</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Point the camera at the customer&apos;s QR code</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setScanModalOpen(false)}
-                  aria-label="Close scanner"
-                  className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-              <div className="p-4">
-                <QRScanner
-                  onScan={(code) => {
-                    setScanCode(code)
-                    handleScan(code)
-                    setScanModalOpen(false)
-                  }}
-                  onError={(error) => {
-                    setScanMsg({ type: 'error', text: error })
-                  }}
-                  className="w-full aspect-video"
-                />
-              </div>
-              <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50">
-                <button type="button" onClick={() => setScanModalOpen(false)} className={BTN_SECONDARY_SM}>
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* QR Camera Scanner Modal — shared shell; staff own no scanner. */}
+        {scanModalOpen && canScanQr && (
+          <Modal
+            isOpen={scanModalOpen}
+            onClose={() => setScanModalOpen(false)}
+            title="QR code scanner"
+            subtitle="Point the camera at the customer's QR code"
+            footer={
+              <Button variant="secondary" onClick={() => setScanModalOpen(false)} className="px-3.5">
+                Close
+              </Button>
+            }
+          >
+            <QRScanner
+              onScan={(code) => {
+                setScanCode(code)
+                handleScan(code)
+                setScanModalOpen(false)
+              }}
+              onError={(error) => {
+                setScanMsg({ type: 'error', text: error })
+              }}
+              className="w-full aspect-video"
+            />
+          </Modal>
         )}
 
         {/* ── Tabs ── */}

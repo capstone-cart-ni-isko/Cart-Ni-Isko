@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
+import Modal from '../../components/ui/Modal.jsx'
+import Button from '../../components/ui/Button.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { uploadImage } from '../../services/upload.js'
 import { empIsStaff } from '../../components/admin/schema.js'
@@ -1367,46 +1369,39 @@ export default function AdminInventory() {
         </div>
       </div>
 
-      {/* Add Product Modal */}
+      {/* Add Product Modal — the shared popup shell; the form scrolls inside
+          the panel so long variation lists stay reachable, and the submit row
+          stays pinned in the footer. */}
       {showAddProductModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fade-in">
-          {/*
-            The panel - not the page - is the scroll container: it is capped at
-            92vh and scrolls its own content. Before, the form had no cap and no
-            overflow, so on any screen shorter than the form the bottom was simply
-            unreachable (no scrollbar anywhere) and the admin could not scroll back
-            up to the fields already filled in.
-          */}
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="add-product-title"
-            className="w-full max-w-2xl bg-white rounded-xl border border-slate-200 shadow-2xl max-h-[92vh] flex flex-col overflow-hidden animate-scale-in"
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 shrink-0">
-              <div className="min-w-0">
-                <h3 id="add-product-title" className="text-sm font-bold text-slate-900">Add New Product</h3>
-                <p className="text-[11px] text-slate-400 font-normal mt-0.5">
-                  Every variation needs a name and a stock count. Photos are optional.
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Close add product"
-                onClick={() => setShowAddProductModal(false)}
-                className="w-7 h-7 shrink-0 rounded-md bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 cursor-pointer"
+        <Modal
+          isOpen={showAddProductModal}
+          onClose={() => setShowAddProductModal(false)}
+          title="Add New Product"
+          subtitle="Every variation needs a name and a stock count. Photos are optional."
+          size="wide"
+          bodyClassName="modal-scroll"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowAddProductModal(false)} className="px-3.5">
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                form="add-product-form"
+                disabled={isCreatingProduct}
+                className="px-3.5"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
+                {isCreatingProduct ? 'Creating…' : 'Create Product'}
+              </Button>
+            </>
+          }
+        >
             <form
+              id="add-product-form"
               onSubmit={handleCreateProduct}
-              className="flex-1 min-h-0 overflow-y-auto overscroll-contain text-xs"
+              className="space-y-3 text-xs"
             >
-              <div className="px-4 py-3.5 space-y-3">
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Product Name</label>
                 <input
@@ -1719,29 +1714,8 @@ export default function AdminInventory() {
                   onChange={handleVariationPhotoChange}
                 />
               </div>
-
-              </div>
-              {/* Pinned to the bottom of the scroll area so "Create Product" is
-                  always reachable, however long the variation list gets. */}
-              <div className="sticky bottom-0 bg-white border-t border-slate-200 px-4 py-3 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddProductModal(false)}
-                  className="h-8 px-3 rounded-md border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingProduct}
-                  className="h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isCreatingProduct ? 'Creating…' : 'Create Product'}
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* FLOW-MANAGE_INV-05 / REQ-IM-01: edit the details of a product that is
@@ -1749,27 +1723,33 @@ export default function AdminInventory() {
           product detail page, one combination at a time - the bulk replace path
           would retire every prodvar row and orphan the bags holding them. */}
       {showEditProductModal && editTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-bold text-slate-900">Edit Product</h2>
-              <button
-                type="button"
-                aria-label="Close edit product"
+        <Modal
+          isOpen={showEditProductModal && !!editTarget}
+          onClose={() => {
+            setShowEditProductModal(false)
+            setEditTarget(null)
+          }}
+          title="Edit Product"
+          bodyClassName="modal-scroll"
+          footer={
+            <>
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setShowEditProductModal(false)
                   setEditTarget(null)
                 }}
-                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                className="px-3.5"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateProduct} className="space-y-2.5 text-xs px-4 py-3">
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" form="edit-product-form" className="px-3.5">
+                Save Changes
+              </Button>
+            </>
+          }
+        >
+          <form id="edit-product-form" onSubmit={handleUpdateProduct} className="space-y-2.5 text-xs">
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Product Name</label>
                 <input
@@ -1864,27 +1844,8 @@ export default function AdminInventory() {
                   Manage variations
                 </Link>
               </div>
-              <div className="pt-1 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEditProductModal(false)
-                    setEditTarget(null)
-                  }}
-                  className="h-8 px-3 rounded-md border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold cursor-pointer"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          </form>
+        </Modal>
       )}
 
       <ConfirmModal
@@ -1903,28 +1864,23 @@ export default function AdminInventory() {
           prodvar row - and every bag and sales row hanging off it - is left
           untouched. */}
       {variantEditor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-lg bg-white shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <div className="min-w-0">
-                <h2 className="text-sm font-bold text-slate-900">Edit Combination</h2>
-                <p className="text-[11px] text-slate-400 truncate">
-                  {variantEditor.variant.label || variantEditor.variant.name}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Close edit combination"
-                onClick={() => setVariantEditor(null)}
-                className="text-slate-400 hover:text-slate-700 cursor-pointer"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-2.5 px-4 py-3 text-xs">
+        <Modal
+          isOpen={!!variantEditor}
+          onClose={() => setVariantEditor(null)}
+          title="Edit Combination"
+          subtitle={variantEditor.variant.label || variantEditor.variant.name}
+          bodyClassName="modal-scroll space-y-2.5 text-xs"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setVariantEditor(null)} className="px-3.5">
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleVariantEditorSave} className="px-3.5">
+                Save Changes
+              </Button>
+            </>
+          }
+        >
               {Object.entries(variantEditor.variant.options || {}).length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {Object.entries(variantEditor.variant.options).map(([axis, value]) => (
@@ -1938,58 +1894,57 @@ export default function AdminInventory() {
                 </div>
               )}
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Display name (optional)</label>
+                <label className="field-label">Display name (optional)</label>
                 <input
                   type="text"
                   placeholder={variantEditor.variant.label || 'Cream / Medium'}
                   value={variantDraft.name}
                   onChange={(e) => setVariantDraft((draft) => ({ ...draft, name: e.target.value }))}
-                  className="w-full h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
+                  className="field-input"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Stock</label>
+                  <label className="field-label">Stock</label>
                   <input
                     type="number"
                     min="0"
                     value={variantDraft.stock}
                     onChange={(e) => setVariantDraft((draft) => ({ ...draft, stock: e.target.value }))}
-                    className="w-full h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
+                    className="field-input"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Markup (₱)</label>
+                  <label className="field-label">Markup (₱)</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={variantDraft.markup}
                     onChange={(e) => setVariantDraft((draft) => ({ ...draft, markup: e.target.value }))}
-                    className="w-full h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
+                    className="field-input"
                   />
                 </div>
               </div>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Image (optional)</label>
+                <label className="field-label">Image (optional)</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     placeholder="/uploads/product/... or data URL"
                     value={variantDraft.pic}
                     onChange={(e) => setVariantDraft((draft) => ({ ...draft, pic: e.target.value }))}
-                    className="flex-1 h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
+                    className="field-input flex-1"
                   />
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
                     onClick={() => {
                       setVariantEditor({ ...variantEditor, pickingPhoto: true })
                       addVariationPhotoRef.current?.click()
                     }}
-                    className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                   >
                     Upload
-                  </button>
+                  </Button>
                 </div>
                 {variantDraft.pic && (
                   <img
@@ -1999,25 +1954,7 @@ export default function AdminInventory() {
                   />
                 )}
               </div>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 px-4 py-3">
-              <button
-                type="button"
-                onClick={() => setVariantEditor(null)}
-                className="h-8 px-3 rounded-md border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleVariantEditorSave}
-                className="h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold cursor-pointer"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </AdminLayout>
   )

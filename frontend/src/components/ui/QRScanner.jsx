@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useToast } from '../../hooks/useToast.js'
 import { scanQr } from '../../services/tracking.js'
+import Modal from './Modal.jsx'
+import Button from './Button.jsx'
 
 /**
  * QRScanner - Camera-based QR code scanner using html5-qrcode
@@ -230,56 +232,37 @@ export function QrScanModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-md flex items-center justify-center px-4 animate-fade-in">
-      <div className="bg-white rounded-xl border border-slate-200 w-full max-w-md shadow-xl animate-scale-in overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-            <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onClose?.()}
-            aria-label="Close scanner"
-            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="p-4">
-          <QRScanner
-            onScan={(code) => submit(code)}
-            onError={(scanError) => setError(scanError)}
-            className="w-full aspect-video"
-          />
-          {error && <p className="mt-2 text-center text-xs text-rose-600">{error}</p>}
-        </div>
-
-        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-2 bg-slate-50/40">
+    <Modal
+      isOpen={open}
+      onClose={() => onClose?.()}
+      title={title}
+      subtitle={subtitle}
+      footer={
+        <>
           {fallbackCode ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               disabled={busy}
               onClick={() => submit(fallbackCode)}
-              className="h-8 px-3 rounded-md border border-brand-orange text-xs font-bold text-brand-orange hover:bg-orange-50 disabled:opacity-50 cursor-pointer"
+              className="mr-auto border border-brand-orange text-brand-orange hover:bg-orange-50"
             >
               {fallbackLabel}
-            </button>
+            </Button>
           ) : (
             <span />
           )}
-          <button
-            type="button"
-            onClick={() => onClose?.()}
-            className="h-8 px-3 rounded-md border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-          >
+          <Button variant="secondary" onClick={() => onClose?.()}>
             {busy ? 'Verifying…' : 'Close'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <QRScanner
+        onScan={(code) => submit(code)}
+        onError={(scanError) => setError(scanError)}
+        className="w-full aspect-video"
+      />
+      {error && <p className="field-error text-center">{error}</p>}
+    </Modal>
   )
 }

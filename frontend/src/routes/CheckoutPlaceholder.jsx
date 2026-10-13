@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { createPortal } from 'react-dom'
 import { useCart } from '../hooks/useCart.js'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import BottomNav from '../components/layout/BottomNav.jsx'
 import Button from '../components/ui/Button.jsx'
+import Modal from '../components/ui/Modal.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { ApiErrorText } from '../components/ui/ApiErrorBoundary.jsx'
 import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
@@ -823,56 +823,51 @@ function CheckoutPlaceholder() {
       </div>
 
       {/* FLOW-CHECKOUT-09: five-second confirmation before the order is written. */}
-      {confirmOpen &&
-        createPortal(
-          <div className="fixed inset-0 z-[130000] flex items-center justify-center p-4">
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setConfirmOpen(false)}
-              aria-hidden="true"
-            />
-            <div
-              role="dialog"
-              aria-modal="true"
-              className="relative w-full max-w-sm bg-white rounded-2xl p-6 border border-gray-200 shadow-xl animate-scale-in"
-            >
-              <h3 className="text-base font-bold text-gray-900">Confirm your order</h3>
-              <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-                <span className="font-bold text-gray-800">₱{totalDue.toFixed(2)}</span> due ·{' '}
-                {itemsToCheckout.length} {itemsToCheckout.length === 1 ? 'item' : 'items'} ·{' '}
-                {dispatchType === 'pickup' ? 'Store pickup' : 'Courier delivery'}.
-              </p>
-              <p className="text-xs text-gray-400 mt-2">
-                This confirmation closes in{' '}
-                <span className="font-bold text-brand-orange">{Math.max(0, confirmSeconds)}s</span>.
-              </p>
-              <div className="grid grid-cols-2 gap-2 mt-5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmOpen(false)
-                    setConfirmSeconds(CONFIRM_SECONDS)
-                    runPlacement()
-                  }}
-                  className="h-11 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-sm font-bold transition-colors cursor-pointer"
-                >
-                  Looks good
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirmOpen(false)
-                    setConfirmSeconds(CONFIRM_SECONDS)
-                  }}
-                  className="h-11 rounded-lg bg-white border border-slate-200 text-gray-700 text-sm font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Go back
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {confirmOpen && (
+        <Modal
+          isOpen={confirmOpen}
+          onClose={() => {
+            setConfirmOpen(false)
+            setConfirmSeconds(CONFIRM_SECONDS)
+          }}
+          title="Confirm your order"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setConfirmOpen(false)
+                  setConfirmSeconds(CONFIRM_SECONDS)
+                }}
+                className="flex-1 h-11"
+              >
+                Go back
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setConfirmOpen(false)
+                  setConfirmSeconds(CONFIRM_SECONDS)
+                  runPlacement()
+                }}
+                className="flex-1 h-11"
+              >
+                Looks good
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-500 leading-relaxed">
+            <span className="font-bold text-gray-800">₱{totalDue.toFixed(2)}</span> due ·{' '}
+            {itemsToCheckout.length} {itemsToCheckout.length === 1 ? 'item' : 'items'} ·{' '}
+            {dispatchType === 'pickup' ? 'Store pickup' : 'Courier delivery'}.
+          </p>
+          <p className="field-hint">
+            This confirmation closes in{' '}
+            <span className="font-bold text-brand-orange">{Math.max(0, confirmSeconds)}s</span>.
+          </p>
+        </Modal>
+      )}
 
       {/* FLOW-CHECKOUT-08: the phone code that gates the placement call. */}
       <OtpVerifyModal

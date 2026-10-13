@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useToast } from '../../hooks/useToast.js'
 import LoginPromptModal from './LoginPromptModal.jsx'
-import { CloseIcon } from './Icons.jsx'
+import Modal from './Modal.jsx'
+import Button from './Button.jsx'
 import { createReview, fetchProductReviews } from '../../services/reviews.js'
 
 function StarRating({ rating = 0, size = 'sm' }) {
@@ -411,107 +412,87 @@ export default function ProductReviews({ product }) {
         </div>
       )}
 
-      {/* Write a Review Modal */}
+      {/* Write a Review Modal — the shared popup shell */}
       {showWriteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in">
-          <div
-            className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-xl overflow-hidden p-5 animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-sm font-bold text-gray-900">Write a Product Review</h3>
-                <p className="text-xs text-gray-500 line-clamp-1">{product.name || 'Campus Merch'}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowWriteModal(false)}
-                className="w-7 h-7 rounded-lg bg-slate-100 text-gray-400 hover:text-gray-700 flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <CloseIcon className="w-3.5 h-3.5" />
-              </button>
+        <Modal
+          isOpen={showWriteModal}
+          onClose={() => setShowWriteModal(false)}
+          title="Write a Product Review"
+          subtitle={product.name || 'Campus Merch'}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowWriteModal(false)} className="px-3.5">
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" form="write-review-form" disabled={submitting} className="px-3.5">
+                {submitting ? 'Submitting…' : 'Submit Review'}
+              </Button>
+            </>
+          }
+        >
+          {/* Moderation Note */}
+          <div className="p-3 bg-amber-50/70 border border-amber-200/70 rounded-md text-[11px] text-amber-900 space-y-1">
+            <div className="font-bold flex items-center gap-1.5 text-amber-800">
+              <span>🛡️</span>
+              <span>Campus Moderation Notice</span>
             </div>
-
-            {/* Moderation Note */}
-            <div className="my-3 p-3 bg-amber-50/70 border border-amber-200/70 rounded-xl text-[11px] text-amber-900 space-y-1">
-              <div className="font-bold flex items-center gap-1.5 text-amber-800">
-                <span>🛡️</span>
-                <span>Campus Moderation Notice</span>
-              </div>
-              <p className="text-amber-800/90 leading-normal">
-                To maintain authentic and respectful feedback for all Iskolars, new reviews are verified by staff before appearing publicly.
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmitReview} className="space-y-3.5">
-              {/* Star Rating Selection */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">Overall Rating</label>
-                <div className="flex items-center gap-1.5">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onMouseEnter={() => setHoverRating(star)}
-                      onMouseLeave={() => setHoverRating(0)}
-                      onClick={() => setRating(star)}
-                      className="text-2xl transition-transform hover:scale-115 cursor-pointer p-0.5"
-                    >
-                      <span
-                        className={
-                          star <= (hoverRating || rating) ? 'text-amber-400' : 'text-gray-200'
-                        }
-                      >
-                        ★
-                      </span>
-                    </button>
-                  ))}
-                  <span className="text-xs font-bold text-gray-600 ml-2">
-                    {rating} of 5 Stars
-                  </span>
-                </div>
-              </div>
-
-              {/* Review Comment */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
-                  Your Review Comments
-                </label>
-                <textarea
-                  rows={4}
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Share details about the fabric quality, sizing fit, color accuracy, and overall satisfaction..."
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:border-brand-orange focus:ring-1 focus:ring-brand-orange outline-none transition-all resize-none"
-                  required
-                />
-              </div>
-
-              {submitError && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 font-semibold leading-relaxed">
-                  {submitError}
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowWriteModal(false)}
-                  className="h-8 px-4 rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="h-8 px-5 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange-dark active:scale-95 transition-all cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {submitting ? 'Submitting…' : 'Submit Review'}
-                </button>
-              </div>
-            </form>
+            <p className="text-amber-800/90 leading-normal">
+              To maintain authentic and respectful feedback for all Iskolars, new reviews are verified by staff before appearing publicly.
+            </p>
           </div>
-        </div>
+
+          <form id="write-review-form" onSubmit={handleSubmitReview} className="space-y-3.5">
+            {/* Star Rating Selection */}
+            <div>
+              <label className="field-label">Overall Rating</label>
+              <div className="flex items-center gap-1.5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    onClick={() => setRating(star)}
+                    className="text-2xl transition-transform hover:scale-115 cursor-pointer p-0.5"
+                  >
+                    <span
+                      className={
+                        star <= (hoverRating || rating) ? 'text-amber-400' : 'text-gray-200'
+                      }
+                    >
+                      ★
+                    </span>
+                  </button>
+                ))}
+                <span className="text-xs font-bold text-gray-600 ml-2">
+                  {rating} of 5 Stars
+                </span>
+              </div>
+            </div>
+
+            {/* Review Comment */}
+            <div>
+              <label className="field-label" htmlFor="review-comment">
+                Your Review Comments
+              </label>
+              <textarea
+                id="review-comment"
+                rows={4}
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Share details about the fabric quality, sizing fit, color accuracy, and overall satisfaction..."
+                className="field-input resize-none"
+                required
+              />
+            </div>
+
+            {submitError && (
+              <div className="p-3 rounded-md bg-red-50 border border-red-200 text-xs text-red-700 font-semibold leading-relaxed">
+                {submitError}
+              </div>
+            )}
+          </form>
+        </Modal>
       )}
 
       <LoginPromptModal

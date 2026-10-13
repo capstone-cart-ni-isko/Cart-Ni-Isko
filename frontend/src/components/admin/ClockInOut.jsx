@@ -4,6 +4,8 @@ import { useToast } from '../../hooks/useToast.js'
 import { useApiChange } from '../../hooks/useApiChange.js'
 import { fetchMyAccount, updateAccount } from '../../services/accounts.js'
 import { fetchShifts, setShiftUnavailable } from '../../services/shifts.js'
+import Modal from '../ui/Modal.jsx'
+import Button from '../ui/Button.jsx'
 
 /**
  * DOMAIN 7 / FLOW-EMP_SCHED-04 + REQ-SS-03 — the docked sidebar's
@@ -254,34 +256,30 @@ export default function ClockInOut() {
       )}
 
       {/* Confirmation: an early time-out is a roster change other people feel,
-          so it is never a one-click action (REQ-SS-02 / REQ-SS-03). */}
+          so it is never a one-click action (REQ-SS-02 / REQ-SS-03).
+          Shared popup shell - same look as every other dialog in the system. */}
       {confirmingOut && (
-        <div className="fixed inset-0 z-[99999] bg-black/50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-xl max-w-sm w-full border border-slate-200 p-5 shadow-xl animate-scale-in">
-            <h3 className="text-sm font-bold text-slate-900">Request to time out?</h3>
-            <p className="text-xs text-slate-500 mt-1">
-              You will be marked out of the store and your remaining block
-              {remaining.length === 1 ? '' : 's'} today will stop staffing the roster. Super
-              admins are alerted to find a substitute (REQ-SS-03).
-            </p>
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setConfirmingOut(false)}
-                className="h-8 px-3 rounded-md bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer"
-              >
+        <Modal
+          isOpen={confirmingOut}
+          onClose={() => setConfirmingOut(false)}
+          title="Request to time out?"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setConfirmingOut(false)} className="px-3.5">
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleClockOut}
-                className="h-8 px-3 rounded-md bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 cursor-pointer"
-              >
+              </Button>
+              <Button variant="danger" onClick={handleClockOut} className="px-3.5">
                 Time out
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-600 font-medium leading-relaxed">
+            You will be marked out of the store and your remaining block
+            {remaining.length === 1 ? '' : 's'} today will stop staffing the roster. Super
+            admins are alerted to find a substitute (REQ-SS-03).
+          </p>
+        </Modal>
       )}
     </div>
   )

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
+import Toggle from '../components/ui/Toggle.jsx'
 import { useToast } from '../hooks/useToast.js'
 import { fetchMyPreferences, updateMyPreferences } from '../services/settings.js'
 
@@ -13,34 +14,6 @@ import { fetchMyPreferences, updateMyPreferences } from '../services/settings.js
 */
 
 const REMINDER_PRESETS = [0, 15, 30, 60, 120, 1440]
-
-function Toggle({ checked, onChange, label, description, disabled }) {
-  return (
-    <div className="flex items-start justify-between gap-4 px-5 py-4">
-      <div className="min-w-0">
-        <p className="text-sm font-bold text-gray-900">{label}</p>
-        <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{description}</p>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={`shrink-0 w-12 h-7 rounded-full p-1 transition-colors disabled:opacity-60 ${
-          checked ? 'bg-brand-orange' : 'bg-gray-300'
-        }`}
-      >
-        <span
-          className={`block w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
-        />
-      </button>
-    </div>
-  )
-}
 
 function NotificationPreferences() {
   const { showToast } = useToast()
@@ -184,6 +157,7 @@ function NotificationPreferences() {
               </div>
 
               <Toggle
+                className="px-5 py-4"
                 label="Email notifications"
                 description="Also send order, appointment and account updates to your email."
                 checked={prefs.email}
@@ -195,6 +169,7 @@ function NotificationPreferences() {
               />
               <div className="border-t border-gray-50" />
               <Toggle
+                className="px-5 py-4"
                 label="Product notifications"
                 description="Hear about new arrivals, restocks and promos in your inbox."
                 checked={prefs.prod}

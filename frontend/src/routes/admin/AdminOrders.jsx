@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import Modal from '../../components/ui/Modal.jsx'
+import Button from '../../components/ui/Button.jsx'
 import StatCard from '../../components/admin/StatCard.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import DataTable from '../../components/admin/DataTable.jsx'
@@ -735,46 +737,45 @@ export default function AdminOrders() {
         )}
       </DrawerPanel>
 
-      {/* Bulk update modal */}
+      {/* Bulk update modal — the shared popup shell (index.css primitives). */}
       {showBulkModal && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 animate-fade-in">
-          <div className="bg-white rounded-lg p-4 max-w-sm w-full border border-slate-200 space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">
-              Bulk update ({selectedOrderIds.length} orders)
-            </h3>
-            <p className="text-xs text-slate-500">
-              Select a new status to apply to all selected orders.
-            </p>
-            <select
-              value={bulkNewStatus}
-              onChange={(e) => setBulkNewStatus(e.target.value)}
-              className="w-full h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
-            >
-              {['To Process', 'To Claim', 'To Receive', 'Cancelled'].map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-            <div className="flex justify-end gap-2 pt-1.5">
-              <button
-                type="button"
-                onClick={() => setShowBulkModal(false)}
-                className="h-8 px-3 bg-slate-100 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 cursor-pointer"
-              >
+        <Modal
+          isOpen={showBulkModal}
+          onClose={() => setShowBulkModal(false)}
+          title={`Bulk update (${selectedOrderIds.length} orders)`}
+          subtitle="Select a new status to apply to all selected orders."
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowBulkModal(false)} className="px-3.5">
                 Cancel
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="primary"
                 disabled={actionBusy}
                 onClick={handleBulkUpdate}
-                className="h-8 px-3 bg-brand-orange rounded-md text-xs font-semibold text-white hover:bg-brand-orange-dark cursor-pointer disabled:opacity-60"
+                className="px-3.5"
               >
                 Apply to {selectedOrderIds.length} orders
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </>
+          }
+        >
+          <label className="field-label" htmlFor="bulk-status">
+            New order status
+          </label>
+          <select
+            id="bulk-status"
+            value={bulkNewStatus}
+            onChange={(e) => setBulkNewStatus(e.target.value)}
+            className="field-input"
+          >
+            {['To Process', 'To Claim', 'To Receive', 'Cancelled'].map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </Modal>
       )}
     </AdminLayout>
   )

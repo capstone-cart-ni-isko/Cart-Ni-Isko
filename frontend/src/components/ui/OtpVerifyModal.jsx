@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import Button from './Button.jsx'
+import Modal from './Modal.jsx'
 import OtpInput from './OtpInput.jsx'
-import { CloseIcon } from './Icons.jsx'
 import { issueOtp, verifyOtp } from '../../services/otp.js'
 import { fetchNotifications } from '../../services/notifications.js'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -104,79 +103,65 @@ function OtpVerifyModal({ isOpen, purpose, title, onClose, onVerified }) {
     await onVerified?.()
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-[120000] flex items-center justify-center p-4 isolate">
-      <div className="absolute inset-0 z-0 bg-black/50" onClick={onClose} aria-hidden="true" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="relative z-10 w-full max-w-sm bg-white rounded-2xl p-6 border border-gray-200 shadow-xl animate-scale-in pointer-events-auto"
-      >
-        <div className="flex items-start justify-between gap-3 mb-1">
-          <h3 className="text-base font-bold text-gray-900 leading-tight">{title || 'Verification required'}</h3>
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title || 'Verification required'}
+      footer={
+        <Button
+          type="submit"
+          form="otp-verify-form"
+          disabled={code.length !== 6 || busy}
+          loading={busy}
+          className="w-full"
+        >
+          Verify
+        </Button>
+      }
+    >
+      <p className="text-sm text-gray-500 font-medium leading-relaxed">
+        Enter the 6-digit code we sent to your{' '}
+        <span className="font-semibold text-gray-700">
+          {channel === 'email' ? 'Bicol University email' : 'registered phone'}
+        </span>
+        {phone ? (
+          <>
+            {' '}at <span className="font-semibold text-gray-700">{phone}</span>
+          </>
+        ) : null}
+        . It expires in 5 minutes.
+      </p>
+
+      <form id="otp-verify-form" onSubmit={submit} className="space-y-4">
+        <OtpInput value={code} onChange={setCode} length={6} />
+
+        {hint && (
+          <p className="text-xs text-center text-gray-500 bg-gray-50 border border-gray-100 rounded-md py-2">
+            Inbox code: <span className="font-bold text-gray-900 tracking-widest">{hint}</span>
+          </p>
+        )}
+
+        {error && <p className="field-error text-center">{error}</p>}
+      </form>
+
+      <div className="text-center text-sm">
+        {cooldown > 0 ? (
+          <p className="text-gray-500 font-semibold">
+            Resend code in <span className="text-brand-orange font-bold">{cooldown}s</span>
+          </p>
+        ) : (
           <button
             type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="text-gray-400 hover:text-gray-700 transition-colors"
+            onClick={sendCode}
+            disabled={busy}
+            className="text-brand-orange font-black hover:underline disabled:opacity-60"
           >
-            <CloseIcon className="w-4 h-4" />
+            Resend code
           </button>
-        </div>
-
-        <p className="text-sm text-gray-500 font-medium leading-relaxed mb-5">
-          Enter the 6-digit code we sent to your{' '}
-          <span className="font-semibold text-gray-700">
-            {channel === 'email' ? 'Bicol University email' : 'registered phone'}
-          </span>
-          {phone ? (
-            <>
-              {' '}at <span className="font-semibold text-gray-700">{phone}</span>
-            </>
-          ) : null}
-          . It expires in 5 minutes.
-        </p>
-
-        <form onSubmit={submit} className="space-y-4">
-          <OtpInput value={code} onChange={setCode} length={6} />
-
-          {hint && (
-            <p className="text-xs text-center text-gray-500 bg-gray-50 border border-gray-100 rounded-lg py-2">
-              Inbox code: <span className="font-bold text-gray-900 tracking-widest">{hint}</span>
-            </p>
-          )}
-
-          {error && <p className="text-xs text-red-500 font-semibold text-center">{error}</p>}
-
-          <Button
-            type="submit"
-            disabled={code.length !== 6 || busy}
-            loading={busy}
-            className="w-full h-11 rounded-full font-bold shadow-md"
-          >
-            Verify
-          </Button>
-        </form>
-
-        <div className="text-center pt-4 text-sm">
-          {cooldown > 0 ? (
-            <p className="text-gray-500 font-semibold">
-              Resend code in <span className="text-brand-orange font-bold">{cooldown}s</span>
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={sendCode}
-              disabled={busy}
-              className="text-brand-orange font-black hover:underline disabled:opacity-60"
-            >
-              Resend code
-            </button>
-          )}
-        </div>
+        )}
       </div>
-    </div>,
-    document.body
+    </Modal>
   )
 }
 
