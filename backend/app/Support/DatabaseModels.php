@@ -9,21 +9,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-/**
- * Supporting tables behind the seven models.
- *
- MODELS lists exactly Customer, Delivery, Employee, Order,
- * Pickup, Product and Visit, so these legacy classes no longer live in a file
- * of their own under app/Models. They keep the App\Models namespace (nothing
- * had to change at any call site) and are loaded by the fallback autoloader in
- * AppServiceProvider::register(). Nothing here is ever instantiated through a
- * table the seven owners do not cover - the owning model exposes it as a
- * relation (see Customer::bag(), Employee::schedules(), Order::items(), ...).
- *
- * Rules 13-15 (BAG): one row per customer + product variation, with the
- * number of pieces. `bag_placed` flips to true once the row has been cut
- * into an order; `bag_deleted` is the soft delete REQ-BAG-02 asks for.
- */
 class Bag extends Model
 {
     protected $table = 'bag';
@@ -31,8 +16,6 @@ class Bag extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        // `bag_id` has no sequence on the live table, so writers pass the
-        // number from App\Support\IdAllocator::next().
         'bag_id',
         'cust_id',
         'prodvar_id',
@@ -61,14 +44,12 @@ class Bag extends Model
         return $this->belongsTo(Prodvar::class, 'prodvar_id', 'prodvar_id');
     }
 
-    /** Still on the shelf, not yet checked out and not removed. */
     public function scopeLive($query)
     {
         return $query->whereNull('bag_deleted')->where('bag_placed', false);
     }
 }
 
-/** DOMAIN 32 / FLOW-ACCESS_LOG-01: immutable customer access log rows. */
 class CustLog extends Model
 {
     protected $table = 'custlog';
@@ -76,8 +57,6 @@ class CustLog extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        // `custlog_id` has no sequence on the live table, so writers pass
-        // the number from App\Support\IdAllocator::next().
         'custlog_id',
         'cust_id',
         'custlog_access',
@@ -95,8 +74,6 @@ class CustNotif extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        // `custnotif_id` has no sequence on the live table, so writers pass
-        // the number from App\Support\IdAllocator::next().
         'custnotif_id',
         'cust_id',
         'custnotif_created',
@@ -116,7 +93,6 @@ class CustNotif extends Model
     }
 }
 
-/** DOMAIN 32 / FLOW-ACCESS_LOG-04: immutable employee access log rows. */
 class EmpLog extends Model
 {
     protected $table = 'emplog';
@@ -124,8 +100,6 @@ class EmpLog extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        // `emplog_id` has no sequence on the live table, so writers pass
-        // the number from App\Support\IdAllocator::next().
         'emplog_id',
         'emp_id',
         'emplog_access',
@@ -143,8 +117,6 @@ class EmpNotif extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        // `empnotif_id` has no sequence on the live table, so writers pass
-        // the number from App\Support\IdAllocator::next().
         'empnotif_id',
         'emp_id',
         'empnotif_created',
@@ -171,11 +143,6 @@ class Item extends Model
     public $timestamps = false;
     public $incrementing = true;
 
-    // Live schema columns: item_id, ord_id, bag_id, item_created
-    // (quantity/amount live on the linked bag row; the item_qty/item_amount/
-    // prod_id spellings are kept fillable for the legacy sqlite test schema).
-    // `item_id` is fillable because the live table has no sequence for it:
-    // writers must pass the number from App\Support\IdAllocator::next().
     protected $fillable = [
         'item_id',
         'ord_id',
@@ -198,11 +165,6 @@ class Item extends Model
         return $this->belongsTo(Order::class, 'ord_id', 'ord_id');
     }
 
-    /**
-     * FLOW-CHECKOUT-02 / REQ-BAG-01: an order line is cut from one bag row.
-     * OrdersAPI's fulfil/restock/bump paths walk items -> bag -> prodvar, so
-     * without this relation every scan hit `RelationNotFoundException` (500).
-     */
     public function bag()
     {
         return $this->belongsTo(Bag::class, 'bag_id', 'bag_id');
@@ -214,10 +176,6 @@ class Item extends Model
     }
 }
 
-/**
- * Links an order to a delivery row.
- * Live schema: parcel_id, ord_id, deliver_id, pay_id, parcel_created, parcel_completed
- */
 class Parcel extends Model
 {
     protected $table = 'parcel';
@@ -253,10 +211,6 @@ class Parcel extends Model
     }
 }
 
-/**
- * The payment table records every completed payment.
- * Live schema: pay_id, pay_created, pay_ref, pay_given, pay_due, pay_change
- */
 class Payment extends Model
 {
     protected $table = 'payment';
@@ -279,11 +233,6 @@ class Payment extends Model
     ];
 }
 
-/**
- * DOMAIN 9 / DOMAIN 14 metric source: one rolled-up row per product
- * variation per day. Aggregates are maintained by OrdersAPI/OrdersAPI whenever
- * an order is placed, cancelled or claimed.
- */
 class Prodsales extends Model
 {
     protected $table = 'prodsales';
@@ -328,10 +277,6 @@ class Prodvar extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        // `prodvar_id` has no sequence on the live table either, so the key is
-        // allocated in application code (App\Support\IdAllocator) and must be
-        // mass-assignable - otherwise it is dropped and the INSERT fails on a
-        // NOT NULL violation whenever a variation is created.
         'prodvar_id',
         'prod_id',
         'prodvar_name',
@@ -356,14 +301,6 @@ class Prodvar extends Model
         'prodvar_deleted' => 'datetime',
     ];
 
-    /**
-     * A product can variate along several axes at once - (cream, medium) is one
-     * variation, (black, metallic) another - so the {axis: value} pairs behind
-     * a row travel in `prodvar_options`. The cell is written as a JSON string
-     * by ProductsAPI::encodeOptions and read back as a map by decodeOptions;
-     * this cast only keeps a raw array usable on the way in, so a caller may
-     * hand the model the map directly.
-     */
     public function setProdvarOptionsAttribute($value)
     {
         if (is_array($value)) {
@@ -379,7 +316,6 @@ class Prodvar extends Model
         return $this->belongsTo(Product::class, 'prod_id', 'prod_id');
     }
 
-    /** What the customer actually pays for one piece of this variation. */
     public function unitPrice(): float
     {
         $base = (float) ($this->product->prod_price ?? 0);
@@ -388,13 +324,6 @@ class Prodvar extends Model
     }
 }
 
-/**
- * DOMAIN 13 / DOMAIN 23 reviews.
- *
- * The schema carries no rating column, so the rating travels inside `rev_msg`
- * as a leading `<rating>|` token. ProductsAPI encodes on write and decodes on
- * read; nothing else in the system ever touches `rev_msg` raw.
- */
 class Review extends Model
 {
     protected $table = 'reviews';
@@ -424,7 +353,6 @@ class Review extends Model
         return $this->belongsTo(Product::class, 'prod_id', 'prod_id');
     }
 
-    /** Stores "<rating>|<message>". */
     public static function compose(int $rating, string $message): string
     {
         $rating = max(1, min(5, $rating));
@@ -432,7 +360,6 @@ class Review extends Model
         return $rating . '|' . $message;
     }
 
-    /** The 1-5 rating carried by this review. */
     public function rating(): int
     {
         $raw = (string) $this->rev_msg;
@@ -441,7 +368,6 @@ class Review extends Model
         return is_numeric($head) ? max(1, min(5, (int) $head)) : 0;
     }
 
-    /** The free-text half of the review. */
     public function text(): string
     {
         $raw = (string) $this->rev_msg;
@@ -450,26 +376,17 @@ class Review extends Model
         return count($parts) === 2 ? $parts[1] : $raw;
     }
 
-    /** REQ-MANAGE_REV-02: only approved reviews reach customers. */
     public function isApproved(): bool
     {
         return $this->rev_approved !== null;
     }
 
-    /** REQ-MANAGE_REV-03: rejected rows stay for audit under a marker. */
     public function isRejected(): bool
     {
         return $this->rev_approved === null && str_starts_with((string) $this->rev_msg, '[REJECTED]');
     }
 }
 
-/**
- * DOMAIN 7 (EMPLOYEE SCHEDULING).
- *
- * `schedules` replaces the old duty_shift table: one row is one stretch an
- * employee is prescheduled for. `sched_disabled` is the employee's own
- * "unavailable" flag (FLOW-EMP_SCHED-04); a null value means prescheduled.
- */
 class Schedule extends Model
 {
     protected $table = 'schedules';
@@ -477,13 +394,6 @@ class Schedule extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        // `sched_id` is a bare bigint NOT NULL primary key on the live
-        // `schedules` table: no sequence, no identity, no column default, so an
-        // insert that omits the key dies with "null value in column sched_id
-        // violates not-null constraint" - which is exactly what POST /shifts
-        // did before SystemAPI::createShift started allocating the number with
-        // App\Support\IdAllocator::next(). It therefore has to be mass
-        // assignable, the same way product.prod_id and prodvar.prodvar_id are.
         'sched_id',
         'emp_id',
         'sched_time_start',
@@ -504,7 +414,6 @@ class Schedule extends Model
         return $this->belongsTo(Employee::class, 'emp_id', 'emp_id');
     }
 
-    /** Minutes this block contributes toward the 180-minute weekly floor. */
     public function minutes(): int
     {
         if (! $this->sched_time_start || ! $this->sched_time_end) {
@@ -514,7 +423,6 @@ class Schedule extends Model
         return max(0, (int) $this->sched_time_start->diffInMinutes($this->sched_time_end));
     }
 
-    /** A block is staffed while it is prescheduled and not self-disabled. */
     public function isStaffed(): bool
     {
         return $this->sched_disabled === null;
@@ -525,18 +433,6 @@ class Schedule extends Model
         return $this->sched_time_start->lte($start) && $this->sched_time_end->gte($end);
     }
 
-    // ==========================================
-    // ROSTER QUERIES (business rule 10 / REQ-AB-03 / REQ-EMP_SCHED-06)
-    // ==========================================
-
-    /*
-        REQ-SS-03: how many blocks still need a replacement because the
-        assigned employee is no longer available for them - either the
-        employee logged out of the store (emp_instore) or the block itself
-        carries the employee's own "unavailable" flag (FLOW-EMP_SCHED-04).
-        Derived, never stored. Tolerates a connection without the schedules
-        table so the slot calendar still answers there.
-    */
     public static function pendingReplacements(): int
     {
         try {
@@ -546,7 +442,6 @@ class Schedule extends Model
         }
     }
 
-    /** Blocks that no longer staff the roster: self-disabled or off-store. */
     protected static function blocked()
     {
         return static::query()->where(function ($query) {
@@ -555,13 +450,6 @@ class Schedule extends Model
         });
     }
 
-    /*
-        REQ-SS-01: an employee who already holds a block they are not
-        available for has logged an explicit exception, so the academic-period
-        job leaves that employee alone. A self-disabled block and an off-store
-        employee are both such an exception. Returns false on a connection
-        without the table, which lets the job treat everyone as up for renewal.
-    */
     public static function hasException(int $empId): bool
     {
         try {
@@ -576,17 +464,6 @@ class Schedule extends Model
         }
     }
 
-    /*
-        REQ-AB-03 / REQ-SS-03: the available duty blocks of one calendar day.
-        `schedules` stores one timestamp pair per block, so the day is the
-        calendar date of the block's start. A block the employee flagged as
-        unavailable no longer staffs the roster, so FLOW-EMP_SCHED-06/07
-        ("marking a block unavailable instantly subtracts that employee from
-        the active headcount and restricts booking") needs it gone from the
-        day's count. An empty result means no available employee holds a
-        block that day; see hasRosterFor for the distinction between "not
-        rostered" and "not staffed".
-    */
     public static function rosterFor(\Carbon\Carbon $day): \Illuminate\Support\Collection
     {
         try {
@@ -599,9 +476,6 @@ class Schedule extends Model
         }
     }
 
-    // Does the shop hold any duty block for that day, whoever staffs it? False
-    // means the day was never rostered, so the day-wide in-store count is the
-    // answer for every slot on it.
     public static function hasRosterFor(\Carbon\Carbon $day): bool
     {
         try {
@@ -611,7 +485,6 @@ class Schedule extends Model
         }
     }
 
-    // The staff members currently counted as in-store
     public static function availableEmployeeIds(): \Illuminate\Support\Collection
     {
         return static::activeEmployeeQuery()
@@ -619,13 +492,6 @@ class Schedule extends Model
             ->pluck('emp_id');
     }
 
-    /**
-     * The live Supabase `employee` table has no `emp_disabled` column (it
-     * ships emp_deleted / emp_suspended instead), while the legacy/sqlite
-     * schema the test suite runs on still carries it - same probe as
-     * Controller::activeEmployeeQuery(). Filtering on a missing column would
-     * kill the whole roster query, so the filter only applies when it exists.
-     */
     private static ?bool $hasEmpDisabled = null;
 
     public static function activeEmployeeQuery()
@@ -648,14 +514,6 @@ class Schedule extends Model
     }
 }
 
-/**
- * Compatibility facade over SystemSettings.
- *
- * SCHEMA has no SETTINGS table, so nothing is ever read from
- * or written to the database here - the settings document lives on disk.
- * Every legacy `Setting::getValue()` / `Setting::setValue()` call site keeps
- * working unchanged.
- */
 class Setting
 {
     public static function getValue(string $key, $default = null)
@@ -668,52 +526,32 @@ class Setting
         SystemSettings::set($key, $value);
     }
 
-    /** Bulk read for the settings screen. */
     public static function all(): array
     {
         return SystemSettings::all();
     }
 
-    /** Bulk write for the settings screen. */
     public static function fill(array $values): void
     {
         SystemSettings::putMany($values);
     }
 }
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
         'password',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -723,21 +561,12 @@ class User extends Authenticatable
     }
 }
 
-/**
- * DOMAIN 24 (WISHLIST). REQ-WISHLIST-02 asks for a soft delete, so removal
- * stamps `wish_hidden` instead of dropping the row; display queries only
- * rows WHERE wish_hidden IS NULL (the live soft-delete column) ordered by
- * wish_created DESC (FLOW-WISHLIST-03).
- */
 class Wishlist extends Model
 {
     protected $table = 'wishlist';
     protected $primaryKey = 'wish_id';
     public $timestamps = false;
 
-    // Live schema columns: wish_id, cust_id, prod_id, wish_created, wish_hidden
-    // `wish_id` has no sequence on the live table, so writers pass the number
-    // from App\Support\IdAllocator::next().
     protected $fillable = [
         'wish_id',
         'cust_id',
@@ -761,13 +590,9 @@ class Wishlist extends Model
         return $this->belongsTo(Product::class, 'prod_id', 'prod_id');
     }
 
-    /** FLOW-WISHLIST-03: visible = not soft-hidden yet. */
     public function scopeVisible($query)
     {
         return $query->whereNull('wish_hidden');
     }
 }
-
-// Legacy name for the Visit model (app/Models/Visit.php), kept so pre-refactor
-// callers such as Controllers/Backups resolve instead of fataling.
 class_alias(Visit::class, 'App\Models\Appointment');

@@ -13,35 +13,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
-/**
- * ProductsAPI
- *
- * DOMAIN 9 / 10 / 13 / 23 - the customer catalog and the employee inventory: products, variants, reviews, uploads and enable/disable.
- *
- * Repackaged from: Products API, Reviews API, Upload API.
- */
 class ProductsAPI extends Controller
 {
 
-    /**
-     * Per-request product presentation memo.
-     *
-     * One request renders the same product from several surfaces (a bag line,
-     * an order line and the wishlist row all point back at one product), and
-     * every default present() re-runs the two aggregate queries behind it
-     * (prodsales SUM + approved-reviews breakdown). The memo is hung off the
-     * current request rather than the container: the container outlives a
-     * request under a long-lived worker (and in the test harness), so a memo
-     * kept there served a pre-write payload to a later read of the same
-     * product. Keyed to the request it is rebuilt for every request in every
-     * runtime.
-     */
     private static function presentMemo(): \ArrayObject
     {
         $request = app()->bound('request') ? app('request') : null;
 
-        // No request context (e.g. a console caller): skip memoisation rather
-        // than risk serving stale data from a shared instance.
         if ($request === null) {
             return new \ArrayObject();
         }
@@ -54,41 +32,8 @@ class ProductsAPI extends Controller
         return $request->attributes->get($key);
     }
 
-    // ===== from the Products API file =====
-/**
-     * DOMAIN 9 / 10 / 23 (CATALOG & INVENTORY).
-     *
-     * Variations live in `prodvar`; the old JSON columns (prod_sizes,
-     * prod_colors, prod_images, prod_stock_matrix, prod_qty, prod_peak*,
-     * prod_today*, prod_reviews-as-array ...) no longer exist. Every response
-     * therefore rebuilds that legacy shape from the prodvar rows so the
-     * storefront keeps rendering, while the raw prodvar fields travel alongside
-     * it. Aggregates come from product.prod_rating / prod_reviews /
-     * prod_total_var and the prodsales table.
-     */
-
-    // ===== from the Products API file =====
-
-        // ==========================================
-        // PRESENTATION (legacy JSON aliases + raw prodvar rows)
-        // ==========================================
-
-        /**
-         * One product as the API returns it: the new-schema columns plus the
-         * legacy JSON shape rebuilt from its variations.
-         *
-         * @param \Illuminate\Support\Collection|array|null $variations already
-         *        loaded prodvar rows (avoids an N+1 on list endpoints)
-         * @param array|null $breakdown pre-computed approved rating breakdown
-         * @param array|null $metrics pre-computed prodsales aggregates
-         *        (['sold' => int]) so list endpoints stay at two queries
-         */
         public static function present(Product $product, $variations = null, ?array $breakdown = null, ?array $metrics = null): array
         {
-            // A default render (no caller-supplied rows) is deterministic per
-            // product, so it is memoised and reused for the rest of the
-            // request. A caller that passes its own variations/breakdown/metrics
-            // still gets exactly the shape it asked for.
             $defaultRender = $variations === null && $breakdown === null && $metrics === null;
             $memo = $defaultRender ? self::presentMemo() : null;
             if ($defaultRender && $memo->offsetExists((int) $product->prod_id)) {
@@ -103,9 +48,6 @@ class ProductsAPI extends Controller
                 : collect($variations);
 
             $stock = (int) $vars->sum('prodvar_stock');
-            // Pictures are stored host-agnostic and resolved against whatever
-            // backend answers the request, so the seeded rows, the rows an
-            // admin uploads later and the admin's own preview all agree.
             $vars->each(function (Prodvar $v) {
                 $v->prodvar_pic = self::publicPicture($v->prodvar_pic);
             });
@@ -114,8 +56,6 @@ class ProductsAPI extends Controller
                 ->filter(fn ($pic) => filled($pic))
                 ->unique()
                 ->values();
-            // Rule 19: the main image is the prodvar with prodvar_main=true,
-            // otherwise the first non-null prodvar_pic.
             $main = $vars->first(fn (Prodvar $v) => (bool) $v->prodvar_main);
             $mainImage = ($main !== null && filled($main->prodvar_pic)) ? $main->prodvar_pic : $images->first();
 
@@ -125,16 +65,11 @@ class ProductsAPI extends Controller
                 (string) $product->prod_name
             );
 
-            // Raw prodvar rows, exposed twice under two names so both the old
-            // ("prodvar") and newer ("variations") readers keep working.
             $variationsPayload = $vars->map(function (Prodvar $variation) use ($product) {
                 $row = $variation->attributesToArray();
                 $row['unit_price'] = round((float) $product->prod_price + (float) ($variation->prodvar_markup ?? 0), 2);
                 $row['available'] = $variation->prodvar_disabled === null;
 
-                // A product may variate along several axes at once, so each row
-                // also answers with the combination it stands for and its
-                // human label: {"Color":"Cream","Size":"Medium"} -> "Cream / Medium".
                 $options = self::decodeOptions($variation->prodvar_options);
                 $row['options'] = $options;
                 $row['option_label'] = self::optionLabel($options, (string) $variation->prodvar_name);
@@ -146,20 +81,12 @@ class ProductsAPI extends Controller
             $payload['variations'] = $variationsPayload;
             $payload['prodvar'] = $variationsPayload;
 
-            // The axes this product varies along, derived from its own rows:
-            // ["Color","Size"]. A one-axis product answers with one, a plain
-            // product with none - and nothing about the shape is fixed in the
-            // schema, so a third axis is just more rows.
             $payload['option_axes'] = self::optionAxes($vars);
 
-            // Legacy JSON shape, derived from the variation rows.
             $payload['prod_qty'] = $stock;
             $payload['prod_status'] = $stock > 0 ? 'In Stock' : 'Out of Stock';
             $payload['prod_images'] = $images->all() ?: null;
-            // The size list is the size axis when the product has one (so a
-            // colour x size shirt lists its sizes, not its combinations), and
-            // the plain labels otherwise.
-            $sizeAxis = self::optionAxisNamed($payload['option_axes'], self::SIZE_KEYS);
+            $sizeAxis = self::optionAxisNamed($payload['option_axes'], self::sizeKeys);
             $payload['prod_sizes'] = ($sizeAxis
                 ? $vars->map(fn (Prodvar $v) => self::decodeOptions($v->prodvar_options)[$sizeAxis] ?? null)
                     ->filter()->unique()->values()->all()
@@ -171,8 +98,6 @@ class ProductsAPI extends Controller
             $payload['prod_preorder'] = (bool) $vars->contains(fn (Prodvar $v) => (bool) $v->prodvar_preorder);
             $payload['main_image'] = $mainImage;
 
-            // Aggregates: prod_reviews is an int count now (the review rows
-            // live in `reviews`), prod_review_count keeps the legacy name.
             $payload['prod_reviews'] = (int) $product->prod_reviews;
             $payload['prod_review_count'] = (int) $product->prod_reviews;
             $payload['prod_rating'] = round((float) $product->prod_rating, 2);
@@ -180,22 +105,15 @@ class ProductsAPI extends Controller
                 ? (int) $product->prod_total_var
                 : $vars->count();
 
-            // REQ-MANAGE_INV-06: metrics come from `prodsales`, never from the
-            // legacy `prod_peaksold` column (a stored 0 that no writer touches).
-            // presentMany() passes the batched sum in via $metrics.
             $sold = $metrics['sold'] ?? $product->totalSold();
             $payload['stock']    = $stock;
             $payload['prod_peaksold'] = $sold;
             $payload['prod_sold']     = $sold;
 
-            // FLOW-MANAGE_INV-06 / REQ-MANAGE_INV-04: the automated
-            // low-stock alert as a per-row flag the admin list reads.
             $threshold = (int) (\App\Support\SystemSettings::get('low_stock_threshold', 5));
             $payload['low_stock'] = $stock <= $threshold;
             $payload['low_stock_threshold'] = $threshold;
 
-            // The breakdown is computed from approved reviews only, so a stale
-            // column can never show a moderation-untouched number.
             if ($breakdown === null) {
                 $breakdown = self::ratingBreakdowns([(int) $product->prod_id])[(int) $product->prod_id] ?? null;
             }
@@ -203,9 +121,6 @@ class ProductsAPI extends Controller
                 $payload['prod_rating_breakdown'] = $breakdown['breakdown'];
             }
 
-            // REQ-MANAGE_INV-02: a disabled/deleted product - or one whose
-            // variations are all disabled - is flagged for the wishlist and
-            // every other surface that still shows the row.
             $visible = $vars->filter(fn (Prodvar $v) => $v->prodvar_disabled === null);
             $payload['available'] = $product->isBuyable() && $visible->isNotEmpty();
             $payload['unavailable'] = ! $payload['available'];
@@ -217,7 +132,6 @@ class ProductsAPI extends Controller
             return $payload;
         }
 
-        /** Present a whole collection with two batched queries (vars + reviews). */
         public static function presentMany($products): array
         {
             $products = collect($products)->values();
@@ -244,14 +158,6 @@ class ProductsAPI extends Controller
             })->all();
         }
 
-        /**
-         * Batch-render a set of products into the per-request memo.
-         *
-         * Callers that are about to render many products one at a time (order
-         * lines, cart lines, wishlist rows) prime once over the whole set, so
-         * each later default present() is an array lookup instead of two more
-         * round trips on the Supabase link.
-         */
         public static function primePresentations($products): void
         {
             $list = collect($products)
@@ -272,10 +178,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /**
-         * Approved-only rating breakdown per product: [5 => n, 4 => n, ...].
-         * Mirrors Review's "<rating>|<message>" encoding without hydrating models.
-         */
         public static function ratingBreakdowns(array $prodIds): array
         {
             $prodIds = array_values(array_unique(array_filter(array_map('intval', $prodIds))));
@@ -324,7 +226,6 @@ class ProductsAPI extends Controller
             return $out;
         }
 
-        /** The 1-5 token carried by a rev_msg (rejected rows keep the original). */
         public static function ratingToken(?string $revMsg): int
         {
             $raw = (string) $revMsg;
@@ -340,7 +241,6 @@ class ProductsAPI extends Controller
             return is_numeric($head) ? max(1, min(5, (int) $head)) : 0;
         }
 
-        /** Images are stored as /uploads/... paths or base64 data URLs. */
         protected static function imageAllowed($value): bool
         {
             $value = trim((string) $value);
@@ -359,17 +259,6 @@ class ProductsAPI extends Controller
             return (bool) preg_match('/\.(jpe?g|png)$/i', $path);
         }
 
-        /**
-         * A stored picture as the browser has to load it.
-         *
-         * `prodvar_pic` keeps the host-agnostic form (/storage/uploads/product/x.png,
-         * or the storage-relative uploads/product/x.png the upload endpoint's
-         * `path` field carries) so a seeded row and a row an admin uploads
-         * later resolve to whichever backend is answering the request -
-         * 127.0.0.1:8000 in development, the deployed service in production.
-         * An already-absolute URL or a data URL is passed through untouched, so
-         * nothing is ever prefixed twice.
-         */
         public static function publicPicture($value)
         {
             $value = trim((string) $value);
@@ -384,35 +273,18 @@ class ProductsAPI extends Controller
             return self::publicUrl($path);
         }
 
-        /**
-         * REQ-ADD_PROD-07: format AND file size are validated before an image
-         * is accepted. Uploaded paths are checked by the upload endpoint; this
-         * guards the inline base64 form the admin form still sends (a 2 MB
-         * decoded ceiling keeps one product row from bloating the table).
-         */
         protected static function imageWithinSize($value): bool
         {
             $value = trim((string) $value);
             if ($value === '' || ! preg_match('#^data:image/#i', $value)) {
-                return true; // an /uploads path carries no inline payload
+                return true;
             }
 
-            return strlen($value) <= self::MAX_IMAGE_B64_CHARS;
+            return strlen($value) <= self::maxImageB64Chars;
         }
 
-        /** 2 MB decoded ~= 2.7M base64 characters. */
-        protected const MAX_IMAGE_B64_CHARS = 2800000;
+        protected const maxImageB64Chars = 2800000;
 
-        /**
-         * REQ-ADD_PROD-04: categories are predefined and system-wide. Every
-         * spelling the admin UI offers (singular, plural, legacy) folds onto
-         * one canonical value. `Accessories` remains accepted only so existing
-         * unclassified rows can still be edited; it is not offered for new rows.
-         *
-         * Public so every writer of `prod_categ` - the admin form, the
-         * inventory seeder and any future importer - folds its value through
-         * this one list instead of keeping a private copy of it.
-         */
         public static function categoryWhitelist(): array
         {
             return [
@@ -421,7 +293,6 @@ class ProductsAPI extends Controller
             ];
         }
 
-        /** Alias -> canonical category name (lowercase keys). */
         public static function normalizeCategory(?string $raw, ?string $productName = null): string
         {
             $value = strtolower(trim((string) $raw));
@@ -477,10 +348,6 @@ class ProductsAPI extends Controller
             return $category === '' ? 'Accessories' : $category;
         }
 
-        /**
-         * @return string|null the canonical category, or null (with $message
-         *         filled in) when the value is outside the whitelist.
-         */
         public static function validatedCategory($raw, ?string &$message = null): ?string
         {
             $categ = self::normalizeCategory($raw);
@@ -495,55 +362,20 @@ class ProductsAPI extends Controller
             return $categ;
         }
 
-        // ==========================================
-        // MULTI-AXIS VARIATION OPTIONS
-        // ==========================================
+        protected const maxVariations = 500;
 
-        /**
-         * A product can variate along SEVERAL axes at the same time - a shirt
-         * can be (cream, medium) or (black, metallic) - so ONE `prodvar` row is
-         * one full combination and `prodvar_options` carries the {axis: value}
-         * pairs that produced it: {"Color":"Cream","Size":"Medium"}.
-         *
-         * The schema already ships `prodvar_options` (varchar, nullable) for
-         * exactly this, so nothing here needs a new table or column (rule 80
-         * still routes every read/write through DatabaseAPI). The axes of a
-         * product are derived from the union of the keys its variations carry,
-         * which is why the shape can grow from one axis to two without a
-         * migration. Unknown axes work too - "Material", "Edition", "Fit".
-         *
-         * Legacy rows (no options at all) keep falling back to their variation
-         * name everywhere, so a single-axis or plain product renders unchanged.
-         */
+        protected const maxOptionAxes = 4;
 
-        /** A shirt with 2 colours in 5 sizes is 10 rows; the ceiling keeps one
-         *  product from bloating a single response. */
-        protected const MAX_VARIATIONS = 500;
+        protected const maxOptionChars = 40;
 
-        /** Colour × size × material is already exotic; four is plenty. */
-        protected const MAX_OPTION_AXES = 4;
+        protected const sizeKeys = ['size', 'sizes'];
+        protected const colorKeys = ['color', 'colour', 'colors', 'colours'];
 
-        protected const MAX_OPTION_CHARS = 40;
-
-        /** Axis spellings the storefront's colour and size pickers look for. */
-        protected const SIZE_KEYS = ['size', 'sizes'];
-        protected const COLOR_KEYS = ['color', 'colour', 'colors', 'colours'];
-
-        /** One axis value, trimmed and with whitespace runs collapsed. */
         public static function optionValue($raw): string
         {
             return trim((string) preg_replace('/\s+/u', ' ', (string) $raw));
         }
 
-        /**
-         * Accepts everything a caller may reasonably send as an option set and
-         * returns an ordered {axis: value} map, or null when the payload is not
-         * a usable option set at all.
-         *
-         * object  {"Color":"Cream","Size":"Medium"}
-         * list    [{"name":"Color","value":"Cream"}, {"axis":"Size","value":"M"}]
-         * string  '{"Color":"Cream"}' | 'Color=Cream; Size=Medium' | 'Color: Cream'
-         */
         public static function normalizeOptions($raw): ?array
         {
             if ($raw === null || $raw === '') {
@@ -600,11 +432,6 @@ class ProductsAPI extends Controller
             return self::collectOptions($pairs);
         }
 
-        /**
-         * Folds the collected pairs onto one spelling per axis: the first
-         * spelling wins and a repeated axis updates its value, so "color" and
-         * "Color" can never both end up on the same row.
-         */
         public static function collectOptions(array $pairs): array
         {
             $out = [];
@@ -622,12 +449,6 @@ class ProductsAPI extends Controller
             return $out;
         }
 
-        /**
-         * Validates and normalises the option set of ONE variation.
-         *
-         * @return array{0: array, 1: string|null} the ordered {axis: value} map
-         *         (empty when none was sent) and the rejection message.
-         */
         public static function variationOptions($raw): array
         {
             if ($raw === null || $raw === '' || $raw === []) {
@@ -644,15 +465,15 @@ class ProductsAPI extends Controller
                 return [[], 'Every variation option needs both an axis name and a value.'];
             }
 
-            if (count($options) > self::MAX_OPTION_AXES) {
-                return [[], 'A variation can vary along at most ' . self::MAX_OPTION_AXES . ' axes at once.'];
+            if (count($options) > self::maxOptionAxes) {
+                return [[], 'A variation can vary along at most ' . self::maxOptionAxes . ' axes at once.'];
             }
 
             foreach ($options as $axis => $value) {
-                if (mb_strlen($axis) > self::MAX_OPTION_CHARS
-                    || mb_strlen((string) $value) > self::MAX_OPTION_CHARS) {
+                if (mb_strlen($axis) > self::maxOptionChars
+                    || mb_strlen((string) $value) > self::maxOptionChars) {
                     return [[], 'A variation option axis and value must be '
-                        . self::MAX_OPTION_CHARS . ' characters or fewer.'];
+                        . self::maxOptionChars . ' characters or fewer.'];
                 }
 
                 if (preg_match('/[\x00-\x1f\x7f]/', $axis . (string) $value)) {
@@ -663,7 +484,6 @@ class ProductsAPI extends Controller
             return [$options, null];
         }
 
-        /** The JSON cell written to `prodvar_options` (axes sorted, stable). */
         public static function encodeOptions(array $options): ?string
         {
             if ($options === []) {
@@ -675,7 +495,6 @@ class ProductsAPI extends Controller
             return json_encode($options, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
 
-        /** The {axis: value} map a `prodvar_options` cell carries. */
         public static function decodeOptions($raw): array
         {
             if ($raw === null || $raw === '') {
@@ -690,7 +509,6 @@ class ProductsAPI extends Controller
             return is_array($decoded) ? $decoded : [];
         }
 
-        /** "Cream / Medium" - the human label of one combination. */
         public static function optionLabel(array $options, string $fallback = ''): string
         {
             $values = array_values($options);
@@ -698,12 +516,6 @@ class ProductsAPI extends Controller
             return $values === [] ? $fallback : implode(' / ', $values);
         }
 
-        /**
-         * The identity of a variation INSIDE one product. Two rows are the same
-         * variation only when this matches (case-insensitively), so a shirt can
-         * never be minted twice as (cream, medium) - and a legacy row with no
-         * options still falls back to its name, exactly as before.
-         */
         public static function optionSignature(array $options, string $name = ''): string
         {
             if ($options !== []) {
@@ -719,11 +531,6 @@ class ProductsAPI extends Controller
             return 'name=' . strtolower(trim($name));
         }
 
-        /**
-         * The axes a product varies along, in first-seen order. Derived from
-         * the variations themselves, so adding a second axis to a product is a
-         * data change rather than a schema change.
-         */
         public static function optionAxes($variations): array
         {
             $axes = [];
@@ -743,7 +550,6 @@ class ProductsAPI extends Controller
             return $axes;
         }
 
-        /** The axis whose (case-insensitive) name is in $keys, else null. */
         public static function optionAxisNamed(array $axes, array $keys): ?string
         {
             foreach ($axes as $axis) {
@@ -755,23 +561,11 @@ class ProductsAPI extends Controller
             return null;
         }
 
-        /**
-         * The legacy `prod_colors` swatch list, derived from the variation rows.
-         *
-         * A product with a colour axis answers with one swatch per distinct
-         * colour value - (cream, medium) and (cream, large) are the SAME cream,
-         * not two colours. A single-axis product keeps the old
-         * one-swatch-per-variation behaviour, and a product with no options at
-         * all answers with null exactly as before.
-         */
         public static function colorSwatches($vars, array $axes): ?array
         {
-            $axis = self::optionAxisNamed($axes, self::COLOR_KEYS);
+            $axis = self::optionAxisNamed($axes, self::colorKeys);
 
             if ($axis === null) {
-                // No colour axis: with several axes the combination itself is
-                // what the picker offers, otherwise fall back to the old
-                // one-swatch-per-variation list.
                 if ($axes !== []) {
                     return $vars
                         ->map(fn (Prodvar $v) => [
@@ -822,28 +616,6 @@ class ProductsAPI extends Controller
             return $swatches === [] ? null : array_values($swatches);
         }
 
-        // ==========================================
-        // CATALOG / INVENTORY
-        // ==========================================
-
-        /*
-            Adding product to catalog/inventory
-            ----------
-            JSON REQUEST
-
-            prod_name - string (req)
-            prod_tag - string (opt - generated when missing; UNIQUE)
-            prod_categ - string (opt)
-            prod_price - numeric (req, must be > 0)
-            prod_desc - string (opt)
-            prod_qty - integer (opt - stock for the default variation)
-            prod_images - array (opt - jpg/png only)
-            variations - array (opt)
-                each: prodvar_name, prodvar_stock, prodvar_pic, prodvar_markup,
-                      prodvar_options, prodvar_preorder, prodvar_main
-                At least one variation is required (built from prod_qty when the
-                caller only speaks the legacy dialect).
-        */
         public function addProduct(Request $json)
         {
             $validator = (new DatabaseAPI())->addProduct($json);
@@ -854,9 +626,6 @@ class ProductsAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Product name is required.'], 400);
             }
 
-            // prod_name and prod_tag are UNIQUE in the schema; the storefront
-            // treats "SHIRT" and "shirt" as the same product, so the check is
-            // case-insensitive.
             if (Product::whereRaw('lower(prod_name) = lower(?)', [$name])->exists()) {
                 return response()->json(['success' => false, 'message' => 'Product name already exists.'], 409);
             }
@@ -887,15 +656,12 @@ class ProductsAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'A product needs at least one variation.'], 422);
             }
 
-            // REQ-ADD_PROD-04: categories are a predefined, system-wide set.
             $categError = null;
             $categ = self::validatedCategory($json->input('prod_categ'), $categError);
             if ($categ === null) {
                 return response()->json(['success' => false, 'message' => $categError], 422);
             }
 
-            // REQ-ADD_PROD-07: format + size are validated before the row is
-            // written (format in parseVariations, size here).
             foreach ((array) ($json->input('prod_images') ?: []) as $image) {
                 if (! self::imageWithinSize($image)) {
                     return response()->json([
@@ -908,12 +674,6 @@ class ProductsAPI extends Controller
             try {
                 $product = DB::transaction(function () use ($json, $name, $tag, $price, $variations, $categ) {
                     $product = Product::create([
-                        // SYSTEM RULE / App\Support\IdAllocator: the live
-                        // `product.prod_id` is a bare bigint NOT NULL with no
-                        // sequence, identity or default, so an insert that
-                        // omits it dies on a NOT NULL violation. The key is
-                        // allocated here - INSIDE this transaction, so the
-                        // MAX(pk)+1 read sits next to the write.
                         'prod_id'       => $this->nextId('product', 'prod_id'),
                         'prod_name'     => $name,
                         'prod_tag'      => $tag,
@@ -924,14 +684,11 @@ class ProductsAPI extends Controller
                         'prod_reviews'  => 0,
                         'prod_total_var' => count($variations),
                         'prod_created'  => now(),
-                        'prod_disabled' => null, // active (REQ-MANAGE_INV-02)
+                        'prod_disabled' => null,
                         'prod_deleted'  => null,
                     ]);
 
                     foreach ($variations as $variation) {
-                        // Same story for `prodvar.prodvar_id`: no sequence on
-                        // the live table, so every variation row carries its
-                        // own allocated key.
                         Prodvar::create($variation + [
                             'prodvar_id'      => $this->nextId('prodvar', 'prodvar_id'),
                             'prod_id'          => $product->prod_id,
@@ -955,11 +712,6 @@ class ProductsAPI extends Controller
                     );
                 }
 
-                // REQ-IM-03: the alert is per VARIATION, not per product - a
-                // shirt that is out of cream/medium while black/large is full
-                // has a shortage wherever the shirt is rarely checked. With more
-                // than one variation these rows say strictly more than the
-                // product-level line above, so only one of the two fires.
                 if ($variationCount > 1) {
                     $this->notifyLowStockVariations($product->fresh(), null);
                 }
@@ -981,16 +733,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Displaying orders from catalog/inventory
-            ----------
-            JSON REQUEST (Optional filters)
-
-            prod_id - integer (opt)
-
-            Items no longer carry prod_id: the chain is orders -> items -> bag
-            -> prodvar -> product, and quantity/amount live on the bag row.
-        */
         public function displayOrders(Request $json)
         {
             try {
@@ -1023,7 +765,6 @@ class ProductsAPI extends Controller
                     'bag.bag_amount as item_amount'
                 )->distinct()->orderBy('orders.ord_created', 'desc')->get();
 
-                // REQ-ACCESS_LOG-01: reading the inventory/orders list is logged.
                 $this->logView($json, 'inventory');
 
                 return response()->json([
@@ -1041,17 +782,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            FLOW-MANAGE_INV-08: sales history for each product - daily units,
-            revenue and a trend, aggregated from `prodsales` (REQ-MANAGE_INV-06:
-            metrics are NEVER read from the legacy peak/today columns).
-
-            GET /products/sales?prod_id=&days=&date_from=&date_to=
-
-            prod_id  - integer (opt: one product, else every product)
-            days     - integer (opt: window length ending today, default 30)
-            date_from/date_to - Y-m-d (opt: explicit window, overrides `days`)
-        */
         public function productSales(Request $json)
         {
             try {
@@ -1111,9 +841,6 @@ class ProductsAPI extends Controller
                     ];
                 }
 
-                // Names are fetched once for the whole window instead of a
-                // SELECT per product row (the per-row query was the N+1 on the
-                // high-latency Supabase link).
                 if ($byProduct !== []) {
                     $names = Product::whereIn('prod_id', array_keys($byProduct))->pluck('prod_name', 'prod_id');
                     foreach ($byProduct as $pid => $entry) {
@@ -1121,8 +848,6 @@ class ProductsAPI extends Controller
                     }
                 }
 
-                // FLOW-MANAGE_INV-08 asks for trends: compare the second half
-                // of the window against the first half, per product.
                 foreach ($byProduct as &$entry) {
                     $days = $entry['days'];
                     $half = intdiv(count($days), 2);
@@ -1155,16 +880,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Filtering the catalog/inventory
-            ----------
-            JSON REQUEST
-
-            category - string (opt)
-            status - string (opt) - e.g., 'active', 'disabled', 'deleted', 'all'
-            stock - string (opt) - e.g., 'in_stock', 'out_of_stock', 'low_stock'
-            low_stock_threshold - integer (opt, default: low_stock_threshold setting)
-        */
         public function filterCatalog(Request $json)
         {
             try {
@@ -1177,16 +892,10 @@ class ProductsAPI extends Controller
                 $query = Product::query();
                 $isEmployee = $this->isEmployee($json->user('api'));
                 if (! $isEmployee) {
-                    // REQ-MANAGE_INV-02: customers never see disabled/deleted rows.
                     $status = 'active';
                 }
 
                 if ($status === 'disabled') {
-                    // A soft-deleted row is gone from every admin list (the
-                    // `active` branch already excludes it), so it must not
-                    // reappear here either - otherwise a product that was
-                    // unlisted and then deleted came back as a duplicate row
-                    // in the inventory table, which fetches active + disabled.
                     $query->whereNotNull('prod_disabled')->whereNull('prod_deleted');
                 } elseif ($status === 'deleted') {
                     $query->whereNotNull('prod_deleted');
@@ -1194,7 +903,6 @@ class ProductsAPI extends Controller
                     $query->whereNull('prod_disabled')->whereNull('prod_deleted');
                 }
 
-                // D19: the catalog is ordered by name.
                 $products = $query->orderBy('prod_name')->get();
                 $rows = self::presentMany($products);
                 if ($categ) {
@@ -1208,7 +916,6 @@ class ProductsAPI extends Controller
                     ));
                 }
 
-                // Stock filters run against SUM(prodvar.prodvar_stock).
                 if ($stock === 'in_stock') {
                     $rows = array_values(array_filter($rows, fn ($row) => (int) $row['prod_qty'] > 0));
                 } elseif ($stock === 'out_of_stock') {
@@ -1220,7 +927,6 @@ class ProductsAPI extends Controller
                     ));
                 }
 
-                // REQ-ACCESS_LOG-01: reading the catalog is logged.
                 $this->logView($json, 'catalog');
 
                 return response()->json([
@@ -1238,15 +944,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Category list for the inventory / catalog filters
-            ----------
-            GET /products/categories - no body.
-
-            REQ-ADD_PROD-04: the predefined set, merged with any distinct
-            value already sitting on a live row (deduplicated
-            case-insensitively), so a filter can always match real data.
-        */
         public function productCategories(Request $json)
         {
             try {
@@ -1281,13 +978,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Removing product from catalog/inventory
-            ----------
-            JSON REQUEST
-
-            prod_id - integer (req)
-        */
         public function removeProduct(Request $json)
         {
             $prodId = $json->input('prod_id');
@@ -1320,13 +1010,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Searching products
-            ----------
-            JSON REQUEST
-
-            q - string (opt)
-        */
         public function searchProducts(Request $json)
         {
             try {
@@ -1337,8 +1020,6 @@ class ProductsAPI extends Controller
                 }
 
                 if ($q) {
-                    // ilike is PostgreSQL-only; SQLite/MySQL use LIKE, which is
-                    // already case-insensitive for ASCII.
                     $op = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
                     $query->where(function($query) use ($q, $op) {
                         $query->where('prod_name', $op, "%{$q}%")
@@ -1347,7 +1028,6 @@ class ProductsAPI extends Controller
                     });
                 }
 
-                // REQ-ACCESS_LOG-01: reading the catalog search is logged.
                 $this->logView($json, 'catalog search');
 
                 return response()->json([
@@ -1365,17 +1045,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Sorting products
-            ----------
-            JSON REQUEST
-
-            sort_by - string (opt) - 'name', 'price', 'qty', 'created', 'popularity'
-            order - string (opt) - 'asc' or 'desc'
-
-            'qty' and 'popularity' no longer map to a column: quantity is
-            SUM(prodvar.prodvar_stock) and popularity is SUM(prodsales_qty).
-        */
         public function sortProducts(Request $json)
         {
             try {
@@ -1419,7 +1088,6 @@ class ProductsAPI extends Controller
                     });
                 }
 
-                // REQ-ACCESS_LOG-01: reading the sorted catalog is logged.
                 $this->logView($json, 'catalog sort');
 
                 return response()->json([
@@ -1437,18 +1105,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Updating product details
-            ----------
-            JSON REQUEST
-
-            prod_id - integer (req)
-            prod_name / prod_tag / prod_categ / prod_price / prod_desc - opt
-            prod_qty - integer (opt, legacy: total stock across variations)
-            prod_images - array (opt, legacy: first image becomes the main
-                          variation's picture)
-            variations - array (opt: replaces the variation rows)
-        */
         public function updateProductDetails(Request $json)
         {
             $validator = (new DatabaseAPI())->updateProductDetails($json);
@@ -1469,8 +1125,6 @@ class ProductsAPI extends Controller
                     }
                 }
 
-                // The validator's `unique` rule is case-sensitive, so the
-                // schema-level UNIQUE constraint needs its own guard here.
                 foreach (['prod_name', 'prod_tag'] as $uniqueField) {
                     if (! array_key_exists($uniqueField, $updateData)) {
                         continue;
@@ -1494,7 +1148,6 @@ class ProductsAPI extends Controller
                 }
 
                 if (array_key_exists('prod_categ', $updateData)) {
-                    // REQ-ADD_PROD-04: same predefined category set as add.
                     $categError = null;
                     $categ = self::validatedCategory($updateData['prod_categ'], $categError);
                     if ($categ === null) {
@@ -1515,23 +1168,15 @@ class ProductsAPI extends Controller
 
                 $product->update($updateData);
 
-                // Every variation that existed before this request, by
-                // prodvar_id -> stock. REQ-IM-03 alerts on the variations that
-                // CROSSED the threshold, so the "before" side has to be read
-                // before any stock write below.
                 $stockBefore = Prodvar::where('prod_id', $product->prod_id)
                     ->whereNull('prodvar_deleted')
                     ->pluck('prodvar_stock', 'prodvar_id')
                     ->map(fn ($stock) => (int) $stock)
                     ->all();
 
-                // Legacy stock / photo edits are redirected onto the variations.
                 $stockChanged = false;
                 $variantNote = null;
                 if ($json->has('prodvar_id') && $json->has('prod_qty')) {
-                    // The inventory stepper points at ONE variation, so the
-                    // absolute value lands on that row instead of being spread
-                    // over the main variation by applyTotalStock().
                     $variationTarget = (int) $json->input('prod_qty');
                     if ($variationTarget < 0) {
                         return response()->json(['success' => false, 'message' => 'Product quantity cannot be negative.'], 422);
@@ -1573,11 +1218,6 @@ class ProductsAPI extends Controller
                 }
 
                 if ($json->has('variant')) {
-                    // REQ-MANAGE_INV-01 / "Product variant addition, editing, &
-                    // removal": ONE variation may be added, edited or removed
-                    // on its own. The bulk path below reconciles a whole set,
-                    // which is only right when the admin is re-defining the
-                    // product from scratch.
                     $variantInput = $json->input('variant');
                     if (! is_array($variantInput)) {
                         return response()->json(['success' => false, 'message' => 'The variant details are not valid.'], 422);
@@ -1612,12 +1252,6 @@ class ProductsAPI extends Controller
                         );
                     }
 
-                    // REQ-IM-03 is per variation: "every time the quantity of a
-                    // certain product variation falls behind a preconfigured
-                    // number". Comparing against the pre-edit snapshot is what
-                    // keeps this from firing on every save of an unchanged row.
-                    // A single-variation product is already covered word for
-                    // word by the product-level line above.
                     if ($product->totalVariationCount() > 1) {
                         $this->notifyLowStockVariations($product, $stockBefore);
                     }
@@ -1653,14 +1287,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Viewing product details
-            ----------
-            JSON REQUEST
-
-            prod_id - integer (opt)
-            prod_tag - string (opt)
-        */
         public function viewProductDetails(Request $json)
         {
             try {
@@ -1692,7 +1318,6 @@ class ProductsAPI extends Controller
                     ], 404);
                 }
 
-                // REQ-ACCESS_LOG-01: opening a product page is logged.
                 $this->logView($json, 'product');
 
                 return response()->json([
@@ -1710,13 +1335,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Unlisting a product (custom option for updating status)
-            ----------
-            JSON REQUEST
-
-            prod_id - integer (req)
-        */
         public function unlistProduct(Request $json)
         {
             $prodId = $json->input('prod_id');
@@ -1730,8 +1348,6 @@ class ProductsAPI extends Controller
                     return response()->json(['success' => false, 'message' => 'Product not found'], 404);
                 }
 
-                // REQ-MANAGE_INV-02: disabled the moment this lands, so the
-                // customer catalog drops it on the next read.
                 $product->update(['prod_disabled' => now()]);
 
                 $this->logInventory($json, 'edit', 'products/unlist - "' . $product->prod_name . '" (#' . $product->prod_id . ')');
@@ -1751,13 +1367,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Selling/listing a product back in catalog
-            ----------
-            JSON REQUEST
-
-            prod_id - integer (req)
-        */
         public function sellProduct(Request $json)
         {
             $prodId = $json->input('prod_id');
@@ -1793,16 +1402,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        // ==========================================
-        // HELPERS
-        // ==========================================
-
-        /**
-         * REQ-MANAGE_INV-05: every inventory change lands in `emplog`. The
-         * caller's employee id is optional (some legacy routes carry no
-         * token), in which case nothing is written rather than a row with a
-         * fabricated id.
-         */
         protected function logInventory(Request $json, string $access, string $what): void
         {
             $user = $json->user('api');
@@ -1811,19 +1410,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /**
-         * Reads the variation rows out of a payload. When the caller only
-         * speaks the legacy dialect (prod_qty + prod_images) a single default
-         * variation is synthesised, so "at least one variation" always holds.
-         *
-         * Each row carries its own {axis: value} option set, which is what lets
-         * one product variate along several axes at once: the caller may send
-         * the whole cartesian product ({"Color":"Cream","Size":"Medium"}), or
-         * one axis per row and let the client explode it. Either way every
-         * combination ends up as its own `prodvar` row with its own stock.
-         *
-         * @return array|\Illuminate\Http\JsonResponse
-         */
         protected function parseVariations(Request $json)
         {
             $raw = $json->input('variations') ?? $json->input('prodvar') ?? $json->input('vars');
@@ -1869,9 +1455,6 @@ class ProductsAPI extends Controller
                     ], 422);
                 }
 
-                // A combination is its own label: "Cream / Medium". The caller
-                // may still override it when it wants a shorter name on the
-                // shelf, but it never has to invent one by hand.
                 $name = trim((string) ($row['prodvar_name'] ?? $row['name'] ?? ''));
                 if ($name === '') {
                     $name = self::optionLabel($options, 'Variation ' . ($index + 1));
@@ -1888,16 +1471,13 @@ class ProductsAPI extends Controller
                 ];
             }
 
-            if (count($rows) > self::MAX_VARIATIONS) {
+            if (count($rows) > self::maxVariations) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'A product can have at most ' . self::MAX_VARIATIONS . ' variations.',
+                    'message' => 'A product can have at most ' . self::maxVariations . ' variations.',
                 ], 422);
             }
 
-            // One row per combination: (cream, medium) and (cream, large) are
-            // two variations of the same shirt, (cream, medium) twice is one
-            // variation sent twice, which would silently split its stock.
             $seen = [];
             foreach ($rows as $index => $row) {
                 $signature = self::optionSignature(
@@ -1939,8 +1519,6 @@ class ProductsAPI extends Controller
                 ];
             }
 
-            // Exactly one main variation: the first flag wins, the rest are
-            // cleared, and a payload with none gets the first row marked.
             $mainSeen = false;
             foreach ($rows as $index => $row) {
                 if (! $row['prodvar_main']) {
@@ -1959,7 +1537,6 @@ class ProductsAPI extends Controller
             return $rows;
         }
 
-        /** A unique prod_tag derived from the name (prod_tag is UNIQUE). */
         protected function uniqueTag(string $name): string
         {
             $base = strtoupper((string) preg_replace('/[^A-Za-z0-9]+/', '', $name));
@@ -1981,10 +1558,6 @@ class ProductsAPI extends Controller
             return $tag;
         }
 
-        /**
-         * Legacy `prod_qty` writes: move the delta onto the main variation so
-         * SUM(prodvar.prodvar_stock) ends up at the requested total.
-         */
         protected function applyTotalStock(Product $product, int $target): bool
         {
             $vars = Prodvar::where('prod_id', $product->prod_id)
@@ -2007,13 +1580,6 @@ class ProductsAPI extends Controller
             return true;
         }
 
-        /**
-         * Per-variation stock write: the inventory stepper adds/removes a piece
-         * from ONE variation, so the absolute value is written to that row
-         * directly instead of moving a delta onto the main variation.
-         *
-         * Returns null when the variation does not belong to this product.
-         */
         protected function applyVariationStock(Product $product, int $prodvarId, int $target): ?bool
         {
             $variation = Prodvar::where('prod_id', $product->prod_id)
@@ -2034,7 +1600,6 @@ class ProductsAPI extends Controller
             return true;
         }
 
-        /** Legacy `prod_images` writes: the first image becomes the main pic. */
         protected function applyMainImage(Product $product, string $image): void
         {
             $main = Prodvar::where('prod_id', $product->prod_id)
@@ -2046,22 +1611,8 @@ class ProductsAPI extends Controller
             $main?->update(['prodvar_pic' => $image]);
         }
 
-        /** Full variation replacement when the payload carries `variations`. */
         protected function syncVariations(Product $product, array $incoming): void
         {
-            /*
-                Reconciles the variation rows of a product with an incoming set.
-
-                A combination that already exists is updated IN PLACE, so its
-                `prodvar_id` survives - and with it every bag row, item row and
-                prodsales row that hangs off that variation. A brand-new
-                combination is created, and one that disappeared from the set is
-                retired. The old `replaceVariations()` soft-deleted every row of
-                the product and minted fresh ones, which orphaned the bags of
-                customers already holding those variations and detached their
-                sales history - so the whole set had become un-editable from the
-                inventory UI.
-             */
             $existing = Prodvar::where('prod_id', $product->prod_id)
                 ->whereNull('prodvar_deleted')
                 ->get();
@@ -2094,14 +1645,11 @@ class ProductsAPI extends Controller
 
                 if ($match) {
                     unset($index[$signature]);
-                    // Re-listing a retired combination brings it back.
                     $match->update($attributes + ['prodvar_disabled' => null]);
                     continue;
                 }
 
                 Prodvar::create($attributes + [
-                    // No sequence on the live `prodvar` table either
-                    // (App\Support\IdAllocator): allocate the key before insert.
                     'prodvar_id'      => $this->nextId('prodvar', 'prodvar_id'),
                     'prod_id'          => $product->prod_id,
                     'prodvar_created'  => now(),
@@ -2115,23 +1663,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /**
-         * Adds, edits or removes ONE variation of a product.
-         *
-         * JSON REQUEST (`variant`)
-         *
-         * prodvar_id     - integer (opt: omit to ADD a new variation)
-         * prodvar_name   - string  (opt: derived from the options when omitted)
-         * prodvar_stock  - integer (opt)
-         * prodvar_markup - numeric (opt)
-         * prodvar_pic    - string  (opt: /uploads path or data URL)
-         * prodvar_options- object  (opt: {"Color":"Cream","Size":"Medium"})
-         * prodvar_preorder / prodvar_disabled / prodvar_main - bool (opt)
-         * remove         - boolean (opt: retire the variation instead of editing)
-         *
-         * @return string|null|\Illuminate\Http\JsonResponse the note to surface
-         *         as the response message, a rejection response, or null.
-         */
         protected function applyVariant(Product $product, array $input)
         {
             $prodvarId = $input['prodvar_id'] ?? $input['id'] ?? null;
@@ -2223,12 +1754,6 @@ class ProductsAPI extends Controller
                 $attributes['prodvar_preorder'] = (bool) $input['prodvar_preorder'];
             }
 
-            // A boolean field is read as a boolean, never through `filled()`:
-            // Laravel 11+ defines filled() as ! blank(), and blank() returns
-            // FALSE for every bool (including `false` itself), so
-            // filled(false) === true. Using it here stamped a disable on the
-            // row for every ENABLE request too, which is what made a disabled
-            // product or combination impossible to bring back.
             if (array_key_exists('prodvar_disabled', $input)) {
                 $attributes['prodvar_disabled'] = filter_var(
                     $input['prodvar_disabled'],
@@ -2244,9 +1769,6 @@ class ProductsAPI extends Controller
                 $attributes['prodvar_options'] = self::encodeOptions($options);
             }
 
-            // A combination is one row: editing a variation onto an option set
-            // another row of the same product already carries is refused rather
-            // than silently splitting the stock of that combination in two.
             $resulting = $optionsSent ? $options : self::decodeOptions($existing?->prodvar_options);
             $signature = self::optionSignature($resulting, (string) ($attributes['prodvar_name'] ?? ''));
 
@@ -2272,10 +1794,6 @@ class ProductsAPI extends Controller
                 $note = 'Variation "' . $existing->prodvar_name . '" updated successfully';
             } else {
                 $created = Prodvar::create($attributes + [
-                    // `prodvar_id` has no sequence on the live table, so a new
-                    // combination allocates its own key (App\Support\IdAllocator)
-                    // - without it the insert dies on a NOT NULL violation and
-                    // "add combination" reports a generic failure.
                     'prodvar_id'      => $this->nextId('prodvar', 'prodvar_id'),
                     'prod_id'          => $product->prod_id,
                     'prodvar_created'  => now(),
@@ -2285,8 +1803,6 @@ class ProductsAPI extends Controller
                 $note = 'Variation "' . $created->prodvar_name . '" added to the product';
             }
 
-            // Exactly one variation carries the main image: a newly flagged row
-            // takes the flag off the others.
             if (! empty($attributes['prodvar_main'])) {
                 Prodvar::where('prod_id', $product->prod_id)
                     ->whereNull('prodvar_deleted')
@@ -2297,18 +1813,6 @@ class ProductsAPI extends Controller
             return $note;
         }
 
-        /**
-         * Retires one variation: a soft delete when nothing holds it, and a
-         * disable when it does.
-         *
-         * REQ-CW-02 / REQ-BAG-01: a variation a customer is already holding in
-         * a bag must not vanish from that bag, so it can no longer be ordered
-         * but the cart line still resolves. Only an unreferenced variation is
-         * deleted outright, which keeps the bag rows and prodsales history of
-         * every retired variation intact either way.
-         *
-         * @return string|\Illuminate\Http\JsonResponse
-         */
         protected function retireVariation(Product $product, Prodvar $variation)
         {
             $live = Prodvar::where('prod_id', $product->prod_id)
@@ -2345,14 +1849,6 @@ class ProductsAPI extends Controller
             return 'Variation "' . $variation->prodvar_name . '" removed successfully';
         }
 
-        /**
-         * REQ-IM-03: a priority notification to every admin and super admin the
-         * moment a VARIATION falls behind the configured threshold. Only the
-         * variations that crossed it are named, so restocking one shirt size
-         * does not re-alert the whole product.
-         *
-         * @param array<int,int>|null $before prodvar_id => stock before the edit
-         */
         protected function notifyLowStockVariations(Product $product, ?array $before): void
         {
             $threshold = (int) SystemSettings::get('low_stock_threshold', 5);
@@ -2365,8 +1861,6 @@ class ProductsAPI extends Controller
                 $stock = (int) $variation->prodvar_stock;
                 $previous = $before[$variation->prodvar_id] ?? null;
 
-                // $before === null is the "just created" path, where every
-                // variation under the threshold is worth an alert.
                 if ($previous !== null && $previous <= $threshold) {
                     continue;
                 }
@@ -2387,7 +1881,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /** Keeps the denormalised aggregate columns honest after any change. */
         protected static function syncTotals(Product $product): void
         {
             $product->update([
@@ -2397,7 +1890,6 @@ class ProductsAPI extends Controller
             ]);
         }
 
-        /** SUM(prodsales_qty) per product - the old prod_peaksold successor. */
         protected static function salesByProduct(): array
         {
             $rows = DB::table('prodsales')
@@ -2415,14 +1907,6 @@ class ProductsAPI extends Controller
             return $out;
         }
 
-        /**
-         * SUM(prodsales_qty) restricted to one set of products.
-         *
-         * presentMany() uses this instead of the global salesByProduct() so a
-         * batch render - including the per-order priming on the orders paths -
-         * reads only the products it is about to show instead of aggregating
-         * the whole prodsales table.
-         */
         protected static function salesForProducts(array $prodIds): array
         {
             $prodIds = array_values(array_unique(array_filter(
@@ -2450,42 +1934,13 @@ class ProductsAPI extends Controller
             return $out;
         }
 
-    // ===== from the Reviews API file =====
-/**
-     * DOMAIN 13 (REVIEWS).
-     *
-     * Reviews live in `reviews`; there is no rating column, so the rating
-     * travels inside rev_msg as a "<rating>|<message>" token (see
-     * Review::compose). Pending = rev_approved IS NULL, approved = a stamp,
-     * rejected = rev_msg prefixed with "[REJECTED] |" which keeps the row for
-     * audit (REQ-MANAGE_REV-03) while hiding it from customers
-     * (FLOW-MANAGE_REV-07).
-     *
-     * Every read answers with BOTH the canonical fields (rating / message) and
-     * the legacy order-shaped ones the current frontend still renders
-     * (ord_rating / ord_review / ord_completed / ord_id / status).
-     */
-
-    // ===== from the Reviews API file =====
-
-        // Order statuses that do not represent a completed purchase. The new
-        // vocabulary keeps the old meaning: a cart still being processed, a
-        // cancellation request and a cancelled order never count.
-        protected const NOT_PURCHASED = ['processing', 'to cancel', 'cancelled'];
-
-        // ==========================================
-        // ENCODING / PRESENTATION
-        // ==========================================
+        protected const notPurchased = ['processing', 'to cancel', 'cancelled'];
 
         protected function countsAsPurchase($status): bool
         {
-            return ! in_array($this->purchaseStatusKey($status), self::NOT_PURCHASED, true);
+            return ! in_array($this->purchaseStatusKey($status), self::notPurchased, true);
         }
 
-        /**
-         * Folds the legacy spellings of a status onto the new vocabulary so the
-         * NOT_PURCHASED list stays exhaustive for rows written before the rename.
-         */
         protected function purchaseStatusKey($status): string
         {
             $key = strtolower(trim((string) $status));
@@ -2498,7 +1953,6 @@ class ProductsAPI extends Controller
             };
         }
 
-        /** Splits rev_msg into its rating token, text and rejection marker. */
         protected function decode(?string $revMsg): array
         {
             $raw = (string) $revMsg;
@@ -2524,7 +1978,6 @@ class ProductsAPI extends Controller
             return ['rating' => $rating, 'text' => $text, 'rejected' => $rejected];
         }
 
-        /** Canonical + legacy aliases for one review row. */
         protected function reviewsPresent(Review $review, ?int $ordId = null): array
         {
             $decoded = $this->decode($review->rev_msg);
@@ -2532,13 +1985,8 @@ class ProductsAPI extends Controller
                 ? 'approved'
                 : ($decoded['rejected'] ? 'rejected' : 'pending');
 
-            // The admin queue still derives its state from ord_review, so a
-            // rejected row keeps the historical sentinel there while the real
-            // text stays available under `message` for audit.
             $legacyText = $status === 'rejected' ? '[REVIEW CENSORED]' : $decoded['text'];
 
-            // FLOW-MANAGE_REV-02: the admin list shows product name and
-            // customer name per row (eager-loaded by displayReviews).
             $product  = $review->product;
             $customer = $review->customer;
 
@@ -2549,31 +1997,21 @@ class ProductsAPI extends Controller
                 'rev_created'  => optional($review->rev_created)->toDateTimeString(),
                 'rev_approved' => optional($review->rev_approved)->toDateTimeString(),
 
-                // FLOW-MANAGE_REV-02 / FLOW-MANAGE_REV-04 display columns
                 'prod_name'    => $product?->prod_name,
                 'cust_name'    => $customer
                     ? trim(($customer->cust_nickname ?: $customer->cust_givname) . ' ' . $customer->cust_surname)
                     : null,
-                // Canonical read model
                 'rating'       => $decoded['rating'],
                 'message'      => $decoded['text'],
                 'status'       => $status,
 
-                // Legacy order-shaped aliases (spec section 6)
                 'ord_id'       => $ordId,
                 'ord_rating'   => $decoded['rating'],
                 'ord_review'   => $legacyText,
-                // The old list showed the order's completion date; the review
-                // timestamp is the only equivalent the new schema carries.
                 'ord_completed' => optional($review->rev_created)->toDateTimeString(),
             ];
         }
 
-        // ==========================================
-        // RESOLUTION HELPERS
-        // ==========================================
-
-        // The customer account behind the bearer token, or a 403 response
         protected function requireCustomer(Request $json)
         {
             $user = $json->user('api');
@@ -2587,7 +2025,6 @@ class ProductsAPI extends Controller
             return $user;
         }
 
-        /** Product ids inside one order: orders -> items -> bag -> prodvar. */
         protected function productIdsForOrder(int $ordId): array
         {
             return DB::table('items')
@@ -2600,10 +2037,6 @@ class ProductsAPI extends Controller
                 ->all();
         }
 
-        /**
-         * Newest order per (customer, product) so the legacy ord_id handle can
-         * travel with every review row without an N+1.
-         */
         protected function orderMap($reviews): array
         {
             $reviews = collect($reviews);
@@ -2633,25 +2066,11 @@ class ProductsAPI extends Controller
             return $map;
         }
 
-        /** The order id behind one review, from the map built above. */
         protected function orderIdFor(Review $review, array $map): ?int
         {
             return $map[(int) $review->cust_id][(int) $review->prod_id] ?? null;
         }
 
-        /**
-         * Resolves the review a payload points at. `rev_id` is canonical;
-         * the legacy dialect sends `ord_id` (+ optional prod_id), which is
-         * mapped back through items -> bag -> prodvar.
-         *
-         * The legacy handle is ambiguous by construction: one order buys
-         * several products, so without `prod_id` the newest row of ANY of
-         * them was silently picked - moderating (or deleting) the wrong
-         * review. When the order holds more than one product and no `prod_id`
-         * was sent, the caller is told to disambiguate instead of guessing.
-         *
-         * @return Review|\Illuminate\Http\JsonResponse|null
-         */
         protected function resolveReview(Request $json)
         {
             $revId = $json->input('rev_id');
@@ -2694,17 +2113,11 @@ class ProductsAPI extends Controller
                 ->first();
         }
 
-        /** REQ-MANAGE_REV-03: rows deleted by moderation keep their text. */
         protected function isDeleted(Review $review): bool
         {
             return str_starts_with((string) $review->rev_msg, '[DELETED]');
         }
 
-        /**
-         * REQ-MANAGE_REV-05: product.prod_rating is the average of APPROVED
-         * ratings and product.prod_reviews the count of APPROVED rows, so
-         * moderation can never corrupt them.
-         */
         protected function recomputeProduct(int $prodId): void
         {
             $rows = Review::where('prod_id', $prodId)
@@ -2724,23 +2137,6 @@ class ProductsAPI extends Controller
             ]);
         }
 
-        // ==========================================
-        // ENDPOINTS
-        // ==========================================
-
-        /*
-            Creating product reviews
-            ----------
-            JSON REQUEST
-
-            ord_id - integer (opt: legacy handle, one of ord_id / prod_id)
-            prod_id - integer (opt: one of ord_id / prod_id)
-            rating - integer (req: 1-5)   [legacy: ord_rating]
-            message - string (opt)        [legacy: ord_review / review]
-
-            One review per customer per product; every submission waits for
-            employee approval (rev_approved stays NULL).
-        */
         public function createReview(Request $json)
         {
             $validator = (new DatabaseAPI())->createReview($json);
@@ -2780,7 +2176,6 @@ class ProductsAPI extends Controller
                         return response()->json(['success' => false, 'message' => 'Order not found'], 404);
                     }
 
-                    // Only the purchaser may review their own order
                     if ((int) $order->cust_id !== (int) $customer->getKey()) {
                         return response()->json([
                             'success' => false,
@@ -2819,17 +2214,14 @@ class ProductsAPI extends Controller
                         return response()->json(['success' => false, 'message' => 'Product not found'], 404);
                     }
 
-                    // Purchase rule: a review is only allowed once the order
-                    // was actually paid for (still-processing and cancelled
-                    // orders never count as a purchase)
-                    $placeholders = implode(',', array_fill(0, count(self::NOT_PURCHASED), '?'));
+                    $placeholders = implode(',', array_fill(0, count(self::notPurchased), '?'));
                     $purchased = DB::table('orders')
                         ->join('items', 'items.ord_id', '=', 'orders.ord_id')
                         ->join('bag', 'bag.bag_id', '=', 'items.bag_id')
                         ->join('prodvar', 'prodvar.prodvar_id', '=', 'bag.prodvar_id')
                         ->where('orders.cust_id', $customer->getKey())
                         ->where('prodvar.prod_id', $prodId)
-                        ->whereRaw('LOWER(orders.ord_status) NOT IN (' . $placeholders . ')', self::NOT_PURCHASED)
+                        ->whereRaw('LOWER(orders.ord_status) NOT IN (' . $placeholders . ')', self::notPurchased)
                         ->exists();
 
                     if (! $purchased) {
@@ -2842,12 +2234,6 @@ class ProductsAPI extends Controller
                     $prodId = (int) $prodId;
                 }
 
-                // REQ-APC-2 / Domain 13: only one review per customer per
-                // product. A rejected row keeps its audit trail but does not
-                // block a fresh submission, and a review an employee deleted
-                // (REQ-MANAGE_REV-03 soft-deletes it for audit) has to leave
-                // the customer free to write another one - otherwise the one
-                // moderation delete would silence them for good.
                 $existing = Review::where('cust_id', $customer->getKey())
                     ->where('prod_id', $prodId)
                     ->orderByDesc('rev_created')
@@ -2868,8 +2254,6 @@ class ProductsAPI extends Controller
                     'rev_approved' => null,
                 ]);
 
-                // FLOW-ACCESS_LOG-01: a customer write is an append-only edit on
-                // the account, the same as every other customer surface.
                 $this->logCustomer((int) $customer->getKey(), 'edit',
                     'POST /api/reviews/create - review #' . $review->rev_id . ' (product #' . $prodId . ')');
 
@@ -2890,17 +2274,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Deleting product reviews
-            ----------
-            JSON REQUEST
-
-            rev_id - integer (canonical)
-            ord_id - integer (legacy handle, + optional prod_id)
-
-            Customers may only delete their own rows; employees may delete any.
-            The product aggregates are recomputed afterwards.
-        */
         public function deleteReview(Request $json)
         {
             $validator = (new DatabaseAPI())->deleteReview($json);
@@ -2909,7 +2282,7 @@ class ProductsAPI extends Controller
             try {
                 $review = $this->resolveReview($json);
                 if ($review instanceof \Illuminate\Http\JsonResponse) {
-                    return $review; // ambiguous legacy handle (409)
+                    return $review;
                 }
                 if (! $review) {
                     return response()->json(['success' => false, 'message' => 'Review not found'], 404);
@@ -2933,16 +2306,11 @@ class ProductsAPI extends Controller
 
                 $prodId = (int) $review->prod_id;
 
-                // REQ-MANAGE_REV-03: a moderation delete is a SOFT delete -
-                // the row stays in `reviews` (its text survives under a
-                // [DELETED] marker) so the audit trail the SRS asks for
-                // still exists, while every read below filters it out.
                 $review->rev_msg = '[DELETED] ' . (string) $review->rev_msg;
                 $review->rev_approved = null;
                 $review->save();
                 $this->recomputeProduct($prodId);
 
-                // REQ-MANAGE_REV-04: approve / reject / delete all land in emplog.
                 if ($this->isEmployee($user)) {
                     $this->logEmployee((int) $user->emp_id, 'delete',
                         'DELETE /api/reviews/delete - soft-deleted review #' . $review->rev_id
@@ -2963,17 +2331,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Displaying product reviews
-            ----------
-            JSON REQUEST / Query Params
-
-            prod_id - integer (opt)
-            status - string (opt: pending | approved | rejected | all, employees only)
-
-            FLOW-CATALOG-05: customers and guests only ever see approved rows,
-            newest first.
-        */
         public function displayReviews(Request $json)
         {
             try {
@@ -2989,16 +2346,8 @@ class ProductsAPI extends Controller
                     $query->where('prod_id', $prodId);
                 }
 
-                // REQ-MANAGE_REV-03: a soft-deleted row is gone from every
-                // read - customer wall, admin queue and search alike.
                 $query->whereRaw("rev_msg NOT LIKE '[DELETED]%'");
 
-                /*
-                    FLOW-MANAGE_REV-01: the admin page opens on the whole
-                    queue. An empty `status` used to fall through to the
-                    customer branch (approved only), so the pending rows the
-                    page exists for never appeared until a filter was picked.
-                */
                 if ($isEmployee && $statusFilter === '' && $isAdmin) {
                     $statusFilter = 'all';
                 }
@@ -3017,13 +2366,9 @@ class ProductsAPI extends Controller
                             ->whereRaw("rev_msg LIKE '[REJECTED]%'");
                     }
                 } else {
-                    // REQ-MANAGE_REV-02: pending and rejected rows never reach
-                    // a customer, whatever status they asked for.
                     $query->whereNotNull('rev_approved');
                 }
 
-                // FLOW-MANAGE_REV-04: search by product name or customer name
-                // (the admin page sends `q`; `search` is the older alias).
                 $needle = $q !== '' ? $q : trim((string) $json->input('search', ''));
                 if ($needle !== '') {
                     $query->where(function ($builder) use ($needle) {
@@ -3047,8 +2392,6 @@ class ProductsAPI extends Controller
                     ->map(fn (Review $review) => $this->reviewsPresent($review, $this->orderIdFor($review, $map)))
                     ->values();
 
-                // REQ-ACCESS_LOG-01: reading reviews (customer wall or the
-                // moderation queue) is logged on the reading account.
                 $this->logView($json, 'reviews');
 
                 return response()->json([
@@ -3066,42 +2409,23 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Moderating product reviews
-            ----------
-            JSON REQUEST
-
-            rev_id - integer (canonical)
-            ord_id - integer (legacy handle, + optional prod_id)
-            approve - boolean (opt, default: true)
-            censored_review - string (opt, replacement text)
-
-            approve=true  -> rev_approved = now() (published)
-            approve=false -> rev_msg = '[REJECTED] |' + original, keeping the
-                             row for audit with rev_approved NULL
-        */
         public function moderateReview(Request $json)
         {
             $validator = (new DatabaseAPI())->moderateReview($json);
             if ($validator) return $validator;
 
-            // Only employees review submissions before they go public
             $denied = $this->requireEmployee($json);
             if ($denied) return $denied;
 
             try {
                 $review = $this->resolveReview($json);
                 if ($review instanceof \Illuminate\Http\JsonResponse) {
-                    return $review; // ambiguous legacy handle (409)
+                    return $review;
                 }
                 if (! $review) {
                     return response()->json(['success' => false, 'message' => 'Review not found'], 404);
                 }
 
-                // REQ-MANAGE_REV-03: a review an employee already deleted stays
-                // in the table for audit, and every read filters it out - a
-                // second moderation decision on it would only rewrite the audit
-                // row, so it is answered as gone.
                 if ($this->isDeleted($review)) {
                     return response()->json(['success' => false, 'message' => 'Review not found'], 404);
                 }
@@ -3113,8 +2437,6 @@ class ProductsAPI extends Controller
                 $rating = $decoded['rating'] > 0 ? $decoded['rating'] : 1;
 
                 if ($approve) {
-                    // Approving a previously rejected row restores a clean
-                    // "<rating>|<text>" token (no marker survives).
                     $review->rev_msg = Review::compose($rating, $text);
                     $review->rev_approved = now();
                     $newStatus = 'approved';
@@ -3137,7 +2459,6 @@ class ProductsAPI extends Controller
                         : 'Your review for ' . $label . ' was not approved.');
                 }
 
-                // REQ-ACCESS_LOG-01/03: moderating a review is an edit action.
                 $user = $json->user('api');
                 if ($this->isEmployee($user)) {
                     $this->logEmployee((int) $user->emp_id, 'edit',
@@ -3162,22 +2483,12 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Scoring product ratings
-            ----------
-            JSON REQUEST / Query Params
-
-            prod_id - integer (opt)
-
-            Only approved feedback contributes to the public score.
-        */
         public function scoreRating(Request $json)
         {
             try {
                 $prodId = $json->input('prod_id');
 
                 $query = Review::whereNotNull('rev_approved')
-                    // REQ-MANAGE_REV-03: soft-deleted rows never score.
                     ->whereRaw("rev_msg NOT LIKE '[DELETED]%'");
                 if ($prodId) {
                     $query->where('prod_id', $prodId);
@@ -3203,7 +2514,6 @@ class ProductsAPI extends Controller
                         'prod_id'         => $prodId,
                         'average_rating'  => $average,
                         'total_reviews'   => $rows->count(),
-                        // Canonical aliases of the same two numbers
                         'prod_rating'     => $average,
                         'prod_reviews'    => $rows->count(),
                     ],
@@ -3218,19 +2528,6 @@ class ProductsAPI extends Controller
             }
         }
 
-        /*
-            Updating product reviews
-            ----------
-            JSON REQUEST
-
-            rev_id - integer (canonical)
-            ord_id - integer (legacy handle, + optional prod_id)
-            rating - integer (opt 1-5)   [legacy: ord_rating]
-            message - string (opt)       [legacy: ord_review / review]
-
-            Editing stops once an employee approved (or rejected) it; a pending
-            edit keeps the row pending.
-        */
         public function updateReview(Request $json)
         {
             $validator = (new DatabaseAPI())->updateReview($json);
@@ -3239,7 +2536,7 @@ class ProductsAPI extends Controller
             try {
                 $review = $this->resolveReview($json);
                 if ($review instanceof \Illuminate\Http\JsonResponse) {
-                    return $review; // ambiguous legacy handle (409)
+                    return $review;
                 }
                 if (! $review) {
                     return response()->json(['success' => false, 'message' => 'Review not found'], 404);
@@ -3285,11 +2582,9 @@ class ProductsAPI extends Controller
                 }
 
                 $review->rev_msg = Review::compose((int) $rating, (string) $text);
-                $review->rev_approved = null; // an edit always re-enters the queue
+                $review->rev_approved = null;
                 $review->save();
 
-                // FLOW-ACCESS_LOG-01: editing a review is an append-only edit on
-                // the customer's own account.
                 $this->logCustomer((int) $user->getKey(), 'edit',
                     'PUT /api/reviews/update - review #' . $review->rev_id . ' (product #' . $review->prod_id . ')');
 
@@ -3312,33 +2607,8 @@ class ProductsAPI extends Controller
             }
         }
 
-    // ===== from the Upload API file =====
-/**
- * DOMAIN 6-ish file handling: images are stored on THIS backend's disk
- * (storage/app/public/uploads/<type>/) and served from /storage/...
- *
- * There is no Supabase storage bucket anywhere in this flow (SPEC: 18 tables,
- * no bucket config) — a write failure degrades to a self-contained base64 data
- * URL so the caller still gets a usable `url` instead of a 500.
- */
+    private const imageRules = ['required', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:2048'];
 
-    // ===== from the Upload API file =====
-
-    /** Images only, and at most 2 MB each. */
-    private const RULES = ['required', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:2048'];
-
-    /**
-     * The public origin a stored file is addressed through.
-     *
-     * A real request is authoritative (Render fronts the API under its own
-     * service host, and `getSchemeAndHttpHost()` keeps the port when the API
-     * is served from 127.0.0.1:8000 in development). A console run - a seeder
-     * importing the initial catalog - has no request, so it falls back to
-     * APP_URL, which render.yaml pins to the deployed service and .env pins to
-     * the local one. Both writers of `prodvar_pic` therefore produce the very
-     * same absolute URL instead of one of them drifting onto a host that
-     * 404s.
-     */
     public static function publicUrl(string $path): string
     {
         $origin = rtrim((string) config('app.url'), '/');
@@ -3351,17 +2621,9 @@ class ProductsAPI extends Controller
         return $origin . '/' . ltrim($path, '/');
     }
 
-    /**
-     * POST /uploads - accept an actual image file, persist it under
-     * storage/app/public/uploads/<type>/, and return its public URL.
-     *
-     * multipart/form-data
-     *   file - image (png/jpg/jpeg/gif/webp, max 2MB) (req)
-     *   type - subfolder: avatar | product | banner ... (opt)
-     */
     public function uploadImage(Request $request)
     {
-        $validator = Validator::make($request->all(), ['file' => self::RULES]);
+        $validator = Validator::make($request->all(), ['file' => self::imageRules]);
 
         if ($validator->fails()) {
             return response()->json([
@@ -3378,7 +2640,6 @@ class ProductsAPI extends Controller
                 $extension = 'png';
             }
 
-            // Unique name: no two uploads can ever collide, no clock reuse.
             $filename = now()->format('Ymd_His') . '_' . substr(md5(uniqid('', true)), 0, 8)
                 . '.' . $extension;
 
@@ -3401,8 +2662,6 @@ class ProductsAPI extends Controller
                 ], 200);
             }
 
-            // Write failure (read-only disk, missing link, quota...): hand back
-            // a data URL so the caller still has something usable to render.
             $mime = $file->getMimeType() ?: 'image/' . $extension;
             $dataUrl = 'data:' . $mime . ';base64,' . base64_encode((string) $file->get());
 

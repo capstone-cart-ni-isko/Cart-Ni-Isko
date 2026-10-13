@@ -28,61 +28,11 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
-/**
- * UserAPI
- *
- * DOMAIN 17 / 20 / 24 / 25 / 29 - the customer bag, wishlist, profile and settings, plus the employee-facing account surfaces.
- *
- * Repackaged from: Cart API, Wishlist API.
- */
 class UserAPI extends Controller
 {
 
-    // ===== from the Cart API file =====
-/**
- * DOMAIN 25 (BAG / CART) endpoints.
- *
- * The customer cart lives in the `bag` table: one live row per customer +
- * product variation (bag_placed = false, bag_deleted IS NULL). Different
- * variations of the same product NEVER merge into one row (REQ-BAG-01) -
- * the variation id is the identity of the line.
- *
- * The legacy cart built from `orders` rows tagged `CART-*` is retired: the
- * orders view below returns EVERY order the customer has, newest first
- * (FLOW-ORD_LIST-02) - there is no cart marker on `orders` any more, the
- * bag table is the cart - and gains the FLOW-ORD_LIST-03 server-side
- * `filter` buckets. Order line detail always comes from
- * items -> bag -> prodvar -> product; totals always from ord_amount.
- *
- * Every cart mutation answers with the same envelope the frontend reads:
- *   { success, message, data: { items: [cart item shape], cart_count, subtotal } }
- * `cart_count` (REQ-BAG-03) is the number of live bag rows; `subtotal`
- * (FLOW-BAG-06) is sum(bag_amount * bag_qty) - bag_amount is a UNIT amount.
- */
-
-    // ===== from the Cart API file =====
-
-    /** Columns of `customer` that mirror the live bag line count. */
     private static ?array $counterColumns = null;
 
-    // ==========================================
-    // ADD TO CART
-    // ==========================================
-
-    /*
-        Adding a product (or one of its variations) to the bag
-        ----------
-        JSON REQUEST
-
-        cust_id    - integer (opt: must match the token when sent)
-        prod_id    - integer|string (req: product id or prod_tag)
-        prodvar_id - integer (opt: explicit variation, wins over size/color)
-        size       - string (opt: matched against prodvar_name / prodvar_options)
-        color      - string|{name,image} (opt)
-        item_qty   - integer (opt, default: 1)
-        item_amount- numeric (opt: UNIT amount for this line)
-        items      - array of the same line fields (opt, multi-add)
-    */
     public function addOrder(Request $json)
     {
         try {
@@ -117,8 +67,6 @@ class UserAPI extends Controller
                     'prodvar_id'  => $json->input('prodvar_id'),
                     'size'        => $json->input('size'),
                     'color'       => $json->input('color'),
-                    // A product may variate along several axes at the same
-                    // time, so the client may name the whole combination.
                     'options'     => $json->input('options'),
                     'item_qty'    => $json->input('item_qty', 1),
                     'item_amount' => $json->input('item_amount'),
@@ -158,8 +106,6 @@ class UserAPI extends Controller
                     $line['options'] ?? null
                 );
                 if (! $prodvar) {
-                    // No variation row at all: OrdersAPI refuses the same way
-                    // (a bag line cannot exist without a variation).
                     return response()->json([
                         'success' => false,
                         'message' => 'Product "' . $product->prod_name . '" is no longer offered',
@@ -190,23 +136,6 @@ class UserAPI extends Controller
         }
     }
 
-    // ==========================================
-    // DISPLAY CART / ORDERS
-    // ==========================================
-
-    /*
-        Displaying the bag or the customer's orders
-        ----------
-        Query Params
-
-        cust_id     - integer (opt, must match the token when sent)
-        scope       - 'bag'|'cart' -> bag rows, 'orders' -> placed orders
-        bag         - boolean (legacy alias for scope=bag)
-        tag_prefix  - 'CART-*' (legacy alias for scope=bag)
-        filter      - all|processing|to-claim|claimed|unclaimed|cancelled
-        ord_status  - string (opt, exact match)
-        ord_id      - integer (opt, single order)
-    */
     public function displayOrders(Request $json)
     {
         try {
@@ -220,13 +149,9 @@ class UserAPI extends Controller
             $custId = $scope['custId'];
             $employeeView = $scope['employee'];
 
-            // REQ-ACCESS_LOG-01: reading the customer's cart/orders is logged.
             $this->logView($json, 'cart');
 
-            // A bag belongs to one customer, so an employee never asks for one.
             if (!$employeeView && $this->wantsBagRows($json)) {
-                // Self-heal the badge counter while the bag is being read
-                // (legacy behaviour: the cart view refreshed cust_cart).
                 self::syncCartCounter($custId);
 
                 return response()->json([
@@ -241,7 +166,6 @@ class UserAPI extends Controller
             if ($json->filled('ord_status')) {
                 $query->where('ord_status', $json->input('ord_status'));
             } elseif ($json->filled('status')) {
-                // `status` is the friendly alias the orders list sends.
                 $query->where('ord_status', $json->input('status'));
             }
             if ($json->filled('ord_id')) {
@@ -268,10 +192,6 @@ class UserAPI extends Controller
             ], 500);
         }
     }
-
-    // ==========================================
-    // SEARCH ORDERS
-    // ==========================================
 
     public function searchOrders(Request $json)
     {
@@ -312,9 +232,6 @@ class UserAPI extends Controller
             $query = $this->ordersQuery($custId);
 
             if ($q !== '') {
-                // `orders` has no tag column any more: the search runs over
-                // the status, the order id and the products that were bought
-                // (always through items -> bag -> prodvar -> product).
                 $query->where(function ($builder) use ($q) {
                     $builder->where('ord_status', 'like', "%{$q}%")
                             ->orWhereHas('items.bag.prodvar.product', function ($pq) use ($q) {
@@ -347,10 +264,6 @@ class UserAPI extends Controller
         }
     }
 
-    // ==========================================
-    // SORT ORDERS
-    // ==========================================
-
     public function sortOrders(Request $json)
     {
         try {
@@ -373,15 +286,11 @@ class UserAPI extends Controller
                 'id'     => 'ord_id',
                 'amount' => 'ord_amount',
                 'total'  => 'ord_amount',
-                // `rating` is a legacy sort key with no live column: it falls
-                // back to the creation date, as do unknown keys below.
                 'rating' => 'ord_created',
             ];
             $column = $columnMap[$sortBy] ?? 'ord_created';
 
             if (!$employeeView && $this->wantsBagRows($json)) {
-                // The bag is always newest-first (FLOW-BAG-04); the legacy
-                // sort call cannot reorder it, it only filters + reports it.
                 $bags = self::bagQuery($custId)->orderByDesc('bag_created')->get();
 
                 return response()->json([
@@ -418,19 +327,6 @@ class UserAPI extends Controller
         }
     }
 
-    // ==========================================
-    // REMOVE FROM CART (soft delete)
-    // ==========================================
-
-    /*
-        Removing one bag line
-        ----------
-        JSON REQUEST
-
-        bag_id  - integer (req)
-        item_id - integer (opt, legacy alias for bag_id)
-        ord_id  - integer (opt, legacy alias for bag_id)
-    */
     public function removeOrder(Request $json)
     {
         try {
@@ -463,14 +359,12 @@ class UserAPI extends Controller
             }
 
             if ($bag->bag_placed) {
-                // Already cut into an order: the order flow owns it now.
                 return response()->json([
                     'success' => false,
                     'message' => 'Only cart items can be removed.',
                 ], 409);
             }
 
-            // FLOW-BAG-05: soft delete, exactly like the POS void precedent.
             $bag->update([
                 'bag_deleted' => now(),
                 'bag_placed'  => DB::raw('false'),
@@ -494,19 +388,6 @@ class UserAPI extends Controller
         }
     }
 
-    // ==========================================
-    // QTY EDIT (bag row)
-    // ==========================================
-
-    /*
-        Editing the quantity of one bag line
-        ----------
-        JSON REQUEST
-
-        bag_id   - integer (req)
-        item_id  - integer (opt, legacy alias for bag_id)
-        item_qty - integer (req, clamped to prodvar_stock)
-    */
     public function updateBagLine(Request $json)
     {
         try {
@@ -546,8 +427,6 @@ class UserAPI extends Controller
             }
 
             if ($bag->prodvar) {
-                // Only live stock bounds the line; a sold-out variation keeps
-                // its row at 1 piece instead of collapsing to a 0-qty line.
                 $qty = max(1, min($qty, (int) $bag->prodvar->prodvar_stock));
             }
 
@@ -570,10 +449,6 @@ class UserAPI extends Controller
             ], 500);
         }
     }
-
-    // ==========================================
-    // CLEAR THE BAG (FLOW-BAG-07)
-    // ==========================================
 
     public function clearCart(Request $json)
     {
@@ -613,14 +488,6 @@ class UserAPI extends Controller
         }
     }
 
-    // ==========================================
-    // BAG HELPERS (shared with UserAPI)
-    // ==========================================
-
-    /**
-     * One cart line payload: the bag row + its variation + the product as
-     * ProductsAPI::present() renders it (sizes/colors/stockMatrix/variations).
-     */
     public static function cartItemPayload(Bag $bag): array
     {
         $bag->loadMissing(['prodvar.product']);
@@ -637,7 +504,6 @@ class UserAPI extends Controller
         $lineTotal = round($qty * $amount, 2);
 
         return [
-            // Canonical bag fields (frontend maps these as `bag-{bag_id}`)
             'id'             => 'bag-' . $bag->bag_id,
             'bag_id_display' => 'bag-' . $bag->bag_id,
             'bag_id'         => (int) $bag->bag_id,
@@ -648,15 +514,10 @@ class UserAPI extends Controller
             'bag_placed'     => (bool) $bag->bag_placed,
             'bag_created'    => $bag->bag_created,
             'bag_deleted'    => $bag->bag_deleted,
-            // Cart item shape the frontend consumes: amount is the UNIT price
-            // stored on the bag row, line_total = qty * amount (FLOW-BAG-06)
             'qty'            => $qty,
             'amount'         => $amount,
             'line_total'     => $lineTotal,
             'prodvar'        => $prodvar ? $prodvar->toArray() : null,
-            // Legacy line aliases. These are response names only - the bag
-            // row holds every quantity and amount - and item_amount stays the
-            // LINE total those screens document it as.
             'item_id'        => (int) $bag->bag_id,
             'item_qty'       => $qty,
             'item_amount'    => $lineTotal,
@@ -676,11 +537,6 @@ class UserAPI extends Controller
         ];
     }
 
-    /**
-     * Render a whole set of cart lines. The products behind every line are
-     * primed in one batch first, so the per-line present() is a memo lookup
-     * instead of two aggregate queries each.
-     */
     public static function cartItemsPayload($bags): array
     {
         $bags = collect($bags)->values();
@@ -689,10 +545,6 @@ class UserAPI extends Controller
         return $bags->map(fn (Bag $bag) => self::cartItemPayload($bag))->values()->all();
     }
 
-    /**
-     * Prime every variation/product behind a set of bag lines in one batch.
-     * Shared by the cart envelope and any other screen that renders bag lines.
-     */
     public static function primeCartProducts($bags): void
     {
         $products = [];
@@ -709,10 +561,6 @@ class UserAPI extends Controller
         ProductsAPI::primePresentations($products);
     }
 
-    /**
-     * Every cart response envelope: items (bag_created DESC), cart_count and
-     * subtotal = sum(bag_amount * bag_qty) (FLOW-BAG-06).
-     */
     public static function cartEnvelope(int $custId): array
     {
         $bags = self::bagQuery($custId)->orderByDesc('bag_created')->get();
@@ -726,7 +574,6 @@ class UserAPI extends Controller
         ];
     }
 
-    /** Live bag rows for one customer (bag_placed = false, bag_deleted IS NULL). */
     public static function bagQuery(int $custId)
     {
         return Bag::with(['prodvar.product'])
@@ -735,30 +582,11 @@ class UserAPI extends Controller
             ->whereRaw('bag_placed = false');
     }
 
-    /** REQ-BAG-03: the number of live bag rows. */
     public static function cartCount(int $custId): int
     {
         return self::bagQuery($custId)->count();
     }
 
-    /**
-     * Resolve the variation a cart line points at.
-     *
-     * Explicit prodvar_id wins; otherwise the labels sent by the client are
-     * matched against prodvar_name and prodvar_options - the same data
-     * ProductsAPI::present() rebuilds `prod_sizes` / `prod_colors` /
-     * `prod_stock_matrix` from. No match (or no label at all) falls back to
-     * OrdersAPI::defaultVariation(): the main, else first, live variation.
-     *
-     * A product may variate along several axes at the same time - colour and
-     * size, colour and material - so a label is matched against EVERY axis
-     * value and not only against a key literally called "size"/"color". Without
-     * that, a colour × material shirt matched "Cream" on four rows and returned
-     * the first, which put the wrong stock bucket in the customer's bag. A row
-     * whose whole option set agrees with every label sent wins outright.
-     *
-     * @return Prodvar|null null when the product has no live variation at all
-     */
     public static function resolveVariation(Product $product, $prodvarId = null, $size = null, $color = null, $options = null): ?Prodvar
     {
         $vars = Prodvar::where('prod_id', $product->prod_id)
@@ -786,9 +614,6 @@ class UserAPI extends Controller
             ? ($color['image'] ?? ($color['gallery'][0] ?? null))
             : null;
 
-        // The client may name the combination outright - {"Color":"Cream",
-        // "Size":"Medium"} - which is the SAME vocabulary ProductsAPI and
-        // OrdersAPI use, so a match here is a match there.
         if (is_array($options) && $options !== []) {
             $wanted = ProductsAPI::normalizeOptions($options);
             if ($wanted !== null) {
@@ -813,8 +638,6 @@ class UserAPI extends Controller
         foreach ($vars as $var) {
             $name = trim((string) $var->prodvar_name);
             $opts = self::variationOptions($var);
-            // Every value of every axis: the identity of a row is its whole
-            // combination, so a label matches whichever axis carries it.
             $values = array_map(
                 fn ($value) => strtolower(trim((string) $value)),
                 array_values($opts)
@@ -832,8 +655,6 @@ class UserAPI extends Controller
                         break;
                     }
                 }
-                // Same value on ANY axis: this is what makes a material or fit
-                // axis resolvable from a storefront that only knows "size".
                 if (in_array(strtolower($sizeLabel), $values, true)) {
                     $score += 4;
                 }
@@ -855,8 +676,6 @@ class UserAPI extends Controller
                 $score += 2;
             }
 
-            // The combination that carries EVERY label sent is the one the
-            // customer actually picked, so it beats a partial match outright.
             $matchedAxes = 0;
             foreach ($axes as $index => $axis) {
                 $value = $values[$index];
@@ -881,12 +700,6 @@ class UserAPI extends Controller
         return $best ?? $vars->first();
     }
 
-    /**
-     * Create or increment the ONE live bag row for (cust, prodvar).
-     * Different variations never merge (REQ-BAG-01).
-     *
-     * @param float|null $unitAmount UNIT amount for the line (bag_amount)
-     */
     public static function upsertBagLine(int $custId, Prodvar $prodvar, int $qty, ?float $unitAmount): Bag
     {
         $unit = $unitAmount !== null
@@ -908,22 +721,17 @@ class UserAPI extends Controller
         }
 
         return Bag::create([
-            // The live bag table has no sequence for bag_id (allocating inside
-            // the caller's transaction when there is one - see IdAllocator).
             'bag_id'     => IdAllocator::next('bag', 'bag_id'),
             'cust_id'     => $custId,
             'prodvar_id'  => $prodvar->prodvar_id,
             'bag_qty'     => max(1, $qty),
             'bag_amount'  => $unit,
-            // DB::raw: a PHP bool binding is sent as an integer and Postgres
-            // rejects integer for a boolean column (OrdersAPI precedent).
             'bag_placed'  => DB::raw('false'),
             'bag_created' => now(),
             'bag_deleted' => null,
         ]);
     }
 
-    /** REQ-BAG-03: mirror the live bag line count on the customer row. */
     public static function syncCartCounter(int $custId): void
     {
         $count = self::cartCount($custId);
@@ -934,11 +742,6 @@ class UserAPI extends Controller
         }
     }
 
-    /**
-     * `customer.cust_bag` (POS badge) and `customer.cust_cart` (legacy) both
-     * mirror the live bag count; only the columns the connection actually has
-     * are written.
-     */
     private static function counterColumns(): array
     {
         if (self::$counterColumns === null) {
@@ -951,7 +754,6 @@ class UserAPI extends Controller
         return self::$counterColumns;
     }
 
-    /** prodvar_options ships as a JSON string or (already) an array. */
     private static function variationOptions(Prodvar $prodvar): array
     {
         $raw = $prodvar->prodvar_options;
@@ -967,7 +769,6 @@ class UserAPI extends Controller
         return [];
     }
 
-    /** The line's UNIT amount: what the client sent, else the catalog price. */
     private function unitAmount($sent, Product $product, Prodvar $prodvar): float
     {
         if ($sent !== null && $sent !== '') {
@@ -977,21 +778,6 @@ class UserAPI extends Controller
         return round((float) $product->prod_price + (float) ($prodvar->prodvar_markup ?? 0), 2);
     }
 
-    // ==========================================
-    // ORDERS HELPERS (legacy CART-* cart retired)
-    // ==========================================
-
-    /**
-     * The rows an order-list caller is allowed to read.
-     *
-     * Returns `['custId' => int, 'employee' => false]` for a customer, whose
-     * list is always their own (FLOW-ORD_LIST-02); `['custId' => null,
-     * 'employee' => true]` for an authenticated employee, who reads the whole
-     * store's orders - DOMAIN 3's dashboard KPIs and DOMAIN 5's orders screen
-     * both come through here, and GET /products/orders (role:staff) already
-     * hands every employee that same list. Anything else is `null` and the
-     * caller keeps its original 403.
-     */
     protected function orderScope(Request $json): ?array
     {
         $custId = $this->customerId($json);
@@ -1005,10 +791,6 @@ class UserAPI extends Controller
         return null;
     }
 
-    /**
-     * True when the caller asked for bag rows (scope=bag|cart, bag=1 or a
-     * legacy CART-* tag_prefix).
-     */
     protected function wantsBagRows(Request $json): bool
     {
         if ($json->filled('bag')) {
@@ -1024,23 +806,6 @@ class UserAPI extends Controller
         return false;
     }
 
-    /**
-     * Every order in scope (FLOW-ORD_LIST-02, ord_created DESC). A customer's
-     * scope is their own `cust_id`; an employee's scope is the whole store
-     * (`$custId === null` adds no constraint). There is no cart marker on
-     * `orders` any more - the bag table IS the cart - so nothing is excluded.
-     * Line detail is eager-loaded through items -> bag -> prodvar -> product
-     * (the items table has no quantity or product columns) and dispatch info
-     * through the live pickup/appointment and delivery/parcel columns.
-     * `pickup` is deliberately not joined to its payment: the live pickup
-     * table carries no payment key. `customer` is eager-loaded because the
-     * admin list renders the nickname/email per row (D3 / REQ-SD-02).
-     *
-     * FLOW-MANAGE_PRE-02 / REQ-MANAGE_PRE-01: the employee view never shows a
-     * register draft - a walk-in order still `processing` whose bag rows are
-     * all unplaced is register state, not an order to fulfil, and it used to
-     * inflate the "processing" tab and every dashboard KPI.
-     */
     protected function ordersQuery(?int $custId)
     {
         $query = Order::with([
@@ -1055,10 +820,6 @@ class UserAPI extends Controller
         if ($custId !== null) {
             $query->where('cust_id', $custId);
         } else {
-            // A register draft is: no pickup row AND no delivery row (i.e.
-            // `Order::isWalkIn()`), still `processing`, and not one bag line
-            // placed yet. Everything else stays in the list, so a completed
-            // walk-in sale still shows.
             $query->where(function ($builder) {
                 $builder->whereHas('pickup')
                     ->orWhereHas('delivery')
@@ -1076,21 +837,11 @@ class UserAPI extends Controller
         return $query;
     }
 
-    /** The bag badge an employee has no meaning for: no customer, no bag. */
     protected function orderScopeCartCount(?int $custId): int
     {
         return $custId === null ? 0 : self::cartCount($custId);
     }
 
-    /**
-     * FLOW-ORD_LIST-03 / FLOW-MANAGE_PRE-02: server-side tab buckets. Legacy
-     * status spellings are folded in with the DOMAIN 27 vocabulary (POS
-     * normalizeStatus) so rows written by older clients still land in a
-     * bucket. The spec-literal filter names ("to claim/receive",
-     * "claimed/received", "cancel requests") are accepted as aliases of the
-     * stored keys, so FLOW-MANAGE_PRE-02's filter list answers as written.
-     * An unknown or absent filter changes nothing (backward compatible).
-     */
     protected function applyOrderFilter($query, string $filter): void
     {
         $buckets = [
@@ -1099,8 +850,6 @@ class UserAPI extends Controller
             'claimed'         => ['claimed', 'received', 'delivered', 'completed'],
             'unclaimed'       => ['unclaimed'],
             'cancelled'       => ['cancelled', 'cancel', 'canceled', 'returned', 'refunded'],
-            // FLOW-MANAGE_PRE-05: the "cancel requests" filter an employee
-            // approves/rejects preorder cancellations through.
             'cancel requests' => ['to cancel', 'cancel requested', 'return requested'],
         ];
 
@@ -1125,11 +874,6 @@ class UserAPI extends Controller
         );
     }
 
-    /**
-     * Render a whole set of orders. Every product behind every order line is
-     * primed in one batch first, so the per-line present() is a memo lookup
-     * rather than two aggregate queries per line.
-     */
     protected function ordersPayload($orders): array
     {
         $orders = collect($orders)->values();
@@ -1149,13 +893,6 @@ class UserAPI extends Controller
         return $orders->map(fn ($o) => $this->orderPayload($o))->values()->all();
     }
 
-    /**
-     * Render a placed order with all of its relations: status, claiming,
-     * created, total and dispatch info (FLOW-ORD_LIST-02/03). Only live
-     * columns are read - totals from ord_amount, line detail from
-     * items -> bag -> prodvar -> product, dispatch from the appointment and
-     * delivery rows.
-     */
     protected function orderPayload(Order $order): array
     {
         $order->loadMissing([
@@ -1170,11 +907,6 @@ class UserAPI extends Controller
         $payload['claiming'] = $order->ord_claiming ?? null;
         $payload['created']  = $order->ord_created ?? null;
 
-        // REQ-MANAGE_PRE-01: preorder vs walk-in is a first-class field, so
-        // the admin list no longer has to infer it from a tag that live rows
-        // do not carry (the customer relation ships with it above).
-        // The pickup/delivery relations are already eager-loaded above, so this
-        // reads them instead of firing two EXISTS queries per order.
         $walkIn = $order->pickup === null && $order->delivery === null;
         $payload['is_walk_in']  = $walkIn;
         $payload['walk_in']     = $walkIn;
@@ -1191,8 +923,6 @@ class UserAPI extends Controller
                 . ' ' . $payload['customer']['cust_surname'])
             : null;
 
-        // Totals: ord_amount is authoritative, the bag lines behind the items
-        // are the fallback.
         $lineTotal = round((float) array_sum(array_column($items, 'line_total')), 2);
         $ordAmount = $order->getAttribute('ord_amount');
         $amount    = $ordAmount !== null && $ordAmount !== '' ? round((float) $ordAmount, 2) : $lineTotal;
@@ -1201,8 +931,6 @@ class UserAPI extends Controller
         $payload['amount']     = $amount;
         $payload['total']      = $amount;
 
-        // Payment comes from the parcel that carries it; the order's own
-        // pay_reference / pay_received / pay_change already ship above.
         $payment = $order->parcel?->payment ?? null;
         if ($payment) {
             $payload['pay_ref']       = $payment->pay_ref;
@@ -1212,7 +940,6 @@ class UserAPI extends Controller
             $payload['pay_reference'] = $payment->pay_ref;
         }
 
-        // Pickup: the live appointment slot (start/end), never a single date
         $appointment = $order->pickup?->appointment ?? null;
         if ($appointment) {
             $payload['dispatch_type']  = 'pickup';
@@ -1225,8 +952,6 @@ class UserAPI extends Controller
             $payload['appoint_closed'] = $appointment->appoint_closed;
         }
 
-        // Delivery: live expectation/end columns. The delivery state itself is
-        // derived from ord_status + the deliver_* stamps below.
         $delivery = $order->parcel?->delivery ?? $order->delivery ?? null;
         if ($delivery) {
             $payload['dispatch_type']      = 'delivery';
@@ -1255,12 +980,6 @@ class UserAPI extends Controller
         return $payload;
     }
 
-    /**
-     * Render one order line. The live items table only links an ord_id to a
-     * bag row (item_id, ord_id, bag_id, item_created - nothing else), so the
-     * quantity, the price and the product are always read through
-     * bag -> prodvar -> product.
-     */
     protected function itemPayload(Item $item): array
     {
         $item->loadMissing('bag.prodvar.product');
@@ -1284,14 +1003,9 @@ class UserAPI extends Controller
             'prod_name'  => $product?->prod_name,
             'prodvar_id' => $prodvar ? (int) $prodvar->prodvar_id : ($bag ? (int) $bag->prodvar_id : null),
             'prodvar'    => $prodvar?->toArray(),
-            // Canonical line detail (same vocabulary as the cart item shape)
             'qty'        => $qty,
             'amount'     => $unit,
             'line_total' => $lineTotal,
-            // Legacy response aliases the orders screens still read. They are
-            // derived from the bag row above - the items table has no quantity
-            // or amount columns - and item_amount stays a LINE total, which is
-            // what those screens document it as.
             'item_qty'    => $qty,
             'item_amount' => $lineTotal,
             'product'     => $present,
@@ -1299,33 +1013,6 @@ class UserAPI extends Controller
         ];
     }
 
-    // ===== from the Wishlist API file =====
-/**
- * DOMAIN 24 (WISHLIST).
- *
- * Removal is a soft delete on `wish_hidden` (REQ-WISHLIST-02 - wish_hidden is
- * the live column, a timestamptz that is NULL while the row is visible), the
- * display only ever shows rows with wish_hidden IS NULL ordered wish_created
- * DESC (FLOW-WISHLIST-03), and re-adding a hidden row resurrects it instead
- * of inserting a duplicate.
- *
- * "Transfer to order" no longer builds an orders-CART row: it creates a live
- * bag line through UserAPI (one row per product variation), so the wishlist
- * item always lands in the bag the checkout flow reads.
- */
-
-    // ===== from the Wishlist API file =====
-
-    /*
-        Adding a product to the wishlist
-        ----------
-        JSON REQUEST
-
-        cust_id - integer (req)
-        prod_id - integer or string prod_tag (req)
-        item_qty / item_amount - accepted for legacy clients, the live
-            wishlist table has no quantity columns and ignores them
-    */
     public function addWishlistItem(Request $json)
     {
         $validator = (new DatabaseAPI())->addWishlistItem($json);
@@ -1352,8 +1039,6 @@ class UserAPI extends Controller
 
             $resolvedProdId = $product->prod_id;
 
-            // One row per (cust, prod): a visible row is skipped, a hidden
-            // (wish_hidden) row is resurrected - never a duplicate insert.
             $existing = Wishlist::where('cust_id', $custId)
                 ->where('prod_id', $resolvedProdId)
                 ->first();
@@ -1363,8 +1048,6 @@ class UserAPI extends Controller
                 $message = 'Item already in wishlist';
             } else {
                 if ($existing) {
-                    // Resurrect the hidden row (query builder: the wishlist
-                    // composite key is not a Eloquent primary key everywhere).
                     Wishlist::where('cust_id', $custId)
                         ->where('prod_id', $resolvedProdId)
                         ->update([
@@ -1373,7 +1056,6 @@ class UserAPI extends Controller
                         ]);
                 } else {
                     Wishlist::create([
-                        // No sequence for wish_id on the live table.
                         'wish_id'      => $this->nextId('wishlist', 'wish_id'),
                         'cust_id'     => $custId,
                         'prod_id'     => $resolvedProdId,
@@ -1407,19 +1089,6 @@ class UserAPI extends Controller
         }
     }
 
-    /*
-        Moving a wishlist item into the bag (FLOW-WISHLIST-06)
-        ----------
-        JSON REQUEST
-
-        cust_id    - integer (req)
-        prod_id    - integer or string prod_tag (req)
-        item_qty   - integer (opt, default: 1)
-        prodvar_id - integer (opt, explicit variation)
-        size       - string (opt)
-        color      - string|{name,image} (opt)
-        item_amount- numeric (opt, UNIT amount)
-    */
     public function addWishlistToOrder(Request $json)
     {
         $validator = (new DatabaseAPI())->addWishlistToOrder($json);
@@ -1451,7 +1120,6 @@ class UserAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Wishlist item not found.'], 404);
             }
 
-            // Same variation resolution as POST /cart/add.
             $prodvar = UserAPI::resolveVariation(
                 $product,
                 $json->input('prodvar_id'),
@@ -1472,8 +1140,6 @@ class UserAPI extends Controller
                 ? round((float) $sent, 2)
                 : round((float) $product->prod_price + (float) ($prodvar->prodvar_markup ?? 0), 2);
 
-            // Wishlist and bag membership stay independent: the saved row is
-            // kept, the bag gains one live line for this variation.
             UserAPI::upsertBagLine($custId, $prodvar, $qty, $unit);
             UserAPI::syncCartCounter($custId);
             $this->logCustomer($custId, 'edit', 'POST /api/wishlist/to_order');
@@ -1493,13 +1159,6 @@ class UserAPI extends Controller
         }
     }
 
-    /*
-        Displaying the wishlist
-        ----------
-        JSON REQUEST
-
-        cust_id - integer (req)
-    */
     public function displayWishlist(Request $json)
     {
         try {
@@ -1518,19 +1177,14 @@ class UserAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Customer not found'], 404);
             }
 
-            // REQ-ACCESS_LOG-01: reading the customer's wishlist is logged.
             $this->logView($json, 'wishlist');
 
-            // FLOW-WISHLIST-03: hidden rows stay hidden, newest first.
-            // Unavailable rows REMAIN in the list (FLOW-WISHLIST-07): each
-            // payload carries `available` so the frontend can label them.
             $items = Wishlist::with('product')
                 ->where('cust_id', $custId)
                 ->whereNull('wish_hidden')
                 ->orderByDesc('wish_created')
                 ->get();
 
-            // Prime the products once so each row's present() is a lookups.
             ProductsAPI::primePresentations($items->pluck('product')->filter()->all());
 
             $this->syncWishlistCounter($custId);
@@ -1554,14 +1208,6 @@ class UserAPI extends Controller
         }
     }
 
-    /*
-        Removing a wishlist item (soft delete - REQ-WISHLIST-02)
-        ----------
-        JSON REQUEST
-
-        cust_id - integer (req)
-        prod_id - integer or string prod_tag (req)
-    */
     public function removeWishlistItem(Request $json)
     {
         $validator = (new DatabaseAPI())->removeWishlistItem($json);
@@ -1579,7 +1225,6 @@ class UserAPI extends Controller
             $product = $this->resolveProduct($json->input('prod_id'));
             $resolvedProdId = $product ? $product->prod_id : $json->input('prod_id');
 
-            // REQ-WISHLIST-02: stamp wish_hidden, never ->delete().
             Wishlist::where('cust_id', $custId)
                 ->where('prod_id', $resolvedProdId)
                 ->whereNull('wish_hidden')
@@ -1606,12 +1251,6 @@ class UserAPI extends Controller
         }
     }
 
-    /*
-        Wishlist row lookup by id or tag
-        ----------
-        The live wishlist has no quantity columns: item_qty / item_amount are
-        accepted and ignored so older clients keep getting a 200.
-    */
     public function updateWishlistItem(Request $json)
     {
         $validator = (new DatabaseAPI())->updateWishlistItem($json);
@@ -1651,15 +1290,6 @@ class UserAPI extends Controller
         }
     }
 
-    // ==========================================
-    // HELPERS
-    // ==========================================
-
-    /**
-     * One wishlist row: the stored fields, the presented product and the
-     * FLOW-WISHLIST-07 `available` flag (product exists, not disabled, not
-     * deleted). Unavailable rows are still returned.
-     */
     protected function wishlistPayload(Wishlist $wish): array
     {
         $product = $wish->product;
@@ -1678,7 +1308,6 @@ class UserAPI extends Controller
         return $payload;
     }
 
-    /** cust_wishlist mirrors the number of live (wish_hidden IS NULL) rows. */
     protected function syncWishlistCounter(int $custId): void
     {
         $count = Wishlist::where('cust_id', $custId)->whereNull('wish_hidden')->count();
@@ -1686,7 +1315,6 @@ class UserAPI extends Controller
         Customer::where('cust_id', $custId)->update(['cust_wishlist' => $count]);
     }
 
-    /** `prod_id` may also arrive as a `prod_tag`; a bad key never hits SQL. */
     protected function wishlistResolveProduct($prodKey): ?Product
     {
         if ($prodKey === null || $prodKey === '') {
@@ -1705,35 +1333,7 @@ class UserAPI extends Controller
 
         public function customerSignup(Request $json)
         {
-            /*
-                CUSTOMER SIGNUP (DOMAIN 17)
-                ----------
-                JSON REQUEST
 
-                email       - string (req - Bicol University address for BUños)
-                phone       - string (req - 10 to 11 digits)
-                password    - string (req)
-                givname     - string (req)
-                surname     - string (req)
-                type        - string (req - "BUeño" | "guest")
-                cust_categ  - string (req for BUños: student | alumni | faculty)
-                cust_college- string (req for BUños)
-                cust_dept   - string (req for BUños)
-                pronoun     - string (opt)
-                bday        - string (opt)
-                address     - string (opt)
-                callcode    - string (opt)
-                backup_phone- string (opt)
-                backup_email- string (opt)
-
-                FLOW-CUST_SIGNUP-05: the account is created but NOT opened -
-                no session token is returned. Only a cleared phone OTP
-                finalizes it, so `cust_login_active` stays NULL (a token with
-                no matching nonce is rejected by ApiToken::parse) and a signed
-                `challenge` carries the customer to /verify-otp.
-            */
-
-            // Validate signup input
             $validator = (new DatabaseAPI())->customerSignup($json);
             if ($validator) return $validator;
 
@@ -1741,15 +1341,12 @@ class UserAPI extends Controller
             $phone    = (string) $json->input('phone');
             $password = (string) $json->input('password');
 
-            // FLOW-CUST_SIGNUP-02: cust_type is either "BUeño" or "guest".
             $guest = $this->normalizeSignupType($json->input('type')) !== 'bueno';
 
-            // FLOW-CUST_SIGNUP-03 / FLOW-CUST_SIGNUP-04.
             $categ   = $guest ? null : (strtolower((string) $json->input('cust_categ')) ?: 'student');
             $college = $guest ? null : (trim((string) $json->input('cust_college')) ?: null);
             $dept    = $guest ? null : (trim((string) $json->input('cust_dept')) ?: null);
 
-            // FLOW-CUST_SIGNUP-06: the email address may not be registered.
             if ($email !== '' && Customer::where('cust_email', $email)->exists()) {
                 return response()->json([
                     'success' => false,
@@ -1757,7 +1354,6 @@ class UserAPI extends Controller
                 ], 409);
             }
 
-            // FLOW-CUST_SIGNUP-07 (uniqueness half): one account per number.
             if (Customer::where('cust_phone', $phone)->exists()) {
                 return response()->json([
                     'success' => false,
@@ -1765,33 +1361,22 @@ class UserAPI extends Controller
                 ], 409);
             }
 
-            // Inserts to database using Models
             try {
                 $customer = Customer::create(
                     $this->signupAttributes($json, $email, $phone, $password, $guest, $categ, $college, $dept)
                 );
 
-                // FLOW-CUST_SIGNUP-05 / REQ-CUST_SIGNUP-04: the six-digit
-                // code lands in the new account's own notification inbox,
-                // and the signed challenge is what the verify screen redeems.
                 [$code, $error] = $this->issueOtpCode($customer, 'signup');
 
-                // REQ-CUST_LOGOUT-03 / FLOW-ACCESS_LOG-01: the registration
-                // itself is an authentication action.
                 $this->logCustomer((int) $customer->cust_id, 'authentication',
                     'POST /api/auth/cust_signup - account created, phone OTP pending');
 
-                // FLOW-CUST_SIGNUP-05: the row exists but is NOT finalized, so
-                // the signup stays flagged for a week - a login inside that
-                // window resumes this OTP challenge instead of opening a
-                // session, and clearing the flag is what finalizes the signup.
                 Cache::put(
                     $this->signupPendingKey((int) $customer->cust_id),
                     ['email' => $email, 'phone' => $phone, 'ts' => now()->timestamp],
                     now()->addDays(7)
                 );
 
-                // JSON SUCCESS (account pending, no session yet)
                 return response()->json([
                     'success' => true,
                     'message' => $code !== null
@@ -1803,13 +1388,12 @@ class UserAPI extends Controller
                         'challenge'    => ApiToken::challenge($customer, 'signup'),
                         'phone'        => $this->maskPhone($customer->cust_phone),
                         'delivery'     => 'in_app_notification',
-                        'expires_in'   => self::OTP_TTL_MINUTES * 60,
+                        'expires_in'   => self::otpTtlMinutes * 60,
                         'cust_id'      => (int) $customer->cust_id,
                     ],
                 ], 201);
 
             } catch (\Exception $e) {
-                // JSON ERROR
                 return response()->json([
                     'success' => false,
                     'message' => 'Signup failed',
@@ -1818,13 +1402,6 @@ class UserAPI extends Controller
             }
         }
 
-
-        /**
-         * Builds the CUSTOMER row for the schema that is actually connected:
-         * the live columns when they exist, the pre-migration
-         * columns otherwise (the legacy fixtures used by the test suite).
-         * No column outside either generation is ever written.
-         */
         private function signupAttributes(
             Request $json,
             string $email,
@@ -1845,8 +1422,6 @@ class UserAPI extends Controller
             $bday = (string) ($json->input('bday') ?: $json->input('birthday'));
 
             $attributes = [
-                // The live customer table carries no sequence, so the key is
-                // handed out by the shared allocator (see IdAllocator).
                 'cust_id'       => $this->nextId('customer', 'cust_id'),
                 'cust_created'  => now(),
                 'cust_password' => Hash::make($password),
@@ -1867,21 +1442,16 @@ class UserAPI extends Controller
                     'cust_address'             => $address !== '' ? $address : null,
                     'cust_bday'                => $bday !== '' ? $bday : null,
                     'cust_avatar'              => null,
-                    // FLOW-CUST_SIGNUP-03 / FLOW-CUST_SIGNUP-04
                     'cust_categ'               => $categ,
                     'cust_dept'                => $dept,
                     'cust_backup_phone'        => trim((string) ($json->input('backup_phone') ?: $json->input('backupphone'))) ?: null,
                     'cust_backup_email'        => strtolower(trim((string) ($json->input('backup_email') ?: $json->input('backupemail')))) ?: null,
                     'cust_backup_ques'         => null,
                     'cust_backup_answer'       => null,
-                    // NOT NULL on the live schema with the
-                    // default "/", so the marker is written explicitly - an
-                    // explicit NULL here would abort the insert (23502).
                     'cust_backup_code'         => '/',
                     'cust_darkmode'            => false,
                     'cust_deleted'             => null,
                     'cust_suspended'           => null,
-                    // FLOW-CUST_SIGNUP-05: no live session until the OTP clears
                     'cust_login_active'        => null,
                     'cust_login_failed'        => null,
                     'cust_last_logout'         => null,
@@ -1894,7 +1464,6 @@ class UserAPI extends Controller
                 ];
             }
 
-            // Legacy (pre-migration) table shape.
             return $attributes + [
                 'cust_nickname'  => trim((string) $json->input('givname') . ' ' . (string) $json->input('surname')),
                 'cust_birthday'  => $bday !== '' ? $bday : '2000-01-01',
@@ -1907,36 +1476,11 @@ class UserAPI extends Controller
             ];
         }
 
-
         public function employeeSignup(Request $json)
         {
-            /*
-                EMPLOYEE ENROLLMENT (DOMAIN 6)
-                ----------
-                JSON REQUEST
 
-                email - string (req - must be a Bicol University address)
-                phone - string (req)
-                surname - string (req)
-                givname - string (req)
-                categ / type - string (opt: staff | admin | super admin)
-                midname, suffix, studnum, pronoun, birthday, brgy, city,
-                province, country, callcode, instore - optional details
-
-                FLOW-EMP_ENROLL-02 collects exactly the five required values,
-                FLOW-EMP_ENROLL-03 validates the university domain,
-                FLOW-EMP_ENROLL-04 generates and emails the temporary
-                password, FLOW-EMP_ENROLL-05 opens the account as "active" and
-                preschedules it as "available", FLOW-EMP_ENROLL-06 confirms
-                back to the super admin and FLOW-EMP_ENROLL-07 writes the
-                enrollment - failures included (REQ-EMP_ENROLL-05) - to the
-                access log.
-            */
-
-            // Validate signup input
             $validator = (new DatabaseAPI())->employeeSignup($json);
             if ($validator) {
-                // REQ-EMP_ENROLL-05: a rejected attempt is an attempt too.
                 $this->logEnrollment($json, 'FAILED', $validator->getData()['message'] ?? 'rejected');
 
                 return $validator;
@@ -1947,8 +1491,6 @@ class UserAPI extends Controller
             $type = $this->employeeCategory($json);
 
             if (Employee::where('emp_email', $email)->exists()) {
-                // REQ-EMP_ENROLL-04: duplicates are rejected with a clear error
-                // (and the attempt still lands in the log).
                 $this->logEnrollment($json, 'FAILED', 'duplicate email ' . $email);
 
                 return response()->json([
@@ -1957,10 +1499,6 @@ class UserAPI extends Controller
                 ], 409);
             }
 
-            // FLOW-EMP_ENROLL-02: the schedule the super admin entered on the
-            // enrollment form. The blocks are judged BEFORE the account exists,
-            // so a roster that breaks DOMAIN 7 costs the super admin a clear
-            // message instead of a half-enrolled employee.
             $shiftBlocks = $this->enrollmentShiftBlocks($json);
             $shiftProblem = $this->enrollmentShiftProblem($shiftBlocks);
             if ($shiftProblem !== null) {
@@ -1994,50 +1532,22 @@ class UserAPI extends Controller
                     'emp_callcode' => $json->input('callcode', '+63'),
                     'emp_phone' => $json->input('phone'),
                     'emp_email' => $email,
-                    // FLOW-EMP_ENROLL-02: the initial category. The live table
-                    // spells it `emp_categ` (lowercase, rule 32); the fixture
-                    // still carries the legacy `emp_type` alias.
                     'emp_categ' => $type,
                     'emp_type' => strtoupper($type),
-                    // existingColumns() keeps only the spelling the connected
-                    // schema carries (emp_instore on the fixture, emp_present
-                    // on live), so the flag lands in the real column.
                     'emp_instore' => (bool) $json->input('instore', false),
                     'emp_present' => (bool) $json->input('instore', false),
-                    // FLOW-EMP_ENROLL-05: the account opens active, so both
-                    // blocking stamps stay empty until somebody suspends it.
                     'emp_suspended' => null,
                     'emp_deleted' => null,
                 ];
 
-                // The connected schema decides which of those columns exist:
-                // the live employee table carries the current set
-                // (no emp_birthday / emp_brgy / emp_type ...), while the
-                // pre-migration fixture phpunit runs on still declares its own
-                // NOT NULL columns. forceCreate writes exactly the intersection
-                // - the model's fillable list would silently drop the fixture's
-                // required columns and fail the insert - and every key above
-                // comes from this whitelist, never straight from the request.
                 $employee = Employee::forceCreate(
                     $this->existingColumns('employee', $attributes)
                 );
 
-                // FLOW-EMP_ENROLL-05 / REQ-EMP_ENROLL-06: the new account is
-                // prescheduled as available straight away. With a schedule on
-                // the enrollment form those blocks are the preschedule; without
-                // one the account opens with full availability (one unbroken
-                // block from now, well past the 180-minute weekly floor).
                 $this->prescheduleNewEmployee((int) $employee->emp_id, $shiftBlocks);
 
-                // FLOW-EMP_ENROLL-04: the generated password goes to the
-                // employee's Bicol University mailbox as well as back to the
-                // super admin. MAIL_MAILER=log keeps this best-effort - a mail
-                // transport that is not configured must not fail the signup.
                 $this->mailTemporaryPassword($employee, $temporaryPassword);
 
-                // REQ-UM-04 / FLOW-EMP_ENROLL-07: registrations are logged
-                // with the responsible super admin and the timestamp, like
-                // every other user management action.
                 $by = $json->user('api');
                 EmpLog::forceCreate(
                     $this->existingColumns('emplog', [
@@ -2046,7 +1556,6 @@ class UserAPI extends Controller
                         'emplog_created' => now(),
                         'emplog_access'  => 'edit',
                         'emplog_endpoint' => 'POST /api/auth/emp_signup',
-                        // Legacy fixture columns (dropped where they are absent).
                         'emplog_action'  => 'REGISTER',
                         'emplog_desc'    => 'Registered employee ' . $employee->emp_id . ' ('
                             . $employee->emp_givname . ' ' . $employee->emp_surname . ') as '
@@ -2056,8 +1565,6 @@ class UserAPI extends Controller
                     ])
                 );
 
-                // FLOW-EMP_ENROLL-07: the same event, filed under the id of
-                // the super admin who performed it.
                 $this->logEnrollment($json, 'ENROLLED', $email . ' as ' . $type);
 
                 return response()->json([
@@ -2070,10 +1577,8 @@ class UserAPI extends Controller
                     ]),
                 ], 201);
             } catch (\Exception $e) {
-                // REQ-EMP_ENROLL-05: failures are logged too.
                 $this->logEnrollment($json, 'FAILED', $email . ' - ' . $e->getMessage());
 
-                // JSON ERROR
                 return response()->json([
                     'success' => false,
                     'message' => 'Signup failed',
@@ -2082,19 +1587,6 @@ class UserAPI extends Controller
             }
         }
 
-
-        // The super-admin test itself lives on the base Controller
-        // (`protected isSuperAdmin($user)`) and delegates to
-        // Employee::isSuperAdmin(). Redeclaring it here - with a narrower
-        // visibility *and* a narrower parameter type - is a PHP fatal error
-        // that php -l cannot see, and it 500'd /auth/emp_login, which the
-        // portal then surfaced as "Cannot reach the server".
-
-        /**
-         * FLOW-EMP_ENROLL-02 - the initial category posted by the enrolment
-         * form, folded onto rule 32's vocabulary ("staff", "admin", "super
-         * admin"). `categ` is the current spelling, `type` the legacy alias.
-         */
         private function employeeCategory(Request $json): string
         {
             $raw = (string) ($json->input('categ') ?: $json->input('type') ?: 'STAFF');
@@ -2107,25 +1599,6 @@ class UserAPI extends Controller
             };
         }
 
-
-        /**
-         * FLOW-EMP_ENROLL-05 / REQ-EMP_ENROLL-06 - a new employee is
-         * prescheduled as "available" the moment the account is opened, so
-         * their first week carries full availability (one unbroken block from
-         * now, well past the 180-minute weekly floor of rule 46).
-         *
-         * When the enrollment form carries a schedule (`shifts`), THOSE blocks
-         * are the preschedule instead: the form is where the new employee's
-         * duty is decided, and adding or removing their dates and times later
-         * is done from the employee list on the schedule screen
-         * (FLOW-EMP_SCHED-03/04). Every block is written with a freshly
-         * allocated `sched_id`, the same way POST /shifts does it, because the
-         * live column carries no sequence.
-         *
-         * The live connection owns a `schedules` table; the pre-migration
-         * fixture does not, so the write is skipped there rather than failing
-         * the enrollment.
-         */
         private function prescheduleNewEmployee(int $empId, array $blocks = []): void
         {
             try {
@@ -2141,7 +1614,6 @@ class UserAPI extends Controller
                         'sched_time_start' => $start,
                         'sched_time_end'   => $start->copy()->addDays(7),
                         'sched_created'    => now(),
-                        // null = prescheduled / available (see the Schedule model).
                         'sched_disabled'   => null,
                     ]);
 
@@ -2155,21 +1627,13 @@ class UserAPI extends Controller
                         'sched_time_start' => Carbon::parse($block['shift_date'] . ' ' . $block['shift_start']),
                         'sched_time_end'   => Carbon::parse($block['shift_date'] . ' ' . $block['shift_end']),
                         'sched_created'    => now(),
-                        // null = prescheduled / available (see the Schedule model).
                         'sched_disabled'   => null,
                     ]);
                 }
             } catch (\Throwable $e) {
-                // Availability bookkeeping must never undo an enrollment.
             }
         }
 
-        /**
-         * The normalized duty blocks an enrollment form posted, or an empty
-         * list when the form carried no schedule.
-         *
-         * @return array<int, array{shift_date: string, shift_start: string, shift_end: string}>
-         */
         private function enrollmentShiftBlocks(Request $json): array
         {
             $rows = $json->input('shifts');
@@ -2197,17 +1661,10 @@ class UserAPI extends Controller
             return $blocks;
         }
 
-        /**
-         * DOMAIN 7 on the enrollment's own schedule: the 10-minute grid
-         * (FLOW-EMP_SCHED-03), no overlapping block (REQ-EMP_SCHED-04) and the
-         * 180-minute weekly floor of rule 46 / REQ-EMP_SCHED-01. Null when the
-         * roster the form asked for is one the system may store.
-         */
         private function enrollmentShiftProblem(array $blocks): ?string
         {
             $floor = (int) SystemSettings::get('min_weekly_minutes', 180);
 
-            /** @var array<string, int> $weekMinutes week key => minutes */
             $weekMinutes = [];
             $windows = [];
 
@@ -2249,13 +1706,6 @@ class UserAPI extends Controller
             return null;
         }
 
-
-        /**
-         * FLOW-EMP_ENROLL-04 - hands the generated password to the employee's
-         * Bicol University mailbox. Best-effort by design: with MAIL_MAILER=log
-         * (or an unreachable transport) the message is written to the mail log
-         * and the super admin still receives the password in the response.
-         */
         private function mailTemporaryPassword(Employee $employee, string $temporaryPassword): void
         {
             try {
@@ -2271,16 +1721,9 @@ class UserAPI extends Controller
                         ->subject('Your Tindahan ni Isko staff account');
                 });
             } catch (\Throwable $e) {
-                // Never fail enrollment because of a mail transport.
             }
         }
 
-
-        /**
-         * FLOW-EMP_ENROLL-07 / REQ-EMP_ENROLL-05 - one immutable emplog row for
-         * the enrollment itself, filed under the id of the super admin who
-         * performed it (successes and failures alike).
-         */
         private function logEnrollment(Request $json, string $outcome, string $detail): void
         {
             $by = $json->user('api');
@@ -2295,7 +1738,6 @@ class UserAPI extends Controller
                 'POST /api/auth/emp_signup - ' . $outcome . ': ' . $detail
             );
         }
-
 
         public function backupCredentials(Request $json)
         {
@@ -2326,16 +1768,6 @@ class UserAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
             }
 
-            /*
-                DOMAIN 15 / FLOW-EMP_SET-03 (and its DOMAIN 29 twin).
-
-                The schema keeps backup contacts in the single
-                `*_backup_phone` / `*_backup_email` column pair - there is no
-                `*_backupcallcode` column any more - so the country code the
-                form still sends is folded into the stored number instead of
-                being written to a column that does not exist. An empty value
-                simply leaves the stored contact untouched, exactly as before.
-            */
             $prefix = $user instanceof Employee ? 'emp' : 'cust';
 
             $updates = [];
@@ -2355,8 +1787,6 @@ class UserAPI extends Controller
                 $user->update($updates);
             }
 
-            // REQ-EMP_SET-02 / REQ-CUST_SET-02: a settings change is logged
-            // with the account id and the timestamp it happened at.
             if ($user instanceof Employee) {
                 $this->logEmployee((int) $user->emp_id, 'edit',
                     'POST /api/auth/backup_credentials - backup contacts updated');
@@ -2372,15 +1802,6 @@ class UserAPI extends Controller
             ]);
         }
 
-
-        /**
-         * Folds a country code onto a backup phone number so the value that
-         * lands in `*_backup_phone` is one international number:
-         *   ("9123456789", "+63") -> "+639123456789"
-         *   ("09123456789", "+63") -> "+639123456789"
-         * An already international number (or one without a code) is kept as
-         * the caller wrote it.
-         */
         private function normalizeBackupPhone(string $phone, string $callcode): string
         {
             $phone = trim($phone);
@@ -2403,7 +1824,6 @@ class UserAPI extends Controller
             return '+' . $code . $digits;
         }
 
-
         public function updateCredentials(Request $json)
         {
             try {
@@ -2422,14 +1842,6 @@ class UserAPI extends Controller
                 return $validator;
             }
 
-            // DOMAIN 29 / FLOW-CUST_SET-03: a customer always proves the
-            // change with a phone OTP before anything is written.
-            //
-            // REQ-EMP_SET-01 - FLOW-EMP_SET-02 orders the form as "current
-            // password, then new password twice", so the current password is
-            // answered FIRST: raising the OTP challenge before the password
-            // has even been compared would hide "Current password is
-            // incorrect." behind a verification the caller never asked for.
             $user = $json->user();
             $passwordField = $user instanceof Customer ? 'cust_password' : 'emp_password';
             $changedField = $user instanceof Customer ? 'cust_cred_changed' : 'emp_cred_changed';
@@ -2446,10 +1858,6 @@ class UserAPI extends Controller
                 return $gate;
             }
 
-            // FLOW-EMP_SET-02 - the new password is entered twice. The form
-            // sends the second entry as `new_password_confirmation`; when it
-            // is present it must match exactly, so a mismatched pair can
-            // never reach the database.
             if ($json->has('new_password_confirmation')
                 && (string) $json->input('new_password_confirmation') !== (string) $json->input('new_password')) {
                 return response()->json([
@@ -2458,13 +1866,6 @@ class UserAPI extends Controller
                 ], 422);
             }
 
-            // REQ-SETUP-03 - a super admin credential has to meet the store's
-            // security standard: minimum length and complexity. The same bar
-            // EmployeePassword::generateTemporary() already clears for the
-            // temporary password issued at enrollment (REQ-EMP_ENROLL-03), so
-            // every super admin password in the system is produced by one
-            // shared rule. Only super admins are held to it; customers and
-            // other employees keep the validator's own 8-character floor.
             $employeeCategory = $user instanceof Employee
                 ? (string) ($user->emp_categ ?: $user->emp_type)
                 : '';
@@ -2503,17 +1904,6 @@ class UserAPI extends Controller
                 if ($json->has('phone')) {
                     $update['emp_phone'] = $json->input('phone');
                 }
-                /*
-                    REQ-EMP_PROF-01 - "Employee email addresses must not be
-                    editable by regular staff members."
-
-                    This endpoint only ever rewrites the account that owns the
-                    bearer token, so the category of that account is the whole
-                    test: a staff member may change phone, pronoun and password
-                    here, but never the login identity itself. An admin or
-                    super admin keeps the right (rules 36-37 reserve the
-                    category itself for super admins).
-                */
                 if ($json->has('email')) {
                     $requested = mb_strtolower(trim((string) $json->input('email')));
                     $current = mb_strtolower(trim((string) $user->emp_email));
@@ -2527,8 +1917,6 @@ class UserAPI extends Controller
                             ], 403);
                         }
 
-                        // Rule 27: a Bicol University email belongs to only
-                        // one employee (and never to a customer either).
                         $taken = Employee::where('emp_email', $requested)
                             ->where('emp_id', '!=', $user->emp_id)
                             ->exists()
@@ -2544,33 +1932,20 @@ class UserAPI extends Controller
                     }
                 }
             }
-            // The credential-changed stamp only exists where the schema has
-            // the column; writing it blindly would be dropped by mass
-            // assignment (or fail outright on a schema without it).
             if (\Schema::hasColumn($user->getTable(), $changedField)) {
                 $update[$changedField] = now();
             }
             $user->update($update);
 
             if ($user instanceof Employee) {
-                /*
-                    FLOW-EMP_LOGOUT-06 / REQ-EMP_LOGOUT-03 - a password change
-                    ends every session of the account at once: employee tokens
-                    carry the `emp_login_active` nonce, so clearing it revokes
-                    the token that carried this request and every other device
-                    too (ApiToken::parse refuses a token whose nonce no longer
-                    matches the column).
-                */
                 $user->emp_login_active = null;
                 $user->save();
             } else {
                 $user->tokens()->delete();
             }
 
-            // The verification covers exactly this one change (FLOW-CUST_SET-06).
             $this->consumeOtp($json, 'password_change');
 
-            // REQ-CUST_SET-02 / REQ-EMP_SET-02: every setting change is logged.
             if ($user instanceof Customer) {
                 $this->logCustomer((int) $user->cust_id, 'edit',
                     'PUT /api/auth/update_credentials - password changed');
@@ -2585,30 +1960,11 @@ class UserAPI extends Controller
             ]);
         }
 
-
-    // ===== from the Settings API file =====
-/**
-     * DOMAIN 1 / DOMAIN 15 / DOMAIN 29.
-     *
-     * There is no `settings` table (SPEC section 4): system-wide values live in
-     * SystemSettings (storage/app/system-settings.json) and every per-account
-     * preference lives on the caller's own customer / employee row.
-     */
-
-    // ===== from the Settings API file =====
-
-    // ==========================================
-    // PROFILE PAYLOAD MAPPING (legacy input -> live columns)
-    // ==========================================
-
-    /** Validation for the mapped customer payload (new column names). */
-    private const CUSTOMER_PROFILE_RULES = [
+    private const customerProfileRules = [
         'cust_givname' => 'sometimes|string|max:100',
         'cust_surname' => 'sometimes|string|max:100',
         'cust_pronoun' => 'sometimes|string|max:50',
         'cust_bday' => 'sometimes|nullable|date',
-        // REQ-CUST_PROF-03: several addresses share this single column, so it
-        // is allowed to grow far past the legacy 255-character form limit.
         'cust_address' => 'sometimes|nullable|string|max:4000',
         'cust_callcode' => 'sometimes|regex:/^\+?[0-9]{1,4}$/',
         'cust_phone' => 'sometimes|nullable|regex:/^[0-9]{10,11}$/',
@@ -2625,14 +1981,9 @@ class UserAPI extends Controller
         'cust_notif_prod' => 'sometimes|boolean',
     ];
 
-    /**
-     * REQ-EMP_PROF-03 / REQ-CUST_PROF-04: an avatar is at most 2 MB - the
-     * same ceiling ProductsAPI::uploadImage enforces on a real file upload.
-     */
-    private const MAX_AVATAR_BYTES = 2048 * 1024;
+    private const maxAvatarBytes = 2048 * 1024;
 
-    /** Validation for the mapped employee payload (new column names). */
-    private const EMPLOYEE_PROFILE_RULES = [
+    private const employeeProfileRules = [
         'emp_givname' => 'sometimes|string|max:100',
         'emp_surname' => 'sometimes|string|max:100',
         'emp_pronoun' => 'sometimes|string|max:50',
@@ -2642,8 +1993,6 @@ class UserAPI extends Controller
         'emp_avatar' => 'sometimes|nullable|string',
         'emp_backup_phone' => 'sometimes|nullable|string|max:40',
         'emp_backup_email' => 'sometimes|nullable|email:rfc',
-        // Whichever spelling the connected schema stores the flag under
-        // (see Employee::availabilityColumn()).
         'emp_present' => 'sometimes|boolean',
         'emp_instore' => 'sometimes|boolean',
         'emp_darkmode' => 'sometimes|boolean',
@@ -2651,8 +2000,7 @@ class UserAPI extends Controller
         'emp_notif_email' => 'sometimes|boolean',
     ];
 
-        /** Preference columns that belong to a customer row (D15/D29). */
-        private const CUSTOMER_PREFS = [
+        private const customerPrefs = [
             'darkmode'           => 'cust_darkmode',
             'notif_appointremind'=> 'cust_notif_appointremind',
             'notif_email'        => 'cust_notif_email',
@@ -2664,9 +2012,7 @@ class UserAPI extends Controller
             'backup_code'        => 'cust_backup_code',
         ];
 
-
-        /** Preference columns that belong to an employee row (D15/D29). */
-        private const EMPLOYEE_PREFS = [
+        private const employeePrefs = [
             'darkmode'           => 'emp_darkmode',
             'notif_appointremind'=> 'emp_notif_appointremind',
             'notif_email'        => 'emp_notif_email',
@@ -2678,21 +2024,15 @@ class UserAPI extends Controller
             'backup_code'        => 'emp_backup_code',
         ];
 
-
-        /** True when $key is one of the personal preference columns above. */
         private function isPreferenceKey(string $key): bool
         {
-            foreach ([self::CUSTOMER_PREFS, self::EMPLOYEE_PREFS] as $map) {
-                // Bare aliases the frontend sends: `darkmode`, `notif_email`,
-                // `notif_appointremind`, `backup_phone`, ...
+            foreach ([self::customerPrefs, self::employeePrefs] as $map) {
                 if (array_key_exists($key, $map)) {
                     return true;
                 }
-                // Canonical column names: `emp_darkmode`, `cust_backup_email`, ...
                 if (in_array($key, $map, true)) {
                     return true;
                 }
-                // Prefixed aliases: `cust_darkmode`, `emp_notif_email`, ...
                 foreach ($map as $bare => $column) {
                     if ($key === $column || str_ends_with($key, '_' . $bare)) {
                         return true;
@@ -2703,8 +2043,6 @@ class UserAPI extends Controller
             return false;
         }
 
-
-        /** Coerce a preference payload value into the row column type. */
         private function castPreference(string $column, $value)
         {
             if (str_ends_with($column, '_darkmode') || str_ends_with($column, '_notif_email') || str_ends_with($column, '_notif_prod')) {
@@ -2713,7 +2051,6 @@ class UserAPI extends Controller
             if (str_ends_with($column, '_notif_appointremind')) {
                 return (int) $value;
             }
-            // A contact column stores its contacts as one ';'-separated string.
             if (str_ends_with($column, '_backup_phone') || str_ends_with($column, '_backup_email')) {
                 return is_array($value)
                     ? implode('; ', array_values(array_filter(array_map('trim', $value))))
@@ -2723,13 +2060,6 @@ class UserAPI extends Controller
             return $value;
         }
 
-
-        /**
-         * DOMAIN 29 value rules, checked before anything is written:
-         * reminders are whole minutes <= one day (REQ-CUST_SET-01), switches
-         * are booleans, and backup contacts are well-formed lists.
-         * Returns a 422 response, or null when every value is acceptable.
-         */
         private function invalidPreference(array $preferences)
         {
             foreach ($preferences as $key => $value) {
@@ -2780,8 +2110,6 @@ class UserAPI extends Controller
             return null;
         }
 
-
-        /** A contact column may hold several contacts; ';' or ',' separates them. */
         private function contactList($value): array
         {
             if ($value === null || $value === '') {
@@ -2794,60 +2122,39 @@ class UserAPI extends Controller
             return array_values(array_filter(array_map('trim', preg_split('/[;,]+/', (string) $value))));
         }
 
-
-        // The shared Controller::fail() answers 422 for a preference that
-        // failed its value rule; the status is passed explicitly at each call.
-
-
-        /** The caller's own preference columns (prefixed + bare aliases). */
         private function callerPreferences($user): array
         {
             if (!$user instanceof Customer && !$user instanceof Employee) {
                 return [];
             }
 
-            $map = $user instanceof Customer ? self::CUSTOMER_PREFS : self::EMPLOYEE_PREFS;
+            $map = $user instanceof Customer ? self::customerPrefs : self::employeePrefs;
             $prefs = [];
             foreach ($map as $bare => $column) {
                 $value = $user->getAttribute($column);
                 if ($value === null) {
                     continue;
                 }
-                $prefs[$column] = $value;   // canonical new name
-                $prefs[$bare]    = $value;   // legacy alias the frontend reads
+                $prefs[$column] = $value;
+                $prefs[$bare]    = $value;
             }
 
             return $prefs;
         }
 
-
-        /** System settings + caller prefs + the FLOW-SETUP-01 readiness flag. */
         private function payload($user): array
         {
-            // SystemAPI owns the system-wide settings document (rule 76), so
-            // the system half of the payload is read through it instead of
-            // being duplicated here.
             $settings = (new SystemAPI())->systemSettingsPayload();
 
             return array_merge($settings, $this->callerPreferences($user));
         }
 
-
-        /*
-            Displaying settings
-            ----------
-            JSON REQUEST (No required params)
-
-            Returns the system-wide settings (SystemSettings JSON document),
-            the caller's own preference columns and `setup_complete`.
-        */
         public function displaySettings(Request $json)
         {
             try {
                 $user = $json->user('api');
                 $settings = $this->payload($user);
 
-                // D32 - reading settings is a 'view' action.
                 if ($user instanceof Employee) {
                     $this->logEmployee((int) $user->getKey(), 'view', 'GET /api/settings/display');
                 } elseif ($user instanceof Customer) {
@@ -2869,17 +2176,6 @@ class UserAPI extends Controller
             }
         }
 
-
-        /*
-            Updating settings
-            ----------
-            JSON REQUEST
-
-            settings - array (req: key-value dictionary)
-
-            Personal preference keys are written to the caller's own row; every
-            other key is system-wide and needs a super admin (D1).
-        */
         public function updateSettings(Request $json)
         {
             $validator = (new DatabaseAPI())->updateSettings($json);
@@ -2896,7 +2192,6 @@ class UserAPI extends Controller
 
                 $newSettings = $json->input('settings');
 
-                // Split the dictionary: personal preferences vs system keys.
                 $preferences = [];
                 $system      = [];
                 foreach ((array) $newSettings as $key => $value) {
@@ -2908,7 +2203,6 @@ class UserAPI extends Controller
                     }
                 }
 
-                // D1: system-wide values are super-admin only.
                 if (!empty($system) && !$this->isSuperAdmin($user)) {
                     return response()->json([
                         'success' => false,
@@ -2918,10 +2212,9 @@ class UserAPI extends Controller
 
                 $endpoint = 'PUT /api/settings/update';
 
-                // Personal preferences -> the caller's own row (D15/D29).
                 $appliedPreferences = [];
                 if (!empty($preferences)) {
-                    $map    = $user instanceof Customer ? self::CUSTOMER_PREFS : self::EMPLOYEE_PREFS;
+                    $map    = $user instanceof Customer ? self::customerPrefs : self::employeePrefs;
                     $table  = $user instanceof Customer ? 'customer' : 'employee';
                     $keyCol = $user instanceof Customer ? 'cust_id' : 'emp_id';
 
@@ -2934,7 +2227,6 @@ class UserAPI extends Controller
                     foreach ($preferences as $key => $value) {
                         $column = $map[$key] ?? null;
                         if ($column === null) {
-                            // `cust_darkmode` / `emp_backup_phone` style keys
                             foreach ($map as $bare => $candidate) {
                                 if ($key === $candidate || str_ends_with($key, '_' . $bare)) {
                                     $column = $candidate;
@@ -2943,12 +2235,6 @@ class UserAPI extends Controller
                             }
                         }
                         if ($column !== null) {
-                            // A preference key whose column is not part of this
-                            // schema (e.g. `emp_notif_prod` on the employee row,
-                            // which SCHEMA does not list) is
-                            // skipped instead of producing invalid SQL - and it
-                            // is NOT counted as a change below, because nothing
-                            // was written for it.
                             if (! \Schema::hasColumn($table, $column)) {
                                 continue;
                             }
@@ -2957,8 +2243,6 @@ class UserAPI extends Controller
                         }
                     }
 
-                    // FLOW-CUST_SET-06 / REQ-CUST_SET-02: backup contacts are
-                    // sensitive, so a customer must clear the phone OTP first.
                     $backupTouched = array_key_exists('cust_backup_phone', $updates)
                         || array_key_exists('cust_backup_email', $updates);
                     if ($user instanceof Customer && $backupTouched) {
@@ -2973,26 +2257,15 @@ class UserAPI extends Controller
                     }
 
                     if ($user instanceof Customer && $backupTouched) {
-                        // One verification covers exactly one saved change.
                         $this->consumeOtp($json, 'backup_contacts');
                     }
                 }
 
-                /*
-                    System-wide values -> SystemSettings (D1).
-
-                    SystemAPI owns the system settings document (rule 76), so
-                    the validate-before-write and the storage write are
-                    delegated to SystemAPI::applySystemSettings(); a returned
-                    response is the error envelope to send back as-is.
-                */
                 $systemProblem = (new SystemAPI())->applySystemSettings($system);
                 if ($systemProblem !== null) {
                     return $systemProblem;
                 }
 
-                // D32 / REQ-CUST_SET-04 - changing settings is an 'edit' action,
-                // recorded with the preference that actually changed.
                 $changed = $appliedPreferences;
                 if (!empty($system)) {
                     $changed = array_merge($changed, array_keys($system));
@@ -3024,16 +2297,6 @@ class UserAPI extends Controller
             }
         }
 
-
-        /*
-            Displaying notifications for an account (inbox)
-            ----------
-            JSON REQUEST / Query Params
-
-            recipient_type - string (req: customer | employee)
-            recipient_id - integer (req for employees, resolved from the
-                            token for customers)
-        */
         public function displayNotifications(Request $json)
         {
             $recipientType = strtolower((string) $json->input('recipient_type', ''));
@@ -3068,7 +2331,6 @@ class UserAPI extends Controller
                     return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
                 }
 
-                // D31: unread first, then priority first, then *_created DESC.
                 if ($recipientType === 'customer') {
                     $notifications = CustNotif::where('cust_id', $recipientId)
                         ->orderByRaw('CASE WHEN custnotif_read IS NULL THEN 0 ELSE 1 END')
@@ -3083,7 +2345,6 @@ class UserAPI extends Controller
                         ->get();
                 }
 
-                // D32 - reading your own inbox is a 'view' action.
                 $this->logActor($json, 'view', 'GET /api/notif/display');
 
                 return response()->json([
@@ -3101,15 +2362,6 @@ class UserAPI extends Controller
             }
         }
 
-
-        /*
-            Updating notification status (mark as read)
-            ----------
-            JSON REQUEST
-
-            notif_id - integer (req)
-            recipient_type - string (req: customer | employee)
-        */
         public function updateNotificationStatus(Request $json)
         {
             $validator = (new DatabaseAPI())->updateNotificationStatus($json);
@@ -3146,7 +2398,6 @@ class UserAPI extends Controller
                     $notif->update(['empnotif_read' => now()]);
                 }
 
-                // D31 marking read sets *_read = now(); D32 logs it as an edit.
                 $this->logActor($json, 'edit', 'PUT /api/notif/update');
 
                 return response()->json([
@@ -3164,12 +2415,6 @@ class UserAPI extends Controller
             }
         }
 
-
-    /*
-        Reading the caller's own account row
-        ----------
-        GET /api/accounts/me - no body needed
-    */
     public function displayMyAccount(Request $json)
     {
         $user = $json->user('api');
@@ -3206,16 +2451,6 @@ class UserAPI extends Controller
         }
     }
 
-
-    /*
-        Updating account details (REQ-APC-02 profile form)
-        ----------
-        JSON REQUEST
-
-        user_id - integer (req)
-        account_type - string (req: customer | employee)
-        (attributes to update - new column names first, legacy aliases accepted)
-    */
     public function updateAccountDetails(Request $json)
     {
         $validator = (new DatabaseAPI())->updateAccountDetails($json);
@@ -3248,17 +2483,6 @@ class UserAPI extends Controller
                 return $error;
             }
 
-            /*
-                REQ-EMP_PROF-01 - "Employee email addresses must not be
-                editable by regular staff members."
-
-                The form already renders the field read-only for a staff
-                member, but a crafted request must land on the same rule, so
-                the server checks the CALLER's category. Sending the address
-                back unchanged is treated as the no-op a round-tripped form
-                produces (the value is simply dropped), while an actual change
-                is refused. Admins and super admins keep the right.
-            */
             if (! $isCustomer && array_key_exists('emp_email', $payload)) {
                 $requestedEmail = (string) $payload['emp_email'];
                 $currentEmail = mb_strtolower(trim((string) $user->emp_email));
@@ -3283,7 +2507,7 @@ class UserAPI extends Controller
                 ], 422);
             }
 
-            $rules = $isCustomer ? self::CUSTOMER_PROFILE_RULES : self::EMPLOYEE_PROFILE_RULES;
+            $rules = $isCustomer ? self::customerProfileRules : self::employeeProfileRules;
             $validator = Validator::make($payload, $rules);
             if ($validator->fails()) {
                 return response()->json([
@@ -3293,9 +2517,6 @@ class UserAPI extends Controller
                 ], 422);
             }
 
-            // Unique login identifiers may only be taken by ANOTHER row
-            // (EDGE-UNIQ-01): a profile save that re-sends the current value
-            // is never a conflict.
             if (array_key_exists('cust_email', $payload) && $payload['cust_email']) {
                 $taken = Customer::where('cust_email', $payload['cust_email'])
                     ->where('cust_id', '!=', $user->cust_id)->exists()
@@ -3318,9 +2539,6 @@ class UserAPI extends Controller
                 }
             }
 
-            // REQ-SS-02: availability locks at the exact start of the
-            // employee's duty block, so the change is checked before it is
-            // written. Super admins may override at any time.
             $availability = Employee::availabilityColumn();
             if (! $isCustomer && array_key_exists($availability, $payload)) {
                 $blocked = $this->availabilityDeadlineBlocked($json, (int) $user->emp_id);
@@ -3329,15 +2547,6 @@ class UserAPI extends Controller
 
             $user->update($payload);
 
-            // REQ-SS-03 / REQ-AB-03: an availability change is cross-checked
-            // against open bookings, and customers still holding one are told
-            // to reschedule when the in-store minimum is no longer met.
-            //
-            // FLOW-EMP_SCHED-07 / REQ-SS-03: the super admins are told too,
-            // for every block that just lost its assignee. This is the write
-            // the schedule page's On Duty / Off Duty toggle goes through, so
-            // without it the primary roster control raised no cover request
-            // at all - only the block editor did.
             if (! $isCustomer && array_key_exists($availability, $payload)) {
                 $this->notifyStaffShortage();
                 $this->announceBlocksPendingReplacement(
@@ -3372,19 +2581,10 @@ class UserAPI extends Controller
         }
     }
 
-
-    /**
-     * Maps the legacy / new customer profile payload onto live columns.
-     * Dropped (no column in the schema): cust_username, cust_campus,
-     * cust_course (mapped to cust_dept), cust_year, cust_cred_changed.
-     *
-     * @return array{0: array<string, mixed>, 1: \Illuminate\Http\JsonResponse|null}
-     */
     private function mapCustomerProfile(Customer $user, Request $json): array
     {
         $payload = [];
 
-        // Display name: legacy cust_nickname splits into givname + surname
         $givname = $json->input('cust_givname');
         $surname = $json->input('cust_surname');
         if ($givname !== null || $surname !== null) {
@@ -3406,17 +2606,12 @@ class UserAPI extends Controller
             $payload['cust_pronoun'] = (string) $json->input('cust_pronoun');
         }
 
-        // Birthday: cust_bday (new) or cust_birthday (legacy alias)
         if ($json->has('cust_bday')) {
             $payload['cust_bday'] = $json->input('cust_bday');
         } elseif ($json->has('cust_birthday')) {
             $payload['cust_bday'] = $json->input('cust_birthday');
         }
 
-        // Address: REQ-CUST_PROF-03 allows several delivery addresses per
-        // customer. The schema keeps them in the single cust_address column,
-        // so the list round-trips as one ' | '-separated string; the legacy
-        // four-part payload still rebuilds a single address.
         if ($json->has('cust_addresses')) {
             $list = $json->input('cust_addresses');
             if (! is_array($list)) {
@@ -3454,7 +2649,6 @@ class UserAPI extends Controller
             }
         }
 
-        // Department: cust_dept (new) with cust_course / dept as aliases
         if ($json->has('cust_dept')) {
             $payload['cust_dept'] = $json->input('cust_dept');
         } elseif ($json->has('cust_course') || $json->has('dept')) {
@@ -3463,25 +2657,17 @@ class UserAPI extends Controller
 
         if ($json->has('cust_email')) {
             $email = mb_strtolower(trim((string) $json->input('cust_email')));
-            // REQ-CUST_PROF-01: a customer can never edit their own email
-            // address. The stored value is simply kept, so a profile form
-            // that round-trips a read-only field still saves cleanly.
             if ($email === '' || $email === mb_strtolower(trim((string) $user->cust_email))) {
                 $payload['cust_email'] = $user->cust_email;
             }
         }
-        // REQ-CUST_PROF-01: cust_type is system-assigned (rules 17-18) and is
-        // never written from a profile save.
         if ($json->has('cust_phone')) {
-            // cust_phone is NOT NULL: an empty value means "leave as-is"
             $phone = $this->normalizePhone((string) $json->input('cust_phone'));
             if ($phone !== '') {
                 $payload['cust_phone'] = $phone;
             }
         }
 
-        // Photo: cust_avatar (new) or cust_photo (legacy alias).
-        // REQ-CUST_PROF-04: the format is checked here as well as at upload.
         if ($json->has('cust_avatar') || $json->has('cust_photo')) {
             $avatar = trim((string) ($json->input('cust_avatar') ?? $json->input('cust_photo')));
             if ($avatar !== '' && ! $this->avatarAllowed($avatar)) {
@@ -3493,7 +2679,6 @@ class UserAPI extends Controller
             $payload['cust_avatar'] = $avatar !== '' ? $avatar : null;
         }
 
-        // Backup contact: two legacy keys fold into one column
         if ($json->has('cust_backup_phone')) {
             $payload['cust_backup_phone'] = $json->input('cust_backup_phone');
         } elseif ($json->has('cust_backupphone')) {
@@ -3512,17 +2697,6 @@ class UserAPI extends Controller
         return [$payload, null];
     }
 
-
-    /**
-     * Maps the legacy / new employee profile payload onto live columns.
-     * Dropped (no column in the schema): emp_midname, emp_suffix,
-     * emp_studnum, emp_college, emp_program, emp_year, emp_bloc,
-     * emp_birthday, emp_brgy/city/province/country, emp_backupcallcode,
-     * emp_photo (-> emp_avatar), emp_type (-> emp_categ, managed only by
-     * PUT /accounts/type), emp_cred_changed.
-     *
-     * @return array{0: array<string, mixed>, 1: \Illuminate\Http\JsonResponse|null}
-     */
     private function mapEmployeeProfile(Employee $user, Request $json): array
     {
         $payload = [];
@@ -3535,7 +2709,6 @@ class UserAPI extends Controller
         }
 
         if ($json->has('emp_email')) {
-            // emp_email is NOT NULL + UNIQUE: an empty value means "keep"
             $email = mb_strtolower(trim((string) $json->input('emp_email')));
             if ($email !== '') {
                 $payload['emp_email'] = $email;
@@ -3548,15 +2721,6 @@ class UserAPI extends Controller
             }
         }
 
-        // emp_photo (legacy) -> emp_avatar (live)
-        //
-        // REQ-EMP_PROF-03: "Employee avatars must be validated for format and
-        // file size before upload." The profile screen posts the picture
-        // straight to this endpoint as a data URL, bypassing ProductsAPI, so the
-        // identical PNG/JPEG/GIF/WebP + 2 MB rules are applied here as well.
-        // A value that round-trips untouched from the stored row is a no-op
-        // and is never re-judged, so an already-saved avatar can never block
-        // an unrelated profile edit.
         if ($json->has('emp_avatar') || $json->has('emp_photo')) {
             $avatar = trim((string) ($json->input('emp_avatar') ?? $json->input('emp_photo')));
             $storedAvatar = trim((string) ($user->emp_avatar ?? ''));
@@ -3571,7 +2735,7 @@ class UserAPI extends Controller
                 }
 
                 $bytes = $this->avatarBytes($avatar);
-                if ($bytes !== null && $bytes > self::MAX_AVATAR_BYTES) {
+                if ($bytes !== null && $bytes > self::maxAvatarBytes) {
                     return [$payload, response()->json([
                         'success' => false,
                         'message' => 'Profile avatars must be 2 MB or smaller.',
@@ -3583,8 +2747,6 @@ class UserAPI extends Controller
             $payload['emp_avatar'] = $avatar !== '' ? $avatar : null;
         }
 
-        // emp_instore (legacy) / emp_present (live): write whichever column
-        // the connected schema actually carries.
         $availability = Employee::availabilityColumn();
         if ($json->has('emp_present')) {
             $payload[$availability] = (bool) $json->input('emp_present');
@@ -3592,7 +2754,6 @@ class UserAPI extends Controller
             $payload[$availability] = (bool) $json->input('emp_instore');
         }
 
-        // Backup contact: legacy emp_backupphone / emp_backupemail keys
         if ($json->has('emp_backup_phone')) {
             $payload['emp_backup_phone'] = $json->input('emp_backup_phone');
         } elseif ($json->has('emp_backupphone')) {
@@ -3611,8 +2772,6 @@ class UserAPI extends Controller
         return [$payload, null];
     }
 
-
-    /** Rebuilds cust_address from whichever parts the payload carries. */
     private function rebuildAddress(Customer $user, Request $json): ?string
     {
         if ($json->has('cust_address')) {
@@ -3632,7 +2791,6 @@ class UserAPI extends Controller
         return $parts !== [] ? implode(', ', $parts) : null;
     }
 
-
     private function normalizePhone(string $phone): string
     {
         $cleaned = preg_replace('/[^0-9]/', '', $phone);
@@ -3642,7 +2800,6 @@ class UserAPI extends Controller
 
         return (string) $cleaned;
     }
-
 
     private function combineBackupPhone($callcode, $phone): ?string
     {
@@ -3655,19 +2812,11 @@ class UserAPI extends Controller
         return $callcode !== '' ? $callcode . ' ' . $phone : $phone;
     }
 
-
-    /** 422 response for a rejected address list (REQ-CUST_PROF-03). */
     private function addressError(string $message): \Illuminate\Http\JsonResponse
     {
         return response()->json(['success' => false, 'message' => $message], 422);
     }
 
-
-    /**
-     * REQ-CUST_PROF-04: profile photos must be PNG/JPEG/GIF/WebP. A value may
-     * be a data URI carrying one of those types, a URL ending in an allowed
-     * extension, or a bare extension token.
-     */
     private function avatarAllowed(string $avatar): bool
     {
         if (preg_match('#^data:image/(png|jpe?g|gif|webp);base64,#i', $avatar)) {
@@ -3681,15 +2830,6 @@ class UserAPI extends Controller
             || in_array(ltrim($avatar, '.'), ['png', 'jpg', 'jpeg', 'gif', 'webp'], true);
     }
 
-
-    /**
-     * REQ-EMP_PROF-03: the decoded payload size of an avatar.
-     *
-     * A data URI carries the bytes directly, so they are decoded and counted;
-     * a hosted URL or an already-stored path has no bytes to measure here and
-     * returns null (the picture was sized when it was uploaded, and
-     * ProductsAPI::uploadImage already held it to the same ceiling).
-     */
     private function avatarBytes(string $avatar): ?int
     {
         if (! preg_match('#^data:image/[a-z0-9.+-]+;base64,#i', $avatar, $matches)) {

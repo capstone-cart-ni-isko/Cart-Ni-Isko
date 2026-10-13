@@ -110,7 +110,7 @@ class AccessLogRetentionTest extends TestCase
         $this->logRow('emplog', 30);
         $this->logRow('emplog', 1);
 
-        $purged = (new DatabaseAPI())->purgeAccessLogs(DatabaseAPI::ACCESS_LOG_PURGE_MONTHS);
+        $purged = (new DatabaseAPI())->purgeAccessLogs(DatabaseAPI::accessLogPurgeMonths);
 
         $this->assertSame(['custlog' => 1, 'emplog' => 1], $purged);
         $this->assertSame(1, DB::table('custlog')->count());
@@ -126,7 +126,7 @@ class AccessLogRetentionTest extends TestCase
         $this->logRow('custlog', 25);
         $this->logRow('emplog', 25);
 
-        (new DatabaseAPI())->purgeAccessLogs(DatabaseAPI::ACCESS_LOG_PURGE_MONTHS);
+        (new DatabaseAPI())->purgeAccessLogs(DatabaseAPI::accessLogPurgeMonths);
 
         $notice = EmpNotif::where('emp_id', $this->superAdmin()->emp_id)
             ->where('empnotif_msg', 'LIKE', '%24-month purge%')

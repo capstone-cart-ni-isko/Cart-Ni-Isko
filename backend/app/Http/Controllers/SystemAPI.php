@@ -18,48 +18,18 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
-/**
- * SystemAPI
- *
- * DOMAIN 1 / 5 / 6 / 7 / 14 / 15 / 31 / 32 - system-wide concerns: setup, settings, scheduling, notifications, analytics, access logs, monitoring/suspension and API<->model integration.
- *
- * Repackaged from: Settings API, Setup API, Shift API, Notif API, Reports API, Health API, Accounts API, Access API.
- */
 class SystemAPI extends Controller
 {
 
-    // ===== from the Setup API file =====
-/**
- * DOMAIN 1 - SETUP.
- *
- * FLOW-SETUP-05: a setup wizard has to be able to ask the system what is
- * still missing and to mint the very first super admin (FLOW-SETUP-04) with a
- * securely generated, stored password (REQ-SETUP-03).
- *
- * Nothing here may create a row unless the store has no employees at all:
- * `POST /setup/initialize` is a one-shot bootstrap, so against a database
- * that already holds a staff roster it answers 409 and changes nothing.
- *
- * Configuration is written to the SystemSettings JSON document, never to the
- * database - the SCHEMA lists no settings table (FLOW-SETUP-01).
- */
-
-    // ===== from the Setup API file =====
-
-    /** The only store configuration the wizard is allowed to write (FLOW-SETUP-01). */
-    private const CONFIG_KEYS = [
+    private const configKeys = [
         'store_name' => 'string',
         'store_location' => 'string',
         'store_contact' => 'string',
         'operating_hours' => 'string',
     ];
 
-    /** Rule 27 / REQ-EMP_ENROLL-02: staff identities live on the university domain. */
-    private const BICOL_DOMAIN = '@bicol-u.edu.ph';
+    private const bicolDomain = '@bicol-u.edu.ph';
 
-    /*
-        GET /api/setup/status  (public - nothing is authenticated yet)
-    */
     public function status()
     {
         try {
@@ -79,13 +49,10 @@ class SystemAPI extends Controller
             'success' => true,
             'message' => 'Setup status retrieved successfully.',
             'data'    => [
-                // REQ-SETUP-02: false until every critical field is filled.
                 'setup_complete' => count($missing) === 0,
                 'missing_critical' => $missing,
-                // FLOW-SETUP-04: the wizard only has an account to create
-                // while the roster is empty.
                 'needs_initial_super_admin' => $this->rosterEmpty(),
-                'bicol_domain' => self::BICOL_DOMAIN,
+                'bicol_domain' => self::bicolDomain,
                 'store' => [
                     'store_name'      => (string) SystemSettings::get('store_name', ''),
                     'store_location'  => (string) SystemSettings::get('store_location', ''),
@@ -96,17 +63,6 @@ class SystemAPI extends Controller
         ], 200);
     }
 
-    /*
-        POST /api/setup/initialize  (public, throttled - one-shot bootstrap)
-
-        JSON REQUEST
-        email    - string (req - Bicol University address)
-        surname  - string (req)
-        givname  - string (req)
-        phone    - string (req)
-        password - string (opt - generated when absent; must clear REQ-SETUP-03)
-        store_name / store_location / store_contact / operating_hours - opt
-    */
     public function initialize(Request $json)
     {
         if (! $this->rosterEmpty()) {
@@ -117,8 +73,6 @@ class SystemAPI extends Controller
             ], 409);
         }
 
-        // REQ-SETUP-01: every posted value is validated before anything is
-        // written - to the settings document or to the database.
         $email = strtolower(trim((string) $json->input('email', '')));
         $surname = trim((string) $json->input('surname', ''));
         $givname = trim((string) $json->input('givname', ''));
@@ -131,10 +85,10 @@ class SystemAPI extends Controller
             ], 422);
         }
 
-        if (! str_ends_with($email, self::BICOL_DOMAIN)) {
+        if (! str_ends_with($email, self::bicolDomain)) {
             return response()->json([
                 'success' => false,
-                'message' => 'The super admin email must be a Bicol University address (' . self::BICOL_DOMAIN . ').',
+                'message' => 'The super admin email must be a Bicol University address (' . self::bicolDomain . ').',
             ], 422);
         }
 
@@ -145,8 +99,6 @@ class SystemAPI extends Controller
             ], 409);
         }
 
-        // FLOW-SETUP-04: secure password generation. A wizard may hand one in
-        // instead, but REQ-SETUP-03 decides whether it is good enough.
         $generated = false;
         $password = (string) $json->input('password', '');
 
@@ -161,10 +113,8 @@ class SystemAPI extends Controller
             ], 422);
         }
 
-        // REQ-SETUP-02: configuration is saved only when the critical fields
-        // it carries are all non-empty - a partial block may never half-apply.
         $config = [];
-        foreach (self::CONFIG_KEYS as $key => $_type) {
+        foreach (self::configKeys as $key => $type) {
             if ($json->has($key)) {
                 $config[$key] = trim((string) $json->input($key));
             }
@@ -197,12 +147,8 @@ class SystemAPI extends Controller
                 'emp_email'    => $email,
                 'emp_categ'    => 'super admin',
                 'emp_type'     => 'SUPER ADMIN',
-                // existingColumns() keeps only the spelling the connected
-                // schema carries (emp_instore on the fixture, emp_present on
-                // live), so the account opens as not in-store either way.
                 'emp_instore'  => false,
                 'emp_present'  => false,
-                // FLOW-SETUP-04: the account opens active, never suspended.
                 'emp_suspended' => null,
                 'emp_deleted'   => null,
             ]));
@@ -211,8 +157,6 @@ class SystemAPI extends Controller
                 SystemSettings::putMany($config);
             }
 
-            // REQ-SETUP-04: the setup action is logged for audit, filed under
-            // the id of the account it just created.
             $this->logEmployee((int) $employee->emp_id, 'edit',
                 'POST /api/setup/initialize - initial super admin created'
                 . ($configuring ? ' and configuration saved' : ''));
@@ -224,8 +168,6 @@ class SystemAPI extends Controller
                     : 'Setup complete. Your super admin account is ready.',
                 'data'    => array_merge($employee->toArray(), [
                     'setup_complete' => count(SystemSettings::missingCritical()) === 0,
-                    // Only a generated secret is echoed back; a chosen one is
-                    // already stored as a bcrypt digest and never round-trips.
                     'generated_password' => $generated ? $password : null,
                     'must_change_password' => $generated,
                 ]),
@@ -239,7 +181,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /** True while no employee row exists - the only state a bootstrap may run in. */
     private function rosterEmpty(): bool
     {
         try {
@@ -249,16 +190,6 @@ class SystemAPI extends Controller
         }
     }
 
-    // ==========================================
-    // SYSTEM-WIDE SETTINGS (shared, rule 76)
-    // ==========================================
-
-    /**
-     * The system-wide half of a settings payload: every SystemSettings value
-     * plus the FLOW-SETUP-01 readiness flags. SystemAPI owns the system
-     * settings document, so UserAPI's routed displaySettings endpoint reuses
-     * this instead of duplicating the read (rule 76).
-     */
     public function systemSettingsPayload(): array
     {
         $settings = SystemSettings::all();
@@ -270,17 +201,6 @@ class SystemAPI extends Controller
         return $settings;
     }
 
-    /**
-     * Validates and writes a batch of system-wide settings (D1 / REQ-SETUP-01).
-     *
-     * Every value is validated BEFORE anything is saved, and a document that
-     * could not be written answers with a real error - a super admin must
-     * never be told "saved" while the change only ever lived in this one
-     * request.
-     *
-     * @return \Illuminate\Http\JsonResponse|null null on success, or the
-     *         422 / 500 error envelope the caller should return as-is.
-     */
     public function applySystemSettings(array $system)
     {
         if (empty($system)) {
@@ -307,23 +227,10 @@ class SystemAPI extends Controller
         return null;
     }
 
-    // ===== from the Shift API file =====
+    const shiftFields = ['emp_id', 'shift_date', 'shift_start', 'shift_end', 'unavailable'];
 
-    // Fields a staff member may submit through the schedule UI
-    const SHIFT_FIELDS = ['emp_id', 'shift_date', 'shift_start', 'shift_end', 'unavailable'];
+    const shiftUnavailableField = 'unavailable';
 
-    // FLOW-EMP_SCHED-04: the employee's own "unavailable" flag. The request
-    // spelling is a plain boolean; `schedules` stores it as the timestamp the
-    // exception was logged (REQ-SS-01), which is also what makes the block
-    // permanently distinct from a freshly prescheduled one.
-    const SHIFT_UNAVAILABLE_FIELD = 'unavailable';
-
-    /*
-        Listing duty shifts
-        ----------
-        QUERY PARAMS (all optional)
-        emp_id, date, date_from, date_to, status
-    */
     public function displayShifts(Request $json)
     {
         try {
@@ -342,8 +249,6 @@ class SystemAPI extends Controller
             ->get()
             ->map(fn (Schedule $shift) => $this->shiftPayload($shift));
 
-        // The status is derived rather than stored, so it is filtered after
-        // the rows are mapped. Unknown values simply return nothing.
         $status = strtoupper((string) $json->query('status'));
         if ($status !== '') {
             $shifts = $shifts->where('status', $status)->values();
@@ -356,21 +261,11 @@ class SystemAPI extends Controller
         ], 200);
     }
 
-    /*
-        Creating a duty shift
-        ----------
-        JSON REQUEST
-        emp_id, shift_date, shift_start, shift_end (req)
-        shift_type, shift_location, status (opt)
-    */
     public function createShift(Request $json)
     {
         $validator = (new DatabaseAPI())->createShift($json);
         if ($validator) return $validator;
 
-        // DOMAIN 7 - every preschedule is validated before the row exists:
-        // the 10-minute grid, the 24-hour past limit, overlapping blocks and
-        // the weekly minimum (FLOW-EMP_SCHED-03/05, REQ-EMP_SCHED-01/03/04).
         $start = $this->windowStart($json);
         $end   = $this->windowEnd($json);
         if ($start === null || $end === null) {
@@ -386,23 +281,12 @@ class SystemAPI extends Controller
         if ($blocked) return $blocked;
 
         try {
-            // FLOW-EMP_SCHED-08 / REQ-EMP_SCHED-05: every roster write is
-            // attributed to the employee who made it, with its timestamp.
             $this->logActor($json, 'edit', 'POST /api/shifts');
 
             $start = $this->windowStart($json);
             $end   = $this->windowEnd($json);
 
             $shift = Schedule::create([
-                // SYSTEM RULE / App\Support\IdAllocator: `schedules.sched_id` is
-                // a bare bigint NOT NULL primary key with no sequence, identity
-                // or column default on the live connection, so an Eloquent insert
-                // that omits the key dies on a NOT NULL violation. The number is
-                // allocated here - INSIDE the same statement the window is
-                // resolved from, before the row is written - exactly as
-                // ProductsAPI::addProduct allocates product.prod_id /
-                // prodvar.prodvar_id and UserAPI::prescheduleNewEmployee
-                // allocates its baseline block.
                 'sched_id'         => $this->nextId('schedules', 'sched_id'),
                 'emp_id'         => (int) $json->input('emp_id'),
                 'sched_time_start' => $start,
@@ -425,13 +309,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Updating a duty shift
-        ----------
-        JSON REQUEST (route supplies the shift id)
-        any of emp_id, shift_date, shift_start, shift_end, emp_instore,
-        unavailable
-    */
     public function updateShift(Request $json, $shiftId)
     {
         $shift = Schedule::with('employee')->find($shiftId);
@@ -439,18 +316,6 @@ class SystemAPI extends Controller
             return response()->json(['success' => false, 'message' => 'Duty shift not found'], 404);
         }
 
-        /*
-            FLOW-EMP_SCHED-04: "Employees must be able to view their own
-            schedule and mark specific time blocks as 'unavailable'".
-
-            Rule 38 keeps the rest of the roster with the super admins, so a
-            non-admin caller may touch ONE field on ONE block - their own
-            `unavailable` exception - and nothing else. Admins and super admins
-            keep every field exactly as before. The block itself is still
-            validated against the same rules (the 10-minute grid, the overlap
-            rule, the weekly floor and the REQ-SS-02 deadline) and still costs
-            the same REQ-SS-03 announcement when it stops staffing the roster.
-        */
         $actor = $json->user('api');
         $isAdmin = $actor instanceof Employee && ($this->isSuperAdmin($actor) || $actor->isAdmin());
 
@@ -462,8 +327,6 @@ class SystemAPI extends Controller
                 ], 403);
             }
 
-            // Every roster field stays with the admins; the employee's own
-            // exception is the single value a non-admin may send.
             $adminOnly = [
                 'emp_id', 'shift_date', 'shift_start', 'shift_end',
                 'emp_instore', 'shift_type', 'shift_location', 'status',
@@ -482,19 +345,11 @@ class SystemAPI extends Controller
             }
         }
 
-        // Captured before anything is written so "the block just lost its
-        // assignee" is decided against the stored state, not the edited one.
         $wasStaffed = $shift->isStaffed();
 
-        // The stored block is needed so a partial update is still checked
-        // against the window it will end up with.
         $validator = (new DatabaseAPI())->updateShift($json, $shift);
         if ($validator) return $validator;
 
-        // The window is one value pair, so a partial update is applied
-        // onto the stored one instead of overwriting half of it. It is
-        // resolved BEFORE the row is touched, so the DOMAIN 7 rules below
-        // judge the block as it will be stored.
         $start = $this->windowStart($json, $shift);
         $end   = $this->windowEnd($json, $shift);
 
@@ -520,29 +375,19 @@ class SystemAPI extends Controller
         }
 
         try {
-            // Availability is a separate change from the block fields: it is
-            // gated by REQ-SS-02 and cross-referenced against open bookings by
-            // REQ-SS-03.
             if ($json->has('emp_instore')) {
                 $blocked = $this->availabilityDeadlineBlocked($json, (int) $shift->emp_id);
                 if ($blocked) return $blocked;
                 $this->changeAvailability($shift, $json->boolean('emp_instore'));
             }
 
-            // FLOW-EMP_SCHED-04: the employee's own "unavailable" exception on
-            // one block. Same REQ-SS-02 deadline as a store-wide availability
-            // change, and the same REQ-SS-03 consequence: the block stops
-            // staffing the roster, so an affected booking is told to
-            // reschedule and the super admins are told to find a substitute.
-            if ($json->has(self::SHIFT_UNAVAILABLE_FIELD)) {
-                $unavailable = $json->boolean(self::SHIFT_UNAVAILABLE_FIELD);
+            if ($json->has(self::shiftUnavailableField)) {
+                $unavailable = $json->boolean(self::shiftUnavailableField);
 
                 $blocked = $this->availabilityDeadlineBlocked($json, (int) $shift->emp_id);
                 if ($blocked) return $blocked;
 
                 if ($unavailable && $shift->sched_disabled === null) {
-                    // REQ-EMP_SCHED-01: a disabled block no longer counts toward
-                    // the weekly floor, so the week is re-judged without it.
                     $weekMinutes = $this->weekMinutes(
                         (int) $shift->emp_id,
                         $shift->sched_time_start,
@@ -555,8 +400,6 @@ class SystemAPI extends Controller
 
                     $shift->sched_disabled = now();
                 } elseif (! $unavailable && $shift->sched_disabled !== null) {
-                    // Clearing the exception restores the block, so the week is
-                    // judged WITH it again.
                     $weekMinutes = $this->weekMinutes(
                         (int) $shift->emp_id,
                         $shift->sched_time_start,
@@ -571,10 +414,7 @@ class SystemAPI extends Controller
                 }
             }
 
-            // REQ-SS-03 / FLOW-EMP_SCHED-06: the exception is only announced
-            // once, after the row it belongs to is written, so the headcount
-            // the announcement is computed from is the stored one.
-            $justUnavailable = $json->boolean(self::SHIFT_UNAVAILABLE_FIELD)
+            $justUnavailable = $json->boolean(self::shiftUnavailableField)
                 && $shift->sched_disabled !== null
                 && ! $shift->isStaffed()
                 && ! $wasStaffed;
@@ -591,8 +431,6 @@ class SystemAPI extends Controller
             }
 
             if ($shift->wasChanged()) {
-                // FLOW-EMP_SCHED-08 / REQ-EMP_SCHED-05: every roster write is
-                // attributed to the employee who made it, with its timestamp.
                 $this->logActor($json, 'edit', 'PUT /api/shifts/' . $shift->sched_id);
             }
 
@@ -610,11 +448,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Cancelling a duty shift
-        ----------
-        No JSON body needed; the row is removed from schedules
-    */
     public function cancelShift(Request $json, $shiftId)
     {
         try {
@@ -633,10 +466,6 @@ class SystemAPI extends Controller
             return response()->json(['success' => false, 'message' => 'Duty shift not found'], 404);
         }
 
-        // FLOW-EMP_SCHED-05 / REQ-EMP_SCHED-01: cancelling a block is a
-        // scheduling change too, so the employee must keep the weekly minimum
-        // afterwards. A super admin may always override (rule 38 - they own
-        // the roster and are the only one who can re-plan a week).
         if (! $this->isSuperAdmin($json->user('api')) && $shift->isStaffed()) {
             $weekAfter = $this->weekMinutes(
                 (int) $shift->emp_id,
@@ -652,8 +481,6 @@ class SystemAPI extends Controller
         $cancelled = $this->shiftPayload($shift);
         $shift->delete();
 
-        // FLOW-EMP_SCHED-08 / REQ-EMP_SCHED-05: cancelling a block is a
-        // scheduling change too, so it is attributed and timestamped.
         $this->logActor($json, 'delete', 'DELETE /api/shifts/' . $shiftId);
 
         return response()->json([
@@ -663,13 +490,6 @@ class SystemAPI extends Controller
         ], 200);
     }
 
-    // ==========================================
-    // SHIFT HELPERS
-    // ==========================================
-
-    // `shift_date` + `shift_start` arrive as two fields and are stored as one
-    // timestamp, so they are only meaningful together: a request that supplies
-    // neither leaves the stored start untouched.
     private function windowStart(Request $json, ?Schedule $shift = null)
     {
         if ($json->has('shift_date') && $json->has('shift_start')) {
@@ -685,8 +505,6 @@ class SystemAPI extends Controller
         return null;
     }
 
-    // On create there is no stored window to fall back on, so the end always
-    // comes from the request; on update it resolves against the stored block.
     private function windowEnd(Request $json, ?Schedule $shift = null)
     {
         if ($json->has('shift_end')) {
@@ -702,18 +520,6 @@ class SystemAPI extends Controller
         return $shift ? $shift->sched_time_end : null;
     }
 
-    // ==========================================
-    // DOMAIN 7 (EMPLOYEE SCHEDULING) RULES
-    // ==========================================
-
-    /*
-        FLOW-EMP_SCHED-03 / FLOW-EMP_SCHED-05 + REQ-EMP_SCHED-01/03/04:
-        every write to `schedules` is judged against the DOMAIN 7 rules
-        BEFORE the row is touched, and the rejection is a plain message the
-        schedule screen can show as-is.
-
-        Returns the rejection response, or null when the block may proceed.
-    */
     private function shiftWindowBlocked(
         Request $json,
         int $empId,
@@ -743,9 +549,6 @@ class SystemAPI extends Controller
         );
     }
 
-    // FLOW-EMP_SCHED-03: the schedule calendar only offers 10-minute steps,
-    // so a block that lands off the grid is refused here rather than stored
-    // as a time the calendar can never show again.
     private function shiftOffGrid(Carbon $time)
     {
         if ((int) $time->minute % 10 === 0 && (int) $time->second === 0) {
@@ -758,8 +561,6 @@ class SystemAPI extends Controller
         );
     }
 
-    // REQ-EMP_SCHED-03: only a super admin may write a block that is already
-    // more than twenty-four hours in the past.
     private function shiftTooFarInPast(Request $json, Carbon $start)
     {
         if ($this->isSuperAdmin($json->user('api'))) {
@@ -776,13 +577,6 @@ class SystemAPI extends Controller
         );
     }
 
-    /*
-        REQ-EMP_SCHED-04: the employee's live blocks that cross the proposed
-        window. A block sitting ENTIRELY INSIDE a wider one is not a conflict
-        - that is exactly how a duty slot reads inside the baseline
-        availability block an enrolled employee is prescheduled with
-        (FLOW-EMP_ENROLL-06), so only a partial cross is refused.
-    */
     private function overlappingShift(int $empId, Carbon $start, Carbon $end, ?int $ignoreShiftId = null): ?Schedule
     {
         $crossing = Schedule::where('emp_id', $empId)
@@ -798,12 +592,6 @@ class SystemAPI extends Controller
         return $crossing;
     }
 
-    /*
-        REQ-EMP_SCHED-01: every prescheduled minute the employee keeps in the
-        week the block lands in (Monday-based), including the block itself.
-        Disabled blocks (the employee's own "unavailable" flag) count for
-        nothing - they no longer staff the roster.
-    */
     private function weekMinutes(int $empId, Carbon $start, Carbon $end, ?int $ignoreShiftId = null): int
     {
         $weekStart = $start->copy()->startOfWeek();
@@ -820,9 +608,6 @@ class SystemAPI extends Controller
         return (int) $minutes + max(0, (int) $start->diffInMinutes($end));
     }
 
-    // FLOW-EMP_SCHED-05 / rule 46: the weekly floor, read from the same
-    // setting the enrollment preschedule uses. Null when the week still
-    // clears it.
     private function weeklyFloorProblem(int $minutes)
     {
         $floor = (int) SystemSettings::get('min_weekly_minutes', 180);
@@ -837,9 +622,6 @@ class SystemAPI extends Controller
         );
     }
 
-    // Builds the shift query, applying the optional list filters. Every date
-    // filter resolves against the block's start, which is what the calendar
-    // positions on.
     private function filteredShifts(Request $json)    {
         $query = Schedule::query();
         $employeeId = $json->query('emp_id');
@@ -855,8 +637,6 @@ class SystemAPI extends Controller
         return $query->orderBy('sched_time_start')->orderBy('sched_id');
     }
 
-    // Complete shift metadata for every API response: block id, employee,
-    // block window, derived status and timestamps
     private function shiftPayload(Schedule $shift): array
     {
         $employee = $shift->employee;
@@ -872,11 +652,8 @@ class SystemAPI extends Controller
             'shift_date'     => $start ? $start->toDateString() : null,
             'shift_start'    => $start ? $start->format('H:i') : null,
             'shift_end'      => $end ? $end->format('H:i') : null,
-            // No column to store these on; see the class note above.
             'shift_type'     => null,
             'shift_location' => null,
-            // FLOW-EMP_SCHED-04: the employee's own exception on this block.
-            // `schedules` keeps it as the timestamp it was logged.
             'unavailable'    => $shift->sched_disabled !== null,
             'unavailable_at' => optional($shift->sched_disabled)->toDateTimeString(),
             'status'         => $this->shiftStatus($shift),
@@ -885,11 +662,6 @@ class SystemAPI extends Controller
         ];
     }
 
-    // `schedules` has no status column, so the status is derived from the
-    // assignee's availability and the block window relative to now.
-    // REQ-SS-03: an employee who is no longer available - logged out of the
-    // store, or flagged this very block unavailable - leaves the block
-    // PENDING REPLACEMENT; slotState() already treats that block as unstaffed.
     private function shiftStatus(Schedule $shift): string
     {
         if (! $shift->isStaffed()) {
@@ -910,10 +682,6 @@ class SystemAPI extends Controller
         return 'SCHEDULED';
     }
 
-    // REQ-SS-03: flipping an employee to unavailable makes every still-open
-    // booking of that type unworkable, so the affected blocks read as
-    // PENDING REPLACEMENT and super admins are alerted. Flipping back to
-    // available clears the need and leaves the bookings untouched.
     private function changeAvailability(Schedule $shift, bool $inStore): void
     {
         $employee = $shift->employee;
@@ -924,29 +692,17 @@ class SystemAPI extends Controller
         if ($inStore) return;
 
         $this->notifyStaffShortage();
-        // Going off duty strips the assignee off EVERY block of theirs that is
-        // still ahead, not just the one being edited - that is what the cover
-        // queue on the schedule screen has to show.
         $this->announceBlocksPendingReplacement(
             $this->staffBlocksNeedingCover($employee)
         );
     }
 
-    // FLOW-EMP_SCHED-06 / 07: a block the employee flagged unavailable stops
-    // staffing the roster, so every still-open booking inside it has to be told
-    // to reschedule and every super admin has to be told to find a substitute.
     private function announceBlockUnavailable(Schedule $shift): void
     {
         $this->notifyStaffShortage();
         $this->announceBlocksPendingReplacement([$shift]);
     }
 
-    // ===== from the Notif API file =====
-
-        /**
-         * DOMAIN 31 - custnotif_type / empnotif_type are always one of
-         * priority | regular (default priority, per DDL).
-         */
         private function notifType(Request $json): string
         {
             $type = strtolower((string) $json->input('notif_type', $json->input('type', 'priority')));
@@ -954,16 +710,6 @@ class SystemAPI extends Controller
             return in_array($type, ['priority', 'regular'], true) ? $type : 'priority';
         }
 
-        /*
-            Creating notifications
-            ----------
-            JSON REQUEST
-
-            recipient_type - string (req: customer | employee)
-            recipient_id - integer (req)
-            notif_msg - string (req)
-            notif_type - string (opt: priority | regular, def priority)
-        */
         public function createNotification(Request $json)
         {
             $validator = (new DatabaseAPI())->createNotification($json);
@@ -982,7 +728,6 @@ class SystemAPI extends Controller
                     }
 
                     $notif = CustNotif::create([
-                        // No sequence for custnotif_id on the live table.
                         'custnotif_id'      => $this->nextId('custnotif', 'custnotif_id'),
                         'cust_id'           => $recipientId,
                         'custnotif_created' => now(),
@@ -997,7 +742,6 @@ class SystemAPI extends Controller
                     }
 
                     $notif = EmpNotif::create([
-                        // No sequence for empnotif_id on the live table.
                         'empnotif_id'       => $this->nextId('empnotif', 'empnotif_id'),
                         'emp_id'           => $recipientId,
                         'empnotif_created' => now(),
@@ -1007,7 +751,6 @@ class SystemAPI extends Controller
                     ]);
                 }
 
-                // D32 - the staff member who pushed it, not the recipient.
                 $this->logActor($json, 'edit', 'POST /api/notif/create');
 
                 return response()->json([
@@ -1025,16 +768,6 @@ class SystemAPI extends Controller
             }
         }
 
-        /*
-            Distributing notifications
-            ----------
-            JSON REQUEST
-
-            recipient_type - string (req: customer | employee)
-            notif_msg - string (req)
-            recipient_ids - array of integers (opt, if omitted sends to ALL of that type)
-            notif_type - string (opt: priority | regular, def priority)
-        */
         public function distributeNotifications(Request $json)
         {
             $validator = (new DatabaseAPI())->distributeNotifications($json);
@@ -1050,7 +783,6 @@ class SystemAPI extends Controller
                 $now = now();
 
                 if ($recipientType === 'customer') {
-                    // Fetch target customers (soft-deleted / suspended are skipped)
                     $query = Customer::whereNull('cust_deleted')->whereNull('cust_suspended');
                     if (!empty($recipientIds) && is_array($recipientIds)) {
                         $query->whereIn('cust_id', $recipientIds);
@@ -1059,11 +791,6 @@ class SystemAPI extends Controller
 
                     $sentCount = 0;
                     foreach ($customers as $customer) {
-                        // Live custnotif has no sequence, so every row carries
-                        // its own allocated key: the allocator reuses the
-                        // lowest vacant key, so a pre-computed run of ids
-                        // (MAX+1, MAX+2, ...) could hand out a key that is
-                        // already taken.
                         CustNotif::create([
                             'custnotif_id'      => $this->nextId('custnotif', 'custnotif_id'),
                             'cust_id'           => $customer->cust_id,
@@ -1075,7 +802,6 @@ class SystemAPI extends Controller
                         $sentCount++;
                     }
                 } else {
-                    // Fetch target employees (soft-deleted / suspended are skipped)
                     $query = Employee::whereNull('emp_deleted')->whereNull('emp_suspended');
                     if (!empty($recipientIds) && is_array($recipientIds)) {
                         $query->whereIn('emp_id', $recipientIds);
@@ -1083,9 +809,6 @@ class SystemAPI extends Controller
                     $employees = $query->get();
 
                     foreach ($employees as $employee) {
-                        // Same reason as the customer branch: allocate one
-                        // key per row instead of a pre-computed run, so the
-                        // lowest-vacant-key rule is honoured for every row.
                         EmpNotif::create([
                             'empnotif_id'       => $this->nextId('empnotif', 'empnotif_id'),
                             'emp_id'           => $employee->emp_id,
@@ -1098,7 +821,6 @@ class SystemAPI extends Controller
                     }
                 }
 
-                // D32 - one row for the actor; recipients are not actors here.
                 $this->logActor($json, 'edit', 'POST /api/notif/distribute');
 
                 return response()->json([
@@ -1120,24 +842,12 @@ class SystemAPI extends Controller
             }
         }
 
-    // ===== from the Reports API file =====
-
     private ReportBuilder $builder;
 
     public function __construct()
     {
         $this->builder = new ReportBuilder();
     }
-
-    /*
-        Reports API (DOMAIN 14 - saved report templates)
-        ----------
-        The `reports` table keeps one row per saved filter template
-        (report_title + a JSON report_text of {type, filters}); the report
-        DATA itself is built on the fly by ReportBuilder and never stored.
-        Every route requires an admin-ranked employee (rule 32), and an
-        admin only ever sees their own templates.
-    */
 
     public function index(Request $json)
     {
@@ -1225,8 +935,6 @@ class SystemAPI extends Controller
 
             $report = null;
             if ($saveTemplate && $templateName) {
-                // reports owns its own key (no IdAllocator), so the number is
-                // left to the database and the saved row is read back.
                 $reportId = DB::table('reports')->insertGetId([
                     'emp_id' => $user->emp_id,
                     'report_created' => now(),
@@ -1331,17 +1039,8 @@ class SystemAPI extends Controller
         }
     }
 
-    // ===== from the Health API file =====
+    const staleMinutes = 120;
 
-    // Minutes without a heartbeat before the scheduler counts as stalled
-    const STALE_MINUTES = 120;
-
-    /*
-        Scheduler health check
-        ----------
-        No params. Returns 200 while the heartbeat is fresh, 503 once it is
-        stale or missing.
-    */
     public function schedulerHealth(Request $json)
     {
         try {
@@ -1359,7 +1058,7 @@ class SystemAPI extends Controller
         $ageSeconds = $lastRun === ''
             ? null
             : (int) Carbon::parse($lastRun)->diffInSeconds(now(), true);
-        $isRunning = $ageSeconds !== null && $ageSeconds <= self::STALE_MINUTES * 60;
+        $isRunning = $ageSeconds !== null && $ageSeconds <= self::staleMinutes * 60;
 
         return response()->json([
             'success'             => true,
@@ -1367,36 +1066,9 @@ class SystemAPI extends Controller
             'job'                 => 'priority-notification-follow-ups',
             'last_heartbeat'      => $lastRun === '' ? null : $lastRun,
             'age_seconds'         => $ageSeconds,
-            'stale_after_minutes' => self::STALE_MINUTES,
+            'stale_after_minutes' => self::staleMinutes,
         ], $isRunning ? 200 : 503);
     }
-
-    // ===== from the Accounts API file =====
-/**
- * Accounts API - user management (DOMAIN 5 / DOMAIN 6, rules 36-40).
- *
- * Everything is written against the live schema: employees carry
- * `emp_categ` ('staff' | 'admin' | 'super admin'), `emp_suspended`,
- * `emp_deleted` and `emp_present`; customers carry `cust_suspended`,
- * `cust_deleted`, `cust_type`, `cust_categ`, `cust_address`, `cust_bday`
- * and `cust_avatar`.
- *
- * The legacy column names (`emp_type`, `emp_instore`, `emp_disabled`,
- * `emp_photo`, `cust_nickname`, `cust_birthday`, `cust_photo`,
- * `cust_brgy`/`city`/`province`/`country`, `cust_disabled`, ...) are never
- * READ from the database - they are derived on the way OUT as response
- * aliases so the current frontend keeps working.
- *
- * Response envelope: {success, message?, data?}.
- */
-
-    // ===== from the Accounts API file =====
-
-    // ==========================================
-    // AUTHORIZATION (resolved on the `api` guard: config's default guard is
-    // still the stateless-less `web` one, so Controller::requireEmployee()
-    // would see a null user here)
-    // ==========================================
 
     private function denyUnlessEmployee(Request $json)
     {
@@ -1422,15 +1094,6 @@ class SystemAPI extends Controller
         return null;
     }
 
-    /*
-        Changing account type (rule 37 / REQ-UM-01)
-        ----------
-        JSON REQUEST
-
-        user_id - integer (req)
-        account_type - string (req: customer | employee)
-        new_type - string (req: STAFF | ADMIN | SUPER ADMIN)
-    */
     public function changeAccountType(Request $json)
     {
         $validator = (new DatabaseAPI())->changeAccountType($json);
@@ -1450,7 +1113,6 @@ class SystemAPI extends Controller
                     'message' => 'Customer and employee accounts cannot be converted.',
                 ], 422);
             }
-            // Rule 32 / D5: emp_categ carries exactly these three values
             if (! in_array($newType, ['staff', 'admin', 'super admin'], true)) {
                 return response()->json(['success' => false, 'message' => 'Invalid employee role.'], 422);
             }
@@ -1464,7 +1126,6 @@ class SystemAPI extends Controller
             $actor = $json->user('api');
             $user->update(['emp_categ' => $newType]);
 
-            // REQ-UM-04 / DOMAIN 32: role change logged with the super admin
             $this->logEmployee(
                 (int) $user->emp_id,
                 'edit',
@@ -1488,30 +1149,11 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Enrolling an employee (DOMAIN 5 / REQ-EMP_ENROLL-*, rule 36)
-        ----------
-        Thin alias of the live enrolment path (POST /auth/emp_signup): the
-        @bicol-u.edu.ph email rule, the 409 on duplicate, the generated
-        temporary password, emp_present=true and the emplog 'edit' row all
-        live in UserAPI::employeeSignup() so there is exactly one
-        implementation. Wire `POST /accounts/enroll` to this method if the
-        accounts-namespaced route is wanted.
-    */
     public function enrollEmployee(Request $json)
     {
         return (new UserAPI())->employeeSignup($json);
     }
 
-    /*
-        Deleting accounts (rule 38 / REQ-UM-03)
-        ----------
-        JSON REQUEST
-
-        user_id - integer (req)
-        account_type - string (req: customer | employee)
-        hard_delete - boolean (opt, default: false)
-    */
     public function deleteAccount(Request $json)
     {
         $validator = (new DatabaseAPI())->deleteAccount($json);
@@ -1545,8 +1187,6 @@ class SystemAPI extends Controller
                     try {
                         $user->delete();
                     } catch (\Illuminate\Database\QueryException $e) {
-                        // Linked rows (orders, logs, ...) keep the purge from
-                        // completing: fall back to the soft delete.
                         if ((string) ($e->errorInfo[0] ?? '') !== '23503') {
                             throw $e;
                         }
@@ -1555,8 +1195,6 @@ class SystemAPI extends Controller
                             'cust_login_active' => null,
                         ]);
                     }
-                    // The customer row is gone (or marked): record the purge
-                    // against the acting super admin instead of the target.
                     $this->logEmployee(
                         $adminId,
                         'edit',
@@ -1565,7 +1203,6 @@ class SystemAPI extends Controller
                 } else {
                     $user->update([
                         'cust_deleted' => now(),
-                        // REQ-UM-02: every outstanding token dies with the row
                         'cust_login_active' => null,
                     ]);
                     $this->logCustomer(
@@ -1586,9 +1223,6 @@ class SystemAPI extends Controller
                     try {
                         $user->delete();
                     } catch (\Illuminate\Database\QueryException $e) {
-                        // Linked rows (logs, schedule blocks, ...) keep the
-                        // purge from completing: fall back to the soft delete
-                        // instead of failing the request outright.
                         if ((string) ($e->errorInfo[0] ?? '') !== '23503') {
                             throw $e;
                         }
@@ -1625,15 +1259,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Disabling accounts (rule 38 / REQ-UM-02, REQ-UM-04)
-        ----------
-        JSON REQUEST
-
-        user_id - integer (req)
-        account_type - string (req: customer | employee)
-        reason - string (req)
-    */
     public function disableAccount(Request $json)
     {
         $validator = (new DatabaseAPI())->disableAccount($json);
@@ -1654,7 +1279,6 @@ class SystemAPI extends Controller
 
                 $user->update([
                     'cust_suspended' => now(),
-                    // REQ-UM-02: terminate every active session immediately
                     'cust_login_active' => null,
                 ]);
 
@@ -1703,13 +1327,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Displaying accounts (rule 37 / REQ-EMP_LIST-01..05)
-        ----------
-        JSON REQUEST / QUERY PARAMS
-
-        account_type - string (opt: customer | employee | all)
-    */
     public function displayAccounts(Request $json)
     {
         $denied = $this->denyUnlessEmployee($json);
@@ -1755,15 +1372,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Recovering accounts (rule 38 / REQ-UM-02)
-        ----------
-        JSON REQUEST
-
-        user_id - integer (req)
-        account_type - string (req: customer | employee)
-        reason - string (opt)
-    */
     public function recoverAccount(Request $json)
     {
         $validator = (new DatabaseAPI())->recoverAccount($json);
@@ -1832,14 +1440,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Searching accounts (REQ-EMP_LIST-02)
-        ----------
-        JSON REQUEST / QUERY PARAMS
-
-        q - string (req)
-        account_type - string (opt: customer | employee | all)
-    */
     public function searchAccounts(Request $json)
     {
         $denied = $this->denyUnlessEmployee($json);
@@ -1897,15 +1497,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Sorting accounts (REQ-EMP_LIST-03)
-        ----------
-        JSON REQUEST / QUERY PARAMS
-
-        sort_by - string (opt: created | name | type)
-        order - string (opt: asc | desc)
-        account_type - string (opt: customer | employee | all)
-    */
     public function sortAccounts(Request $json)
     {
         $denied = $this->denyUnlessEmployee($json);
@@ -1952,33 +1543,8 @@ class SystemAPI extends Controller
         }
     }
 
-    // ===== from the Access API file =====
-/**
- * Access log API (DOMAIN 32, REQ-ACCESS_LOG-01..03).
- *
- * custlog / emplog rows are append-only: every authentication, view and
- * edit action of an account lands in one of them with
- * `*_access` in auth | view | edit and a short `*_endpoint` description.
- * Nothing here ever updates or deletes a log row.
- *
- * Response envelope: {success, message?, data?}.
- */
+    private const maxEndpoint = 250;
 
-    // ===== from the Access API file =====
-
-    /** Endpoints may hold a route plus a short note: keep them column-sized. */
-    private const MAX_ENDPOINT = 250;
-
-    /*
-        Flagging irregularities
-        ----------
-        JSON REQUEST
-
-        action  - string (req)
-        desc    - string (req)
-        access  - string (opt: auth | view | edit, default view)
-        endpoint - string (opt: overrides the composed target description)
-    */
     public function flagIrregularity(Request $json)
     {
         $validator = (new DatabaseAPI())->flagIrregularity($json);
@@ -1991,7 +1557,6 @@ class SystemAPI extends Controller
             }
 
             EmpLog::create([
-                // No sequence for emplog_id on the live table.
                 'emplog_id'       => $this->nextId('emplog', 'emplog_id'),
                 'emp_id'         => $employee->emp_id,
                 'emplog_access'  => $this->accessValue($json->input('access'), 'view'),
@@ -2012,16 +1577,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Logging actions
-        ----------
-        JSON REQUEST
-
-        action   - string (req)
-        desc     - string (req)
-        access   - string (opt: auth | view | edit, default view)
-        endpoint - string (opt: overrides the composed target description)
-    */
     public function logAction(Request $json)
     {
         $validator = (new DatabaseAPI())->logAction($json);
@@ -2034,7 +1589,6 @@ class SystemAPI extends Controller
             }
 
             EmpLog::create([
-                // No sequence for emplog_id on the live table.
                 'emplog_id'       => $this->nextId('emplog', 'emplog_id'),
                 'emp_id'         => $employee->emp_id,
                 'emplog_access'  => $this->accessValue($json->input('access'), 'view'),
@@ -2055,22 +1609,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /*
-        Merged access log (FLOW-ACCESS_LOG-07, REQ-ACCESS_LOG-02/03)
-        ----------
-        GET /api/access/logs (super admin only)
-
-        QUERY PARAMS (all optional)
-        scope  - string (all | customers | employees, default all)
-        q      - string (matches the endpoint text or the actor's name)
-        access - string (auth | view | edit)
-        from   - date (YYYY-MM-DD, inclusive)
-        to     - date (YYYY-MM-DD, inclusive)
-        limit  - int (1..500, default 200)
-
-        Read-only: this endpoint never modifies a log row. Newest first, and
-        every entry carries the acting account's name and type.
-    */
     public function accessLog(Request $json)
     {
         try {
@@ -2084,8 +1622,6 @@ class SystemAPI extends Controller
 
     private function performAccessLog(Request $json)
     {
-        // The route already carries role:super_admin; the guard-resolved
-        // check below keeps the rule true even if the route is re-wired.
         if (! $this->isSuperAdmin($json->user('api'))) {
             return response()->json([
                 'success' => false,
@@ -2124,7 +1660,6 @@ class SystemAPI extends Controller
         usort($rows, fn (array $a, array $b) => strcmp($b['created'], $a['created']));
         $rows = array_slice($rows, 0, $limit);
 
-        // DOMAIN 32: reading the audit trail is itself an audited view
         $actor = $json->user('api');
         if ($actor instanceof Employee) {
             $this->logEmployee((int) $actor->emp_id, 'view', 'GET /api/access/logs');
@@ -2137,19 +1672,6 @@ class SystemAPI extends Controller
         ], 200);
     }
 
-    /*
-        Access-log retention purge (DOMAIN 32, REQ-ACCESS_LOG-01 override)
-        ----------
-        DELETE /api/access/logs (super admin only)
-
-        One action removes EVERY custlog and emplog entry older than 24
-        months (DatabaseAPI::ACCESS_LOG_PURGE_MONTHS) and notifies every
-        super admin of the count. This is the manual half of the owner's
-        retention policy: the system asks for it once every two weeks, and
-        the daily 60-month sweep would delete those rows anyway. Nothing
-        younger than 24 months is ever touched, and the purge itself is
-        written back into the surviving trail as a `delete` entry.
-    */
     public function purgeAccessLogs(Request $json)
     {
         try {
@@ -2163,8 +1685,6 @@ class SystemAPI extends Controller
 
     private function performPurgeAccessLogs(Request $json)
     {
-        // The route already carries role:super_admin; the guard-resolved
-        // check below keeps the rule true even if the route is re-wired.
         $actor = $json->user('api');
 
         if (! $this->isSuperAdmin($actor)) {
@@ -2174,11 +1694,10 @@ class SystemAPI extends Controller
             ], 403);
         }
 
-        $months = DatabaseAPI::ACCESS_LOG_PURGE_MONTHS;
+        $months = DatabaseAPI::accessLogPurgeMonths;
         $purged = (new DatabaseAPI())->purgeAccessLogs($months);
         $total = array_sum($purged);
 
-        // DOMAIN 32: purging the trail is itself recorded in the trail.
         if ($actor instanceof Employee) {
             $this->logEmployee(
                 (int) $actor->emp_id,
@@ -2199,11 +1718,6 @@ class SystemAPI extends Controller
         ], 200);
     }
 
-    // ==========================================
-    // QUERY BUILDERS (read-only)
-    // ==========================================
-
-    /** @return array<int, array<string, mixed>> */
     private function customerLogRows(string $search, string $access, ?string $from, ?string $to, int $limit): array
     {
         $query = DB::table('custlog')
@@ -2246,7 +1760,6 @@ class SystemAPI extends Controller
             ->all();
     }
 
-    /** @return array<int, array<string, mixed>> */
     private function employeeLogRows(string $search, string $access, ?string $from, ?string $to, int $limit): array
     {
         $query = DB::table('emplog')
@@ -2288,25 +1801,22 @@ class SystemAPI extends Controller
             ->all();
     }
 
-    /** Shapes one joined row into the shared log-entry payload. */
     private function normalizeRow(object $row, string $scope): array
     {
         $role = (string) ($row->actor_role ?? '');
         $created = (string) $row->created;
 
         return [
-            'scope' => $scope,                 // 'customer' | 'employee'
+            'scope' => $scope,
             'log_id' => (int) $row->log_id,
             'id' => (int) $row->log_id,
             'actor_id' => (int) $row->actor_id,
             'actor_name' => (string) ($row->actor_name ?? ''),
             'actor_type' => $scope,
             'actor_role' => $role,
-            'access' => (string) $row->access, // auth | view | edit
+            'access' => (string) $row->access,
             'endpoint' => (string) ($row->endpoint ?? ''),
             'created' => $created,
-            // Legacy-style per-table keys so old consumers can tell the
-            // two sources apart without a scope field.
             'custlog_id' => $scope === 'customer' ? (int) $row->log_id : null,
             'emplog_id' => $scope === 'employee' ? (int) $row->log_id : null,
             'custlog_access' => $scope === 'customer' ? (string) $row->access : null,
@@ -2318,15 +1828,6 @@ class SystemAPI extends Controller
         ];
     }
 
-    // ==========================================
-    // HELPERS
-    // ==========================================
-
-    /**
-     * auth | view | edit | delete, falling back to $default for anything else.
-     * `delete` is in the set because REQ-MANAGE_REV-04 asks for a review
-     * deletion to be distinguishable from a read in the access log.
-     */
     private function accessValue($value, string $default): string
     {
         $value = strtolower(trim((string) $value));
@@ -2334,7 +1835,6 @@ class SystemAPI extends Controller
         return in_array($value, ['auth', 'view', 'edit', 'delete'], true) ? $value : $default;
     }
 
-    /** "<endpoint> - <action>: <desc>", cut to the column width. */
     private function endpointFrom(Request $json, string $fallbackAction): string
     {
         $explicit = trim((string) $json->input('endpoint', ''));
@@ -2350,12 +1850,11 @@ class SystemAPI extends Controller
 
     private function short(string $endpoint): string
     {
-        return mb_strlen($endpoint) > self::MAX_ENDPOINT
-            ? mb_substr($endpoint, 0, self::MAX_ENDPOINT)
+        return mb_strlen($endpoint) > self::maxEndpoint
+            ? mb_substr($endpoint, 0, self::maxEndpoint)
             : $endpoint;
     }
 
-    /** Start of the given day (inclusive), or null when absent/invalid. */
     private function dayStart($value): ?string
     {
         if (! is_string($value) || trim($value) === '') {
@@ -2368,7 +1867,6 @@ class SystemAPI extends Controller
         }
     }
 
-    /** End of the given day (inclusive), or null when absent/invalid. */
     private function dayEnd($value): ?string
     {
         if (! is_string($value) || trim($value) === '') {

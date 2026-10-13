@@ -10,12 +10,6 @@ class Product extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        // `prod_id` is a bare bigint NOT NULL with no sequence on the live
-        // table, so writers allocate it themselves (App\Support\IdAllocator)
-        // and hand it to the model. It has to be MASS-ASSIGNABLE for that to
-        // survive: without it the key was silently dropped and every INSERT
-        // died on a NOT NULL violation - which is why "Add product" always
-        // answered "Failed to add product".
         'prod_id',
         'prod_name',
         'prod_categ',
@@ -60,25 +54,11 @@ class Product extends Model
         return $this->hasMany(Review::class, 'prod_id', 'prod_id');
     }
 
-    /**
-     * MODELS: product variants aggregate onto Product
-     * (prodvar rows live in App\Support\DatabaseModels; only DatabaseAPI
-     * touches them, rule 80).
-     */
     public function variations()
     {
         return $this->hasMany(Prodvar::class, 'prod_id', 'prod_id');
     }
 
-    /**
-     * Live stock = SUM(prodvar.prodvar_stock) over the non-deleted variations.
-     *
-     * `product.prod_qty` is a legacy column that no writer touches (every
-     * stock write goes to `prodvar`), so reading it returned 0 for every
-     * product and the low-stock gate at ProductsAPI::updateProductDetails
-     * fired on every edit. Falls back to the column only when the product has
-     * no variation rows at all (pre-restore fixture data).
-     */
     public function totalStock(): int
     {
         try {
@@ -90,18 +70,11 @@ class Product extends Model
                 return $sum;
             }
         } catch (\Throwable $e) {
-            // No prodvar table on this connection: fall through to the column.
         }
 
         return (int) ($this->prod_qty ?? 0);
     }
 
-    /**
-     * How many live variations the product has. A product with more than one
-     * is one that variates - by one axis or by several at once - and its
-     * low-stock alerts belong to the individual combinations rather than to the
-     * product as a whole (REQ-IM-03).
-     */
     public function totalVariationCount(): int
     {
         try {
@@ -113,7 +86,6 @@ class Product extends Model
         }
     }
 
-    /** REQ-MANAGE_INV-06: total units ever sold, aggregated from prodsales. */
     public function totalSold(): int
     {
         try {
@@ -126,7 +98,6 @@ class Product extends Model
         }
     }
 
-    /** Rule 60 / REQ-CATALOG-03: disabled products never reach the catalog. */
     public function isBuyable(): bool
     {
         return $this->prod_disabled === null && $this->prod_deleted === null;
