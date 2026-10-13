@@ -8,13 +8,16 @@ import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import backIcon from '../assets/icons/common/back.svg'
 import searchIcon from '../assets/icons/common/search.svg'
-
-const categories = ['All', 'Shirts', 'Hoodie', 'Varsity Jacket', 'Accessories', 'Cap', 'Lanyard', 'Pins']
+import { normalizeProductCategory, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_FILTERS } from '../data/productCategories.js'
 
 function Shop() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { products: productsData, loading, error, reload } = useCatalog()
+  const legacyCategories = [...new Set(productsData
+    .map((product) => normalizeProductCategory(product.category, product.name))
+    .filter((category) => !PRODUCT_CATEGORIES.includes(category)))]
+  const categories = [...PRODUCT_CATEGORY_FILTERS, ...legacyCategories]
 
   const [query, setQuery] = useState('')
   const [filterModalOpen, setFilterModalOpen] = useState(false)
@@ -43,7 +46,7 @@ function Shop() {
     if (catVal) {
       setActiveFilters((prev) => ({
         ...prev,
-        category: catVal,
+        category: normalizeProductCategory(catVal),
       }))
     }
   }, [searchParams])
@@ -69,17 +72,11 @@ function Shop() {
     }
 
     // 2. Category filter
-    if (activeFilters.category !== 'All') {
-      if (activeFilters.category === 'Accessories') {
-        const isAccessory =
-          prod.category === 'Accessories' ||
-          prod.category === 'Cap' ||
-          prod.category === 'Lanyard' ||
-          prod.category === 'Pins'
-        if (!isAccessory) return false
-      } else if (prod.category !== activeFilters.category) {
-        return false
-      }
+    if (
+      activeFilters.category !== 'All' &&
+      normalizeProductCategory(prod.category, prod.name) !== normalizeProductCategory(activeFilters.category)
+    ) {
+      return false
     }
 
     // 3. Collection filter
@@ -277,6 +274,7 @@ function Shop() {
         onClose={() => setFilterModalOpen(false)}
         initialFilters={activeFilters}
         onApply={handleApplyFilters}
+        categoryOptions={categories}
       />
     </AppShell>
   )

@@ -120,6 +120,10 @@ class ProductsAPI extends Controller
             $mainImage = ($main !== null && filled($main->prodvar_pic)) ? $main->prodvar_pic : $images->first();
 
             $payload = $product->attributesToArray();
+            $payload['prod_categ'] = self::normalizeCategory(
+                (string) $product->prod_categ,
+                (string) $product->prod_name
+            );
 
             // Raw prodvar rows, exposed twice under two names so both the old
             // ("prodvar") and newer ("variations") readers keep working.
@@ -402,8 +406,8 @@ class ProductsAPI extends Controller
         /**
          * REQ-ADD_PROD-04: categories are predefined and system-wide. Every
          * spelling the admin UI offers (singular, plural, legacy) folds onto
-         * one canonical value, and anything outside the list is rejected with
-         * the list itself, so `prod_categ` can never drift into free text.
+         * one canonical value. `Accessories` remains accepted only so existing
+         * unclassified rows can still be edited; it is not offered for new rows.
          *
          * Public so every writer of `prod_categ` - the admin form, the
          * inventory seeder and any future importer - folds its value through
@@ -412,19 +416,17 @@ class ProductsAPI extends Controller
         public static function categoryWhitelist(): array
         {
             return [
-                'Shirts', 'Hoodies', 'Jackets', 'Varsity Jacket', 'Caps',
-                'Lanyards', 'Pins', 'Stickers', 'Accessories', 'Windbreaker',
-                'Others',
+                'Shirts', 'Hoodies', 'Jackets', 'Caps', 'Lanyards',
+                'Stickers', 'Pins', 'Totebags', 'Keychains',
             ];
         }
 
         /** Alias -> canonical category name (lowercase keys). */
-        public static function normalizeCategory(?string $raw): string
+        public static function normalizeCategory(?string $raw, ?string $productName = null): string
         {
-            $value = trim((string) $raw);
-            if ($value === '') {
-                return 'Others';
-            }
+            $value = strtolower(trim((string) $raw));
+            $value = preg_replace('/[_-]+/', ' ', $value);
+            $value = preg_replace('/\s+/', ' ', $value);
 
             $aliases = [
                 'shirt'        => 'Shirts',
@@ -433,8 +435,11 @@ class ProductsAPI extends Controller
                 'hoodies'      => 'Hoodies',
                 'jacket'       => 'Jackets',
                 'jackets'      => 'Jackets',
-                'varsity'      => 'Varsity Jacket',
-                'varsity jacket' => 'Varsity Jacket',
+                'varsity'      => 'Jackets',
+                'varsity jacket' => 'Jackets',
+                'varsity jackets' => 'Jackets',
+                'windbreaker'  => 'Jackets',
+                'windbreakers' => 'Jackets',
                 'cap'          => 'Caps',
                 'caps'         => 'Caps',
                 'lanyard'      => 'Lanyards',
@@ -443,19 +448,33 @@ class ProductsAPI extends Controller
                 'pins'         => 'Pins',
                 'sticker'      => 'Stickers',
                 'stickers'     => 'Stickers',
+                'tote bag'     => 'Totebags',
+                'tote bags'    => 'Totebags',
+                'totebag'      => 'Totebags',
+                'totebags'     => 'Totebags',
+                'key chain'    => 'Keychains',
+                'key chains'   => 'Keychains',
+                'keychain'     => 'Keychains',
+                'keychains'    => 'Keychains',
                 'accessory'    => 'Accessories',
                 'accessories'  => 'Accessories',
-                'windbreaker'  => 'Windbreaker',
-                // The catalog directory and the storefront both spell this
-                // category "Windbreakers" (plural). Without the alias the
-                // store's own product sheet sat outside the whitelist and
-                // REQ-ADD_PROD-04 refused every windbreaker row with
-                // "Unknown product category".
-                'windbreakers' => 'Windbreaker',
-                'others'       => 'Others',
+                'others'       => 'Accessories',
             ];
 
-            return $aliases[strtolower($value)] ?? $value;
+            $category = $aliases[$value] ?? $value;
+            if ($category !== '' && $category !== 'Accessories') {
+                return $category;
+            }
+
+            $name = strtolower((string) $productName);
+            if (str_contains($name, 'lanyard')) return 'Lanyards';
+            if (str_contains($name, 'tote')) return 'Totebags';
+            if (str_contains($name, 'key chain') || str_contains($name, 'keychain')) return 'Keychains';
+            if (str_contains($name, 'sticker')) return 'Stickers';
+            if (str_contains($name, 'pin') || str_contains($name, 'badge')) return 'Pins';
+            if (str_contains($name, 'cap')) return 'Caps';
+
+            return $category === '' ? 'Accessories' : $category;
         }
 
         /**
@@ -466,7 +485,7 @@ class ProductsAPI extends Controller
         {
             $categ = self::normalizeCategory($raw);
 
-            if (! in_array($categ, self::categoryWhitelist(), true)) {
+            if (! in_array($categ, self::categoryWhitelist(), true) && $categ !== 'Accessories') {
                 $message = 'Unknown product category "' . $categ
                     . '". Allowed categories: ' . implode(', ', self::categoryWhitelist()) . '.';
 
@@ -1162,10 +1181,6 @@ class ProductsAPI extends Controller
                     $status = 'active';
                 }
 
-                if ($categ) {
-                    $query->where('prod_categ', $categ);
-                }
-
                 if ($status === 'disabled') {
                     // A soft-deleted row is gone from every admin list (the
                     // `active` branch already excludes it), so it must not
@@ -1182,6 +1197,16 @@ class ProductsAPI extends Controller
                 // D19: the catalog is ordered by name.
                 $products = $query->orderBy('prod_name')->get();
                 $rows = self::presentMany($products);
+                if ($categ) {
+                    $wantedCategory = self::normalizeCategory($categ);
+                    $rows = array_values(array_filter(
+                        $rows,
+                        fn ($row) => self::normalizeCategory(
+                            (string) ($row['prod_categ'] ?? ''),
+                            (string) ($row['prod_name'] ?? '')
+                        ) === $wantedCategory
+                    ));
+                }
 
                 // Stock filters run against SUM(prodvar.prodvar_stock).
                 if ($stock === 'in_stock') {
@@ -1226,10 +1251,11 @@ class ProductsAPI extends Controller
         {
             try {
                 $inUse = Product::whereNull('prod_deleted')
-                    ->distinct()
-                    ->pluck('prod_categ')
-                    ->filter(fn ($c) => $c !== null && trim((string) $c) !== '')
-                    ->map(fn ($c) => trim((string) $c))
+                    ->get(['prod_name', 'prod_categ'])
+                    ->map(fn (Product $product) => self::normalizeCategory(
+                        (string) $product->prod_categ,
+                        (string) $product->prod_name
+                    ))
                     ->all();
 
                 $merged = [];

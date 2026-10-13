@@ -3,8 +3,8 @@ import DrawerPanel from '../DrawerPanel.jsx'
 import { useAdmin } from '../../../hooks/useAdmin.js'
 import { uploadImage } from '../../../services/upload.js'
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL } from '../kit/ui.js'
+import { PRODUCT_CATEGORIES } from '../../../data/productCategories.js'
 
-const CATEGORIES = ['Shirts', 'Hoodie', 'Varsity Jacket', 'Cap', 'Lanyard', 'Pins', 'Accessories']
 const EMPTY = { name: '', category: 'Shirts', price: '', stock: '', desc: '', photo: '' }
 
 /* Adds a catalog product through the same addProduct action as Inventory. */
@@ -87,7 +87,7 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
           <div>
             <label className={LABEL} htmlFor="np-category">Category</label>
             <select id="np-category" className={INPUT} value={form.category} onChange={set('category')}>
-              {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+              {PRODUCT_CATEGORIES.map((category) => <option key={category}>{category}</option>)}
             </select>
           </div>
           <div>

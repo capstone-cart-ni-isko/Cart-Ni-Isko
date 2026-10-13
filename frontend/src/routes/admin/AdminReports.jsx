@@ -7,6 +7,7 @@ import Button from '../../components/ui/Button.jsx'
 import { DownloadIcon, FileTextIcon, CalendarIcon, UsersIcon, PackageIcon, SaveIcon } from '../../components/ui/Icons.jsx'
 import { apiPost, apiGet } from '../../services/api.js'
 import { empCateg, empIsActive, first, fmtDateTime, productStock, toNumber } from '../../components/admin/schema.js'
+import { normalizeProductCategory } from '../../data/productCategories.js'
 import { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
 
@@ -285,7 +286,7 @@ function AdminReports() {
             doc.autoTable({
               startY: y,
               head: [['Name', 'Category', 'Price', 'Qty', 'Stock Value', 'Low Stock']],
-              body: generatedData.items.slice(0, 50).map(i => [i.prod_name, i.prod_categ, `₱${i.prod_price}`, productStock(i), `₱${toNumber(i.stock_value).toLocaleString()}`, i.is_low_stock ? 'Yes' : 'No']),
+              body: generatedData.items.slice(0, 50).map(i => [i.prod_name, normalizeProductCategory(i.prod_categ, i.prod_name), `₱${i.prod_price}`, productStock(i), `₱${toNumber(i.stock_value).toLocaleString()}`, i.is_low_stock ? 'Yes' : 'No']),
               theme: 'striped',
               headStyles: { fillColor: [249, 115, 22] },
             })
@@ -359,7 +360,7 @@ function AdminReports() {
     rows.push(['Items'])
     rows.push(['ID', 'Tag', 'Name', 'Category', 'Price', 'Qty', 'Stock Value', 'Low Stock'])
     data.items?.forEach(i => rows.push([
-      i.prod_id, i.prod_tag, i.prod_name, i.prod_categ,
+      i.prod_id, i.prod_tag, i.prod_name, normalizeProductCategory(i.prod_categ, i.prod_name),
       i.prod_price, productStock(i), i.stock_value, i.is_low_stock ? 'Yes' : 'No'
     ]))
     return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
@@ -639,7 +640,7 @@ function AdminReports() {
                         {generatedData.items.slice(0, 50).map(i => (
                           <tr key={i.prod_id} className={`hover:bg-slate-50 ${i.is_low_stock ? 'bg-rose-50/30' : ''}`}>
                             <td className="p-3 font-medium">{i.prod_name}</td>
-                            <td className="p-3 text-slate-600">{i.prod_categ}</td>
+                            <td className="p-3 text-slate-600">{normalizeProductCategory(i.prod_categ, i.prod_name)}</td>
                             <td className="p-3 text-right">₱{toNumber(i.prod_price).toFixed(2)}</td>
                             <td className="p-3 text-right">{productStock(i)}</td>
                             <td className="p-3 text-right font-medium">₱{toNumber(i.stock_value).toLocaleString()}</td>

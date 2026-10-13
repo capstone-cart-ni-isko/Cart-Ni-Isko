@@ -220,10 +220,7 @@ function ProductDetail() {
     showToast(isSaved ? 'Removed from Wishlist' : 'Added to Wishlist')
   }
 
-  const isApparel =
-    product.category === 'Hoodie' ||
-    product.category === 'Varsity Jacket' ||
-    product.category === 'Shirts'
+  const isApparel = ['Hoodies', 'Jackets', 'Shirts'].includes(product.category)
 
   const ctaLabel = isOutOfStock
     ? 'Out of Stock'

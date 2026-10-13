@@ -31,8 +31,6 @@ function readDraft() {
   }
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
 function SignIn() {
   const navigate = useNavigate()
   const { login } = useAuth()
@@ -74,10 +72,8 @@ function SignIn() {
     const value = String(form[name] || '').trim()
 
     if (name === 'identifier') {
-      if (!value) return 'Enter your email address.'
-      if (value.includes('@')) {
-        if (!EMAIL_RE.test(value)) return 'Enter a valid email address.'
-      } else if (value.replace(/\D/g, '').length < 10) {
+      if (!value) return 'Enter your phone number.'
+      if (value.replace(/\D/g, '').length < 10) {
         return 'Enter a valid phone number.'
       }
       return ''
@@ -142,21 +138,22 @@ function SignIn() {
     navigate('/home')
   }
 
-  const emailField = (idPrefix, inputClassName, errorClassName) => (
+  const phoneField = (idPrefix, inputClassName, errorClassName) => (
     <div>
       <label
         htmlFor={`${idPrefix}-identifier`}
         className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 md:text-sm md:text-gray-700 md:normal-case md:tracking-normal"
       >
-        Email Address
+        Phone Number
       </label>
       <div className="relative">
         <input
           id={`${idPrefix}-identifier`}
-          type="email"
+          type="tel"
           name="identifier"
-          autoComplete="username"
-          placeholder="you@bicol-u.edu.ph"
+          autoComplete="tel"
+          inputMode="tel"
+          placeholder="09XX XXX XXXX"
           value={form.identifier}
           onChange={handleChange}
           onFocus={() => {
@@ -181,7 +178,7 @@ function SignIn() {
       {identifierError && <p className={errorClassName}>{identifierError}</p>}
       {!identifierError && (
         <p className="text-xs text-gray-400 mt-1 font-medium md:block hidden">
-          Your registered phone number works here too.
+          Enter the phone number registered to your account.
         </p>
       )}
     </div>
@@ -240,7 +237,7 @@ function SignIn() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-            {emailField(
+            {phoneField(
               'mobile',
               'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all',
               'text-red-500 text-xs mt-1 font-semibold'
@@ -248,7 +245,7 @@ function SignIn() {
 
             {passwordField(
               'mobile',
-              'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all'
+              'w-full h-12 px-4 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 transition-all'
             )}
 
             <div className="flex items-center justify-between pt-1">
@@ -303,7 +300,7 @@ function SignIn() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-            {emailField(
+            {phoneField(
               'desktop',
               'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white transition-all',
               'text-red-500 text-xs mt-1.5 font-semibold'
@@ -311,7 +308,7 @@ function SignIn() {
 
             {passwordField(
               'desktop',
-              'w-full h-12 px-4 border rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white transition-all'
+              'w-full h-12 px-4 border border-gray-200 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white transition-all'
             )}
 
             {serverError && (

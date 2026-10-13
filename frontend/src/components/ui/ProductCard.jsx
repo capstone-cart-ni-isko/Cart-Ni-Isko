@@ -77,14 +77,14 @@ function ProductCard({ product }) {
 
         {/* Product details */}
         <div className="p-3">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+          <span className="text-[10px] font-normal text-gray-400 uppercase tracking-wider">
             {product.category}
           </span>
-          <h3 className="text-xs sm:text-sm font-bold text-gray-900 mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
+          <h3 className="text-xs sm:text-sm font-normal text-gray-900 mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
             {product.name}
           </h3>
           <div className="mt-1 flex items-center justify-between">
-            <PriceTag amount={product.price} className="text-xs sm:text-sm" />
+            <PriceTag amount={product.price} tone="neutral" className="text-xs sm:text-sm" />
           </div>
         </div>
       </Link>

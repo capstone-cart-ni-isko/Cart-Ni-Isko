@@ -1,4 +1,5 @@
 import { apiGet, cacheRead, cacheWrite } from './api.js'
+import { normalizeProductCategory } from '../data/productCategories.js'
 
 /* The catalog is public and only changes when an admin edits it, so the last
    answer per filter set is mirrored for 60s: the storefront paints instantly
@@ -13,40 +14,16 @@ export function writeCatalogCache(params, rows) {
   cacheWrite(CACHE_KEY(params), rows)
 }
 
-const CATEGORY_ALIASES = {
-  HOODIE: 'Hoodie',
-  HOODIES: 'Hoodie',
-  SHIRT: 'Shirts',
-  SHIRTS: 'Shirts',
-  'VARSITY JACKET': 'Varsity Jacket',
-  ACCESSORIES: 'Accessories',
-  ACCESSORY: 'Accessories',
-  CAP: 'Cap',
-  LANYARD: 'Lanyard',
-  PINS: 'Pins',
-  PIN: 'Pins',
-}
-
 const CATEGORY_IMAGES = {
-  Hoodie: '/src/assets/Images/unnamed (4).png',
+  Hoodies: '/src/assets/Images/unnamed (4).png',
   Shirts: '/src/assets/Images/unnamed (11).png',
-  'Varsity Jacket': '/src/assets/Images/unnamed (12).png',
-  Cap: '/src/assets/Branding/Copy of cap.png',
-  Lanyard: '/src/assets/Branding/Copy of lanyard.png',
+  Jackets: '/src/assets/Images/unnamed (12).png',
+  Caps: '/src/assets/Branding/Copy of cap.png',
+  Lanyards: '/src/assets/Branding/Copy of lanyard.png',
+  Stickers: '/src/assets/Images/unnamed (10).png',
   Pins: '/src/assets/Branding/Copy of badge.png',
+  Totebags: '/src/assets/Images/totebag.png',
   Accessories: '/src/assets/Branding/Copy of store.png',
-}
-
-function normalizeCategory(raw, name = '') {
-  const key = String(raw || '').trim()
-  const mapped = CATEGORY_ALIASES[key.toUpperCase()] || key
-  if (mapped === 'Accessories') {
-    const lower = name.toLowerCase()
-    if (lower.includes('lanyard')) return 'Lanyard'
-    if (lower.includes('cap')) return 'Cap'
-    if (lower.includes('pin')) return 'Pins'
-  }
-  return mapped || 'Accessories'
 }
 
 /** Parse a prodvar_options cell (JSON string or object) into a map. */
@@ -173,7 +150,7 @@ export function variationStockMatrix(variations, secondAxis = null) {
 
 function defaultPresentation(row, category) {
   const image = CATEGORY_IMAGES[category] || CATEGORY_IMAGES.Accessories
-  const isApparel = category === 'Hoodie' || category === 'Shirts' || category === 'Varsity Jacket'
+  const isApparel = ['Hoodies', 'Jackets', 'Shirts'].includes(category)
   const variations = normalizeVariations(row)
   const qty = Number(row.prod_qty ?? variationStock(variations) ?? 0)
 
@@ -207,7 +184,7 @@ export function mapProduct(row) {
   if (!row) return null
 
   const tag = row.prod_tag || `prod-${row.prod_id}`
-  const category = normalizeCategory(row.prod_categ, row.prod_name || '')
+  const category = normalizeProductCategory(row.prod_categ, row.prod_name || '')
   const variations = normalizeVariations(row)
   const fallback = defaultPresentation(row, category)
 
@@ -284,7 +261,7 @@ export function mapProduct(row) {
     status: preOrder ? 'For Pre-order' : qty > 0 ? 'In Stock' : 'Out of Stock',
     tag: row.prod_tag || undefined,
     prod_desc: row.prod_desc || undefined,
-    prod_categ: row.prod_categ || undefined,
+    prod_categ: category,
   }
 }
 

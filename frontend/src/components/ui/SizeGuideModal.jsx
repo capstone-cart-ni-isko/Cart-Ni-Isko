@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { RulerIcon, CloseIcon, HelpIcon } from './Icons.jsx'
+import { normalizeProductCategory } from '../../data/productCategories.js'
 
 const SIZE_CHARTS = {
-  Hoodie: {
+  Hoodies: {
     title: 'BU Hoodies & Sweatshirts',
     note: 'Unisex relaxed fit. Measurements are taken with the garment laid flat.',
     sizes: ['S', 'M', 'L', 'XL', '2XL'],
@@ -21,7 +22,7 @@ const SIZE_CHARTS = {
       { size: '2XL', chest: '71 cm', length: '79 cm', shoulder: '64 cm', sleeve: '71 cm' },
     ],
   },
-  'Varsity Jacket': {
+  Jackets: {
     title: 'BU Varsity Jackets',
     note: 'Boxy collegiate varsity cut with room for layering over inner shirts or hoodies.',
     sizes: ['S', 'M', 'L', 'XL', '2XL'],
@@ -61,14 +62,15 @@ const SIZE_CHARTS = {
   },
 }
 
-export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodie' }) {
+export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodies' }) {
   const [unit, setUnit] = useState('inches') // 'inches' | 'cm'
-  const defaultTab = SIZE_CHARTS[category] ? category : 'Hoodie'
+  const normalizedCategory = normalizeProductCategory(category)
+  const defaultTab = SIZE_CHARTS[normalizedCategory] ? normalizedCategory : 'Hoodies'
   const [activeTab, setActiveTab] = useState(defaultTab)
 
   if (!isOpen) return null
 
-  const currentChart = SIZE_CHARTS[activeTab] || SIZE_CHARTS.Hoodie
+  const currentChart = SIZE_CHARTS[activeTab] || SIZE_CHARTS.Hoodies
   const rows = unit === 'inches' ? currentChart.inches : currentChart.cm
 
   return (

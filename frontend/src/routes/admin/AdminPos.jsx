@@ -6,15 +6,14 @@ import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import QRScanner from '../../components/ui/QRScanner.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { mapOrderRows } from '../../services/dashboard.js'
+import { normalizeProductCategory, PRODUCT_CATEGORIES } from '../../data/productCategories.js'
 
 const CATEGORY_ALL = 'All Items'
 /**
- * FLOW-WALKIN-03: the category pills must be the categories the catalog
- * actually has. They used to be a hardcoded list ("Stickers", "Jackets",
- * "Caps") that the backend's normalisation never produces, so those pills
- * matched nothing and real categories (Lanyard, Varsity Jacket) had none.
+ * FLOW-WALKIN-03: category pills use the shared canonical category set.
+ * Live legacy categories are merged in below so existing rows remain reachable.
  */
-const CATEGORY_FALLBACK = ['Shirts', 'Hoodie', 'Varsity Jacket', 'Cap', 'Lanyard', 'Pins', 'Accessories']
+const CATEGORY_FALLBACK = PRODUCT_CATEGORIES
 
 /**
  * The mobile cart line used to print a fixed fake SKU ("CP-0003") for every
@@ -102,10 +101,9 @@ export default function AdminPos() {
 
   // Filter products by category and search (tolerant to singular/plural labels)
   const filteredProducts = useMemo(() => {
-    const normalizeCat = (value) => String(value || '').trim().toLowerCase().replace(/s$/, '')
-    const selected = normalizeCat(selectedCategory)
+    const selected = normalizeProductCategory(selectedCategory)
     return products.filter((p) => {
-      const cat = normalizeCat(p.category)
+      const cat = normalizeProductCategory(p.category, p.name)
       const matchCat =
         selectedCategory === CATEGORY_ALL || cat === selected || cat.includes(selected) || selected.includes(cat)
       const matchSearch =

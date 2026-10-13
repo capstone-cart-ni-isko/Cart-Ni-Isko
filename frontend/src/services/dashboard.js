@@ -1,3 +1,5 @@
+import { normalizeProductCategory } from '../data/productCategories.js'
+
 /**
  * Admin dashboard & analytics aggregation layer (SRS REQ-SD-01/02/03).
  *
@@ -106,7 +108,7 @@ function mapItemRow(item) {
     // item_amount is the LINE TOTAL (price x qty) - derive the unit price.
     price: qty > 0 ? lineTotal / qty : lineTotal,
     lineTotal,
-    category: product?.prod_categ || 'Accessories',
+    category: normalizeProductCategory(product?.prod_categ, product?.prod_name),
     image: (Array.isArray(product?.prod_images) && product.prod_images[0]) || '',
     preorder: isTruthy(product?.prod_preorder),
     product,
@@ -482,7 +484,7 @@ export function buildCategorySales(rows = [], limit = 6) {
   const byCategory = new Map()
   rows.forEach((row) => {
     ;(row.items || []).forEach((item) => {
-      const key = item.category || 'Accessories'
+      const key = normalizeProductCategory(item.category, item.name)
       const entry = byCategory.get(key) || { category: key, sales: 0, units: 0 }
       entry.sales += Number(item.lineTotal) || 0
       entry.units += Number(item.qty) || 0
@@ -504,7 +506,7 @@ export function buildTopProducts(rows = [], products = [], limit = 4) {
       const key = item.name
       const entry = byProduct.get(key) || {
         name: item.name,
-        category: item.category || 'Accessories',
+        category: normalizeProductCategory(item.category, item.name),
         sales: 0,
         revenue: 0,
         image: item.image || catalog.get(`prod-${item.prodId}`)?.image || '',

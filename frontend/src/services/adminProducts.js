@@ -1,26 +1,16 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './api.js'
+import { normalizeProductCategory } from '../data/productCategories.js'
 
 const CATEGORY_IMAGES = {
-  Hoodie: '/src/assets/Images/unnamed (4).png',
+  Hoodies: '/src/assets/Images/unnamed (4).png',
   Shirts: '/src/assets/Images/unnamed (11).png',
-  'Varsity Jacket': '/src/assets/Images/unnamed (12).png',
-  Cap: '/src/assets/Branding/Copy of cap.png',
-  Lanyard: '/src/assets/Branding/Copy of lanyard.png',
+  Jackets: '/src/assets/Images/unnamed (12).png',
+  Caps: '/src/assets/Branding/Copy of cap.png',
+  Lanyards: '/src/assets/Branding/Copy of lanyard.png',
+  Stickers: '/src/assets/Images/unnamed (10).png',
   Pins: '/src/assets/Branding/Copy of badge.png',
+  Totebags: '/src/assets/Images/totebag.png',
   Accessories: '/src/assets/Branding/Copy of store.png',
-}
-
-function normalizeCategory(raw) {
-  const key = String(raw || '').trim()
-  const upper = key.toUpperCase()
-  if (upper === 'HOODIE' || upper === 'HOODIES') return 'Hoodie'
-  if (upper === 'SHIRT' || upper === 'SHIRTS') return 'Shirts'
-  if (upper === 'VARSITY JACKET') return 'Varsity Jacket'
-  if (upper === 'CAP') return 'Cap'
-  if (upper === 'LANYARD') return 'Lanyard'
-  if (upper === 'PINS' || upper === 'PIN') return 'Pins'
-  if (upper === 'ACCESSORIES' || upper === 'ACCESSORY') return 'Accessories'
-  return key || 'Accessories'
 }
 
 function categoryImage(category) {
@@ -72,7 +62,7 @@ function skuSlug(value) {
  */
 export function mapAdminProduct(row) {
   if (!row) return null
-  const category = normalizeCategory(row.prod_categ)
+  const category = normalizeProductCategory(row.prod_categ, row.prod_name)
   const variations = Array.isArray(row.variations)
     ? row.variations.filter((variant) => variant && variant.prodvar_id !== undefined)
     : []
@@ -139,8 +129,8 @@ export function mapAdminProduct(row) {
     : (row.prod_sizes || []).map((size, i) => ({
         id: `var-${row.prod_id}-${i}`,
         prodvarId: null,
-        name: `${category === 'Accessories' ? 'Standard' : size}`,
-        label: `${category === 'Accessories' ? 'Standard' : size}`,
+        name: `${['Pins', 'Stickers', 'Lanyards', 'Totebags', 'Keychains', 'Accessories'].includes(category) ? 'Standard' : size}`,
+        label: `${['Pins', 'Stickers', 'Lanyards', 'Totebags', 'Keychains', 'Accessories'].includes(category) ? 'Standard' : size}`,
         options: {},
         sku: `${row.prod_tag}-${size}`,
         stock: qty,

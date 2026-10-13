@@ -92,25 +92,15 @@ function AdminEntryRoute() {
   return <Navigate to={empHomePath(currentAdminUser)} replace />
 }
 
-/**
- * FLOW-CUST_LOGIN-01 - the bare "/" entry rule, read through system rule 71
- * ("the customer portal and the admin portal must be separate").
- *
- * The two portals keep their own session slots, so "/" has to pick one. An
- * employee who still holds a staff session is served the EMPLOYEE portal -
- * sending them to the customer login form would be exactly the cross-portal
- * hop rule 71 forbids. When both slots are signed in, the one signed in last
- * wins (services/session.js: latestSessionKind).
- */
+/** Keep staff sessions in the employee portal; customer visitors land at Home. */
 function EntryRoute() {
-  const { currentUser } = useAuth()
   const { currentAdminUser } = useAdmin()
 
   if (currentAdminUser && latestSessionKind() !== 'customer') {
     return <Navigate to="/admin" replace />
   }
 
-  return <Navigate to={currentUser ? '/home' : '/login'} replace />
+  return <Navigate to="/home" replace />
 }
 
 function App() {

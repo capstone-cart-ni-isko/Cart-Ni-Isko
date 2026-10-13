@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import Button from './Button.jsx'
 import closeIcon from '../../assets/icons/common/close.svg'
+import { PRODUCT_CATEGORY_FILTERS } from '../../data/productCategories.js'
 
-const categories = ['All', 'Shirts', 'Hoodie', 'Cap', 'Lanyard', 'Stickers', 'Pins', 'Windbreaker', 'Varsity Jacket']
 const collections = ['All', 'BUnique Collection', 'Classic BU', 'Essentials']
 const sizes = ['S', 'M', 'L', 'XL', '2XL', '3XL']
 const colors = [
@@ -14,7 +14,7 @@ const colors = [
   { name: 'Gold', value: '#F59E0B' },
 ]
 
-function FiltersModal({ isOpen, onClose, initialFilters, onApply }) {
+function FiltersModal({ isOpen, onClose, initialFilters, onApply, categoryOptions = PRODUCT_CATEGORY_FILTERS }) {
   const [filters, setFilters] = useState({
     category: 'All',
     collection: 'All',
@@ -105,7 +105,7 @@ function FiltersModal({ isOpen, onClose, initialFilters, onApply }) {
           <div className="space-y-1.5">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</h3>
             <div className="flex flex-wrap gap-1.5">
-              {categories.map((cat) => (
+                {categoryOptions.map((cat) => (
                 <button
                   key={cat}
                   type="button"

@@ -7,6 +7,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { uploadImage } from '../../services/upload.js'
 import { empIsStaff } from '../../components/admin/schema.js'
+import { normalizeProductCategory, PRODUCT_CATEGORIES } from '../../data/productCategories.js'
 
 /**
  * REQ-ADD_PROD-04: the product categories are a predefined, system-wide set.
@@ -19,39 +20,6 @@ import { empIsStaff } from '../../components/admin/schema.js'
  * category a stored row carries, and a value missing from this list left the
  * select showing nothing at all (and silently dropping the category on save).
  */
-const BACKEND_CATEGORIES = [
-  'Shirts',
-  'Hoodies',
-  'Jackets',
-  'Varsity Jacket',
-  'Caps',
-  'Lanyards',
-  'Pins',
-  'Stickers',
-  'Accessories',
-  'Windbreaker',
-  'Others',
-]
-
-const PRODUCT_CATEGORIES = [
-  'Shirts',
-  'Hoodie',
-  'Varsity Jacket',
-  'Cap',
-  'Lanyard',
-  'Pins',
-  'Accessories',
-  ...BACKEND_CATEGORIES.filter((cat) => ![
-    'Shirts',
-    'Hoodie',
-    'Varsity Jacket',
-    'Cap',
-    'Lanyard',
-    'Pins',
-    'Accessories',
-  ].includes(cat)),
-]
-
 /**
  * REQ-ADD_PROD-07 / FLOW-ADD_PROD-03: the backend accepts JPG and PNG for a
  * variation image (ProductsAPI::parseVariations -> imageAllowed) and at most
@@ -124,6 +92,10 @@ export default function AdminInventory() {
 
   // Product data state - synced directly from backend (refetched on every change)
   const productsList = backendProducts
+  const legacyInventoryCategories = [...new Set(productsList
+    .map((product) => normalizeProductCategory(product.categoryName, product.name))
+    .filter((category) => !PRODUCT_CATEGORIES.includes(category)))]
+  const inventoryFilterCategories = [...PRODUCT_CATEGORIES, ...legacyInventoryCategories]
   const [expandedRows, setExpandedRows] = useState({})
   const [selectedVariantIds, setSelectedVariantIds] = useState([])
   const [selectedProductIds, setSelectedProductIds] = useState([])
@@ -216,6 +188,9 @@ export default function AdminInventory() {
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editCategory, setEditCategory] = useState('Shirts')
+  const editCategoryOptions = PRODUCT_CATEGORIES.includes(editCategory)
+    ? PRODUCT_CATEGORIES
+    : [...PRODUCT_CATEGORIES, editCategory]
   const [editPrice, setEditPrice] = useState('')
   const [editPhoto, setEditPhoto] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -587,10 +562,7 @@ export default function AdminInventory() {
   // left the table untouched (FLOW-MANAGE_INV-03/04).
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-    // The select offers the plural display name, the mapper stores the
-    // singular category ('Hoodie', 'Cap', 'Lanyard').
-    const CATEGORY_ALIASES = { Hoodies: 'Hoodie', Lanyards: 'Lanyard', Caps: 'Cap' }
-    const wantedCategory = CATEGORY_ALIASES[filterCategory] || filterCategory
+    const wantedCategory = normalizeProductCategory(filterCategory)
 
     const rows = productsList.filter((p) => {
       if (
@@ -602,7 +574,7 @@ export default function AdminInventory() {
         )
       )
         return false
-      if (filterCategory !== 'All' && p.categoryName !== wantedCategory) return false
+      if (filterCategory !== 'All' && normalizeProductCategory(p.categoryName, p.name) !== wantedCategory) return false
       if (filterAvailability !== 'All' && p.availability !== filterAvailability) return false
       if (filterStockStatus !== 'All') {
         const stock = Number(p.totalStock) || 0
@@ -817,7 +789,7 @@ export default function AdminInventory() {
                 className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="All">Category ▾</option>
-                {PRODUCT_CATEGORIES.map((cat) => (
+                {inventoryFilterCategories.map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
@@ -1825,7 +1797,7 @@ export default function AdminInventory() {
                     onChange={(e) => setEditCategory(e.target.value)}
                     className="w-full h-8 px-2 rounded-md border border-slate-200 bg-white focus:ring-1 focus:ring-brand-orange cursor-pointer"
                   >
-                    {PRODUCT_CATEGORIES.map((category) => (
+                    {editCategoryOptions.map((category) => (
                       <option key={category} value={category}>{category}</option>
                     ))}
                   </select>

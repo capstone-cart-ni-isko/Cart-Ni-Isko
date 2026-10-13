@@ -111,16 +111,26 @@ class InitialCatalogTest extends TestCase
 
     public function test_every_directory_category_survives_the_backend_whitelist()
     {
+        $this->assertSame([
+            'Shirts', 'Hoodies', 'Jackets', 'Caps', 'Lanyards',
+            'Stickers', 'Pins', 'Totebags', 'Keychains',
+        ], ProductsAPI::categoryWhitelist());
+
         $categories = [];
         foreach ($this->catalog()['products'] ?? [] as $product) {
             $categories[$product['prod_categ']] = true;
         }
 
-        // The directory spells the category "Windbreakers" (plural), which the
-        // alias table used to leave outside the whitelist.
+        // Legacy Windbreaker records now display and filter as Jackets.
         $this->assertArrayHasKey('Windbreakers', $categories);
-        $this->assertSame('Windbreaker', ProductsAPI::normalizeCategory('Windbreakers'));
-        $this->assertSame('Windbreaker', ProductsAPI::normalizeCategory('Windbreaker'));
+        $this->assertSame('Jackets', ProductsAPI::normalizeCategory('Windbreakers'));
+        $this->assertSame('Jackets', ProductsAPI::normalizeCategory('Varsity Jacket'));
+        $this->assertSame('Totebags', ProductsAPI::normalizeCategory('Tote Bags'));
+        $this->assertSame('Keychains', ProductsAPI::normalizeCategory('Key Chain'));
+        $this->assertSame('Lanyards', ProductsAPI::normalizeCategory('Accessories', 'BUnique Lanyard & Badge'));
+        $this->assertSame('Pins', ProductsAPI::normalizeCategory('Accessories', 'University Pin Badge'));
+        $this->assertSame('Accessories', ProductsAPI::normalizeCategory('Accessories', 'Insulated Water Bottle'));
+        $this->assertSame('Keychains', ProductsAPI::validatedCategory('Keychains'));
 
         foreach (array_keys($categories) as $category) {
             $this->assertContains(

@@ -22,16 +22,25 @@ const CalendarIcon = ({ active }) => (
     strokeWidth="2"
     strokeLinecap="round"
     strokeLinejoin="round"
-    className={`w-5 h-5 ${active ? 'text-brand-orange' : ''}`}
+    className={`w-5 h-5 ${active ? 'text-brand-orange' : 'text-[#757575]'}`}
   >
     <rect x="3" y="4.5" width="18" height="16" rx="2.5" />
     <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
   </svg>
 )
 
-/** Darkened flat SVG so the active icon matches the orange line glyphs. */
+/** Recolor flat SVG assets to match the line icons' active and idle states. */
 const Painted = ({ src, alt, active }) => (
-  <img src={src} alt={alt} className="w-5 h-5 transition-all" style={{ filter: active ? 'brightness(0)' : 'none' }} />
+  <img
+    src={src}
+    alt={alt}
+    className="w-5 h-5 transition-all"
+    style={{
+      filter: active
+        ? 'invert(55%) sepia(91%) saturate(1938%) hue-rotate(347deg) brightness(101%) contrast(96%)'
+        : 'none',
+    }}
+  />
 )
 
 function DesktopHeader() {
@@ -140,9 +149,9 @@ function DesktopHeader() {
               <div key={to} className="relative group flex items-center justify-center">
                 <Link
                   to={to}
-                  onClick={guardGuest}
+                  onClick={to === '/home' ? undefined : guardGuest}
                   aria-label={label}
-                  className={`p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center ${on ? 'bg-slate-100' : ''}`}
+                  className={`p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center ${on ? 'bg-orange-50 text-brand-orange' : 'text-[#757575]'}`}
                 >
                   <Glyph active={on} src={src} alt={label} />
                   {badge > 0 && (
@@ -165,7 +174,7 @@ function DesktopHeader() {
               onClick={openMenu}
               aria-label="Menu"
               aria-expanded={isMenuOpen}
-              className={`p-2 rounded-lg hover:bg-slate-100 transition-all flex items-center justify-center cursor-pointer ${isMenuOpen ? 'bg-slate-100' : ''}`}
+              className={`p-2 rounded-lg hover:bg-slate-100 transition-all flex items-center justify-center cursor-pointer ${isMenuOpen ? 'bg-orange-50 text-brand-orange' : 'text-[#757575]'}`}
             >
               <MenuIcon />
             </button>

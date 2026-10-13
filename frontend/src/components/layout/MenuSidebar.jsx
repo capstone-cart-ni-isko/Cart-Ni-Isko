@@ -47,8 +47,7 @@ export function useMenu() {
  * Right-hand menu drawer, always mounted and moved out of view with
  * `translateX` so opening and closing both animate.
  *
- * Exactly six vertical entries, in the order FLOW-CUST_HOME-08 asks for:
- * Profile (avatar), dark mode, Orders, Wishlist, Settings, Logout.
+ * The guest menu omits Logout; signed-in customers see it after Settings.
  */
 function MenuSidebar() {
   const navigate = useNavigate()
@@ -118,7 +117,9 @@ function MenuSidebar() {
     { key: 'orders', label: 'Orders', icon: <PackageIcon />, onClick: () => go('/orders') },
     { key: 'wishlist', label: 'Wishlist', icon: <HeartIcon />, onClick: () => go('/wishlist') },
     { key: 'settings', label: 'Settings', icon: <SettingsIcon />, onClick: () => go('/settings') },
-    { key: 'logout', label: 'Logout', icon: <LogOutIcon className="w-5 h-5 text-red-500" />, onClick: askLogout },
+    ...(currentUser
+      ? [{ key: 'logout', label: 'Logout', icon: <LogOutIcon className="w-5 h-5 text-red-500" />, onClick: askLogout }]
+      : []),
   ]
 
   return (

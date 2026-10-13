@@ -371,7 +371,7 @@ export function AdminProvider({ children }) {
       // the new product, which the server returns as prod_id.
       const res = await createAdminProduct({
         name,
-        category: productData.category || 'Accessories',
+        category: productData.category || 'Shirts',
         price,
         stock,
         desc: productData.desc || '',
