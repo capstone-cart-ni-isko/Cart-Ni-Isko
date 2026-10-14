@@ -326,7 +326,7 @@ export default function AdminLogin() {
 
         {/* Security disclaimer */}
         <div className="text-center pt-1 border-t border-gray-100">
-          <p className="text-[10px] text-gray-400">
+          <p className="text-2xs text-gray-400">
             Protected by Bicol University Student Council IAM System
           </p>
         </div>

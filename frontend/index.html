@@ -17,6 +17,19 @@
     <title>Tindahan ni Isko</title>
   </head>
   <body>
+    <script>
+      /* Paint the saved theme before the first frame: a dark-mode user must
+         never see a light page flash while the bundle loads. Mirrors the
+         portal-aware boot logic in src/main.jsx. */
+      (function () {
+        var path = location.pathname;
+        var key = path === '/admin' || path.indexOf('/admin/') === 0
+          ? 'isko_theme_staff'
+          : 'isko_theme_customer';
+        var theme = localStorage.getItem(key) ?? localStorage.getItem('isko_theme');
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

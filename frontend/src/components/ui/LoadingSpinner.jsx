@@ -13,14 +13,15 @@ export default function LoadingSpinner({ size = 32, className = '' }) {
         className="animate-spin"
         aria-hidden="true"
       >
-        {/* Light track keeps the ring shape while the arc sweeps. */}
-        <circle cx="25" cy="25" r="20" fill="none" stroke="#FED7AA" strokeWidth="5" />
+        {/* Light track keeps the ring shape while the arc sweeps. Both strokes
+            read brand tokens so the ring stays visible in dark mode. */}
+        <circle cx="25" cy="25" r="20" fill="none" stroke="var(--color-brand-orange)" strokeOpacity="0.22" strokeWidth="5" />
         <circle
           cx="25"
           cy="25"
           r="20"
           fill="none"
-          stroke="#F97316"
+          stroke="var(--color-brand-orange)"
           strokeWidth="5"
           strokeLinecap="round"
           strokeDasharray="31.4 94.3"

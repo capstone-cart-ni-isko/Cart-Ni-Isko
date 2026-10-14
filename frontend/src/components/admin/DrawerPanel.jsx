@@ -38,10 +38,12 @@ export default function DrawerPanel({
           <div className="px-4 py-3.5 border-b border-slate-200 flex items-center justify-between bg-white sticky top-0 z-10">
             <div>
               <h2 className="text-base font-bold text-slate-900">{title}</h2>
-              {subtitle && <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>}
+              {subtitle && <p className="text-2xs text-slate-500 mt-0.5">{subtitle}</p>}
             </div>
             <button
               onClick={onClose}
+              type="button"
+              aria-label="Close"
               className="w-7 h-7 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">

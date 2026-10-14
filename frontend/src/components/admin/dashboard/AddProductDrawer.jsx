@@ -106,7 +106,7 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
         <div>
           <label className={LABEL} htmlFor="np-photo">Photo (optional)</label>
           <input id="np-photo" type="file" accept="image/*" onChange={handlePhoto} className="block w-full text-xs text-slate-600 file:mr-2 file:h-8 file:px-3 file:rounded-md file:border file:border-slate-200 file:bg-white file:text-xs file:font-medium" />
-          {uploading && <p className="text-[11px] text-slate-500 mt-1">Uploading…</p>}
+          {uploading && <p className="text-2xs text-slate-500 mt-1">Uploading…</p>}
           {form.photo && !uploading && (
             <img src={form.photo} alt="Product preview" className="mt-2 w-20 h-20 object-contain rounded-md border border-slate-200" />
           )}

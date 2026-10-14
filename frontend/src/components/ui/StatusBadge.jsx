@@ -2,8 +2,10 @@ function StatusBadge({ status, className = '' }) {
   const normalized = status.toUpperCase().replace(/_/g, ' ')
 
   // SRS order pipeline: To Process, To Claim, To Receive, Claimed,
-  // Unclaimed, Cancelled, Returned, Refunded (+ pending request states)
-  let colorClasses = 'bg-gray-100 text-gray-800' // fallback
+  // Unclaimed, Cancelled, Returned, Refunded (+ pending request states).
+  // Each tone maps onto a shared `.badge` modifier so the pill reads theme
+  // tokens (correct in dark mode) and sits on the 11px system floor.
+  let tone = 'badge--plain' // fallback
 
   if (
     normalized === 'TO PROCESS' ||
@@ -14,7 +16,7 @@ function StatusBadge({ status, className = '' }) {
     normalized === 'FOR PRE-ORDER' ||
     normalized === 'PRE-ORDER'
   ) {
-    colorClasses = 'bg-amber-100 text-amber-800'
+    tone = 'badge--warn'
   } else if (
     normalized === 'TO CLAIM' ||
     normalized === 'TO RECEIVE' ||
@@ -22,24 +24,24 @@ function StatusBadge({ status, className = '' }) {
     normalized === 'PICK-UP' ||
     normalized === 'TRANSIT'
   ) {
-    colorClasses = 'bg-indigo-100 text-indigo-800'
+    tone = 'badge--info'
   } else if (normalized === 'CLAIMED' || normalized === 'DELIVERED') {
-    colorClasses = 'bg-green-100 text-green-800'
+    tone = 'badge--ok'
   } else if (normalized === 'UNCLAIMED') {
-    colorClasses = 'bg-orange-100 text-orange-800'
+    tone = 'badge--brand'
   } else if (normalized === 'CANCEL REQUESTED' || normalized === 'RETURN REQUESTED') {
-    colorClasses = 'bg-rose-100 text-rose-700'
+    tone = 'badge--accent'
   } else if (normalized === 'CANCELLED' || normalized === 'FAILED') {
-    colorClasses = 'bg-red-100 text-red-800'
+    tone = 'badge--danger'
   } else if (normalized === 'RETURNED') {
-    colorClasses = 'bg-red-50 text-red-700'
+    tone = 'badge--danger'
   } else if (normalized === 'REFUNDED') {
-    colorClasses = 'bg-purple-100 text-purple-800'
+    tone = 'badge--plain'
   }
 
   return (
     <span
-      className={`inline-block px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded ${colorClasses} ${className}`}
+      className={`badge uppercase tracking-wider ${tone} ${className}`}
     >
       {normalized}
     </span>

@@ -1,7 +1,12 @@
-import { TONE_CLASSES } from './kit/statusTone.js'
+import StatusBadge from './kit/StatusBadge.jsx'
 
 /**
- * Status pill for admin tables and cards, on the kit palette (kit/statusTone.js):
+ * Status pill for admin tables and cards.
+ *
+ * Item 26 - there is ONE badge system: StatusPill is a thin, backwards
+ * compatible front for kit/StatusBadge, so it only decides WHICH tone a value
+ * gets and every colour, dot and radius comes from the kit.
+ *
  *   active  (brand blue)   in progress: to process / claim / receive, preparing, pre-order…
  *   urgent  (brand orange) needs staff attention: requested, pending, unclaimed, low stock…
  *   lost    (red)          cancelled, returned, refunded, failed, rejected…
@@ -11,14 +16,6 @@ import { TONE_CLASSES } from './kit/statusTone.js'
  * red → lost, green → done.
  */
 const VARIANT_TONE = { blue: 'active', purple: 'active', cyan: 'active', amber: 'urgent', red: 'lost', green: 'done' }
-
-const DOT = {
-  neutral: 'bg-slate-400',
-  active: 'bg-isko-blue',
-  done: 'bg-emerald-500',
-  urgent: 'bg-isko-orange',
-  lost: 'bg-rose-500',
-}
 
 const has = (norm, words) => words.some((word) => norm.includes(word))
 
@@ -38,11 +35,10 @@ export default function StatusPill({ status, variant, className = '' }) {
   const tone = (variant && VARIANT_TONE[variant]) || toneFor(String(status).toLowerCase().trim())
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md border text-[11px] font-medium whitespace-nowrap ${TONE_CLASSES[tone]} ${className}`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[tone]}`} />
-      <span className="capitalize">{status}</span>
-    </span>
+    <StatusBadge
+      tone={tone}
+      label={<span className="capitalize">{status}</span>}
+      className={className}
+    />
   )
 }

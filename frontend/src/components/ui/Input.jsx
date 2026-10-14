@@ -1,16 +1,19 @@
-function Input({ label, error, className = '', ...props }) {
+function Input({ label, error, hint, id, className = '', ...props }) {
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-xs font-semibold text-gray-700 mb-1">{label}</label>
+        <label className="field-label" htmlFor={id}>
+          {label}
+        </label>
       )}
       <input
-        className={`w-full h-8 px-3 border rounded-md text-xs placeholder-gray-400 focus:outline-none focus:border-brand-orange transition-all ${
-          error ? 'border-red-400 focus:border-red-500' : 'border-slate-200'
-        } ${className}`}
+        id={id}
+        aria-invalid={error ? 'true' : undefined}
+        className={`field-input ${error ? 'field-input--error' : ''} ${className}`}
         {...props}
       />
-      {error && <p className="text-red-500 text-[11px] mt-1 font-semibold">{error}</p>}
+      {error && <p className="field-error">{error}</p>}
+      {!error && hint && <p className="field-hint">{hint}</p>}
     </div>
   )
 }

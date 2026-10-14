@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
+import Segmented from '../../components/admin/kit/Segmented.jsx'
 import { useToast } from '../../hooks/useToast.js'
 import { deleteOldAccessLogs, fetchAccessLogs } from '../../services/access.js'
 
@@ -135,17 +137,11 @@ export default function AdminAccessLogs({ embedded = false }) {
   // touched, so the visible (newest-200) list usually does not change - it is
   // reloaded anyway so the screen always matches what is left.
   const [purging, setPurging] = useState(false)
+  // DOMAIN 16 - the purge runs through the shared confirmation dialog, never
+  // window.confirm.
+  const [confirmPurge, setConfirmPurge] = useState(false)
 
   const purgeOldLogs = async () => {
-    const confirmed = window.confirm(
-      'Delete every access log entry older than 24 months?\n\n' +
-        "This can't be undone, and every admin will be notified. " +
-        'Entries younger than 24 months are never deleted. If no one acts, ' +
-        'entries older than 24 months are removed on their own once they ' +
-        'reach 60 months.'
-    )
-    if (!confirmed) return
-
     setPurging(true)
     try {
       const res = await deleteOldAccessLogs()
@@ -180,7 +176,7 @@ export default function AdminAccessLogs({ embedded = false }) {
               </svg>
             </button>
             <div className="min-w-0">
-              <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">Access Log</h1>
+              <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">Access Log</h1>
               <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
                 A complete record of every sign-in, view and change made by customers and staff, newest first.
                 Entries can never be edited or removed one by one — the only cleanup is the option below.
@@ -190,23 +186,6 @@ export default function AdminAccessLogs({ embedded = false }) {
         )}
 
         <div className={`flex items-center gap-2 shrink-0 ${embedded ? 'ml-auto' : ''}`}>
-          {/* One-action cleanup for very old entries — admins only. */}
-          <button
-            type="button"
-            onClick={purgeOldLogs}
-            disabled={purging}
-            title="Delete every access log entry older than 24 months"
-            className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-wait"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-              <path d="M10 11v6M14 11v6" />
-              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-            </svg>
-            {purging ? 'Deleting…' : 'Delete logs older than 24 months'}
-          </button>
-
           <button
             type="button"
             onClick={() => fetchAccessLogs(params).catch((err) => showToast(err?.message || "We couldn't refresh the list. Please try again.", 'error'))}
@@ -221,47 +200,37 @@ export default function AdminAccessLogs({ embedded = false }) {
         </div>
       </div>
 
-        {/* FLOW-ACCESS_LOG-09 - all / customers / employees */}
+        {/* FLOW-ACCESS_LOG-09 - all / customers / employees. Three short
+            options, so the kit segmented control is the shape for them. */}
         <div className="flex items-center gap-2.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
-          {SCOPES.map(({ key, label }) => {
-            const active = scope === key
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setScope(key)}
-                className={`px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  active
-                    ? 'bg-orange-50 border border-brand-orange text-brand-orange'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          })}
+          <Segmented
+            label="Account scope"
+            options={SCOPES.map(({ key, label }) => ({ value: key, label }))}
+            value={scope}
+            onChange={setScope}
+          />
         </div>
 
         {/* REQ-ACCESS_LOG-03 - search by actor or endpoint, by action type, by date range */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <label className="block">
-              <span className="block text-[11px] font-bold text-slate-500 mb-1">Search</span>
+              <span className="field-label">Search</span>
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Name or email…"
-                className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-orange"
+                className="field-input"
               />
             </label>
 
             <label className="block">
-              <span className="block text-[11px] font-bold text-slate-500 mb-1">Action</span>
+              <span className="field-label">Action</span>
               <select
                 value={action}
                 onChange={(e) => setAction(e.target.value)}
-                className="w-full h-9 px-2.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-white focus:outline-none focus:border-brand-orange"
+                className="field-input"
               >
                 {ACTIONS.map(({ key, label }) => (
                   <option key={key || 'any'} value={key}>
@@ -272,42 +241,64 @@ export default function AdminAccessLogs({ embedded = false }) {
             </label>
 
             <label className="block">
-              <span className="block text-[11px] font-bold text-slate-500 mb-1">From</span>
+              <span className="field-label">From</span>
               <input
                 type="date"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                className="w-full h-9 px-2.5 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-brand-orange"
+                className="field-input"
               />
             </label>
 
             <label className="block">
-              <span className="block text-[11px] font-bold text-slate-500 mb-1">To</span>
+              <span className="field-label">To</span>
               <input
                 type="date"
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                className="w-full h-9 px-2.5 rounded-lg border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-brand-orange"
+                className="field-input"
               />
             </label>
           </div>
 
-          {filtersOn && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="mt-3 text-xs font-bold text-brand-orange hover:underline cursor-pointer"
-            >
-              Clear filters
-            </button>
-          )}
+          {/* The retention purge lives with the filters (rule: one toolbar per
+              screen) instead of wrapping inside the header row. */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 mt-3 border-t border-slate-100">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmPurge(true)}
+                disabled={purging}
+                title="Delete every access log entry older than 24 months"
+                className="btn btn--secondary text-[var(--tint-danger-fg)]"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+                </svg>
+                {purging ? 'Deleting…' : 'Delete logs older than 24 months'}
+              </button>
+            </div>
+
+            {filtersOn && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-xs font-bold text-brand-orange hover:underline cursor-pointer"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
         </div>
 
         {/* The list itself */}
         {loading && rows.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-8 flex items-center justify-center">
             <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-              <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-brand-orange animate-spin" />
+              <span className="spinner-circle" style={{ '--spinner-size': '14px' }} />
               Loading access log…
             </span>
           </div>
@@ -316,24 +307,31 @@ export default function AdminAccessLogs({ embedded = false }) {
             {error}
           </div>
         ) : rows.length === 0 ? (
-          <div className="text-center py-14 bg-white rounded-xl border border-slate-200 p-8">
-            <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-3 text-slate-400">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="8" y1="13" x2="16" y2="13" />
-                <line x1="8" y1="17" x2="16" y2="17" />
-              </svg>
+          <div className="bg-white rounded-xl border border-slate-200 p-8">
+            <div className="empty-state">
+              <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="8" y1="13" x2="16" y2="13" />
+                  <line x1="8" y1="17" x2="16" y2="17" />
+                </svg>
+              </div>
+              <p className="empty-state__title">No log entries match these filters.</p>
+              <p className="empty-state__hint">Widen the date range or clear the filters to see more.</p>
+              {filtersOn && (
+                <button type="button" onClick={clearFilters} className="btn btn--secondary mt-1">
+                  Clear filters
+                </button>
+              )}
             </div>
-            <p className="text-sm font-bold text-slate-700">No log entries match these filters.</p>
-            <p className="text-xs text-slate-400 mt-1">Widen the date range or clear the filters to see more.</p>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-2xs uppercase tracking-wide text-slate-500">
                     <th className="px-4 py-3 font-bold">When</th>
                     <th className="px-4 py-3 font-bold">Account</th>
                     <th className="px-4 py-3 font-bold">Type</th>
@@ -349,7 +347,7 @@ export default function AdminAccessLogs({ embedded = false }) {
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{stamp(row.created)}</td>
                         <td className="px-4 py-3">
                           <span className="block font-bold text-slate-800">{row.actor_name || 'Unknown account'}</span>
-                          <span className="block text-[11px] text-slate-400">
+                          <span className="block text-2xs text-slate-400">
                             #{row.actor_id} · {row.actor_role || row.scope}
                           </span>
                         </td>
@@ -358,7 +356,7 @@ export default function AdminAccessLogs({ embedded = false }) {
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`px-2 py-0.5 rounded-md text-[11px] font-black uppercase ${
+                            className={`px-2 py-0.5 rounded-md text-2xs font-black uppercase ${
                               ACCESS_STYLES[access] || ACCESS_STYLES.view
                             }`}
                           >
@@ -375,9 +373,25 @@ export default function AdminAccessLogs({ embedded = false }) {
           </div>
         )}
 
-        <p className="text-[11px] text-slate-400 font-medium">
+        <p className="text-2xs text-slate-400 font-medium">
           Showing {rows.length} of up to 200 entries · customers and staff together, newest first.
         </p>
+
+        {/* DOMAIN 32 - one destructive action, behind the shared dialog. */}
+        <ConfirmModal
+          isOpen={confirmPurge}
+          onClose={() => setConfirmPurge(false)}
+          onConfirm={purgeOldLogs}
+          title="Delete very old log entries?"
+          message={
+            'Delete every access log entry older than 24 months?\n\n' +
+              "This can't be undone, and every admin will be notified. " +
+              'Entries younger than 24 months are never deleted. If no one acts, ' +
+              'entries older than 24 months are removed on their own once they ' +
+              'reach 60 months.'
+          }
+          confirmText="Delete entries"
+        />
       </div>
   )
 

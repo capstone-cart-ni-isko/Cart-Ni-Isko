@@ -36,7 +36,7 @@ export default function BarChartStages({ stages = [] }) {
               <span className="font-medium text-[#0F172A] tracking-tight">{stage.label}</span>
               <div className="flex items-baseline gap-1.5 text-right tabular-nums">
                 <span className="font-bold text-[#0F172A]">{stage.count}</span>
-                <span className="text-[10px] text-slate-400 uppercase font-semibold">ORDERS</span>
+                <span className="text-2xs text-slate-400 uppercase font-semibold">ORDERS</span>
               </div>
             </div>
 
@@ -55,7 +55,7 @@ export default function BarChartStages({ stages = [] }) {
       })}
 
       {/* Axis Scale Markers */}
-      <div className="flex justify-between items-center text-[10px] font-medium text-slate-400 pt-2.5 border-t border-slate-100 tabular-nums">
+      <div className="flex justify-between items-center text-2xs font-medium text-slate-400 pt-2.5 border-t border-slate-100 tabular-nums">
         <span>0</span>
         <span>5</span>
         <span>10</span>

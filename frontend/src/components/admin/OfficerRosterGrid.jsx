@@ -81,7 +81,7 @@ export default function OfficerRosterGrid({
               </div>
               <div className="min-w-0">
                 <p className="font-bold text-slate-900 text-xs truncate">{officer.name}</p>
-                <p className="text-[10px] text-slate-500 font-semibold truncate">
+                <p className="text-2xs text-slate-500 font-semibold truncate">
                   {officer.roleLabel}
                 </p>
               </div>
@@ -90,7 +90,7 @@ export default function OfficerRosterGrid({
             <div className="flex items-center gap-2 flex-wrap">
               <StatusPill status={officer.availability} />
               {!officer.available && (
-                <span className="text-[10px] font-semibold text-slate-400">
+                <span className="text-2xs font-semibold text-slate-400">
                   Needs a substitute
                 </span>
               )}
@@ -104,7 +104,7 @@ export default function OfficerRosterGrid({
                       type="button"
                       onClick={() => canEdit && onEditShift && onEditShift(block)}
                       disabled={!canEdit || !onEditShift}
-                      className={`w-full text-left rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors disabled:cursor-default ${
+                      className={`w-full text-left rounded-md border px-2 py-1 text-2xs font-semibold transition-colors disabled:cursor-default ${
                         block.unavailable
                           ? 'bg-slate-50 border-slate-200 text-slate-400'
                           : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
@@ -133,7 +133,7 @@ export default function OfficerRosterGrid({
                   + Assign Shift
                 </button>
               ) : (
-                <p className="text-[10px] text-slate-400 font-semibold text-center py-2">
+                <p className="text-2xs text-slate-400 font-semibold text-center py-2">
                   Only an admin can schedule this employee.
                 </p>
               )}
@@ -148,7 +148,7 @@ export default function OfficerRosterGrid({
                       ? 'Mark this employee out of the store. Their shifts will need a substitute.'
                       : 'Only this employee or an admin can change their availability.'
                   }
-                  className="w-full py-1 text-[10px] font-semibold text-slate-500 hover:text-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full py-1 text-2xs font-semibold text-slate-500 hover:text-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {isSaving ? 'Saving…' : 'Mark Off Duty'}
                 </button>

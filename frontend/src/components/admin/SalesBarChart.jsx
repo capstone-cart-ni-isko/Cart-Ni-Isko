@@ -48,7 +48,7 @@ export default function SalesBarChart({ data = [] }) {
             role="radio"
             aria-checked={metric === key}
             onClick={() => setMetric(key)}
-            className={`h-6 px-2.5 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+            className={`h-6 px-2.5 rounded text-2xs font-semibold transition-colors cursor-pointer ${
               metric === key ? 'bg-isko-blue text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -60,7 +60,7 @@ export default function SalesBarChart({ data = [] }) {
       {empty ? (
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-slate-200 text-center px-4">
           <p className="text-xs font-medium text-slate-600">No sales in this period</p>
-          <p className="text-[11px] text-slate-400">Category totals appear here as orders come in.</p>
+          <p className="text-2xs text-slate-400">Category totals appear here as orders come in.</p>
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col">
@@ -70,7 +70,7 @@ export default function SalesBarChart({ data = [] }) {
               {ticks.map((t) => (
                 <span
                   key={t}
-                  className="absolute right-0 translate-y-1/2 text-[10px] font-medium text-slate-400 tabular-nums leading-none"
+                  className="absolute right-0 translate-y-1/2 text-2xs font-medium text-slate-400 tabular-nums leading-none"
                   style={{ bottom: `${(t / niceMax) * 100}%` }}
                 >
                   {formatTick(t, metric)}
@@ -96,7 +96,7 @@ export default function SalesBarChart({ data = [] }) {
                   return (
                     <div key={item.category} className="group relative flex-1 h-full flex items-end justify-center">
                       <div
-                        className="absolute left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-[10px] font-medium py-0.5 px-2 rounded pointer-events-none whitespace-nowrap z-10"
+                        className="absolute left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-2xs font-medium py-0.5 px-2 rounded pointer-events-none whitespace-nowrap z-10"
                         style={{ bottom: `calc(${heightPercent}% + 4px)` }}
                       >
                         {metric === 'sales' ? `₱${val.toLocaleString()}` : `${val} units`}
@@ -117,7 +117,7 @@ export default function SalesBarChart({ data = [] }) {
             <div className="w-10 shrink-0" />
             <div className="flex-1 min-w-0 flex justify-around gap-3 px-2">
               {data.map((item) => (
-                <span key={item.category} className="flex-1 text-center text-[11px] font-medium text-slate-600 truncate">
+                <span key={item.category} className="flex-1 text-center text-2xs font-medium text-slate-600 truncate">
                   {item.category}
                 </span>
               ))}

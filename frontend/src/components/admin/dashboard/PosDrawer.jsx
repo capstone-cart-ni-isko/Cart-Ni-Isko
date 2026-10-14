@@ -122,7 +122,7 @@ export default function PosDrawer({ isOpen, onClose, onCompleted }) {
                   <li key={p.id} className="flex items-center justify-between gap-2 px-2.5 py-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-2xs text-slate-500">
                         {peso(p.price)} · {p.preOrder ? 'Pre-order' : `${p.totalStock} in stock`}
                       </p>
                     </div>
@@ -163,7 +163,7 @@ export default function PosDrawer({ isOpen, onClose, onCompleted }) {
                   <li key={`${line.id}-${line.variant}`} className="flex items-center gap-2 px-2.5 py-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-slate-900 truncate">{line.name}</p>
-                      <p className="text-[11px] text-slate-500">{peso(line.price)} each</p>
+                      <p className="text-2xs text-slate-500">{peso(line.price)} each</p>
                     </div>
                     <div className="flex items-center border border-slate-200 rounded-md">
                       <button type="button" aria-label="Decrease" onClick={() => posUpdateQty(index, line.qty - 1)} className="w-8 h-8 text-slate-600 hover:bg-slate-50 cursor-pointer">−</button>

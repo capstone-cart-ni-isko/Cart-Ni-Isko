@@ -9,10 +9,11 @@ import { fetchNotifications, unreadCount } from '../services/notifications.js'
 import { WishlistContext } from '../context/WishlistContext.jsx'
 import Avatar from '../components/ui/Avatar.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import notificationIcon from '../assets/icons/common/notification.svg'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import ViewAllLink from '../components/ui/ViewAllLink.jsx'
 
-import { SettingsIcon } from '../components/ui/Icons.jsx'
+import { SettingsIcon, LogOutIcon } from '../components/ui/Icons.jsx'
 
 /* ──────────────────────────────────────────────
    SVG Icon Components for Layout
@@ -113,7 +114,7 @@ function Profile() {
     // Never "/" - the bare entry rule hands the tab to whichever portal was
     // signed in last, so an employee session left in this tab would bounce a
     // customer into the employee portal (rule 71 keeps them separate).
-    navigate('/login', { replace: true })
+    navigate('/signin', { replace: true })
   }
 
   // Appointments live on their own standalone route (/appointments), so Profile
@@ -172,19 +173,18 @@ function Profile() {
 
       {/* ── MOBILE LAYOUT (matching Image 2) ── */}
       <div className="md:hidden pb-28 bg-[#F8F9FA] min-h-dvh">
-        {/* Top bar with Logo, Notifications (badge 3), and Profile icon */}
-        <div className="bg-white px-4 py-3 flex items-center justify-between sticky top-0 z-30 border-b border-gray-100">
+        {/* Top bar with Logo, Notifications (badge 3), and Profile icon —
+            docked through the shared .ribbon primitive so it matches every
+            other page (rules 72-75). */}
+        <div className="ribbon px-4 py-3 flex items-center justify-between">
           <Link to="/home" className="flex items-center">
             <img src={logo} alt="Tindahan ni Isko" className="h-7 object-contain" />
           </Link>
           <div className="flex items-center gap-3">
             <Link to="/notifications" className="relative p-1.5 text-gray-700 hover:text-brand-orange" aria-label="Notifications">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
+              <img src={notificationIcon} alt="" className="w-6 h-6" />
               {unreadNotifications > 0 && (
-                <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-[10px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white">
+                <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-2xs font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white">
                   {unreadNotifications > 99 ? '99+' : unreadNotifications}
                 </span>
               )}
@@ -427,9 +427,14 @@ function Profile() {
             <p className="text-xs text-gray-500 leading-relaxed">
               We're here to assist with your BU merch orders, campus pickups, and sizing queries.
             </p>
-            <span className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 text-[#FF6A00] font-bold text-xs flex items-center justify-center gap-2">
+            {/* A real action (mailto) instead of a non-interactive span, using
+                the same support address the desktop footer links to. */}
+            <a
+              href="mailto:support@tindahanniisko.com"
+              className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 text-[#FF6A00] font-bold text-xs flex items-center justify-center gap-2 hover:bg-orange-100 transition-colors"
+            >
               Contact Support
-            </span>
+            </a>
           </div>
 
           {/* 7. Account Security */}
@@ -452,6 +457,19 @@ function Profile() {
               </Link>
             </div>
           </div>
+
+          {/* 8. Log Out — opens the shared confirmation (FLOW-CUST_LOGOUT-01/02) */}
+          <button
+            type="button"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="w-full flex items-center justify-between px-5 py-4 bg-white rounded-3xl border border-gray-100 shadow-xs hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5">
+              <LogOutIcon className="w-5 h-5 text-red-500" />
+              <p className="text-sm font-bold text-red-600">Log Out</p>
+            </div>
+            <span className="text-red-300 text-xl font-medium">›</span>
+          </button>
         </div>
       </div>
 

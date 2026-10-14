@@ -1,50 +1,44 @@
-import { useState } from 'react'
-
 /**
- * Default avatar.
- *
- * Odd cust_id  → aqua-blue background with a white head silhouette.
- * Even cust_id → dark-grey background with a fiery red-orange head silhouette.
- * No userId   → brand-blue/orange fallback.
- *
- * A missing photo and a photo that fails to load both fall back to the SVG, so
- * a broken upload URL can never leave a blank circle in the menu.
+ * A consistent avatar component with fallback initials.
+ * Use this for user profiles across both portals.
  */
-export default function Avatar({ name = '', src, size = 40, className = '', userId }) {
-  // The URL that failed to load, so swapping photos retries the real image.
-  const [failed, setFailed] = useState(null)
-  const broken = Boolean(src) && failed === src
+export default function Avatar({ name = '', src, size = 40, className = '' }) {
+  const initials = name
+    .split(' ')
+    .map((n) => n[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
 
-  if (src && !broken && !src.includes('avatar.png') && !src.includes('placeholder') && !src.includes('icons')) {
+  const colors = [
+    'bg-orange-100 text-brand-orange',
+    'bg-blue-100 text-blue-700',
+    'bg-emerald-100 text-emerald-700',
+    'bg-purple-100 text-purple-700',
+    'bg-pink-100 text-pink-700',
+    'bg-amber-100 text-amber-700',
+  ]
+  const colorIndex = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length
+
+  if (src) {
     return (
       <img
         src={src}
-        alt={name || 'Avatar'}
-        onError={() => setFailed(src)}
-        className={`rounded-full object-cover ${className}`}
+        alt={name}
+        className={`rounded-full object-cover shrink-0 ${className}`}
         style={{ width: size, height: size }}
       />
     )
   }
 
-  const isOdd = userId != null ? Number(userId) % 2 !== 0 : null
-  const background = isOdd === true ? '#00B4D8' : isOdd === false ? '#2D2D2D' : '#2563EB'
-  const headColor = isOdd === true ? '#FFFFFF' : '#F97316'
-
   return (
-    <svg
-      viewBox="0 0 40 40"
-      role="img"
-      aria-label={name || 'Avatar'}
-      className={`shrink-0 select-none ${className}`}
-      style={{ width: size, height: size }}
-      xmlns="http://www.w3.org/2000/svg"
+    <span
+      className={`rounded-full flex items-center justify-center font-bold shrink-0 ${colors[colorIndex]} ${className}`}
+      style={{ width: size, height: size, fontSize: size * 0.4 }}
+      aria-label={name}
     >
-      <circle cx="20" cy="20" r="20" fill={background} />
-      <g fill={headColor}>
-        <circle cx="20" cy="14" r="7" />
-        <path d="M8 36 C8 29 13 24 20 24 C27 24 32 29 32 36 A20 20 0 0 1 8 36 Z" />
-      </g>
-    </svg>
+      {initials || '?'}
+    </span>
   )
 }

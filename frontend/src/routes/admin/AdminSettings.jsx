@@ -172,7 +172,7 @@ function NumberField({ label, hint, value, min, max, step = 1, suffix, onSave })
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs font-bold text-slate-900">{label}</p>
-          {hint && <p className="text-[11px] text-slate-400 mt-0.5">{hint}</p>}
+          {hint && <p className="text-2xs text-slate-400 mt-0.5">{hint}</p>}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <input
@@ -194,14 +194,14 @@ function NumberField({ label, hint, value, min, max, step = 1, suffix, onSave })
                 : 'border-slate-200 focus:border-brand-orange focus:ring-brand-orange'
             }`}
           />
-          {suffix && <span className="text-[11px] text-slate-400 font-medium">{suffix}</span>}
+          {suffix && <span className="text-2xs text-slate-400 font-medium">{suffix}</span>}
         </div>
       </div>
       {/* Rule 67 — the message sits below/beside the field it belongs to. */}
       {error && (
         <p
           id={`${label.replace(/\s+/g, '-').toLowerCase()}-error`}
-          className="text-[11px] font-medium text-rose-600 mt-1.5"
+          className="text-2xs font-medium text-rose-600 mt-1.5"
           role="alert"
         >
           {error}
@@ -547,7 +547,7 @@ export default function AdminSettings() {
           <div className="w-full h-full bg-white dark:bg-[var(--surface)] rounded-xl border border-slate-200 dark:border-[var(--line)] flex flex-col min-h-0 p-3 overflow-hidden">
             {navSections.map((section) => (
               <div key={section.group} className="mb-4 last:mb-0">
-                <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                <p className="px-2.5 mb-1 text-2xs font-bold text-slate-400 uppercase tracking-widest">
                   {section.group}
                 </p>
                 <div className="space-y-0.5">
@@ -591,7 +591,7 @@ export default function AdminSettings() {
             <div className="md:hidden mb-5 bg-white dark:bg-[var(--surface)] rounded-xl border border-slate-200 dark:border-[var(--line)] p-3 space-y-3">
               {navSections.map((section) => (
                 <div key={section.group}>
-                  <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 dark:text-[var(--muted-2)] uppercase tracking-widest">
+                  <p className="px-2.5 mb-1 text-2xs font-bold text-slate-400 dark:text-[var(--muted-2)] uppercase tracking-widest">
                     {section.group}
                   </p>
                   <div className="space-y-0.5">
@@ -686,7 +686,7 @@ export default function AdminSettings() {
                   <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-100">
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-slate-900">Email notifications</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-2xs text-slate-400 mt-0.5">
                         Store announcements and system alerts sent to your Bicol University mailbox.
                       </p>
                     </div>
@@ -700,7 +700,7 @@ export default function AdminSettings() {
                   <div className="flex items-center justify-between gap-4 py-3">
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-slate-900">Dark mode</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-2xs text-slate-400 mt-0.5">
                         FLOW-EMP_SET-05 — the choice is stored with your account and restored on your next
                         sign-in (REQ-EMP_SET-03).
                       </p>
@@ -788,7 +788,7 @@ export default function AdminSettings() {
                       >
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-slate-900 leading-snug">{t.label}</p>
-                          <p className="text-[11px] text-slate-400 mt-0.5 truncate">{t.desc}</p>
+                          <p className="text-2xs text-slate-400 mt-0.5 truncate">{t.desc}</p>
                         </div>
                         <Toggle
                           checked={t.checked}

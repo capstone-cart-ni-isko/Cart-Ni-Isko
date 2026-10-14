@@ -21,7 +21,7 @@ export function ScheduleHeader({
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
       <div>
-        <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+        <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">
           Employee Scheduling
         </h1>
         <p className="text-xs text-slate-500 font-normal mt-0.5">
@@ -37,7 +37,7 @@ export function ScheduleHeader({
         >
           <span>Pending Covers</span>
           {coverCount > 0 && (
-            <span className="w-4 h-4 bg-brand-orange text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+            <span className="w-4 h-4 bg-brand-orange text-white text-2xs font-bold rounded-full flex items-center justify-center">
               {coverCount}
             </span>
           )}
@@ -85,7 +85,7 @@ export function ThresholdBar({
 
   return (
     <div className="bg-white rounded-lg p-3 border border-slate-200 flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+      <span className="text-2xs font-bold uppercase tracking-wider text-slate-400">
         Staffing thresholds
       </span>
 
@@ -166,7 +166,7 @@ export function ShiftBlocksSection({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div>
           <h2 className="text-sm font-bold text-slate-900">Assigned Duty Blocks</h2>
-          <p className="text-[11px] text-slate-400 font-normal mt-0.5">
+          <p className="text-2xs text-slate-400 font-normal mt-0.5">
             Click any block below to view details, modify schedule, or mark it unavailable
           </p>
         </div>
@@ -207,7 +207,7 @@ export function RosterSection({
     <section className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
       <div>
         <h2 className="text-sm font-bold text-slate-900">Officer Availability</h2>
-        <p className="text-[11px] text-slate-400 font-normal mt-0.5">
+        <p className="text-2xs text-slate-400 font-normal mt-0.5">
           Every active employee is available until they log a conflict ·
           {roster.onDutyCount} in store, {roster.offDutyCount} out
         </p>

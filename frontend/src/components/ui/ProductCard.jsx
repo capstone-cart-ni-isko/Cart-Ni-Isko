@@ -35,7 +35,7 @@ function ProductCard({ product }) {
     <>
       <Link
         to={`/product/${product.id}`}
-        className="block bg-white dark:bg-[var(--surface)] rounded-lg border border-slate-200 dark:border-[var(--line)] overflow-hidden hover:border-slate-300 dark:hover:border-[var(--line-2)] transition-colors select-none relative group"
+        className="block card overflow-hidden hover:border-slate-300 dark:hover:border-[var(--line-2)] transition-colors select-none relative group"
       >
         {/* Product image container */}
         <div className="aspect-square w-full bg-white dark:bg-[var(--surface)] relative overflow-hidden flex items-center justify-center border-b border-slate-200 dark:border-[var(--line)]">
@@ -49,18 +49,20 @@ function ProductCard({ product }) {
             <div className="relative flex flex-col items-center justify-center p-3 text-center">
               <ShirtIcon className="w-10 h-10 text-brand-orange opacity-40 mb-1" />
               {product.preOrder && (
-                <span className="absolute top-2 left-2 bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                <span className="badge badge--info absolute top-2 left-2 uppercase tracking-wider">
                   Pre-order
                 </span>
               )}
             </div>
           )}
 
-          {/* Heart toggle top-right */}
+          {/* Heart toggle top-right — the visible chip stays small but the
+              tap target is padded out to the 44px minimum via the ::before
+              overlay, so the icon size is unchanged. */}
           <button
             type="button"
             onClick={handleWishlistClick}
-            className="absolute top-2.5 right-2.5 w-7 h-7 rounded-md bg-white dark:bg-[var(--surface)] flex items-center justify-center border border-slate-200 dark:border-[var(--line)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] active:scale-90 transition-transform z-10 cursor-pointer"
+            className="absolute top-2.5 right-2.5 w-7 h-7 rounded-md bg-white dark:bg-[var(--surface)] flex items-center justify-center border border-slate-200 dark:border-[var(--line)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] active:scale-90 transition-transform z-10 cursor-pointer before:absolute before:-inset-2 before:content-['']"
           >
             <svg
               viewBox="0 0 24 24"
@@ -77,7 +79,7 @@ function ProductCard({ product }) {
 
         {/* Product details */}
         <div className="p-3">
-          <span className="text-[10px] font-normal text-gray-400 dark:text-[var(--muted-2)] uppercase tracking-wider">
+          <span className="text-2xs font-normal text-gray-400 dark:text-[var(--muted-2)] uppercase tracking-wider">
             {product.category}
           </span>
           <h3 className="text-xs sm:text-sm font-normal text-gray-900 dark:text-[var(--ink)] mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">

@@ -247,7 +247,7 @@ export default function AdminAnalytics() {
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+            <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">
               Analytics Overview
             </h1>
             <p className="text-xs lg:text-sm font-medium text-gray-500 mt-1">
@@ -426,7 +426,7 @@ export default function AdminAnalytics() {
                         className="flex-1 flex flex-col items-center gap-2 group h-full justify-end"
                       >
                         {/* Hover card */}
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[10px] p-2 rounded-xl pointer-events-none whitespace-nowrap shadow-xl -mb-2 z-20 space-y-0.5">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-2xs p-2 rounded-xl pointer-events-none whitespace-nowrap shadow-xl -mb-2 z-20 space-y-0.5">
                           <p className="font-extrabold text-orange-300">{point.date}</p>
                           <p>Walk-in: ₱{point.walkin.toLocaleString()}</p>
                           <p>Pre-order: ₱{point.preorder.toLocaleString()}</p>
@@ -460,7 +460,7 @@ export default function AdminAnalytics() {
                   })}
                 </div>
 
-                <div className="flex justify-between items-center text-[10px] text-gray-400 font-semibold pt-2">
+                <div className="flex justify-between items-center text-2xs text-gray-400 font-semibold pt-2">
                   <span>{firstPoint ? `${firstPoint.date} (Start)` : '—'}</span>
                   <span>{peakPoint ? `Peak: ${peakPoint.date}` : '—'}</span>
                   <span>{lastPoint ? `${lastPoint.date} (Latest)` : '—'}</span>
@@ -485,7 +485,7 @@ export default function AdminAnalytics() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[500px]">
                   <thead>
-                    <tr className="border-b border-gray-100 text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
+                    <tr className="border-b border-gray-100 text-2xs font-extrabold uppercase tracking-wider text-gray-400">
                       <th className="pb-3">Order ID</th>
                       <th className="pb-3">Customer</th>
                       <th className="pb-3">Amount</th>
@@ -509,7 +509,7 @@ export default function AdminAnalytics() {
                         <td className="py-3">
                           <StatusPill status={o.status} />
                         </td>
-                        <td className="py-3 text-right text-gray-400 text-[11px]">{o.date}</td>
+                        <td className="py-3 text-right text-gray-400 text-2xs">{o.date}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -563,14 +563,14 @@ export default function AdminAnalytics() {
                           <p className="text-xs font-bold text-gray-900 truncate">
                             {prod.name}
                           </p>
-                          <p className="text-[10px] text-gray-400 font-semibold">
+                          <p className="text-2xs text-gray-400 font-semibold">
                             {prod.category}
                           </p>
                         </div>
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-xs font-black text-gray-900">{prod.sales}</p>
-                        <p className="text-[10px] text-gray-400 uppercase font-semibold">units</p>
+                        <p className="text-2xs text-gray-400 uppercase font-semibold">units</p>
                       </div>
                     </div>
                   )

@@ -16,6 +16,14 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
   const scannerRef = useRef(null)
   const [hasPermission, setHasPermission] = useState(null)
   const [isScanning, setIsScanning] = useState(false)
+  const [cameraError, setCameraError] = useState('')
+  // Set when the employee pressed "Stop", so the stage idles with a Start
+  // button instead of showing the "Starting camera..." overlay forever.
+  const [manuallyStopped, setManuallyStopped] = useState(false)
+  // Set by the Retry button on the permission screen: the scanner DOM node is
+  // only rendered again on the next paint, so the restart waits for it.
+  const [pendingStart, setPendingStart] = useState(false)
+  const [manualCode, setManualCode] = useState('')
   const scannerInstance = useRef(null)
   const lastScannedCode = useRef(null)
   const scanCooldown = useRef(false)
@@ -68,6 +76,10 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
     } catch (err) {
       const errorMsg = err?.message || 'Failed to start camera'
       console.error('QR Scanner error:', err)
+      // A failed instance is never reused - Retry builds a fresh one in place.
+      scannerInstance.current = null
+      setCameraError(errorMsg)
+      setManuallyStopped(true)
       
       if (err?.name === 'NotAllowedError' || errorMsg.includes('permission')) {
         setHasPermission(false)
@@ -90,11 +102,66 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
     }
   }, [isScanning])
 
-  // Start on mount, stop on unmount
+  // The camera starts once on mount and stops on unmount ONLY.
+  //
+  // These callbacks change identity on every `isScanning` flip, so keeping
+  // them in the dependency list made the effect re-run whenever the scanner
+  // stopped - which called startScanner() again and restarted the camera in a
+  // loop. The first effect keeps the latest callbacks in refs (written inside
+  // an effect, never during render) while the second runs exactly once; from
+  // here on the camera is started and stopped only by the Start / Stop /
+  // Retry buttons below.
+  const startScannerRef = useRef(startScanner)
+  const stopScannerRef = useRef(stopScanner)
+
   useEffect(() => {
+    startScannerRef.current = startScanner
+    stopScannerRef.current = stopScanner
+  })
+
+  useEffect(() => {
+    startScannerRef.current()
+    return () => stopScannerRef.current()
+  }, [])
+
+  // Retry after a permission/camera failure: re-init in place, no page reload.
+  useEffect(() => {
+    if (!pendingStart) return undefined
+    if (!scannerRef.current || isScanning) {
+      setPendingStart(false)
+      return undefined
+    }
+    setPendingStart(false)
     startScanner()
-    return () => stopScanner()
-  }, [startScanner, stopScanner])
+  }, [pendingStart, isScanning, startScanner])
+
+  const handleStart = () => {
+    setCameraError('')
+    setManuallyStopped(false)
+    startScanner()
+  }
+
+  const handleStop = () => {
+    setManuallyStopped(true)
+    stopScanner()
+  }
+
+  /** Re-init in place instead of reloading the whole page (P0). */
+  const handleRetry = () => {
+    setCameraError('')
+    setHasPermission(null)
+    setManuallyStopped(false)
+    setPendingStart(true)
+  }
+
+  /** Manual code entry uses the very same on-result handler as the camera. */
+  const submitManualCode = (e) => {
+    e.preventDefault()
+    const value = manualCode.trim()
+    if (!value) return
+    handleScanSuccess(value)
+    setManualCode('')
+  }
 
   // Handle permission changes
   useEffect(() => {
@@ -105,30 +172,30 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
 
   if (hasPermission === false) {
     return (
-      <div className={`w-full aspect-video bg-slate-100 rounded-xl flex flex-col items-center justify-center p-4 ${className}`} style={style}>
-        <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mb-3">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-8 h-8 text-rose-600">
+      <div className={`w-full aspect-video bg-slate-100 dark:bg-[var(--surface-3)] rounded-xl flex flex-col items-center justify-center p-4 ${className}`} style={style}>
+        <div className="w-16 h-16 bg-rose-100 dark:bg-[var(--tint-danger-bg)] rounded-full flex items-center justify-center mb-3">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-8 h-8 text-rose-600 dark:text-[var(--tint-danger-fg)]">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
             <circle cx="12" cy="12" r="3" />
             <line x1="12" y1="9" x2="12.01" y2="9" />
           </svg>
         </div>
-        <p className="text-center text-slate-700 font-medium mb-1">Camera Access Required</p>
-        <p className="text-center text-sm text-slate-500 mb-4 max-w-xs">
+        <p className="text-center text-slate-700 dark:text-[var(--ink)] font-medium mb-1">Camera Access Required</p>
+        <p className="text-center text-sm text-slate-500 dark:text-[var(--muted)] mb-4 max-w-xs">
           Please allow camera access in your browser settings to scan QR codes.
         </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-brand-orange text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors"
-        >
+        <button type="button" onClick={handleRetry} className="btn btn--primary">
           Retry
         </button>
+        <p className="field-error text-center mt-3 max-w-xs" role="alert">
+          {cameraError || 'The camera could not be started.'}
+        </p>
       </div>
     )
   }
 
   return (
-    <div className={`relative w-full aspect-video bg-slate-900 rounded-xl overflow-hidden ${className}`} style={style}>
+    <div className={`relative w-full aspect-video bg-[var(--surface-4)] rounded-xl overflow-hidden ${className}`} style={style}>
       <div ref={scannerRef} className="w-full h-full" />
       
       {/* Scanning overlay */}
@@ -152,25 +219,48 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
         </p>
       </div>
 
-      {/* Loading state */}
-      {!isScanning && hasPermission !== false && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 z-10">
+      {/* Loading state - only while the camera is genuinely starting up */}
+      {!isScanning && hasPermission !== false && !manuallyStopped && !cameraError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-4)] z-10">
           <div className="text-center">
             <div className="w-10 h-10 border-4 border-brand-orange border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-white text-sm">Starting camera...</p>
+            <p className="text-[var(--ink)] text-sm">Starting camera...</p>
           </div>
         </div>
       )}
 
-      {/* Manual input fallback */}
-      <div className="absolute bottom-4 left-4 right-4">
+      {/* Start / Stop control plus the manual code fallback - a phone camera
+          cannot always focus, so the code can be typed in instead. */}
+      <div className="absolute bottom-3 left-3 right-3 z-20 flex flex-col gap-2 sm:flex-row sm:items-center">
         <button
-          onClick={stopScanner}
-          className="w-full sm:w-auto mx-auto sm:mx-0 px-4 py-2 bg-black/60 backdrop-blur-sm text-white text-sm font-medium rounded-lg hover:bg-black/70 transition-colors"
+          type="button"
+          onClick={isScanning ? handleStop : handleStart}
+          aria-label={isScanning ? 'Stop scanner' : 'Start scanner'}
+          aria-pressed={isScanning}
+          className="btn btn--secondary shrink-0"
         >
-          Stop Scanner
+          {isScanning ? 'Stop Scanner' : 'Start Scanner'}
         </button>
+        <form onSubmit={submitManualCode} className="flex items-center gap-2 flex-1 min-w-0">
+          <input
+            type="text"
+            value={manualCode}
+            onChange={(e) => setManualCode(e.target.value)}
+            placeholder="Enter code manually"
+            aria-label="QR code"
+            className="field-input h-8 text-xs flex-1 min-w-0"
+          />
+          <button type="submit" className="btn btn--secondary shrink-0">
+            Submit
+          </button>
+        </form>
       </div>
+
+      {cameraError && hasPermission !== false && (
+        <p className="field-error absolute left-3 right-3 bottom-24 z-20 text-center" role="alert">
+          {cameraError} Press Start Scanner to try again.
+        </p>
+      )}
     </div>
   )
 }

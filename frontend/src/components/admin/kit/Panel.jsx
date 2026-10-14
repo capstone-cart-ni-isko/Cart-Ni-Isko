@@ -48,7 +48,7 @@ export default function Panel({
               </>
             )}
             {meta && (
-              <span className="text-[11px] text-slate-500 dark:text-[var(--muted)] truncate min-w-0" title={typeof meta === 'string' ? meta : undefined}>
+              <span className="text-2xs text-slate-500 dark:text-[var(--muted)] truncate min-w-0" title={typeof meta === 'string' ? meta : undefined}>
                 {meta}
               </span>
             )}

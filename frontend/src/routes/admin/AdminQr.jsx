@@ -82,13 +82,13 @@ export default function AdminQr() {
               </span>
               <div>
                 <h2 className="text-sm font-bold text-slate-900">Scan a code</h2>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-2xs text-slate-400">
                   {busy ? 'Verifying…' : 'Waiting for a QR code'}
                 </p>
               </div>
             </div>
             <span
-              className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
+              className={`text-2xs font-bold px-2 py-1 rounded-full border ${
                 lastScan?.ok
                   ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
                   : lastScan

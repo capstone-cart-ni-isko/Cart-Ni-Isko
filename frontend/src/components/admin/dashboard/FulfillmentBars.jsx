@@ -70,7 +70,7 @@ export default function FulfillmentBars({ stages = [], activeKey = null, onSelec
                 )}
                 {/* Count callout at the bar end (inside when the bar is long) */}
                 <span
-                  className={`absolute top-1/2 -translate-y-1/2 text-[11px] font-bold tabular-nums ${
+                  className={`absolute top-1/2 -translate-y-1/2 text-2xs font-bold tabular-nums ${
                     pct > 85 ? 'text-white' : 'text-slate-900'
                   }`}
                   style={pct > 85 ? { right: '6px' } : { left: `calc(${pct}% + 6px)` }}
@@ -85,8 +85,8 @@ export default function FulfillmentBars({ stages = [], activeKey = null, onSelec
 
       {/* Scale aligned to the bar column */}
       <div className="grid grid-cols-[9rem_1fr] gap-2 px-1.5 pt-1.5 mt-1 border-t border-slate-100 shrink-0">
-        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Orders</span>
-        <span className="relative h-3 text-[10px] font-medium text-slate-400 tabular-nums">
+        <span className="text-2xs font-medium text-slate-400 uppercase tracking-wide">Orders</span>
+        <span className="relative h-3 text-2xs font-medium text-slate-400 tabular-nums">
           {ticks.map((t) => (
             <span
               key={t}

@@ -1,5 +1,7 @@
 import { Component } from 'react'
 import { activePortal } from '../../services/api.js'
+import Button from './Button.jsx'
+import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 /**
  * Explicit failure text for any API call. Rendered instead of leaving the user
@@ -71,6 +73,13 @@ export class ApiErrorBoundary extends Component {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">
         <div className="w-full max-w-sm bg-white rounded-lg border border-slate-200 p-6 text-center space-y-3">
+          {/* Small brand tile (matches LoginPromptModal) so the failure screen
+              still reads as part of the storefront. */}
+          <div className="flex justify-center">
+            <div className="w-12 h-12 bg-orange-50 rounded-md border border-orange-100 flex items-center justify-center p-2">
+              <img src={logo} alt="Tindahan ni Isko" className="w-8 h-8 object-contain" />
+            </div>
+          </div>
           <h1 className="text-base font-extrabold text-slate-900">This page hit an error</h1>
           <p className="text-sm text-slate-600 break-words">
             Something unexpected went wrong while showing this page. Please try
@@ -82,27 +91,29 @@ export class ApiErrorBoundary extends Component {
           </p>
           {/* The portal home is the guaranteed way back: it always lands the
               user inside their own portal, whichever entry they take. */}
-          <button
+          <Button
             type="button"
+            variant="primary"
+            block
             onClick={() => {
               this.setState({ error: null })
               window.location.assign(exit.homePath)
             }}
-            className="w-full h-10 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-sm font-bold transition-colors cursor-pointer"
           >
             {exit.homeLabel}
-          </button>
+          </Button>
           {canGoBack && (
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              block
               onClick={() => {
                 this.setState({ error: null })
                 window.history.back()
               }}
-              className="w-full h-10 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold transition-colors cursor-pointer"
             >
               {exit.backLabel}
-            </button>
+            </Button>
           )}
         </div>
       </div>

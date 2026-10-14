@@ -174,7 +174,7 @@ export default function ScheduleBlockModal({
               />
             </div>
           </div>
-          <p className="text-[10px] text-slate-400 font-normal">
+          <p className="text-2xs text-slate-400 font-normal">
             {fmtTime(startTime)} – {fmtTime(endTime)} · blocks land on {GRID_MINUTES}-minute steps and
             may not overlap another block for the same employee.
           </p>
@@ -194,7 +194,7 @@ export default function ScheduleBlockModal({
               <span className="block font-semibold text-slate-700">
                 {unavailable ? 'Unavailable' : 'Available'} on this block
               </span>
-              <span className="block text-[10px] text-slate-400 font-normal">
+              <span className="block text-2xs text-slate-400 font-normal">
                 Their class or personal conflict. Marking it
                 unavailable stops the block from covering the shop, tells affected customers to
                 reschedule, and alerts the admins to find a substitute.
@@ -203,7 +203,7 @@ export default function ScheduleBlockModal({
           </label>
 
           {locked ? (
-            <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+            <p className="text-2xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
               {lockMessage} A super admin may still override this change.
             </p>
           ) : null}
@@ -211,7 +211,7 @@ export default function ScheduleBlockModal({
           {formError && (
             <p
               role="alert"
-              className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-2 py-1.5"
+              className="text-2xs font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-2 py-1.5"
             >
               {formError}
             </p>

@@ -57,12 +57,12 @@ export default function StaffScheduleDrawer({ isOpen, onClose }) {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm text-slate-900 truncate">{shift.emp_name}</span>
-              <span className="block text-[11px] text-slate-500 truncate">
+              <span className="block text-2xs text-slate-500 truncate">
                 {titleCase(shift.shift_type)}
                 {shift.shift_location ? ` · ${shift.shift_location}` : ''}
               </span>
               {shift.pending_replacement && (
-                <span className="inline-block mt-1 text-[10px] font-semibold text-isko-orange-dark bg-isko-orange/10 border border-isko-orange/30 rounded px-1.5 py-0.5">
+                <span className="inline-block mt-1 text-2xs font-semibold text-isko-orange-dark bg-isko-orange/10 border border-isko-orange/30 rounded px-1.5 py-0.5">
                   Pending replacement
                 </span>
               )}

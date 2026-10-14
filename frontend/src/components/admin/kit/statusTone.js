@@ -15,7 +15,7 @@ const LOST = ['CANCELLED', 'RETURNED', 'REFUNDED']
 export const TONE_CLASSES = {
   neutral: 'bg-slate-100 text-slate-700 border-slate-200',
   active: 'bg-isko-blue/10 text-isko-blue-dark border-isko-blue/25',
-  done: 'bg-white text-slate-600 border-slate-200',
+  done: 'bg-[var(--surface)] text-slate-600 border-slate-200',
   urgent: 'bg-isko-orange/10 text-isko-orange-dark border-isko-orange/30',
   lost: 'bg-rose-50 text-rose-700 border-rose-200',
 }

@@ -121,11 +121,11 @@ function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
           <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
         </svg>
         <span className="text-xs font-semibold text-slate-700"><LiveDate /></span>
-        <span className="ml-auto text-[10px] text-slate-400">Showing available slots</span>
+        <span className="ml-auto text-2xs text-slate-400">Showing available slots</span>
       </div>
 
       <div className="modal-scroll space-y-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+        <p className="text-2xs font-bold uppercase tracking-wider text-slate-400 mb-2">
           Select a time slot — max {capacity} appointments per slot
         </p>
           {slots.map((slot) => {
@@ -151,7 +151,7 @@ function SchedulePickupModal({ order, slots, onClose, onConfirm, busy }) {
               >
                 <span>{slotRangeLabel(slot)}</span>
                 <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-semibold ${isFull ? 'text-isko-orange-dark' : issue ? 'text-isko-orange' : 'text-slate-400'}`}>
+                  <span className={`text-2xs font-semibold ${isFull ? 'text-isko-orange-dark' : issue ? 'text-isko-orange' : 'text-slate-400'}`}>
                     {isFull ? 'Full' : `${slot.booked}/${slot.capacity}`}
                   </span>
                   {isSelected && (
@@ -185,7 +185,7 @@ const AVATAR_TINTS = ['bg-isko-blue/15 text-isko-blue-dark', 'bg-isko-orange/15 
 function Avatar({ initials, size = 'sm' }) {
   let hash = 0
   for (const ch of String(initials || '#')) hash = (hash + ch.charCodeAt(0)) % AVATAR_TINTS.length
-  const sz = size === 'sm' ? 'w-7 h-7 text-[10px]' : 'w-8 h-8 text-xs'
+  const sz = size === 'sm' ? 'w-7 h-7 text-2xs' : 'w-8 h-8 text-xs'
   return (
     <div className={`${sz} ${AVATAR_TINTS[hash]} rounded-full flex items-center justify-center font-semibold shrink-0`}>
       {initials}
@@ -194,7 +194,7 @@ function Avatar({ initials, size = 'sm' }) {
 }
 
 // Shared table chrome: sticky header row inside a panel that scrolls
-const TH = 'px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200'
+const TH = 'px-3 py-2 text-2xs font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 border-b border-slate-200'
 const TD = 'px-3 py-2.5'
 
 function ScrollTable({ head, children }) {
@@ -231,7 +231,7 @@ function CustomerCell({ order }) {
       <Avatar initials={initialsOf(order.customer)} />
       <div className="min-w-0">
         <p className="font-semibold text-slate-900 truncate">{order.customer}</p>
-        <p className="text-[11px] text-slate-400">{order.custPhone || '—'}</p>
+        <p className="text-2xs text-slate-400">{order.custPhone || '—'}</p>
       </div>
     </div>
   )
@@ -242,7 +242,7 @@ function ItemsCell({ order }) {
   return (
     <>
       <p className="font-medium text-slate-700">{items.count}</p>
-      <p className="text-[11px] text-slate-400 mt-0.5 max-w-[16rem] truncate">{items.label}</p>
+      <p className="text-2xs text-slate-400 mt-0.5 max-w-[16rem] truncate">{items.label}</p>
     </>
   )
 }
@@ -275,7 +275,7 @@ function PickupScheduleSidebar({ slots, onSchedule, onViewUnscheduled }) {
           {slots.length === 0 && (
             <div className="flex items-center gap-2 py-3">
               <LoadingSpinner size={16} />
-              <p className="text-[11px] text-slate-400">Loading today&apos;s slots…</p>
+              <p className="text-2xs text-slate-400">Loading today&apos;s slots…</p>
             </div>
           )}
         </div>
@@ -376,7 +376,7 @@ function OverviewTab({ kpis, scheduleRows, slots, onSchedule, onViewUnscheduled,
                   {row.staffOk === false && (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-isko-orange" aria-label="Not enough staff"><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /><circle cx="12" cy="12" r="10" /></svg>
                   )}
-                  {row.staffOk === null && <span className="text-[11px] text-slate-400">—</span>}
+                  {row.staffOk === null && <span className="text-2xs text-slate-400">—</span>}
                 </td>
                 <td className={TD}>
                   <SlotStatusBadge status={row.status} />
@@ -454,7 +454,7 @@ function ScheduledTab({ groups, slots, onSchedule, onViewUnscheduled, onHandover
             <div key={group.key} className="rounded-md border border-slate-200 overflow-hidden">
               <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-800">{group.label}</span>
-                <span className="text-[11px] font-medium text-slate-500">
+                <span className="text-2xs font-medium text-slate-500">
                   {group.count} {group.count === 1 ? 'appointment' : 'appointments'}
                 </span>
               </div>
@@ -465,15 +465,15 @@ function ScheduledTab({ groups, slots, onSchedule, onViewUnscheduled, onHandover
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-xs font-semibold text-slate-900">{appt.customer}</p>
-                        <span className="text-[11px] font-semibold text-isko-blue-dark bg-isko-blue/10 px-1.5 py-0.5 rounded">{appt.time}</span>
+                        <span className="text-2xs font-semibold text-isko-blue-dark bg-isko-blue/10 px-1.5 py-0.5 rounded">{appt.time}</span>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
+                      <p className="text-2xs text-slate-500 mt-0.5">
                         {appt.apptId} · <span className="font-medium text-slate-700">{appt.orderId}</span>
                       </p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-xs font-medium text-slate-700">{appt.items}</p>
-                      <p className="text-[11px] text-slate-400 mt-0.5 max-w-[180px] truncate">{appt.itemLabel}</p>
+                      <p className="text-2xs text-slate-400 mt-0.5 max-w-[180px] truncate">{appt.itemLabel}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {appt.order && (

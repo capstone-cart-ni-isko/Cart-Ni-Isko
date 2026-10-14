@@ -333,7 +333,7 @@ export default function AdminAppointments() {
         {/* Compacted Top Greeting Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+            <h1 className="page-title text-slate-900 dark:text-[var(--ink)] flex items-center gap-2">
               <span>{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, {staffName}!</span>
             </h1>
             <p className="text-xs text-slate-500 font-normal mt-0.5">
@@ -391,7 +391,7 @@ export default function AdminAppointments() {
                     </svg>
                   </div>
                   <div className="space-y-1">
-                    <span className="inline-block bg-[#FFEDE1] text-[#E65100] text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+                    <span className="inline-block bg-[#FFEDE1] text-[#E65100] text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
                       Master Calendar
                     </span>
                     <h2 className="text-base font-bold text-slate-900">{fmtBadgeDate(selectedDate)}</h2>
@@ -538,12 +538,12 @@ export default function AdminAppointments() {
                         <p className={`text-xs font-bold leading-tight ${isShift ? 'text-[#FF6A00]' : 'text-gray-700'}`}>
                           {item.time.split('–')[0]}
                         </p>
-                        <p className="text-[11px] text-gray-400">
+                        <p className="text-2xs text-gray-400">
                           {item.time.split('–')[1] ? `– ${item.time.split('–')[1]}` : ''}
                         </p>
                         {/* Type Badge */}
                         <span
-                          className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
+                          className={`inline-block text-2xs font-bold px-2 py-0.5 rounded-full mt-1 ${
                             isShift
                               ? 'bg-[#FFE2D1] text-[#E65100]'
                               : isFree
@@ -703,7 +703,7 @@ export default function AdminAppointments() {
                           : 'border border-gray-100 hover:bg-gray-50'
                       }`}
                     >
-                      <span className="text-[11px] font-bold text-gray-600">{d.label}</span>
+                      <span className="text-2xs font-bold text-gray-600">{d.label}</span>
                       <span
                         className={`w-2 h-2 rounded-full my-2 ${
                           d.status === 'shift'
@@ -720,7 +720,7 @@ export default function AdminAppointments() {
               </div>
 
               {/* Legend */}
-              <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 pt-2 border-t border-gray-100">
+              <div className="flex items-center justify-between text-2xs font-semibold text-gray-500 pt-2 border-t border-gray-100">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-[#10B981]" />
                   <span>No bookings</span>
@@ -782,7 +782,7 @@ export default function AdminAppointments() {
                   </div>
                   <div>
                     <p className="text-xs font-black text-gray-900 leading-tight">View Full Schedule</p>
-                    <p className="text-[10px] text-gray-500 font-medium mt-1 leading-snug">
+                    <p className="text-2xs text-gray-500 font-medium mt-1 leading-snug">
                       See all committee schedules and availability.
                     </p>
                   </div>
@@ -806,7 +806,7 @@ export default function AdminAppointments() {
                   </div>
                   <div>
                     <p className="text-xs font-black text-gray-900 leading-tight">Need Help?</p>
-                    <p className="text-[10px] text-gray-500 font-medium mt-1 leading-snug">
+                    <p className="text-2xs text-gray-500 font-medium mt-1 leading-snug">
                       Contact the admin or committee lead.
                     </p>
                   </div>

@@ -49,11 +49,11 @@ export default function ScheduleDutyRequests({
                   <h4 className="font-bold text-slate-900 truncate">
                     {block.employee_name || `Employee #${block.emp_id}`}
                   </h4>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-2xs text-slate-500">
                     Block #{block.shift_id} · {block.shift_date}
                   </p>
                 </div>
-                <span className="text-[10px] font-bold text-amber-700 bg-white border border-amber-200 rounded px-2 py-0.5 shrink-0">
+                <span className="text-2xs font-bold text-amber-700 bg-white border border-amber-200 rounded px-2 py-0.5 shrink-0">
                   {block.status}
                 </span>
               </div>

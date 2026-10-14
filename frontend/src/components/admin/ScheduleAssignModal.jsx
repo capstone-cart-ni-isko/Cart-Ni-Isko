@@ -137,14 +137,14 @@ export default function ScheduleAssignModal({
                     current.size === officers.length ? new Set() : new Set(officers.map((o) => String(o.id)))
                   )
                 }
-                className="text-[10px] font-bold text-brand-orange hover:underline cursor-pointer"
+                className="text-2xs font-bold text-brand-orange hover:underline cursor-pointer"
               >
                 {selectedIds.size === officers.length ? 'Clear all' : 'Select all'}
               </button>
             </div>
             <div className="max-h-40 overflow-y-auto rounded-md border border-slate-200 bg-slate-50 divide-y divide-slate-100">
               {officers.length === 0 && (
-                <p className="px-2.5 py-3 text-[11px] text-slate-400 text-center">
+                <p className="px-2.5 py-3 text-2xs text-slate-400 text-center">
                   No employees to schedule yet.
                 </p>
               )}
@@ -162,7 +162,7 @@ export default function ScheduleAssignModal({
                       className="w-3.5 h-3.5 accent-[#F97316] cursor-pointer"
                     />
                     <span className="flex-1 truncate">{officer.name}</span>
-                    <span className="text-[10px] text-slate-400 shrink-0">{officer.availability}</span>
+                    <span className="text-2xs text-slate-400 shrink-0">{officer.availability}</span>
                   </label>
                 )
               })}
@@ -219,7 +219,7 @@ export default function ScheduleAssignModal({
             </div>
           </div>
 
-          <p className="text-[10px] text-slate-400 font-normal">
+          <p className="text-2xs text-slate-400 font-normal">
             {fmtTime(startTime)} – {fmtTime(endTime)} ({humanMinutes(blockMinutes())}) · blocks move in{' '}
             {GRID_MINUTES}-minute steps. The weekly 180-minute minimum, overlapping shifts and the
             same-day deadline are also checked before saving.
@@ -228,7 +228,7 @@ export default function ScheduleAssignModal({
           {formError && (
             <p
               role="alert"
-              className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-2 py-1.5"
+              className="text-2xs font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-2 py-1.5"
             >
               {formError}
             </p>

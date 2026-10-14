@@ -7,6 +7,7 @@ import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
 import AppointmentCard from '../components/appointment/AppointmentCard.jsx'
 import AppointmentDetailsModal from '../components/appointment/AppointmentDetailsModal.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
+import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import {
   APPOINT_TYPE,
@@ -183,6 +184,8 @@ function Appointments() {
   const [error, setError] = useState('')
   const [form, setForm] = useState(null) // null | 'new' | appointment
   const [viewing, setViewing] = useState(null)
+  // FLOW-MANAGE_BOOKED-05/06: cancelling is confirmed through the shared dialog.
+  const [cancelTarget, setCancelTarget] = useState(null)
   // FLOW-ORD_CLAIM-01: the appointment whose appoint_qr is being scanned
   const [claimTarget, setClaimTarget] = useState(null)
   const alive = useRef(true)
@@ -260,23 +263,28 @@ function Appointments() {
 
   // FLOW-MANAGE_BOOKED-05/06: the customer cancels through the list; the
   // backend flips `appoint_status` to `cancelled` and deletes the QR code.
-  const handleCancel = useCallback(
-    async (appt) => {
-      if (!appt) return
-      if (!window.confirm(`Cancel appointment #${appt.id}?\n\nYour slot will be freed up.`)) return
-      try {
-        await updateAppointment(appt.id, { appoint_status: 'cancelled' })
-        setViewing(null)
-        setForm(null)
-        refresh()
-      } catch (err) {
-        setError(
-          apiErrorMessage(err, 'Failed to cancel the appointment. Please try again.')
-        )
-      }
-    },
-    [refresh]
-  )
+  // The confirmation itself is the shared dialog (no window.confirm, no \n).
+  const handleCancel = useCallback((appt) => {
+    if (!appt) return
+    setViewing(null)
+    setCancelTarget(appt)
+  }, [])
+
+  const confirmCancel = useCallback(async () => {
+    const appt = cancelTarget
+    setCancelTarget(null)
+    if (!appt) return
+    try {
+      await updateAppointment(appt.id, { appoint_status: 'cancelled' })
+      setViewing(null)
+      setForm(null)
+      refresh()
+    } catch (err) {
+      setError(
+        apiErrorMessage(err, 'Failed to cancel the appointment. Please try again.')
+      )
+    }
+  }, [cancelTarget, refresh])
 
   const cards = list.slice(0, limit)
 
@@ -421,6 +429,18 @@ function Appointments() {
         onClose={() => setViewing(null)}
         onEdit={() => startEdit(viewing)}
         onCancel={handleCancel}
+      />
+
+      {/* FLOW-MANAGE_BOOKED-05/06: shared confirmation before cancelling. */}
+      <ConfirmModal
+        isOpen={Boolean(cancelTarget)}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={confirmCancel}
+        title={cancelTarget ? `Cancel appointment #${cancelTarget.id}?` : 'Cancel appointment?'}
+        message="Your slot will be freed up. This cannot be undone."
+        confirmText="Cancel appointment"
+        cancelText="Keep appointment"
+        isDestructive
       />
 
       {/* Camera scan of the pickup QR: POST /tracking/scan {scanned_by:'customer'} */}

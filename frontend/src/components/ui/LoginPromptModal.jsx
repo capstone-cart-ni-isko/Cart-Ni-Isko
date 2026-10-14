@@ -55,19 +55,17 @@ function LoginPromptModal({ isOpen, onClose, message = 'You need to sign in to a
       }
     >
       <div className="flex flex-col items-center text-center gap-3">
-        <div className="w-12 h-12 bg-orange-50 rounded-md border border-orange-100 flex items-center justify-center p-2">
+        {/* Token tile (matches ApiErrorBoundary) so the border stays visible
+            in dark mode instead of a hard-coded orange wash. */}
+        <div className="w-12 h-12 rounded-md border border-[var(--line)] bg-[var(--tint-brand-bg)] flex items-center justify-center p-2">
           <img src={logo} alt="Tindahan ni Isko" className="w-8 h-8 object-contain" />
         </div>
         <p className="text-sm text-gray-600 font-normal leading-relaxed">
           {message}
         </p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-xs text-gray-500 hover:text-gray-700 font-semibold transition-colors cursor-pointer"
-        >
+        <Button variant="ghost" onClick={onClose}>
           Maybe Later
-        </button>
+        </Button>
       </div>
     </Modal>
   )

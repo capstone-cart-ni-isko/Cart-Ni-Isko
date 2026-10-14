@@ -70,7 +70,7 @@ export default function ScheduleTimelineGrid({
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table className="w-full text-left border-collapse min-w-[760px]">
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <tr className="border-b border-slate-200 bg-slate-50/70 text-2xs font-bold uppercase tracking-wider text-slate-500">
             <th className="py-2.5 px-3.5 w-44 sticky left-0 bg-slate-50 z-10">Employee</th>
             {/* The hour marks sit on the SAME 10-minute grid the blocks use,
                 so a label can never drift away from the column it names. */}
@@ -96,7 +96,7 @@ export default function ScheduleTimelineGrid({
               <td className="py-2 px-3.5 sticky left-0 bg-white z-10">
                 <div className="flex items-center gap-2">
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-2xs font-bold shrink-0 ${
                       officer.avatarColor || 'bg-slate-100 text-slate-600'
                     }`}
                   >
@@ -104,7 +104,7 @@ export default function ScheduleTimelineGrid({
                   </div>
                   <div className="min-w-0">
                     <p className="font-bold text-slate-900 truncate">{officer.name}</p>
-                    <p className="text-[10px] text-slate-400">{officer.roleLabel}</p>
+                    <p className="text-2xs text-slate-400">{officer.roleLabel}</p>
                   </div>
                 </div>
               </td>
@@ -133,13 +133,13 @@ export default function ScheduleTimelineGrid({
                         style={{ gridColumn: `${first} / span ${span}` }}
                       >
                         <span
-                          className={`block text-[10px] font-bold truncate ${
+                          className={`block text-2xs font-bold truncate ${
                             unavailable ? 'line-through' : ''
                           }`}
                         >
                           {fmtTime(shift.shift_start)} – {fmtTime(shift.shift_end)}
                         </span>
-                        <span className="block text-[9px] font-normal opacity-80 truncate">
+                        <span className="block text-2xs font-normal opacity-80 truncate">
                           {unavailable ? 'Unavailable' : `#${shift.shift_id}`}
                         </span>
                       </button>

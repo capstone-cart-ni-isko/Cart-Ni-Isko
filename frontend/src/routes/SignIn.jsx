@@ -294,6 +294,12 @@ function SignIn() {
       {/* DESKTOP LOGIN LAYOUT (Image 3 Wireframe) */}
       <div className="hidden md:flex flex-col justify-center min-h-[460px] px-4 py-10 animate-fade-in">
         <div className="w-full max-w-md mx-auto bg-white dark:bg-[var(--surface)] rounded-md border border-slate-200 dark:border-[var(--line)] p-6 space-y-5">
+          {/* Rule 69: the "back" button sits at the TOP LEFT of the container,
+              before the branding, not stranded mid-card. */}
+          <div className="flex justify-start">
+            <BackButton to="/home" label="Back to Homepage" />
+          </div>
+
           <div className="space-y-3 text-center">
             <img
               src={brandLogo}
@@ -301,16 +307,11 @@ function SignIn() {
               className="h-16 w-auto object-contain mx-auto"
             />
             <div>
-              <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">Log In</h1>
+              <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">Sign In</h1>
               <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium mt-1 leading-relaxed">
                 Access your orders, bag, and favorite products anytime, anywhere.
               </p>
             </div>
-          </div>
-
-          {/* Rule 69: the "back" button sits at the top left of the page. */}
-          <div className="flex justify-start">
-            <BackButton to="/home" label="Back to Homepage" />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -341,7 +342,7 @@ function SignIn() {
                   : 'btn--secondary cursor-not-allowed opacity-60'
               }`}
             >
-              {isSubmitting ? <AuthenticatingSkeleton /> : 'Log In'}
+              {isSubmitting ? <AuthenticatingSkeleton /> : 'Sign In'}
             </button>
           </form>
 

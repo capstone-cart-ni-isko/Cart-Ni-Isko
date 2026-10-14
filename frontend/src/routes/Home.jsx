@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
+import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import Avatar from '../components/ui/Avatar.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
 import { PRODUCT_CATEGORIES } from '../data/productCategories.js'
@@ -83,7 +84,16 @@ const shopCategories = PRODUCT_CATEGORIES.map((name) => ({
 
 function ProfileMenu({ open, onClose, user, onLogout }) {
   const navigate = useNavigate()
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
   if (!open) return null
+
+  // FLOW-CUST_LOGOUT-01/02: logging out from the drawer is confirmed first,
+  // exactly like the Settings screen, so it never signs out on a stray tap.
+  const confirmLogout = () => {
+    onLogout()
+    onClose()
+    navigate('/signin')
+  }
 
   return (
     <>
@@ -109,7 +119,7 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
               </svg>
               <span>Home</span>
             </Link>
-            <Link to="/about" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all">
+            <Link to="/settings/about" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-gray-450">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="16" x2="12" y2="12" />
@@ -140,11 +150,7 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
                   <span>Settings</span>
                 </Link>
                 <button
-                  onClick={() => {
-                    onLogout()
-                    onClose()
-                    navigate('/signin')
-                  }}
+                  onClick={() => setShowLogoutModal(true)}
                   className="w-full text-left flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all"
                 >
                   <LogOutIcon className="w-5 h-5 text-red-500" />
@@ -163,6 +169,17 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
           <p className="text-xs text-gray-400 font-medium">Tindahan ni Isko v1.0.0</p>
         </div>
       </aside>
+
+      {/* FLOW-CUST_LOGOUT-01/02: shared logout confirmation, matching Settings. */}
+      <ConfirmModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={confirmLogout}
+        title="Log Out?"
+        message="Are you sure you want to sign out of your Tindahan ni Isko account?"
+        confirmText="Log Out"
+        isDestructive={true}
+      />
     </>
   )
 }
@@ -408,7 +425,7 @@ function Home() {
             </p>
             <div className="pt-1">
               <Link
-                to="/about"
+                to="/settings/about"
                 className="inline-flex items-center justify-center h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold rounded-md transition-colors"
               >
                 Learn More About Us
@@ -612,7 +629,7 @@ function Home() {
             </p>
             <div className="pt-1">
               <Link
-                to="/about"
+                to="/settings/about"
                 className="inline-flex items-center justify-center h-8 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold rounded-md transition-colors"
               >
                 <span>Learn More About Us</span>

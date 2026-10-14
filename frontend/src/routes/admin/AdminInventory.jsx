@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
+import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import Modal from '../../components/ui/Modal.jsx'
@@ -85,6 +86,7 @@ function cartesian(axes) {
 
 export default function AdminInventory() {
   const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, updateVariant, removeVariant, products: backendProducts, currentAdminUser } = useAdmin()
+  const { showToast } = useToast()
 
   // Staff may VIEW the inventory but cannot add, edit, or delete products.
   // The management buttons are hidden for staff (read-only mode).
@@ -196,6 +198,11 @@ export default function AdminInventory() {
   const [editPrice, setEditPrice] = useState('')
   const [editPhoto, setEditPhoto] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
+  // REQ-MANAGE_INV / DOMAIN 16: destructive confirmations are dialogs, never
+  // window.confirm - one for removing a combination, one for replacing the
+  // hand-typed variation list with the axis matrix.
+  const [pendingVariantRemoval, setPendingVariantRemoval] = useState(null)
+  const [confirmMatrixSwitch, setConfirmMatrixSwitch] = useState(false)
 
   // One combination at a time (FLOW-MANAGE_INV-01). The row the drawer's Edit
   // button opens, plus the fields of it the admin is changing.
@@ -209,14 +216,33 @@ export default function AdminInventory() {
   const [addVariationPhotoIndex, setAddVariationPhotoIndex] = useState(null)
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
 
+  /* SYSTEM RULES 66/67 - validation is realtime and the message lives under
+     the field it talks about; nothing is ever refused through window.alert.
+     A field starts reporting as soon as it has been touched (change/blur),
+     and `*FormError` carries the messages that belong to the whole form
+     (one variation row, a failed save). */
+  const [createTouched, setCreateTouched] = useState({ name: false, price: false })
+  const [updateTouched, setUpdateTouched] = useState({ name: false, price: false })
+  const [variantTouched, setVariantTouched] = useState({ stock: false, markup: false })
+  const [createFormError, setCreateFormError] = useState('')
+  const [updateFormError, setUpdateFormError] = useState('')
+  const [variantFormError, setVariantFormError] = useState('')
+
+  const createNameError = createTouched.name && !newProdName.trim() ? 'Product name is required.' : ''
+  const createPriceError = createTouched.price && !(parseFloat(newProdPrice) > 0) ? 'Product price must be greater than zero.' : ''
+  const updateNameError = updateTouched.name && !editName.trim() ? 'Product name is required.' : ''
+  const updatePriceError = updateTouched.price && !(parseFloat(editPrice) > 0) ? 'Product price must be greater than zero.' : ''
+  const variantStockError = variantTouched.stock && !(Number.parseInt(variantDraft.stock, 10) >= 0) ? 'Stock must be zero or more.' : ''
+  const variantMarkupError = variantTouched.markup && Number.parseFloat(variantDraft.markup) < 0 ? 'Markup cannot be negative.' : ''
+
   // REQ-ADD_PROD-07: one shared guard for every upload the form makes.
   const assertImageAcceptable = (file) => {
     if (!ACCEPTED_IMAGE_MIME.includes(file.type)) {
-      window.alert('Product images must be PNG or JPEG files.')
+      showToast('Product images must be PNG or JPEG files.', 'error')
       return false
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      window.alert('Product images must be 2 MB or smaller.')
+      showToast('Product images must be 2 MB or smaller.', 'error')
       return false
     }
     return true
@@ -228,7 +254,7 @@ export default function AdminInventory() {
     try {
       return await uploadImage(file, 'product')
     } catch (err) {
-      window.alert(err.message || 'Unable to upload the image.')
+      showToast(err.message || 'Unable to upload the image.', 'error')
       return null
     } finally {
       setIsUploadingPhoto(false)
@@ -379,16 +405,18 @@ export default function AdminInventory() {
     e.preventDefault()
     if (isCreatingProduct) return
     // FLOW-ADD_PROD-05 / REQ-ADD_PROD-08: invalid input is refused inline
-    // instead of being silently coerced into a placeholder product.
+    // instead of being silently coerced into a placeholder product - and the
+    // message appears under the field (rules 66/67), never in an alert.
     const price = parseFloat(newProdPrice)
     if (!newProdName.trim()) {
-      window.alert('Product name is required.')
+      setCreateTouched((t) => ({ ...t, name: true }))
       return
     }
     if (!(price > 0)) {
-      window.alert('Product price must be greater than zero.')
+      setCreateTouched((t) => ({ ...t, price: true }))
       return
     }
+    setCreateFormError('')
     const variations = newProdVariations
       .map((row) => ({
         name: String(row.name || '').trim(),
@@ -408,27 +436,27 @@ export default function AdminInventory() {
       }))
       .filter((row) => row.name !== '' || row.options || Number.isFinite(row.stock))
     if (variations.length === 0) {
-      window.alert('A product needs at least one variation.')
+      setCreateFormError('A product needs at least one variation.')
       return
     }
     for (const [i, row] of variations.entries()) {
       // A combination names itself ("Cream / Medium"); a hand-typed row has to.
       if (!row.name && !row.options) {
-        window.alert(`Variation ${i + 1} needs a name.`)
+        setCreateFormError(`Variation ${i + 1} needs a name.`)
         return
       }
       if (!Number.isFinite(row.stock) || row.stock < 0) {
-        window.alert(`Variation ${i + 1} needs a stock quantity of zero or more.`)
+        setCreateFormError(`Variation ${i + 1} needs a stock quantity of zero or more.`)
         return
       }
       if (Number.isFinite(row.markup) && row.markup < 0) {
-        window.alert(`Variation ${i + 1} markup cannot be negative.`)
+        setCreateFormError(`Variation ${i + 1} markup cannot be negative.`)
         return
       }
       // REQ-IM-02: the message names the axis and value, not "the option set".
       for (const [axis, value] of Object.entries(row.options || {})) {
         if (!String(axis || '').trim() || !String(value || '').trim()) {
-          window.alert(`Variation ${i + 1} needs both a name and a value for every way it varies.`)
+          setCreateFormError(`Variation ${i + 1} needs both a name and a value for every way it varies.`)
           return
         }
       }
@@ -453,7 +481,12 @@ export default function AdminInventory() {
           ...(row.options && Object.keys(row.options).length > 0 ? { options: row.options } : {}),
         })),
       })
-      if (!result.success) return
+      if (!result.success) {
+        const message = result.error || 'The product could not be saved. Please try again.'
+        showToast(message, 'error')
+        setCreateFormError(message)
+        return
+      }
       setShowAddProductModal(false)
       setNewProdName('')
       setNewProdDesc('')
@@ -479,6 +512,8 @@ export default function AdminInventory() {
         ? prod.image
         : ''
     )
+    setUpdateTouched({ name: false, price: false })
+    setUpdateFormError('')
     setShowEditProductModal(true)
   }
 
@@ -495,13 +530,14 @@ export default function AdminInventory() {
     // FLOW-ADD_PROD-05: refuse non-positive input inline instead of coercing.
     const price = parseFloat(editPrice)
     if (!editName.trim()) {
-      window.alert('Product name is required.')
+      setUpdateTouched((t) => ({ ...t, name: true }))
       return
     }
     if (!(price > 0)) {
-      window.alert('Product price must be greater than zero.')
+      setUpdateTouched((t) => ({ ...t, price: true }))
       return
     }
+    setUpdateFormError('')
     const result = await updateProduct(editTarget.id, {
       prod_name: editName.trim(),
       prod_desc: editDesc,
@@ -509,7 +545,13 @@ export default function AdminInventory() {
       prod_price: price,
       ...(editPhoto ? { prod_images: [editPhoto] } : {}),
     })
-    if (!result.success) return
+    if (!result.success) {
+      // Rule 66/67 + REQ-IM-01: a refused save is reported, never swallowed.
+      const message = result.error || 'The changes could not be saved. Please try again.'
+      showToast(message, 'error')
+      setUpdateFormError(message)
+      return
+    }
     setShowEditProductModal(false)
     setEditTarget(null)
   }
@@ -530,6 +572,8 @@ export default function AdminInventory() {
    */
   const openVariantEditor = (prod, variant) => {
     setVariantEditor({ prodId: prod.prodId, variant })
+    setVariantTouched({ stock: false, markup: false })
+    setVariantFormError('')
     setVariantDraft({
       name: variant.name || '',
       stock: String(variant.stock ?? ''),
@@ -543,20 +587,28 @@ export default function AdminInventory() {
     const stock = Number.parseInt(variantDraft.stock, 10)
     const markup = Number.parseFloat(variantDraft.markup)
     if (!Number.isFinite(stock) || stock < 0) {
-      window.alert('Stock must be zero or more.')
+      setVariantTouched((t) => ({ ...t, stock: true }))
       return
     }
     if (Number.isFinite(markup) && markup < 0) {
-      window.alert('Markup cannot be negative.')
+      setVariantTouched((t) => ({ ...t, markup: true }))
       return
     }
+    setVariantFormError('')
     const result = await updateVariant(variantEditor.prodId, variantEditor.variant.prodvarId, {
       prodvar_name: variantDraft.name,
       prodvar_stock: stock,
       prodvar_markup: Number.isFinite(markup) ? markup : 0,
       ...(variantDraft.pic !== variantEditor.variant.pic ? { prodvar_pic: variantDraft.pic } : {}),
     })
-    if (result.success) setVariantEditor(null)
+    if (result.success) {
+      setVariantEditor(null)
+      showToast('Variation updated.', 'success')
+    } else {
+      const message = result.error || 'The variation could not be saved.'
+      showToast(message, 'error')
+      setVariantFormError(message)
+    }
   }
 
   // Filtered + sorted list. Every facet select used to be decorative — only
@@ -644,7 +696,7 @@ export default function AdminInventory() {
         {/* Compacted Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+            <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">
               Products &amp; Inventory
             </h1>
             <p className="text-xs text-slate-500 font-normal mt-0.5">
@@ -654,7 +706,7 @@ export default function AdminInventory() {
 
           <div className="flex items-center gap-2 shrink-0">
             {isStaff && (
-              <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+              <span className="text-2xs font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
                 View only
               </span>
             )}
@@ -664,7 +716,11 @@ export default function AdminInventory() {
             {!isStaff && (
               <button
                 type="button"
-                onClick={() => setShowAddProductModal(true)}
+                onClick={() => {
+                  setCreateTouched({ name: false, price: false })
+                  setCreateFormError('')
+                  setShowAddProductModal(true)
+                }}
                 className="h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <span>+ Add Product</span>
@@ -685,7 +741,7 @@ export default function AdminInventory() {
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">TOTAL PRODUCTS</p>
+              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">TOTAL PRODUCTS</p>
               <h3 className="text-xl font-bold text-slate-900 mt-0.5">{filteredProducts.length}</h3>
             </div>
           </div>
@@ -700,7 +756,7 @@ export default function AdminInventory() {
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">LOW STOCK</p>
+              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">LOW STOCK</p>
               <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.low}</h3>
             </div>
           </div>
@@ -715,7 +771,7 @@ export default function AdminInventory() {
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">OUT OF STOCK</p>
+              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">OUT OF STOCK</p>
               <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.out}</h3>
             </div>
           </div>
@@ -729,7 +785,7 @@ export default function AdminInventory() {
               </svg>
             </div>
             <div>
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400">PRE-ORDERS</p>
+              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">PRE-ORDERS</p>
               <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.preorder}</h3>
             </div>
           </div>
@@ -879,7 +935,7 @@ export default function AdminInventory() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700 border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="border-b border-slate-200 bg-slate-50/50 text-2xs font-bold text-slate-400 uppercase tracking-wider">
                   <th className="py-2.5 px-3 w-10">
                     <input
                       type="checkbox"
@@ -946,7 +1002,7 @@ export default function AdminInventory() {
                               <h4 className="font-extrabold text-gray-900 text-xs leading-tight">
                                 {prod.name}
                               </h4>
-                              <p className="text-[10px] text-gray-400 font-semibold mt-0.5">
+                              <p className="text-2xs text-gray-400 font-semibold mt-0.5">
                                 SKU: {prod.sku}
                               </p>
                             </div>
@@ -966,13 +1022,13 @@ export default function AdminInventory() {
                               {prod.categoryName}
                             </Link>
                           </p>
-                          <p className="text-[10px] text-gray-400">{prod.sku}</p>
+                          <p className="text-2xs text-gray-400">{prod.sku}</p>
                         </td>
 
                         {/* Availability Column - Rectangular Badge */}
                         <td className="p-4">
                           <span
-                            className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold ${
+                            className={`inline-block px-2.5 py-1 rounded-md text-2xs font-semibold ${
                               prod.availability === 'Pre-order'
                                 ? 'bg-orange-50 text-brand-orange border border-orange-200/60'
                                 : 'bg-blue-50 text-blue-700 border border-blue-200/60'
@@ -992,7 +1048,7 @@ export default function AdminInventory() {
                               </svg>
                               <div>
                                 <span>{prod.totalStock} units total</span>
-                                <span className="block text-[10px] text-gray-400 font-normal">{prod.preorderTarget}</span>
+                                <span className="block text-2xs text-gray-400 font-normal">{prod.preorderTarget}</span>
                               </div>
                             </div>
                           ) : prod.lowStock ? (
@@ -1108,7 +1164,7 @@ export default function AdminInventory() {
                               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                                 <table className="w-full text-left text-xs">
                                   <thead>
-                                    <tr className="border-b border-gray-200 bg-gray-50/80 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                    <tr className="border-b border-gray-200 bg-gray-50/80 text-2xs font-bold text-gray-400 uppercase tracking-wider">
                                       <th className="px-3 py-2 w-8" />
                                       <th className="px-3 py-2">VARIANT</th>
                                       <th className="px-3 py-2">SKU</th>
@@ -1145,7 +1201,7 @@ export default function AdminInventory() {
                                               </span>
                                               {variant.options
                                                 && Object.keys(variant.options).length > 0 && (
-                                                <span className="hidden lg:inline text-[10px] font-semibold text-slate-400">
+                                                <span className="hidden lg:inline text-2xs font-semibold text-slate-400">
                                                   {Object.entries(variant.options)
                                                     .map(([axis, value]) => `${axis}: ${value}`)
                                                     .join(' · ')}
@@ -1184,7 +1240,7 @@ export default function AdminInventory() {
                                           {/* Status - Rectangular */}
                                           <td className="px-3 py-2">
                                             <span
-                                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold ${
+                                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-2xs font-semibold ${
                                                 variant.stock === 0
                                                   ? 'text-rose-600 bg-rose-50 border border-rose-100'
                                                   : variant.lowStock
@@ -1204,7 +1260,7 @@ export default function AdminInventory() {
                                               <span>{variant.status}</span>
                                             </span>
                                           </td>
-                                          <td className="px-3 py-2 text-[11px] text-gray-400 font-medium">
+                                          <td className="px-3 py-2 text-2xs text-gray-400 font-medium">
                                             {variant.lastUpdated}
                                           </td>
                                           <td className="px-3 py-2 text-right">
@@ -1221,7 +1277,7 @@ export default function AdminInventory() {
                                                     prodvar_disabled: !variant.available,
                                                   })
                                                 }
-                                                className="px-2 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
+                                                className="px-2 py-1 rounded-md border border-gray-200 bg-white text-2xs font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
                                               >
                                                 {variant.available ? 'Disable' : 'Enable'}
                                               </button>
@@ -1229,7 +1285,7 @@ export default function AdminInventory() {
                                                 type="button"
                                                 title="Edit this combination"
                                                 onClick={() => openVariantEditor(prod, variant)}
-                                                className="px-2 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
+                                                className="px-2 py-1 rounded-md border border-gray-200 bg-white text-2xs font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
                                               >
                                                 Edit
                                               </button>
@@ -1237,12 +1293,7 @@ export default function AdminInventory() {
                                                 type="button"
                                                 title="Remove this combination"
                                                 disabled={prod.variants.filter((v) => v.available).length <= 1}
-                                                onClick={() => {
-                                                  if (!window.confirm(
-                                                    `Remove "${variant.label || variant.name}" from ${prod.name}?`
-                                                  )) return
-                                                  removeVariant(prod.prodId, variant.prodvarId)
-                                                }}
+                                                onClick={() => setPendingVariantRemoval({ prod, variant })}
                                                 className="p-1 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                               >
                                                 ×
@@ -1409,9 +1460,17 @@ export default function AdminInventory() {
                   required
                   placeholder="e.g. BU Varsity Jacket"
                   value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                  onChange={(e) => {
+                    setNewProdName(e.target.value)
+                    setCreateTouched((t) => ({ ...t, name: true }))
+                  }}
+                  onBlur={() => setCreateTouched((t) => ({ ...t, name: true }))}
+                  aria-invalid={createNameError ? 'true' : undefined}
+                  className={`w-full h-8 px-2.5 rounded-md border text-xs focus:ring-1 focus:ring-brand-orange ${createNameError ? 'field-input--error border-[var(--tint-danger-solid)]' : 'border-slate-200'}`}
                 />
+                {createNameError && (
+                  <p className="field-error" role="alert">{createNameError}</p>
+                )}
               </div>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Description</label>
@@ -1473,9 +1532,17 @@ export default function AdminInventory() {
                     step="0.01"
                     placeholder="e.g. 450"
                     value={newProdPrice}
-                    onChange={(e) => setNewProdPrice(e.target.value)}
-                    className="w-full h-8 px-2.5 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                    onChange={(e) => {
+                      setNewProdPrice(e.target.value)
+                      setCreateTouched((t) => ({ ...t, price: true }))
+                    }}
+                    onBlur={() => setCreateTouched((t) => ({ ...t, price: true }))}
+                    aria-invalid={createPriceError ? 'true' : undefined}
+                    className={`w-full h-8 px-2.5 rounded-md border text-xs focus:ring-1 focus:ring-brand-orange ${createPriceError ? 'field-input--error border-[var(--tint-danger-solid)]' : 'border-slate-200'}`}
                   />
+                  {createPriceError && (
+                    <p className="field-error" role="alert">{createPriceError}</p>
+                  )}
                 </div>
               </div>
 
@@ -1491,7 +1558,7 @@ export default function AdminInventory() {
                         onClick={() =>
                           setNewProdVariations((rows) => [...rows, { ...BLANK_VARIATION }])
                         }
-                        className="h-6 px-2 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                        className="h-6 px-2 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                       >
                         + Add variation
                       </button>
@@ -1506,12 +1573,13 @@ export default function AdminInventory() {
                         const dirty = newProdVariations.some(
                           (row) => row.name || row.stock || row.markup || row.pic
                         )
-                        if (dirty && !window.confirm(
-                          'Switch to the combination matrix? The variations typed out by hand will be replaced by the combinations of the axes below.'
-                        )) return
+                        if (dirty) {
+                          setConfirmMatrixSwitch(true)
+                          return
+                        }
                         setVariationMode('matrix')
                       }}
-                      className="h-6 px-2 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                      className="h-6 px-2 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                     >
                       {variationMode === 'matrix' ? 'Type them out' : 'Use axes'}
                     </button>
@@ -1520,7 +1588,7 @@ export default function AdminInventory() {
 
                 {variationMode === 'matrix' && (
                   <div className="rounded-md border border-slate-200 bg-white p-2 space-y-2">
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-2xs text-slate-500">
                       List the ways this product can vary and the values each one
                       takes. Every combination becomes its own variation with its
                       own stock — color&nbsp;×&nbsp;size, or color&nbsp;×&nbsp;material.
@@ -1540,7 +1608,7 @@ export default function AdminInventory() {
                             className="w-28 h-7 px-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
                           />
                           <div className="flex-1">
-                            <label className="text-[11px] text-slate-500 block mb-0.5">
+                            <label className="text-2xs text-slate-500 block mb-0.5">
                               Values (comma-separated)
                             </label>
                             <input
@@ -1581,7 +1649,7 @@ export default function AdminInventory() {
                             {(entry.values || []).map((value) => (
                               <span
                                 key={`${entry.axis}-${value}`}
-                                className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-semibold text-slate-600"
+                                className="px-1.5 py-0.5 rounded bg-slate-100 text-2xs font-semibold text-slate-600"
                               >
                                 {value}
                               </span>
@@ -1594,7 +1662,7 @@ export default function AdminInventory() {
                       <button
                         type="button"
                         onClick={() => setAxes((rows) => [...rows, { axis: '', values: [] }])}
-                        className="h-6 px-2 rounded-md border border-dashed border-slate-300 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                        className="h-6 px-2 rounded-md border border-dashed border-slate-300 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                       >
                         + Add another way to vary
                       </button>
@@ -1621,7 +1689,7 @@ export default function AdminInventory() {
                         className="flex-1 h-7 px-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
                       />
                       {row.options && (
-                        <span className="hidden sm:inline text-[10px] font-semibold text-slate-400 shrink-0">
+                        <span className="hidden sm:inline text-2xs font-semibold text-slate-400 shrink-0">
                           {combinationLabel(row.options)}
                         </span>
                       )}
@@ -1640,7 +1708,7 @@ export default function AdminInventory() {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <label className="text-[11px] text-slate-500 block mb-0.5">Stock</label>
+                        <label className="text-2xs text-slate-500 block mb-0.5">Stock</label>
                         <input
                           type="number"
                           min="0"
@@ -1655,7 +1723,7 @@ export default function AdminInventory() {
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] text-slate-500 block mb-0.5">Markup (₱)</label>
+                        <label className="text-2xs text-slate-500 block mb-0.5">Markup (₱)</label>
                         <input
                           type="number"
                           min="0"
@@ -1671,14 +1739,14 @@ export default function AdminInventory() {
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] text-slate-500 block mb-0.5">Image (optional)</label>
+                        <label className="text-2xs text-slate-500 block mb-0.5">Image (optional)</label>
                         <button
                           type="button"
                           onClick={() => {
                             setAddVariationPhotoIndex(index)
                             addVariationPhotoRef.current?.click()
                           }}
-                          className="w-full h-7 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:border-brand-orange hover:text-brand-orange cursor-pointer"
+                          className="w-full h-7 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:border-brand-orange hover:text-brand-orange cursor-pointer"
                         >
                           {row.pic ? 'Replace' : 'Upload'}
                         </button>
@@ -1698,7 +1766,7 @@ export default function AdminInventory() {
                               rows.map((r, i) => (i === index ? { ...r, pic: '' } : r))
                             )
                           }
-                          className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 cursor-pointer"
+                          className="text-2xs font-semibold text-slate-500 hover:text-rose-600 cursor-pointer"
                         >
                           Remove image
                         </button>
@@ -1714,6 +1782,9 @@ export default function AdminInventory() {
                   onChange={handleVariationPhotoChange}
                 />
               </div>
+              {createFormError && (
+                <p className="field-error" role="alert">{createFormError}</p>
+              )}
             </form>
         </Modal>
       )}
@@ -1756,9 +1827,17 @@ export default function AdminInventory() {
                   type="text"
                   required
                   value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
+                  onChange={(e) => {
+                    setEditName(e.target.value)
+                    setUpdateTouched((t) => ({ ...t, name: true }))
+                  }}
+                  onBlur={() => setUpdateTouched((t) => ({ ...t, name: true }))}
+                  aria-invalid={updateNameError ? 'true' : undefined}
+                  className={`w-full h-8 px-2.5 rounded-md border focus:ring-1 focus:ring-brand-orange ${updateNameError ? 'field-input--error border-[var(--tint-danger-solid)]' : 'border-slate-200'}`}
                 />
+                {updateNameError && (
+                  <p className="field-error" role="alert">{updateNameError}</p>
+                )}
               </div>
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">Description</label>
@@ -1790,9 +1869,17 @@ export default function AdminInventory() {
                     min="0.01"
                     step="0.01"
                     value={editPrice}
-                    onChange={(e) => setEditPrice(e.target.value)}
-                    className="w-full h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
+                    onChange={(e) => {
+                      setEditPrice(e.target.value)
+                      setUpdateTouched((t) => ({ ...t, price: true }))
+                    }}
+                    onBlur={() => setUpdateTouched((t) => ({ ...t, price: true }))}
+                    aria-invalid={updatePriceError ? 'true' : undefined}
+                    className={`w-full h-8 px-2.5 rounded-md border focus:ring-1 focus:ring-brand-orange ${updatePriceError ? 'field-input--error border-[var(--tint-danger-solid)]' : 'border-slate-200'}`}
                   />
+                  {updatePriceError && (
+                    <p className="field-error" role="alert">{updatePriceError}</p>
+                  )}
                 </div>
               </div>
               <div>
@@ -1808,7 +1895,7 @@ export default function AdminInventory() {
                   <button
                     type="button"
                     onClick={() => editPhotoRef.current?.click()}
-                    className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                    className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                   >
                     Upload
                   </button>
@@ -1831,7 +1918,7 @@ export default function AdminInventory() {
               {/* REQ-IM-01: the input that was refused is never emptied, so the
                   message keeps the context the admin needs to fix it. */}
               <div className="flex items-center justify-between gap-2 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-2">
-                <p className="text-[11px] text-slate-500">
+                <p className="text-2xs text-slate-500">
                   Variations, stock levels and combination prices are edited one
                   combination at a time, so the bag rows of customers holding
                   them stay intact.
@@ -1839,11 +1926,14 @@ export default function AdminInventory() {
                 <Link
                   to={`/admin/inventory/${editTarget.prodId ?? editTarget.id}`}
                   onClick={() => setShowEditProductModal(false)}
-                  className="shrink-0 h-7 px-2.5 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  className="shrink-0 h-7 px-2.5 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
                 >
                   Manage variations
                 </Link>
               </div>
+              {updateFormError && (
+                <p className="field-error" role="alert">{updateFormError}</p>
+              )}
           </form>
         </Modal>
       )}
@@ -1858,6 +1948,35 @@ export default function AdminInventory() {
             ? `"${deleteTarget.name}" will be removed from the catalog (soft delete). You can still re-list it later.`
             : ''
         }
+      />
+
+      {/* DOMAIN 16 - the two destructive steps this page used to run through
+          window.confirm, now on the same dialog as every other confirmation. */}
+      <ConfirmModal
+        isOpen={!!pendingVariantRemoval}
+        onClose={() => setPendingVariantRemoval(null)}
+        onConfirm={() => {
+          if (pendingVariantRemoval) {
+            removeVariant(pendingVariantRemoval.prod.prodId, pendingVariantRemoval.variant.prodvarId)
+          }
+          setPendingVariantRemoval(null)
+        }}
+        title="Remove combination"
+        message={
+          pendingVariantRemoval
+            ? `Remove "${pendingVariantRemoval.variant.label || pendingVariantRemoval.variant.name}" from ${pendingVariantRemoval.prod.name}?`
+            : ''
+        }
+        confirmText="Remove"
+      />
+
+      <ConfirmModal
+        isOpen={confirmMatrixSwitch}
+        onClose={() => setConfirmMatrixSwitch(false)}
+        onConfirm={() => setVariationMode('matrix')}
+        title="Switch to the combination matrix?"
+        message="The variations typed out by hand will be replaced by the combinations of the axes below."
+        confirmText="Use axes"
       />
 
       {/* FLOW-MANAGE_INV-01: one combination, edited on its own, so every other
@@ -1886,7 +2005,7 @@ export default function AdminInventory() {
                   {Object.entries(variantEditor.variant.options).map(([axis, value]) => (
                     <span
                       key={`${axis}-${value}`}
-                      className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-semibold text-slate-600"
+                      className="px-1.5 py-0.5 rounded bg-slate-100 text-2xs font-semibold text-slate-600"
                     >
                       {axis}: {value}
                     </span>
@@ -1910,9 +2029,17 @@ export default function AdminInventory() {
                     type="number"
                     min="0"
                     value={variantDraft.stock}
-                    onChange={(e) => setVariantDraft((draft) => ({ ...draft, stock: e.target.value }))}
+                    onChange={(e) => {
+                      setVariantDraft((draft) => ({ ...draft, stock: e.target.value }))
+                      setVariantTouched((t) => ({ ...t, stock: true }))
+                    }}
+                    onBlur={() => setVariantTouched((t) => ({ ...t, stock: true }))}
+                    aria-invalid={variantStockError ? 'true' : undefined}
                     className="field-input"
                   />
+                  {variantStockError && (
+                    <p className="field-error" role="alert">{variantStockError}</p>
+                  )}
                 </div>
                 <div>
                   <label className="field-label">Markup (₱)</label>
@@ -1921,11 +2048,22 @@ export default function AdminInventory() {
                     min="0"
                     step="0.01"
                     value={variantDraft.markup}
-                    onChange={(e) => setVariantDraft((draft) => ({ ...draft, markup: e.target.value }))}
+                    onChange={(e) => {
+                      setVariantDraft((draft) => ({ ...draft, markup: e.target.value }))
+                      setVariantTouched((t) => ({ ...t, markup: true }))
+                    }}
+                    onBlur={() => setVariantTouched((t) => ({ ...t, markup: true }))}
+                    aria-invalid={variantMarkupError ? 'true' : undefined}
                     className="field-input"
                   />
+                  {variantMarkupError && (
+                    <p className="field-error" role="alert">{variantMarkupError}</p>
+                  )}
                 </div>
               </div>
+              {variantFormError && (
+                <p className="field-error" role="alert">{variantFormError}</p>
+              )}
               <div>
                 <label className="field-label">Image (optional)</label>
                 <div className="flex items-center gap-2">

@@ -5,6 +5,7 @@ import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
+import StatusBadge from '../../components/admin/kit/StatusBadge.jsx'
 import {
   banAccount,
   deleteAccount,
@@ -171,7 +172,7 @@ export default function AdminUsers() {
   }
 
   const sortIndicator = (key) =>
-    sortBy === key ? (sortOrder === 'asc' ? ' â†‘' : ' â†“') : ''
+    sortBy === key ? (sortOrder === 'asc' ? ' ↑' : ' ↓') : ''
 
   const recordLog = (action, description) => {
     logAction({
@@ -233,7 +234,7 @@ export default function AdminUsers() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">
               Staff Directory
             </h1>
             <p className="text-sm text-slate-500 font-normal mt-1">
@@ -242,7 +243,7 @@ export default function AdminUsers() {
           </div>
           <Link
             to="/admin/enroll"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#F97316] hover:bg-[#EA580C] text-white font-semibold text-sm rounded-xl shadow-xs transition-colors cursor-pointer w-fit"
+            className="btn btn--primary w-fit"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -255,12 +256,12 @@ export default function AdminUsers() {
         {/* Summary header: total active + category distribution */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
-            <p className="text-[11px] font-medium text-slate-500">Total active</p>
+            <p className="text-2xs font-medium text-slate-500">Total active</p>
             <p className="text-2xl font-bold text-slate-900 tracking-tight">{activeEmployees.length}</p>
           </div>
           {CATEGORIES.map((categ) => (
             <div key={categ} className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
-              <p className="text-[11px] font-medium text-slate-500">{CATEGORY_LABEL[categ]}s</p>
+              <p className="text-2xs font-medium text-slate-500">{CATEGORY_LABEL[categ]}s</p>
               <p className="text-2xl font-bold text-slate-900 tracking-tight">{categoryDistribution[categ]}</p>
             </div>
           ))}
@@ -275,7 +276,7 @@ export default function AdminUsers() {
             </svg>
             <input
               type="text"
-              placeholder="Search by name or emailâ€¦"
+              placeholder="Search by name or email…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-white border border-slate-200/90 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange shadow-2xs transition-all"
@@ -328,10 +329,10 @@ export default function AdminUsers() {
                 className="appearance-none bg-white border border-slate-200/90 rounded-xl pl-4 pr-9 py-2.5 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:border-brand-orange shadow-2xs cursor-pointer"
                 aria-label="Sort by"
               >
-                <option value="name:asc">Name (Aâ€“Z)</option>
-                <option value="name:desc">Name (Zâ€“A)</option>
-                <option value="email:asc">Email (Aâ€“Z)</option>
-                <option value="email:desc">Email (Zâ€“A)</option>
+                <option value="name:asc">Name (A–Z)</option>
+                <option value="name:desc">Name (Z–A)</option>
+                <option value="email:asc">Email (A–Z)</option>
+                <option value="email:desc">Email (Z–A)</option>
                 <option value="created:desc">Newest first</option>
                 <option value="created:asc">Oldest first</option>
               </select>
@@ -377,7 +378,7 @@ export default function AdminUsers() {
                 title="Dismiss"
                 className="opacity-60 hover:opacity-100 cursor-pointer"
               >
-                âœ•
+                ×
               </button>
             </div>
           </div>
@@ -388,7 +389,7 @@ export default function AdminUsers() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
-                <tr className="border-b border-slate-100 bg-white text-[11px] font-bold uppercase tracking-wider text-slate-400 select-none">
+                <tr className="border-b border-slate-100 bg-white text-2xs font-bold uppercase tracking-wider text-slate-400 select-none">
                   <th className="py-4 px-5 w-24">ID</th>
                   <th className="py-4 px-4">
                     <button
@@ -429,7 +430,7 @@ export default function AdminUsers() {
                     <td colSpan={9} className="py-12 text-center text-slate-400">
                       <span className="inline-flex items-center gap-2">
                         <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-brand-orange animate-spin" />
-                        Loading staff directoryâ€¦
+                        Loading staff directory…
                       </span>
                     </td>
                   </tr>
@@ -456,13 +457,13 @@ export default function AdminUsers() {
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-full bg-[#DBEAFE] text-[#2563EB] font-bold text-xs flex items-center justify-center shrink-0">
-                              {initials || 'â€”'}
+                              {initials || '—'}
                             </div>
                             <span className="font-bold text-slate-900">{emp.name}</span>
                           </div>
                         </td>
-                        <td className="py-4 px-4 text-slate-600">{emp.email || 'â€”'}</td>
-                        <td className="py-4 px-4 text-slate-600">{emp.phone || 'â€”'}</td>
+                        <td className="py-4 px-4 text-slate-600">{emp.email || '—'}</td>
+                        <td className="py-4 px-4 text-slate-600">{emp.phone || '—'}</td>
                         <td className="py-4 px-4">
                           <StatusPill
                             status={emp.inStore ? 'In Store' : 'Out of Store'}
@@ -470,35 +471,28 @@ export default function AdminUsers() {
                           />
                         </td>
                         <td className="py-4 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          <StatusBadge
+                            tone={
                               emp.category === 'super admin'
-                                ? 'bg-[#FFF7ED] text-[#EA580C] border border-orange-200/50'
+                                ? 'urgent'
                                 : emp.category === 'admin'
-                                  ? 'bg-[#FEF3C7] text-[#D97706] border border-amber-200/50'
-                                  : 'bg-[#F1F5F9] text-[#475569] border border-slate-200/80'
-                            }`}
-                          >
-                            {CATEGORY_LABEL[emp.category] || emp.category}
-                          </span>
+                                  ? 'active'
+                                  : 'neutral'
+                            }
+                            label={CATEGORY_LABEL[emp.category] || emp.category}
+                          />
                         </td>
                         <td className="py-4 px-4">
-                          {emp.status === 'active' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#ECFDF5] text-[#059669] border border-emerald-100">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
-                              Active
-                            </span>
-                          ) : emp.status === 'suspended' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-100">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              Suspended
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                              Deleted
-                            </span>
-                          )}
+                          <StatusBadge
+                            tone={
+                              emp.status === 'active'
+                                ? 'done'
+                                : emp.status === 'suspended'
+                                  ? 'urgent'
+                                  : 'neutral'
+                            }
+                            label={STATUS_LABEL[emp.status]}
+                          />
                         </td>
                         <td className="py-4 px-4 text-slate-500">{fmtDateTime(emp.created)}</td>
                         <td className="py-4 px-5 text-right whitespace-nowrap">
@@ -507,7 +501,7 @@ export default function AdminUsers() {
                               {/* FLOW-EMP_LIST-06 - open this employee's profile */}
                               <Link
                                 to={`/admin/account?emp=${emp.emp_id}`}
-                                className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 mr-3"
+                                className="text-2xs font-semibold text-slate-500 hover:text-slate-900 mr-3"
                               >
                                 View
                               </Link>
@@ -515,7 +509,7 @@ export default function AdminUsers() {
                                 <button
                                   type="button"
                                   onClick={() => handleSuspend(emp)}
-                                  className="text-[11px] font-semibold text-amber-600 hover:text-amber-800 mr-3 cursor-pointer"
+                                  className="text-2xs font-semibold text-amber-600 hover:text-amber-800 mr-3 cursor-pointer"
                                 >
                                   Suspend
                                 </button>
@@ -523,7 +517,7 @@ export default function AdminUsers() {
                                 <button
                                   type="button"
                                   onClick={() => handleRecover(emp)}
-                                  className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 mr-3 cursor-pointer"
+                                  className="text-2xs font-semibold text-emerald-600 hover:text-emerald-800 mr-3 cursor-pointer"
                                 >
                                   Recover
                                 </button>
@@ -540,7 +534,7 @@ export default function AdminUsers() {
                                     ? 'You cannot delete your own account.'
                                     : 'Permanently delete this employee account'
                                 }
-                                className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="text-2xs font-semibold text-rose-600 hover:text-rose-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 Delete
                               </button>
@@ -558,7 +552,7 @@ export default function AdminUsers() {
           {/* Footer: count + pagination (past 50 rows) */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-100">
             <p className="text-xs text-slate-400 font-medium">
-              Showing {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}â€“
+              Showing {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}–
               {Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} employees
             </p>
             {totalPages > 1 && (

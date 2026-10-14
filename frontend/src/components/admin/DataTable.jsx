@@ -11,6 +11,12 @@ export default function DataTable({
   actions = null,
   filtersSlot = null,
   emptyMessage = 'No records found.',
+  // Richer empty state (index.css `.empty-state`) for pages that can say why
+  // the table is empty; falls back to `emptyMessage` when only that is given.
+  emptyTitle = null,
+  emptyHint = null,
+  loading = false,
+  loadingMessage = 'Loading…',
   defaultPageSize = 10,
   pageSizeOptions = [5, 10, 20, 50],
 }) {
@@ -62,7 +68,7 @@ export default function DataTable({
         <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full text-left border-collapse min-w-[650px]">
             <thead className="sticky top-0 z-10">
-              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-slate-200 bg-slate-50 text-2xs font-semibold uppercase tracking-wider text-slate-500">
                 {selectable && (
                   <th className="py-2.5 px-3 w-10 text-center">
                     <input
@@ -84,13 +90,31 @@ export default function DataTable({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {paginatedData.length === 0 ? (
+              {loading ? (
                 <tr>
                   <td
                     colSpan={columns.length + (selectable ? 1 : 0)}
                     className="py-8 text-center text-slate-400 font-medium"
                   >
-                    {emptyMessage}
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <span className="spinner-circle !w-4 !h-4" /> {loadingMessage}
+                    </span>
+                  </td>
+                </tr>
+              ) : paginatedData.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={columns.length + (selectable ? 1 : 0)}
+                    className="p-0"
+                  >
+                    <div className="empty-state">
+                      {emptyTitle ? (
+                        <p className="empty-state__title">{emptyTitle}</p>
+                      ) : (
+                        <p className="text-xs text-slate-400 font-medium">{emptyMessage}</p>
+                      )}
+                      {emptyHint && <p className="empty-state__hint">{emptyHint}</p>}
+                    </div>
                   </td>
                 </tr>
               ) : (

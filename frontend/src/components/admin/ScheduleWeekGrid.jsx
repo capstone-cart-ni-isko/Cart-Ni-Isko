@@ -88,7 +88,7 @@ export default function ScheduleWeekGrid({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div>
           <h2 className="text-sm font-bold text-slate-900">Weekly Preschedule</h2>
-          <p className="text-[11px] text-slate-400 font-normal mt-0.5">
+          <p className="text-2xs text-slate-400 font-normal mt-0.5">
             {weekLabel} · employee prescheduled availability
           </p>
         </div>
@@ -118,7 +118,7 @@ export default function ScheduleWeekGrid({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[860px]">
             <thead>
-              <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
+              <tr className="border-b border-slate-100 text-2xs font-bold uppercase tracking-wider text-slate-400 select-none">
                 <th className="py-2.5 pr-3 sticky left-0 bg-white">Employee</th>
                 {days.map((day) => (
                   <th key={dayKey(day)} className="py-2.5 px-2 whitespace-nowrap">
@@ -155,7 +155,7 @@ export default function ScheduleWeekGrid({
                       <td className="py-2.5 pr-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-2xs font-bold shrink-0 ${
                               officer.avatarColor || 'bg-slate-100 text-slate-600'
                             }`}
                           >
@@ -163,7 +163,7 @@ export default function ScheduleWeekGrid({
                           </span>
                           <div className="min-w-0">
                             <p className="font-bold text-slate-900 truncate">{officer.name}</p>
-                            <p className="text-[10px] text-slate-400">{officer.roleLabel}</p>
+                            <p className="text-2xs text-slate-400">{officer.roleLabel}</p>
                           </div>
                         </div>
                       </td>
@@ -174,7 +174,7 @@ export default function ScheduleWeekGrid({
                         return (
                           <td key={key} className="py-2.5 px-2 align-top">
                             {blocks.length === 0 ? (
-                              <span className="text-[10px] text-slate-300">—</span>
+                              <span className="text-2xs text-slate-300">—</span>
                             ) : (
                               <div className="space-y-1">
                                 {blocks.map((block) => {
@@ -192,7 +192,7 @@ export default function ScheduleWeekGrid({
                                       title={`${block.status} · ${block.shift_start}–${block.shift_end}${
                                         block.unavailable ? ' · unavailable' : ''
                                       }${canEdit ? ' · click to edit' : ''}`}
-                                      className={`block w-full text-left px-1.5 py-0.5 rounded border text-[10px] font-semibold whitespace-nowrap transition-colors disabled:cursor-default ${
+                                      className={`block w-full text-left px-1.5 py-0.5 rounded border text-2xs font-semibold whitespace-nowrap transition-colors disabled:cursor-default ${
                                         block.unavailable
                                           ? 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
                                           : 'bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100'
@@ -215,7 +215,7 @@ export default function ScheduleWeekGrid({
 
                       <td className="py-2.5 px-2 text-right whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-bold border ${
                             weekMinutes >= MIN_WEEKLY_MINUTES
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                               : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -239,7 +239,7 @@ export default function ScheduleWeekGrid({
       )}
 
       {!isLoading && !error && (
-        <p className="text-[11px] text-slate-400">
+        <p className="text-2xs text-slate-400">
           Shifts are organized by date range for weekly scheduling and reporting.
         </p>
       )}

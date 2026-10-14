@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
+import Segmented from '../../components/admin/kit/Segmented.jsx'
 import { fetchAdminProducts } from '../../services/adminProducts.js'
 import { fetchProductReviews, moderateReview, deleteReview } from '../../services/reviews.js'
 
@@ -99,6 +101,9 @@ export default function AdminReviews() {
   const [detailOpen, setDetailOpen] = useState(false) // small screens: list -> detail drill-down
   const [checkedIds, setCheckedIds] = useState([])
   const [bulkOpen, setBulkOpen] = useState(false)
+  // REQ-MANAGE_REV-03: deleting a review is permanent for the customer, so it
+  // runs through the shared confirmation dialog (DOMAIN 16), not window.confirm.
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   const mapItem = useCallback((item, product) => {
     // FLOW-MANAGE_REV-05: the canonical review handle travels with the row, so
@@ -209,6 +214,14 @@ export default function AdminReviews() {
   const allChecked =
     filteredReviews.length > 0 && filteredReviews.every((r) => checkedIds.includes(r.id))
 
+  // Item 34 - a filtered-out list says so AND offers the way back.
+  const filtersActive = !!searchQuery.trim() || statusFilter !== 'all' || ratingFilter !== 'all'
+  const clearFilters = () => {
+    setSearchQuery('')
+    setStatusFilter('all')
+    setRatingFilter('all')
+  }
+
   const toggleChecked = (id) =>
     setCheckedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
@@ -268,7 +281,6 @@ export default function AdminReviews() {
 
   const handleDelete = async (review) => {
     if (isModerating) return
-    if (!window.confirm(`Delete the review for ${review.productName}? This cannot be undone.`)) return
     setIsModerating(true)
     try {
       // REQ-MANAGE_REV-03: the row is soft-deleted and kept for audit, so the
@@ -321,7 +333,7 @@ export default function AdminReviews() {
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Reviews Moderation</h1>
+            <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">Reviews Moderation</h1>
             <p className="text-xs text-slate-500 font-normal mt-0.5">
               Review customer feedback and moderate published ratings for the storefront.
             </p>
@@ -412,11 +424,13 @@ export default function AdminReviews() {
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={SELECT_CLASS} aria-label="Status">
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <Segmented
+              label="Status"
+              options={STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              size="sm"
+            />
             <button
               type="button"
               onClick={() => setShowMoreFilters((open) => !open)}
@@ -470,11 +484,21 @@ export default function AdminReviews() {
                   <span className="spinner-circle !w-3.5 !h-3.5" /> Loading reviews…
                 </p>
               ) : filteredReviews.length === 0 ? (
-                <p className="px-4 py-10 text-center text-xs text-slate-400 font-medium">
-                  {reviews.length === 0
-                    ? 'No reviews yet. Reviews appear here once customers submit them.'
-                    : 'No reviews match your filters.'}
-                </p>
+                <div className="empty-state px-4">
+                  <p className="empty-state__title">
+                    {reviews.length === 0 ? 'No reviews yet' : 'No reviews match your filters'}
+                  </p>
+                  <p className="empty-state__hint">
+                    {reviews.length === 0
+                      ? 'Reviews appear here once customers submit them.'
+                      : 'Try a different search, rating or status.'}
+                  </p>
+                  {reviews.length > 0 && filtersActive && (
+                    <button type="button" onClick={clearFilters} className="btn btn--secondary mt-1">
+                      Clear filters
+                    </button>
+                  )}
+                </div>
               ) : (
                 filteredReviews.map((r) => {
                   const meta = getStatusMeta(r)
@@ -500,16 +524,16 @@ export default function AdminReviews() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-xs font-bold text-slate-900 truncate">{r.productName}</p>
-                          <span className="text-[11px] text-slate-400 shrink-0">{r.timeAgo}</span>
+                          <span className="text-2xs text-slate-400 shrink-0">{r.timeAgo}</span>
                         </div>
                         {/* FLOW-MANAGE_REV-02: the queue lists the customer
                             name per review, not only the product. */}
-                        <p className="text-[11px] text-slate-500 mt-0.5 truncate">by {r.reviewer}</p>
+                        <p className="text-2xs text-slate-500 mt-0.5 truncate">by {r.reviewer}</p>
                         <div className="mt-0.5">
                           <Stars rating={r.rating} className="w-3 h-3" />
                         </div>
                         <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-snug">{r.comment}</p>
-                        <span className="inline-flex items-center gap-1.5 mt-1.5 text-[11px] font-medium text-slate-500">
+                        <span className="inline-flex items-center gap-1.5 mt-1.5 text-2xs font-medium text-slate-500">
                           <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
                           {meta.label}
                         </span>
@@ -526,8 +550,14 @@ export default function AdminReviews() {
             className={`${detailOpen ? 'flex' : 'hidden lg:flex'} flex-col flex-1 min-w-0 min-h-0 bg-white border border-slate-200 rounded-lg overflow-hidden`}
           >
             {!selected ? (
-              <div className="flex-1 flex items-center justify-center px-4 py-16 text-xs text-slate-400 font-medium">
-                {isLoading ? 'Loading reviews…' : 'Select a review to inspect it.'}
+              <div className="flex-1 flex items-center justify-center px-4 py-16 text-xs text-slate-400 font-medium gap-2">
+                {isLoading ? (
+                  <>
+                    <span className="spinner-circle !w-3.5 !h-3.5" /> Loading reviews…
+                  </>
+                ) : (
+                  'Select a review to inspect it.'
+                )}
               </div>
             ) : (
               <>
@@ -552,7 +582,7 @@ export default function AdminReviews() {
                     </Link>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <Stars rating={selected.rating} className="w-3.5 h-3.5" />
-                      <span className="text-[11px] text-slate-400">{buildTimestamp(selected)}</span>
+                      <span className="text-2xs text-slate-400">{buildTimestamp(selected)}</span>
                     </div>
                   </div>
 
@@ -584,7 +614,7 @@ export default function AdminReviews() {
                     <button
                       type="button"
                       disabled={isModerating}
-                      onClick={() => handleDelete(selected)}
+                      onClick={() => setPendingDelete(selected)}
                       className="h-8 px-3.5 rounded-md border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Delete
@@ -603,24 +633,24 @@ export default function AdminReviews() {
                   {/* Reviewer + order context (FLOW-MANAGE_REV-02) */}
                   <div className="bg-slate-50 border border-slate-200 rounded-md p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
                     <div className="flex items-center gap-2.5 sm:col-span-2">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 bg-slate-200 text-slate-600">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-2xs font-bold shrink-0 bg-slate-200 text-slate-600">
                         {selected.reviewerInitials}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-bold text-slate-900">{selected.reviewer}</span>
                         {selected.verifiedPurchase !== false && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-2xs font-semibold">
                             Verified Purchase
                           </span>
                         )}
                       </div>
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium text-slate-400">Order</p>
+                      <p className="text-2xs font-medium text-slate-400">Order</p>
                       <p className="text-xs font-semibold text-slate-800 mt-0.5">{selected.orderId || '—'}</p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-medium text-slate-400">Status</p>
+                      <p className="text-2xs font-medium text-slate-400">Status</p>
                       <p className="text-xs font-semibold text-slate-800 mt-0.5 capitalize">{selected.status}</p>
                     </div>
                   </div>
@@ -630,6 +660,17 @@ export default function AdminReviews() {
           </div>
         </div>
       </div>
+
+      {/* FLOW-MANAGE_REV-06 / DOMAIN 16: delete runs through the shared
+          confirmation dialog, never window.confirm. */}
+      <ConfirmModal
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => handleDelete(pendingDelete)}
+        title="Delete this review?"
+        message="The review will be hidden from the storefront but kept for audit. This cannot be undone."
+        confirmText="Delete"
+      />
     </AdminLayout>
   )
 }

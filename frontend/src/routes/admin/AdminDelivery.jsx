@@ -137,7 +137,7 @@ function Avatar({ initials, size = 'sm' }) {
   let hash = 0
   for (const ch of String(initials || '#')) hash = (hash + ch.charCodeAt(0)) % palette.length
   const c = palette[hash]
-  const sz = size === 'sm' ? 'w-7 h-7 text-[10px]' : 'w-8 h-8 text-xs'
+  const sz = size === 'sm' ? 'w-7 h-7 text-2xs' : 'w-8 h-8 text-xs'
   return (
     <div className={`${sz} ${c} rounded-full flex items-center justify-center font-bold shrink-0`}>
       {initials}
@@ -218,9 +218,9 @@ function OverviewTab({ kpis, queuePreview, transitPreview, onGoToQueue, onGoToTr
               {icon}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold tracking-wider uppercase text-slate-400 leading-tight">{label}</p>
+              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400 leading-tight">{label}</p>
               <h3 className="text-xl font-bold text-slate-900">{value}</h3>
-              <p className="text-[10px] text-slate-400">{sub}</p>
+              <p className="text-2xs text-slate-400">{sub}</p>
             </div>
           </div>
         ))}
@@ -240,16 +240,16 @@ function OverviewTab({ kpis, queuePreview, transitPreview, onGoToQueue, onGoToTr
                 <Avatar initials={o.avatar} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-slate-900">{o.customer}</p>
-                  <p className="text-[10px] text-slate-400 truncate">{o.address}</p>
+                  <p className="text-2xs text-slate-400 truncate">{o.address}</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-[11px] font-semibold text-slate-700">{o.items}</p>
-                  <p className="text-[10px] text-slate-400">Ready {o.readyAt}</p>
+                  <p className="text-2xs font-semibold text-slate-700">{o.items}</p>
+                  <p className="text-2xs text-slate-400">Ready {o.readyAt}</p>
                 </div>
               </div>
             ))}
             {queuePreview.length === 0 && (
-              <p className="px-4 py-3 text-[11px] text-slate-400">No orders waiting for dispatch.</p>
+              <p className="px-4 py-3 text-2xs text-slate-400">No orders waiting for dispatch.</p>
             )}
           </div>
         </div>
@@ -266,19 +266,19 @@ function OverviewTab({ kpis, queuePreview, transitPreview, onGoToQueue, onGoToTr
                 <Avatar initials={o.avatar} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-slate-900">{o.customer}</p>
-                  <p className="text-[10px] text-slate-400 truncate">{o.address}</p>
+                  <p className="text-2xs text-slate-400 truncate">{o.address}</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${o.statusLabel === 'Nearby' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : 'bg-blue-50 text-blue-700 border-blue-200/60'}`}>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs font-semibold border ${o.statusLabel === 'Nearby' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : 'bg-blue-50 text-blue-700 border-blue-200/60'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${o.statusLabel === 'Nearby' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
                     {o.statusLabel}
                   </span>
-                  <p className="text-[10px] text-slate-400 mt-0.5">ETA {etaLabel(o.eta)}</p>
+                  <p className="text-2xs text-slate-400 mt-0.5">ETA {etaLabel(o.eta)}</p>
                 </div>
               </div>
             ))}
             {transitPreview.length === 0 && (
-              <p className="px-4 py-3 text-[11px] text-slate-400">No active deliveries right now.</p>
+              <p className="px-4 py-3 text-2xs text-slate-400">No active deliveries right now.</p>
             )}
           </div>
         </div>
@@ -300,7 +300,7 @@ function QueueTab({ queue, onDispatch, dispatching, onOpenOrder }) {
             These orders are packed and ready for courier dispatch. Dispatch to begin third-party courier delivery.
           </p>
         </div>
-        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[11px] font-bold border border-amber-200/60">
+        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-2xs font-bold border border-amber-200/60">
           {queue.length} orders
         </span>
       </div>
@@ -309,7 +309,7 @@ function QueueTab({ queue, onDispatch, dispatching, onOpenOrder }) {
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/60 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <tr className="bg-slate-50/60 border-b border-slate-200 text-2xs font-bold uppercase tracking-wider text-slate-400">
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3">Order #</th>
                 <th className="px-4 py-3">Delivery Address</th>
@@ -330,7 +330,7 @@ function QueueTab({ queue, onDispatch, dispatching, onOpenOrder }) {
                       <Avatar initials={order.avatar} />
                       <div>
                         <p className="font-bold text-slate-900">{order.customer}</p>
-                        <p className="text-[10px] text-slate-400">{order.phone}</p>
+                        <p className="text-2xs text-slate-400">{order.phone}</p>
                       </div>
                     </div>
                   </td>
@@ -342,17 +342,17 @@ function QueueTab({ queue, onDispatch, dispatching, onOpenOrder }) {
                     >
                       {order.id}
                     </button>
-                    <p className="text-[10px] text-slate-400 font-normal mt-0.5">Ready at {order.readyAt}</p>
+                    <p className="text-2xs text-slate-400 font-normal mt-0.5">Ready at {order.readyAt}</p>
                   </td>
                   <td className="px-4 py-3 max-w-[180px]">
                     <p className="text-slate-700 font-medium truncate">{order.address}</p>
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-semibold text-slate-700">{order.items}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5 max-w-[140px] truncate">{order.itemLabel}</p>
+                    <p className="text-2xs text-slate-400 mt-0.5 max-w-[140px] truncate">{order.itemLabel}</p>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-2xs font-bold">
                       {order.fee}
                     </span>
                   </td>
@@ -400,7 +400,7 @@ function InTransitTab({ orders, onOpenOrder }) {
             </svg>
             <p className="text-sm font-bold text-slate-900">In Transit</p>
           </div>
-          <span className="text-[11px] font-semibold text-slate-500">{orders.length} active deliveries</span>
+          <span className="text-2xs font-semibold text-slate-500">{orders.length} active deliveries</span>
         </div>
         <div className="divide-y divide-slate-100">
           {orders.map((order) => (
@@ -409,21 +409,21 @@ function InTransitTab({ orders, onOpenOrder }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs font-bold text-slate-900">{order.customer}</p>
-                  <span className="text-[10px] font-semibold text-slate-500">{order.id}</span>
+                  <span className="text-2xs font-semibold text-slate-500">{order.id}</span>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-0.5 truncate">{order.address}</p>
+                <p className="text-2xs text-slate-400 mt-0.5 truncate">{order.address}</p>
               </div>
               {/* Allowed to shrink: a shrink-0 right rail overflowed the
                   overflow-hidden card and clipped long item lists. */}
               <div className="text-right space-y-0.5 max-w-[45%] min-w-0">
-                <p className="text-[11px] font-semibold text-slate-700 truncate">{order.items} · {order.itemLabel}</p>
+                <p className="text-2xs font-semibold text-slate-700 truncate">{order.items} · {order.itemLabel}</p>
                 <div className="flex items-center justify-end gap-2">
-                  <span className="text-[10px] text-slate-400">Courier ref: <span className="font-semibold text-slate-600">{order.ref}</span></span>
-                  <span className="text-[10px] text-slate-300">·</span>
-                  <span className="text-[10px] text-slate-400">ETA <span className="font-semibold text-slate-600">{etaLabel(order.eta)}</span></span>
+                  <span className="text-2xs text-slate-400">Courier ref: <span className="font-semibold text-slate-600">{order.ref}</span></span>
+                  <span className="text-2xs text-slate-300">·</span>
+                  <span className="text-2xs text-slate-400">ETA <span className="font-semibold text-slate-600">{etaLabel(order.eta)}</span></span>
                 </div>
               </div>
-              <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border ${order.statusLabel === 'Nearby' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : 'bg-blue-50 text-blue-700 border-blue-200/60'}`}>
+              <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-semibold border ${order.statusLabel === 'Nearby' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : 'bg-blue-50 text-blue-700 border-blue-200/60'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${order.statusLabel === 'Nearby' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
                 {order.statusLabel}
               </span>
@@ -431,7 +431,7 @@ function InTransitTab({ orders, onOpenOrder }) {
                 <button
                   type="button"
                   onClick={() => onOpenOrder(order)}
-                  className="h-7 px-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 rounded-md cursor-pointer"
+                  className="h-7 px-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-2xs font-semibold text-slate-700 rounded-md cursor-pointer"
                 >
                   View Order
                 </button>
@@ -461,7 +461,7 @@ function CompletedTab({ orders, total }) {
           </div>
           <div>
             <p className="text-sm font-bold text-slate-900">Delivered</p>
-            <p className="text-[10px] text-slate-400">Successfully delivered orders.</p>
+            <p className="text-2xs text-slate-400">Successfully delivered orders.</p>
           </div>
         </div>
         <button type="button" className="h-8 px-3 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 flex items-center gap-1.5 hover:bg-slate-50 cursor-pointer">
@@ -478,7 +478,7 @@ function CompletedTab({ orders, total }) {
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/60 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <tr className="bg-slate-50/60 border-b border-slate-200 text-2xs font-bold uppercase tracking-wider text-slate-400">
                 <th className="px-4 py-3">Date &amp; Time</th>
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3">Order #</th>
@@ -496,7 +496,7 @@ function CompletedTab({ orders, total }) {
                       <Avatar initials={row.avatar} />
                       <div>
                         <p className="font-bold text-slate-900">{row.customer}</p>
-                        <p className="text-[10px] text-slate-400">{row.phone}</p>
+                        <p className="text-2xs text-slate-400">{row.phone}</p>
                       </div>
                     </div>
                   </td>
@@ -506,10 +506,10 @@ function CompletedTab({ orders, total }) {
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-semibold text-slate-700">{row.items}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{row.itemLabel}</p>
+                    <p className="text-2xs text-slate-400 mt-0.5">{row.itemLabel}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-2xs font-semibold">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3"><polyline points="20 6 9 17 4 12"/></svg>
                       {row.ref}
                     </span>
@@ -526,7 +526,7 @@ function CompletedTab({ orders, total }) {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2.5 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
+        <div className="px-4 py-2.5 border-t border-slate-100 text-2xs text-slate-400 font-medium">
           Showing {orders.length} of {total} delivered orders
         </div>
       </div>
@@ -555,7 +555,7 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
         </svg>
         <div>
           <span className="font-bold text-amber-950 block">Fulfillment Method Lock Principle</span>
-          <p className="text-[11px] text-amber-800 mt-0.5">
+          <p className="text-2xs text-amber-800 mt-0.5">
             Once delivery payment is received, fulfillment remains locked to Delivery. Staff must resolve forwarder issues without silently changing the customer's chosen modality.
           </p>
         </div>
@@ -588,7 +588,7 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/60 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <tr className="bg-slate-50/60 border-b border-slate-200 text-2xs font-bold uppercase tracking-wider text-slate-400">
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3">Order #</th>
@@ -606,13 +606,13 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
                       <Avatar initials={row.avatar} />
                       <div>
                         <p className="font-bold text-slate-900">{row.customer}</p>
-                        <p className="text-[10px] text-slate-400">{row.phone}</p>
+                        <p className="text-2xs text-slate-400">{row.phone}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 font-extrabold text-slate-800">{row.id}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs font-bold border ${
                       row.issue === 'Booking Failed'
                         ? 'bg-rose-100 text-rose-800 border-rose-300'
                         : row.issue === 'Returned'
@@ -632,19 +632,19 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
                   <td className="px-4 py-3 text-slate-600 max-w-[220px]">
                     <p className="font-bold text-slate-900 leading-tight">{row.reason}</p>
                     {row.deliveryPayment ? (
-                      <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
+                      <p className="text-2xs text-emerald-600 font-bold mt-0.5">
                         Delivery payment: {row.deliveryPayment}
                       </p>
                     ) : (
-                      <p className="text-[10px] text-slate-400 mt-0.5">Courier ref: {row.ref}</p>
+                      <p className="text-2xs text-slate-400 mt-0.5">Courier ref: {row.ref}</p>
                     )}
                     {Number(row.feeCharged) > 0 && (
-                      <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                      <p className="text-2xs text-slate-500 font-semibold mt-0.5">
                         Fee charged: ₱{Number(row.feeCharged).toFixed(2)} · paid online
                       </p>
                     )}
                     {row.courier?.order_id && (
-                      <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
+                      <p className="text-2xs text-slate-400 font-mono truncate mt-0.5">
                         Courier order: {row.courier.order_id}
                       </p>
                     )}
@@ -653,7 +653,7 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
                         href={row.courier.share_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-block text-[10px] font-bold text-brand-orange hover:underline mt-0.5"
+                        className="inline-block text-2xs font-bold text-brand-orange hover:underline mt-0.5"
                       >
                         Track courier →
                       </a>
@@ -704,7 +704,7 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
                         <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer text-sm font-bold">⋯</button>
                       </div>
                       {row.lalamoveConfigured === false && (
-                        <p className="text-[10px] text-slate-400 text-right max-w-[230px]">
+                        <p className="text-2xs text-slate-400 text-right max-w-[230px]">
                           LalaMove is not configured yet — book the courier by hand and pass the
                           parcel straight to the rider.
                         </p>
@@ -723,7 +723,7 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2.5 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
+        <div className="px-4 py-2.5 border-t border-slate-100 text-2xs text-slate-400 font-medium">
           Showing {issueOrders.length} of {issueOrders.length} issue orders
         </div>
       </div>
@@ -1044,7 +1044,7 @@ export default function AdminDelivery() {
         {/* ── Page Header ── */}
         <div className="pb-4">
           {/* Breadcrumb */}
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-2">
+          <div className="flex items-center gap-1.5 text-2xs text-slate-400 font-medium mb-2">
             <span>Fulfillment</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
               <polyline points="9 18 15 12 9 6" />
@@ -1094,7 +1094,7 @@ export default function AdminDelivery() {
               {TAB_ICONS[tab]}
               <span>{tab}</span>
               {TAB_COUNTS[tab] !== null && (
-                <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold
+                <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-2xs font-bold
                   ${activeTab === tab ? 'bg-orange-100 text-brand-orange' : 'bg-slate-100 text-slate-500'}`}>
                   {TAB_COUNTS[tab]}
                 </span>

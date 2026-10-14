@@ -1,3 +1,5 @@
+import Button from './Button.jsx'
+
 /** Shown instead of content when the API can't be reached, with a Retry action. */
 export default function ServerErrorNotice({
   message = "Can't reach the store server. Please try again.",
@@ -12,13 +14,9 @@ export default function ServerErrorNotice({
       <p className="text-sm font-bold text-gray-900">We couldn't load the store</p>
       <p className="text-xs text-gray-500 max-w-xs">{message}</p>
       {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="px-4 py-2 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer"
-        >
+        <Button type="button" variant="primary" onClick={onRetry}>
           Retry
-        </button>
+        </Button>
       )}
     </div>
   )

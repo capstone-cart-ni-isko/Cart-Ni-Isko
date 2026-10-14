@@ -221,7 +221,7 @@ function AdminEnrollForm() {
     <AdminLayout>
       <div className="max-w-2xl mx-auto space-y-5">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">
             Enroll Staff
           </h1>
           <p className="text-sm text-slate-500 font-normal mt-1">
@@ -232,7 +232,7 @@ function AdminEnrollForm() {
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-2xs font-semibold text-slate-700 mb-1">
                 Surname <span className="text-rose-500">*</span>
               </label>
               <input
@@ -245,7 +245,7 @@ function AdminEnrollForm() {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-2xs font-semibold text-slate-700 mb-1">
                 Given name <span className="text-rose-500">*</span>
               </label>
               <input
@@ -260,7 +260,7 @@ function AdminEnrollForm() {
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+            <label className="block text-2xs font-semibold text-slate-700 mb-1">
               Bicol University email <span className="text-rose-500">*</span>
             </label>
             <input
@@ -276,7 +276,7 @@ function AdminEnrollForm() {
                   : 'border-slate-200 focus:border-brand-orange focus:ring-brand-orange'
               }`}
             />
-            <p className={`text-[11px] mt-1 ${emailTouched && !emailValid ? 'text-rose-600 font-medium' : 'text-slate-400'}`}>
+            <p className={`text-2xs mt-1 ${emailTouched && !emailValid ? 'text-rose-600 font-medium' : 'text-slate-400'}`}>
               {emailTouched && !emailValid
                 ? `Email must end with ${BICOL_DOMAIN}`
                 : `Must be a valid ${BICOL_DOMAIN} address.`}
@@ -285,7 +285,7 @@ function AdminEnrollForm() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-2xs font-semibold text-slate-700 mb-1">
                 Phone number <span className="text-rose-500">*</span>
               </label>
               <input
@@ -298,7 +298,7 @@ function AdminEnrollForm() {
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <label className="block text-2xs font-semibold text-slate-700 mb-1">
                 Initial category <span className="text-rose-500">*</span>
               </label>
               <select
@@ -322,10 +322,10 @@ function AdminEnrollForm() {
           <div className="pt-2 border-t border-slate-100 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                <h2 className="text-2xs font-bold uppercase tracking-wider text-slate-700">
                   Initial duty schedule
                 </h2>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-2xs text-slate-400 mt-0.5">
                   Each row is one duty block · 10-minute steps · at least {MIN_WEEKLY_MINUTES} minutes
                   per week (minimum 180 minutes)
                 </p>
@@ -355,7 +355,7 @@ function AdminEnrollForm() {
                   >
                     <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] items-end gap-2">
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Date</label>
+                        <label className="block text-2xs font-semibold text-slate-700 mb-1">Date</label>
                         <input
                           type="date"
                           value={row.shift_date}
@@ -369,7 +369,7 @@ function AdminEnrollForm() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">Start</label>
+                        <label className="block text-2xs font-semibold text-slate-700 mb-1">Start</label>
                         <input
                           type="time"
                           step={600}
@@ -383,7 +383,7 @@ function AdminEnrollForm() {
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 mb-1">End</label>
+                        <label className="block text-2xs font-semibold text-slate-700 mb-1">End</label>
                         <input
                           type="time"
                           step={600}
@@ -411,14 +411,14 @@ function AdminEnrollForm() {
                       </button>
                     </div>
 
-                    {error && <p className="text-[11px] font-semibold text-rose-600">{error}</p>}
+                    {error && <p className="text-2xs font-semibold text-rose-600">{error}</p>}
                   </div>
                 )
               })}
             </div>
 
             {shortWeeks.length > 0 && (
-              <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="text-2xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 {shortWeeks
                   .map(({ week, minutes }) => `week of ${week}: ${minutes} of ${MIN_WEEKLY_MINUTES} minutes`)
                   .join(' · ')}{' '}
@@ -426,7 +426,7 @@ function AdminEnrollForm() {
               </p>
             )}
 
-            <p className="text-[11px] text-slate-400">
+            <p className="text-2xs text-slate-400">
               {shifts.length} block{shifts.length === 1 ? '' : 's'} · {totalShiftMinutes} scheduled minutes in total.
               The schedule can be changed later from the{' '}
               <span className="font-semibold text-slate-500">Schedules</span> screen.
@@ -476,7 +476,7 @@ function AdminEnrollForm() {
             {result.tempPassword ? (
               <div className="bg-white border border-emerald-200 rounded-xl p-3 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold text-slate-500">
+                  <p className="text-2xs font-semibold text-slate-500">
                     Temporary password
                   </p>
                   <p className="text-sm font-mono font-bold text-slate-900 break-all">
@@ -500,7 +500,7 @@ function AdminEnrollForm() {
                 credentials issued by the system.
               </p>
             )}
-            <p className="text-[11px] text-emerald-700/80">
+            <p className="text-2xs text-emerald-700/80">
               Share the temporary password securely — a copy has also been
               emailed to the employee's Bicol University inbox
               (FLOW-EMP_ENROLL-04). The employee will be prompted to set

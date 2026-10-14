@@ -291,8 +291,11 @@ function ProductDetail() {
                 </svg>
               </button>
 
-              {/* Status Badge Tag Over Main Image */}
-              <div className="absolute top-4 left-4 md:left-6 z-10 flex flex-col gap-1.5">
+              {/* Status Badge Tag Over Main Image — offset past the mobile
+                  back button (top-4 left-4, ~2.5rem wide) so it never covers
+                  the back arrow; on desktop the back button is hidden and it
+                  returns to the left edge. */}
+              <div className="absolute top-4 left-16 md:left-6 z-10 flex flex-col gap-1.5">
                 {product.preOrder ? (
                   <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
                     <CalendarIcon className="w-3.5 h-3.5 shrink-0" />

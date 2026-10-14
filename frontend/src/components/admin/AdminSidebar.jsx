@@ -51,7 +51,7 @@ const NAV_GROUPS = [
   },
   {
     id: 'sales-ops',
-    group: 'Sales & Operations',
+    group: 'Operations',
     items: [
       {
         to: '/admin/walkin',
@@ -83,8 +83,9 @@ const NAV_GROUPS = [
       {
         to: '/admin/orders',
         label: 'Orders',
-        // REQ-EMP_HOME-01: Orders only for admin and super admin
-        roles: ['ADMIN', 'SUPER_ADMIN'],
+        // FLOW-EMP_HOME-05 lists Orders for every employee and REQ-EMP_HOME-01
+        // forbids staff from only Dashboard / Walk-in / Reviews / Sales - and
+        // /admin/orders is the staff home (empHomePath), so it must render.
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <circle cx="9" cy="21" r="1" />
@@ -93,25 +94,11 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
-      {
-        to: '/admin/analytics',
-        label: 'Sales',
-        hideForStaff: true,
-        // REQ-EMP_HOME-01: Sales only for admin and super admin
-        roles: ['ADMIN', 'SUPER_ADMIN'],
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
-            <line x1="18" y1="20" x2="18" y2="10" />
-            <line x1="12" y1="20" x2="12" y2="4" />
-            <line x1="6" y1="20" x2="6" y2="14" />
-          </svg>
-        ),
-      },
     ],
   },
   {
     id: 'store-catalog',
-    group: 'Store & Catalog',
+    group: 'Store & Sales',
     items: [
       {
         to: '/admin/inventory',
@@ -140,6 +127,21 @@ const NAV_GROUPS = [
           </svg>
         ),
       },
+      {
+        to: '/admin/analytics',
+        label: 'Sales',
+        hideForStaff: true,
+        // REQ-EMP_HOME-01: Sales only for admin and super admin, and the
+        // /admin/analytics route carries the same RequireRole guard.
+        roles: ['ADMIN', 'SUPER_ADMIN'],
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -149,7 +151,10 @@ const NAV_GROUPS = [
       {
         to: '/admin/staff',
         label: 'Staff',
-        // REQ-EMP_HOME-01: Staff management only for super admin
+        // REQ-EMP_HOME-01: the Staff entry is admin/super-admin territory, and
+        // App.jsx locks /admin/staff (and /admin/users) to SUPER_ADMIN only, so
+        // the entry mirrors the route guard exactly - showing it to a plain
+        // ADMIN would only bounce them back to their home page.
         roles: ['SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
@@ -208,6 +213,17 @@ export default function AdminSidebar({ onCloseMobile }) {
 
   const [confirmLogout, setConfirmLogout] = useState(false)
 
+  /* Rule 74 keeps the search bar at the centre of the ribbon, but below `sm`
+     the ribbon has no room for it, so the same search is surfaced in this
+     phone drawer instead of disappearing entirely. */
+  const [mobileSearch, setMobileSearch] = useState('')
+  const submitMobileSearch = (e) => {
+    e.preventDefault()
+    const q = mobileSearch.trim()
+    if (q) navigate(`/admin/orders?search=${encodeURIComponent(q)}`)
+    onCloseMobile?.()
+  }
+
   // DOMAIN 16 — confirmation dialog, then logout and redirect to the login page.
   const handleLogout = () => {
     logoutAdmin()
@@ -251,11 +267,30 @@ export default function AdminSidebar({ onCloseMobile }) {
           </div>
         )}
 
+        {/* Phone-only search (rule 74): the ribbon's own field is hidden
+            below `sm`, so the query lives here instead. */}
+        <form onSubmit={submitMobileSearch} className="md:hidden px-3 pt-2.5 pb-1.5 shrink-0 border-b border-slate-100 dark:border-[var(--line)]">
+          <div className="relative">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="search"
+              value={mobileSearch}
+              onChange={(e) => setMobileSearch(e.target.value)}
+              placeholder="Search orders, products, customers..."
+              aria-label="Search"
+              className="field-input w-full pl-9"
+            />
+          </div>
+        </form>
+
         {/* Navigation — FLOW-EMP_HOME-05 */}
         <nav aria-label="Employee navigation" className="px-2.5 py-1.5 space-y-2 overflow-y-auto flex-1 scrollbar-none">
           {navGroups.map((section) => (
             <div key={section.id} className="space-y-0.5">
-              <div className="px-2.5 pt-0.5 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-[var(--muted-2)] select-none">
+              <div className="px-2.5 pt-0.5 pb-0.5 text-2xs font-bold uppercase tracking-wider text-gray-400 dark:text-[var(--muted-2)] select-none">
                 {section.group}
               </div>
               <div className="space-y-0.5">

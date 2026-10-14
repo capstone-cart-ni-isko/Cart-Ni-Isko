@@ -223,7 +223,7 @@ export default function AdminStoreCustomization() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           {/* Store Status Card */}
           <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+            <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Store Status
             </p>
             <div className="flex items-center gap-2">
@@ -239,7 +239,7 @@ export default function AdminStoreCustomization() {
 
           {/* Last Edit Card */}
           <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+            <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Last Edit
             </p>
             <div className="flex items-center gap-2">
@@ -258,7 +258,7 @@ export default function AdminStoreCustomization() {
 
           {/* Banner Section Card */}
           <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+            <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Banner Section
             </p>
             <div className="flex items-center gap-2">
@@ -353,7 +353,7 @@ export default function AdminStoreCustomization() {
 
                       {/* Slide Label Badge */}
                       <div className="flex-shrink-0">
-                        <span className="inline-block bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        <span className="inline-block bg-blue-50 text-blue-600 text-2xs font-bold px-2 py-0.5 rounded-full">
                           Slide {idx + 1}
                         </span>
                       </div>
@@ -361,11 +361,11 @@ export default function AdminStoreCustomization() {
                       {/* Title & Subtitle */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-[11px] font-semibold text-gray-400 flex-shrink-0">Title</span>
+                          <span className="text-2xs font-semibold text-gray-400 flex-shrink-0">Title</span>
                           <span className="text-xs font-semibold text-gray-800 truncate">{slide.title}</span>
                         </div>
                         <div className="flex items-baseline gap-2 mt-0.5">
-                          <span className="text-[11px] font-semibold text-gray-400 flex-shrink-0">Subtitle</span>
+                          <span className="text-2xs font-semibold text-gray-400 flex-shrink-0">Subtitle</span>
                           <span className="text-xs text-gray-500 truncate">{slide.subtext}</span>
                         </div>
                       </div>
@@ -472,7 +472,7 @@ export default function AdminStoreCustomization() {
                             />
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-bold text-gray-800 truncate">{slide.bannerImage}</p>
-                              <p className="text-[10px] text-gray-400">Recommended: 1200×500 JPG/PNG</p>
+                              <p className="text-2xs text-gray-400">Recommended: 1200×500 JPG/PNG</p>
                             </div>
                             <button
                               type="button"
@@ -486,7 +486,7 @@ export default function AdminStoreCustomization() {
                         </div>
                         {/* Reorder buttons */}
                         <div className="flex items-center gap-2 pt-1">
-                          <span className="text-[11px] font-semibold text-gray-400">Reorder:</span>
+                          <span className="text-2xs font-semibold text-gray-400">Reorder:</span>
                           <button
                             type="button"
                             disabled={idx === 0}
@@ -536,7 +536,7 @@ export default function AdminStoreCustomization() {
               <h3 className="text-sm font-bold text-gray-900 mb-4">How to Edit</h3>
               <ol className="space-y-3.5">
                 <li className="flex gap-3">
-                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-2xs font-black flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
                   <p className="text-xs text-gray-600 leading-relaxed">
                     Click{' '}
                     <span className="inline-flex items-center gap-0.5 bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
@@ -550,7 +550,7 @@ export default function AdminStoreCustomization() {
                   </p>
                 </li>
                 <li className="flex gap-3">
-                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-2xs font-black flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
                   <p className="text-xs text-gray-600 leading-relaxed">
                     Click{' '}
                     <span className="inline-flex items-center gap-0.5 bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
@@ -560,7 +560,7 @@ export default function AdminStoreCustomization() {
                   </p>
                 </li>
                 <li className="flex gap-3">
-                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-2xs font-black flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
                   <p className="text-xs text-gray-600 leading-relaxed">
                     Open a slide's edit panel and use its{' '}
                     <span className="inline-flex items-center gap-0.5 bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
@@ -570,7 +570,7 @@ export default function AdminStoreCustomization() {
                   </p>
                 </li>
                 <li className="flex gap-3">
-                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-[10px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
+                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-2xs font-black flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
                   <p className="text-xs text-gray-600 leading-relaxed">
                     Click{' '}
                     <span className="bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
@@ -591,12 +591,12 @@ export default function AdminStoreCustomization() {
                   {isStoreOpen ? 'Store Open' : 'Store Closed'}
                 </p>
               </div>
-              <p className="text-[11px] text-gray-500 leading-relaxed ml-4">
+              <p className="text-2xs text-gray-500 leading-relaxed ml-4">
                 Your store is currently visible to customers. You can update your banners and content anytime. Changes will go live immediately after saving.
               </p>
               <div className="mt-3 ml-4 p-2.5 bg-blue-50 border border-blue-100 rounded-lg flex gap-2">
                 <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0 mt-0.5">i</span>
-                <p className="text-[11px] text-blue-700 leading-relaxed">
+                <p className="text-2xs text-blue-700 leading-relaxed">
                   To take your store offline, contact your administrator.
                 </p>
               </div>
@@ -671,7 +671,7 @@ export default function AdminStoreCustomization() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               <div className="relative z-10 space-y-1">
-                <span className="inline-block bg-brand-orange text-white text-[9px] font-bold uppercase px-2 py-0.5 rounded-md">
+                <span className="inline-block bg-brand-orange text-white text-2xs font-bold uppercase px-2 py-0.5 rounded-md">
                   {slides[0].subtext}
                 </span>
                 <h3 className="text-xl font-black">{slides[0].title}</h3>

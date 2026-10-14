@@ -205,7 +205,7 @@ export default function ClockInOut() {
 
   if (isLoading) {
     return (
-      <p className="px-2.5 py-1.5 text-[11px] font-semibold text-gray-400 flex items-center gap-2">
+      <p className="px-2.5 py-1.5 text-2xs font-semibold text-gray-400 flex items-center gap-2">
         <span className="spinner-circle !w-3 h-3" /> Loading your schedule…
       </p>
     )
@@ -213,7 +213,7 @@ export default function ClockInOut() {
 
   return (
     <div className="space-y-1">
-      <p className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+      <p className="px-2.5 text-2xs font-bold uppercase tracking-wider text-gray-400">
         {statusLabel}
       </p>
 

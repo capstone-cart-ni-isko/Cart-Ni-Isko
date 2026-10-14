@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 /**
@@ -46,6 +46,24 @@ export default function Modal({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isOpen, onClose, closeOnBackdrop])
 
+  /* Accessibility: opening a popup moves focus INTO it (rule 70 puts that
+     first stop on the top-right close button) so keyboard and screen-reader
+     users land inside the dialog, and closing returns focus to whatever
+     opened it instead of dropping it back on <body>. */
+  const closeRef = useRef(null)
+  useEffect(() => {
+    if (!isOpen) return undefined
+    const restoreTarget = document.activeElement
+    // Give the portal a beat to mount before focusing the close control.
+    const raf = window.requestAnimationFrame(() => closeRef.current?.focus())
+    return () => {
+      window.cancelAnimationFrame(raf)
+      if (restoreTarget && typeof restoreTarget.focus === 'function') {
+        restoreTarget.focus()
+      }
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return createPortal(
@@ -76,6 +94,7 @@ export default function Modal({
             {closeOnBackdrop && (
               <button
                 type="button"
+                ref={closeRef}
                 onClick={() => onClose?.()}
                 className="modal-close"
                 aria-label="Close"

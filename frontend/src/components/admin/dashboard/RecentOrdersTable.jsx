@@ -14,7 +14,7 @@ export default function RecentOrdersTable({ orders = [], emptyText = 'No orders 
     <div className="h-full overflow-auto [mask-image:linear-gradient(to_bottom,black_calc(100%-20px),transparent)] pb-4">
       <table className="w-full text-left border-collapse min-w-[560px]">
         <thead className="sticky top-0 bg-white z-10">
-          <tr className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+          <tr className="text-2xs font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-100">
             <th className="py-1.5 pr-2 font-semibold">Order</th>
             <th className="py-1.5 pr-2 font-semibold">Customer</th>
             <th className="py-1.5 pr-2 font-semibold">Fulfillment</th>
@@ -46,7 +46,7 @@ export default function RecentOrdersTable({ orders = [], emptyText = 'No orders 
               <td className="pr-2 text-right font-semibold text-slate-900 tabular-nums whitespace-nowrap">
                 {peso(order.total)}
               </td>
-              <td className="text-right text-slate-400 text-[11px] whitespace-nowrap">{order.timeAgo || order.date}</td>
+              <td className="text-right text-slate-400 text-2xs whitespace-nowrap">{order.timeAgo || order.date}</td>
             </tr>
           ))}
         </tbody>

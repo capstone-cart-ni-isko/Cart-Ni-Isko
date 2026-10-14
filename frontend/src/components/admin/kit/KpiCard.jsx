@@ -57,7 +57,7 @@ export default function KpiCard({ label, value, subtext, tone = 'neutral', icon,
         </span>
       </div>
       <span className="text-2xl font-bold text-slate-900 dark:text-[var(--ink)] tracking-tight tabular-nums leading-tight">{value}</span>
-      <span className={`flex items-center gap-1 text-[11px] font-medium truncate ${TONE_TEXT[tone] || TONE_TEXT.neutral}`}>
+      <span className={`flex items-center gap-1 text-2xs font-medium truncate ${TONE_TEXT[tone] || TONE_TEXT.neutral}`}>
         <ToneIcon tone={tone} />
         <span className="truncate">{subtext}</span>
       </span>

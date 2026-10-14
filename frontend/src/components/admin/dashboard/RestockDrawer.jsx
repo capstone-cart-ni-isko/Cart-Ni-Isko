@@ -71,7 +71,7 @@ export default function RestockDrawer({ isOpen, onClose, onCompleted }) {
             <li key={p.id} className="flex items-center gap-2 px-2.5 py-2">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
-                <p className={`text-[11px] ${p.totalStock === 0 ? 'text-rose-600 font-semibold' : low ? 'text-isko-orange-dark font-medium' : 'text-slate-500'}`}>
+                <p className={`text-2xs ${p.totalStock === 0 ? 'text-rose-600 font-semibold' : low ? 'text-isko-orange-dark font-medium' : 'text-slate-500'}`}>
                   {p.totalStock === 0 ? 'Out of stock' : `${p.totalStock} in stock`}
                 </p>
               </div>

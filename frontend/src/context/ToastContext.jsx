@@ -1,21 +1,28 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useState, useCallback } from 'react'
+import { createContext, useState, useCallback, useRef, useEffect } from 'react'
 
 export const ToastContext = createContext(null)
 
 export function ToastProvider({ children }) {
   const [toast, setToast] = useState(null)
+  const timerRef = useRef(null)
+
+  // Clear the pending dismissal whenever the toast changes or the provider
+  // unmounts, so a second toast can never be closed by the first one's timer.
+  useEffect(() => () => clearTimeout(timerRef.current), [])
 
   const showToast = useCallback((message, type = 'success', action = null) => {
+    clearTimeout(timerRef.current)
     setToast({ message, type, action })
     const duration = action ? 4000 : 2500
-    const timer = setTimeout(() => {
+    timerRef.current = setTimeout(() => {
       setToast(null)
     }, duration)
-    return () => clearTimeout(timer)
+    return () => clearTimeout(timerRef.current)
   }, [])
 
   const closeToast = useCallback(() => {
+    clearTimeout(timerRef.current)
     setToast(null)
   }, [])
 
@@ -23,12 +30,13 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={{ toast, showToast, closeToast }}>
       {children}
       {toast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[9999] w-max max-w-sm px-4 animate-slide-up">
-          <div
-            className={`px-3.5 py-2 rounded-md text-xs font-medium flex items-center gap-2.5 border ${
-              toast.type === 'error' ? 'bg-rose-50 text-rose-900 border-rose-200' : 'bg-white text-slate-800 border-slate-200'
-            }`}
-          >
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-[140000] w-max max-w-sm px-4 animate-slide-up"
+          style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' }}
+          role="status"
+          aria-live="polite"
+        >
+          <div className={`toast ${toast.type === 'error' ? 'toast--error' : 'toast--success'}`}>
             <span>{toast.message}</span>
             {toast.action && (
               <button
@@ -37,7 +45,7 @@ export function ToastProvider({ children }) {
                   toast.action.onClick()
                   closeToast()
                 }}
-                className="px-2 py-0.5 rounded-md bg-brand-orange text-white font-bold text-xs hover:bg-brand-orange-dark active:scale-95 transition-transform cursor-pointer"
+                className="btn btn--primary ml-auto"
               >
                 {toast.action.label || 'Undo'}
               </button>
@@ -45,7 +53,7 @@ export function ToastProvider({ children }) {
             <button
               type="button"
               onClick={closeToast}
-              className="ml-1 hover:opacity-80 active:scale-95 text-xs text-slate-400 hover:text-slate-600 font-bold p-0.5 cursor-pointer"
+              className="modal-close"
               title="Close"
               aria-label="Close"
             >

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import Segmented from '../../components/admin/kit/Segmented.jsx'
 import BroadcastNotificationDrawer from '../../components/admin/BroadcastNotificationDrawer.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
@@ -151,7 +152,7 @@ export default function AdminNotifications() {
         {/* Header — same type treatment as the customer inbox */}
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-black text-gray-900 tracking-tight">
+            <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">
               Notifications
             </h1>
             <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
@@ -161,48 +162,31 @@ export default function AdminNotifications() {
           <button
             type="button"
             onClick={openBroadcast}
-            className="shrink-0 px-3.5 py-2 rounded-lg bg-brand-orange text-white text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
+            className="btn btn--primary shrink-0"
           >
             Send notification
           </button>
         </div>
 
-        {/* Filter pills */}
-        <div className="flex items-center gap-2.5 overflow-x-auto pb-2 border-b border-slate-200 scrollbar-none">
-          {[
-            { key: 'all', label: 'All', count: items.length },
-            { key: 'unread', label: 'Unread', count: unread.length },
-          ].map(({ key, label, count }) => {
-            const active = filter === key
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setFilter(key)}
-                className={`px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-                  active
-                    ? 'bg-orange-50 border border-brand-orange text-brand-orange'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                <span>{label}</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-xs font-black ${
-                    active ? 'bg-brand-orange text-white' : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            )
-          })}
+        {/* Filter pills - the kit segmented control (item 27: one control, not
+            a page-owned pill row) */}
+        <div className="border-b border-slate-200 dark:border-[var(--line)] pb-2">
+          <Segmented
+            label="Notification filter"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: 'all', label: 'All', count: items.length },
+              { value: 'unread', label: 'Unread', count: unread.length },
+            ]}
+          />
         </div>
 
         {/* Inbox */}
         {loading && items.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-8 flex items-center justify-center">
             <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-              <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-brand-orange animate-spin" />
+              <span className="spinner-circle !w-3.5 !h-3.5" />
               Loading notifications…
             </span>
           </div>

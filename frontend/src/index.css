@@ -23,6 +23,12 @@
   --color-gray-450: #6B7280;
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 
+  /* Smallest type step in the system: 11px is the floor for uppercase
+     badges, chips and counters. Anything smaller (9px/10px) was banned so
+     no label anywhere in either portal becomes unreadable. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1.4;
+
   /* Corner scale: every card/element sits a notch rounder than before, while
      the homepage banner (rounded-[1.5rem]) stays the roundest box on screen. */
   /* One uniform corner for every card, modal and button: rounded-md through
@@ -37,33 +43,46 @@
   --radius-3xl: 12px;
   --radius-carousel: 24px;
 
-  --shadow-none: none;
-  --shadow-2xs: none;
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow-md: none;
-  --shadow-lg: none;
-  --shadow-xl: none;
-  --shadow-2xl: none;
-  --shadow-inner: none;
-  --shadow: none;
+  /* One subtle elevation scale. Every shadow-* class already in the markup
+     reads these, so overlays (popups, drawers, tooltips, sticky ribbons,
+     cards) regain depth and every focus:ring in the app works again, with
+     no component edits. Values stay one gentle step apart so the system
+     looks uniform instead of page-by-page. */
+  --shadow-xs: 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow-sm: 0 1px 3px rgb(15 23 42 / 0.08);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / 0.10);
+  --shadow-lg: 0 8px 24px rgb(15 23 42 / 0.12);
+  --shadow-xl: 0 12px 32px rgb(15 23 42 / 0.14);
+  --shadow-2xl: 0 16px 40px rgb(15 23 42 / 0.16);
+  --shadow-inner: inset 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow-2xs: 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow: 0 1px 3px rgb(15 23 42 / 0.08);
+}
+
+/* On a dark page a light shadow disappears, so the same scale deepens. */
+html.dark {
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.40);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.45);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.50);
+  --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.55);
+  --shadow-xl: 0 12px 32px rgb(0 0 0 / 0.60);
+  --shadow-2xl: 0 16px 40px rgb(0 0 0 / 0.65);
+  --shadow-2xs: 0 1px 2px rgb(0 0 0 / 0.40);
+  --shadow: 0 1px 3px rgb(0 0 0 / 0.45);
 }
 
 *, *::before, *::after {
   -webkit-tap-highlight-color: transparent;
-  box-shadow: none !important;
-  -webkit-box-shadow: none !important;
-  --tw-shadow: 0 0 #0000 !important;
-  --tw-shadow-colored: 0 0 #0000 !important;
-  --tw-drop-shadow: none !important;
 }
 
 *:focus:not(:focus-visible) {
   outline: none !important;
 }
 
+/* One focus ring for the whole system: brand orange, no `!important`, so a
+   component can still refine its own offset (the text field does). */
 *:focus-visible {
-  outline: 2px solid #F97316 !important;
+  outline: 2px solid var(--color-brand-orange);
   outline-offset: 2px;
 }
 
@@ -76,9 +95,10 @@ html {
 
 body {
   margin: 0;
-  background: #F8F9FA;
-  color: #111827;
-  line-height: 1.6;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 0.9375rem;
+  line-height: 1.65;
 }
 
 /* ── Page Title ── */
@@ -110,25 +130,30 @@ input[type="checkbox"].check-plain {
   -webkit-appearance: none;
   width: 1.125rem;
   height: 1.125rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--line-2);
   border-radius: 4px;
-  background-color: #fff;
+  background-color: var(--surface);
   cursor: pointer;
   display: inline-grid;
   place-content: center;
   flex-shrink: 0;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+input[type="checkbox"].check-plain:hover {
+  border-color: var(--color-brand-orange);
 }
 
 input[type="checkbox"].check-plain:checked {
-  background-color: #fff;
-  border-color: #9ca3af;
+  background-color: var(--surface);
+  border-color: var(--color-brand-orange);
 }
 
 input[type="checkbox"].check-plain:checked::after {
   content: "";
   width: 0.28rem;
   height: 0.5rem;
-  border: solid #111827;
+  border: solid var(--color-brand-orange);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg) translateY(-1px);
 }
@@ -183,19 +208,21 @@ input[type="checkbox"].check-plain:checked::after {
   to { transform: rotate(360deg); }
 }
 
-/* ── Loading Spinner ── */
+/* ── Loading Spinner ──
+   Track and arc both read theme tokens, so the ring stays visible on the
+   dark surface instead of fading into it. Size can be overridden per site. */
 .spinner-circle {
-  width: 24px;
-  height: 24px;
-  border: 3px solid rgba(249, 115, 22, 0.15);
-  border-top-color: #F97316;
+  width: var(--spinner-size, 24px);
+  height: var(--spinner-size, 24px);
+  border: 3px solid color-mix(in srgb, var(--color-brand-orange) 18%, transparent);
+  border-top-color: var(--color-brand-orange);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 
 /* ── Skeleton Loader ── */
 .skeleton {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-4) 50%, var(--surface-3) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-md);
@@ -206,16 +233,22 @@ input[type="checkbox"].check-plain:checked::after {
   100% { background-position: -200% 0; }
 }
 
-/* ── Improved Readability ── */
-body {
-  font-size: 0.9375rem;
-  line-height: 1.65;
+/* ── Motion is an enhancement, never a requirement ──
+   Users who ask their device for reduced motion get every entrance,
+   spinner and shimmer stopped, in both portals and on every viewport. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
+/* ── Improved Readability ── */
 .text-readable {
   font-size: 0.9375rem;
   line-height: 1.7;
-  color: #1e293b;
 }
 
 /* ── Card hover lift ── */
@@ -389,6 +422,14 @@ html.dark {
   --color-zinc-800: var(--ink-2);
   --color-zinc-900: var(--ink);
 
+  --color-indigo-50: var(--tint-info-bg);
+  --color-indigo-100: var(--tint-info-bg);
+  --color-indigo-200: color-mix(in srgb, var(--tint-info-fg) 38%, transparent);
+  --color-indigo-600: var(--tint-info-fg);
+  --color-indigo-700: var(--tint-info-fg);
+  --color-indigo-800: var(--tint-info-fg);
+  --color-indigo-900: var(--tint-info-fg);
+
   /* Pale status washes become deep washes … */
   --color-orange-50: var(--tint-brand-bg);
   --color-orange-100: var(--tint-brand-bg);
@@ -451,6 +492,19 @@ html.dark {
   --color-purple-800: var(--tint-plain-fg);
   --color-purple-900: var(--tint-plain-fg);
 
+  /* The deepest step of a status hue is used for ink on its own wash
+     (amber-950 notices, orange-950 headings, blue-950 labels). Left alone
+     it would stay near-black on a now-dark background. */
+  --color-orange-950: var(--tint-brand-fg);
+  --color-amber-950: var(--tint-warn-fg);
+  --color-blue-950: var(--tint-info-fg);
+  --color-emerald-950: var(--tint-ok-fg);
+  --color-red-950: var(--tint-danger-fg);
+  --color-rose-950: var(--tint-accent-fg);
+  --color-purple-950: var(--tint-plain-fg);
+  --color-indigo-950: var(--tint-info-fg);
+  --color-sky-950: var(--tint-info-fg);
+
   /* The -200 step of a status hue is a border in this app far more
      often than a fill, so it becomes a tinted line, not a pastel. */
   --color-orange-200: color-mix(in srgb, var(--tint-brand-fg) 38%, transparent);
@@ -474,12 +528,21 @@ html.dark {
    lose to nothing here: they sit outside Tailwind's layers. */
 
 /* Translucent sheets (ribbon, drawer, modal scrim) must follow the
-   surface too — v4 inlines those, so no variable reaches them. */
-html.dark [class*="bg-white/"] {
+   surface too — v4 inlines those, so no variable reaches them. An exact
+   token match is used for the solid form so a `hover:bg-white` variant is
+   never mistaken for a base background, and `:not(:hover)` keeps every
+   hover state working while the base state is re-pointed. */
+html.dark [class~="bg-white"]:not(:hover) {
+  background-color: var(--surface);
+}
+html.dark [class~="bg-white"]:hover {
+  background-color: var(--surface-4);
+}
+html.dark [class*="bg-white/"]:not(:hover) {
   background-color: color-mix(in srgb, var(--surface) 88%, transparent);
 }
-html.dark [class*="bg-white"] {
-  background-color: var(--surface);
+html.dark [class*="hover:bg-white/"]:hover {
+  background-color: color-mix(in srgb, var(--surface-4) 88%, transparent);
 }
 
 /* …while a step that reads as a dark surface in light mode must not
@@ -582,6 +645,9 @@ html.dark [class*="text-[#E65100]"], html.dark [class*="text-[#EA580C]"] {
 }
 html.dark [class*="text-[#D97706]"] { color: var(--tint-warn-fg); }
 html.dark [class*="text-[#8B5CF6]"] { color: var(--tint-plain-fg); }
+/* `text-black` is used for prices and totals; it must read as the page ink
+   once the theme flips instead of staying a black hole on a dark card. */
+html.dark [class~="text-black"] { color: var(--ink); }
 html.dark .text-text-muted { color: var(--muted); }
 html.dark .placeholder-gray-400::placeholder { color: var(--muted-2); }
 html.dark ::placeholder { color: var(--muted-2); }
@@ -634,6 +700,7 @@ html.dark ::placeholder { color: var(--muted-2); }
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
@@ -707,12 +774,24 @@ html.dark ::placeholder { color: var(--muted-2); }
   transition: border-color 0.2s;
 }
 .field-input::placeholder { color: var(--muted-2); }
+.field-input:hover:not(:disabled) { border-color: var(--line-3); }
 .field-input:focus-visible {
   outline: 2px solid var(--color-brand-orange);
   outline-offset: 0;
   border-color: var(--color-brand-orange);
 }
 .field-input--lg { height: 3rem; border-radius: var(--radius-sm); font-size: 0.9375rem; }
+/* One code box for every OTP screen: same height, same corner, same type. */
+.field-input--otp {
+  width: 3rem;
+  height: 3.5rem;
+  padding: 0;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  border-radius: var(--radius-md);
+}
 textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; }
 .field-hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
 .field-error { font-size: 0.75rem; font-weight: 600; color: var(--tint-danger-fg); margin-top: 0.25rem; }
@@ -736,7 +815,9 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
   transition: background-color 0.15s, color 0.15s, border-color 0.15s;
 }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn--primary { background: var(--tint-brand-solid); color: #fff; }
+/* Primary speaks the same orange as every hand-rolled brand button in the
+   app (#F97316 → darker on hover), so one hover direction everywhere. */
+.btn--primary { background: var(--color-brand-orange); color: #fff; }
 .btn--primary:hover:not(:disabled) { background: var(--color-brand-orange-dark); }
 .btn--secondary { background: var(--surface-3); color: var(--ink-2); border-color: var(--line); }
 .btn--secondary:hover:not(:disabled) { background: var(--surface-4); }
@@ -746,6 +827,9 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
 .btn--danger:hover:not(:disabled) { background: #b91c1c; }
 .btn--lg { height: 3rem; border-radius: var(--radius-sm); font-size: 0.9375rem; }
 .btn--block { width: 100%; }
+/* The native tap highlight is switched off app-wide, so every button
+   answers the press itself: same motion, one rule, both portals. */
+.btn:active:not(:disabled) { transform: scale(0.97); }
 
 /* ── 4 · Toggle switch (Toggle.jsx) ───────────────────────────── */
 .switch {
@@ -773,6 +857,8 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
 }
 .switch[aria-checked="true"] { background: var(--tint-brand-solid); }
 .switch[aria-checked="true"]::after { transform: translateX(1.25rem); }
+.switch:hover:not(:disabled):not([aria-checked="true"]) { background: var(--line-2); }
+.switch:hover:not(:disabled)[aria-checked="true"] { background: var(--color-brand-orange-dark); }
 .switch--lg { width: 3rem; height: 1.75rem; }
 .switch--lg::after { width: 1.5rem; height: 1.5rem; }
 .switch--lg[aria-checked="true"]::after { transform: translateX(1.25rem); }
@@ -787,7 +873,167 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
 .switch-row__label { font-size: 0.875rem; font-weight: 500; color: var(--ink); }
 .switch-row__hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.125rem; }
 
-/* ── 5 · Catalog grid ───────────────────────────────────────
+/* ── 5 · Card / chip / badge / stepper / segmented ─────────────
+   The shapes below exist so no page invents its own. Each one reads only
+   the theme tokens above, which is what keeps light mode, dark mode, the
+   phone, the PWA and the desktop in agreement. */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2rem;
+  padding: 0 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.chip:hover { border-color: var(--line-3); }
+.chip[aria-pressed="true"],
+.chip.is-active {
+  background: var(--color-brand-orange);
+  border-color: var(--color-brand-orange);
+  color: #fff;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.badge--brand { background: var(--tint-brand-bg); color: var(--tint-brand-fg); }
+.badge--ok { background: var(--tint-ok-bg); color: var(--tint-ok-fg); }
+.badge--info { background: var(--tint-info-bg); color: var(--tint-info-fg); }
+.badge--warn { background: var(--tint-warn-bg); color: var(--tint-warn-fg); }
+.badge--danger { background: var(--tint-danger-bg); color: var(--tint-danger-fg); }
+.badge--accent { background: var(--tint-accent-bg); color: var(--tint-accent-fg); }
+.badge--plain { background: var(--tint-plain-bg); color: var(--tint-plain-fg); }
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.stepper__btn {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.stepper__btn:hover:not(:disabled) { background: var(--surface-4); color: var(--ink); }
+.stepper__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.stepper__value {
+  min-width: 2rem;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.segmented__item {
+  height: 1.75rem;
+  padding: 0 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.segmented__item:hover { color: var(--ink); }
+.segmented__item[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Empty results are a state of the system, not an error: one centered,
+   friendly layout for every list in both portals. */
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  padding-block: 2.5rem;
+  text-align: center;
+  color: var(--muted);
+}
+.empty-state__title { color: var(--ink); font-size: 0.9375rem; font-weight: 700; }
+.empty-state__hint { font-size: 0.8125rem; color: var(--muted); max-width: 28rem; }
+
+/* One toast shell: floats above every scrim, clears the bottom nav and the
+   phone home indicator, and tints itself by message type. */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.toast--error {
+  background: var(--tint-danger-bg);
+  border-color: color-mix(in srgb, var(--tint-danger-fg) 45%, transparent);
+  color: var(--tint-danger-fg);
+}
+.toast--success {
+  background: var(--tint-ok-bg);
+  border-color: color-mix(in srgb, var(--tint-ok-fg) 45%, transparent);
+  color: var(--tint-ok-fg);
+}
+
+/* The ribbon (rules 72-75): docked at the top of every page of a portal,
+   logo left, search centre, at most five icons right. */
+.ribbon {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ── 6 · Catalog grid ───────────────────────────────────────
    FLOW-WALKIN-02: the walk-in register must display "the current
    product catalog in the same format as customers see", so the
    customer storefront and the admin register read the SAME grid
@@ -797,3 +1043,23 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
 @media (min-width: 640px) { .grid-catalog { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 1024px) { .grid-catalog { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1280px) { .grid-catalog { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+/* One default control size across every form, both portals and every
+   viewport — but written with :where() and WITHOUT !important so an
+   intentional size (the large login field, the OTP boxes, a h-12 search
+   bar) can still override it instead of being silently flattened.
+   (ISO 25010:2023 - Consistency, Appropriateness Recognizability) */
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="color"]),
+  select
+) {
+  height: 2.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+:where(textarea) {
+  height: auto;
+  min-height: 4.5rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}

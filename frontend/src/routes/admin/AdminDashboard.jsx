@@ -248,7 +248,7 @@ export default function AdminDashboard() {
             title="Recent orders"
             meta={
               orderFilter ? (
-                <span className="inline-flex items-center gap-1 h-5 pl-2 pr-1 rounded-full bg-isko-blue text-white text-[11px] font-medium">
+                <span className="inline-flex items-center gap-1 h-5 pl-2 pr-1 rounded-full bg-isko-blue text-white text-2xs font-medium">
                   {orderFilter.label}
                   <button
                     type="button"

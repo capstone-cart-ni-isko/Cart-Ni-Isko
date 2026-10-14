@@ -89,7 +89,7 @@ export default function BroadcastNotificationDrawer({ isOpen, onClose, accounts 
             type="button"
             onClick={handleClose}
             disabled={sending}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer disabled:opacity-50"
+            className="btn btn--ghost"
           >
             Cancel
           </button>
@@ -97,7 +97,7 @@ export default function BroadcastNotificationDrawer({ isOpen, onClose, accounts 
             type="button"
             onClick={handleSend}
             disabled={!canSend}
-            className="px-4 py-1.5 text-xs font-bold text-white bg-brand-orange hover:bg-brand-orange-dark rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn btn--primary"
           >
             {sending ? 'Sending…' : 'Send'}
           </button>
@@ -105,7 +105,7 @@ export default function BroadcastNotificationDrawer({ isOpen, onClose, accounts 
       }
     >
       <div className="space-y-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Recipients</p>
+        <p className="text-2xs font-semibold uppercase tracking-wider text-slate-400">Recipients</p>
         <div className="flex gap-2">
           <button type="button" className={pill(recipientType === 'customer')} onClick={() => switchType('customer')}>
             Customers
@@ -131,7 +131,7 @@ export default function BroadcastNotificationDrawer({ isOpen, onClose, accounts 
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter by name or email"
-            className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange"
+            className="field-input"
           />
           <div className="max-h-52 overflow-y-auto rounded-lg border border-slate-100 divide-y divide-slate-100">
             {candidates.length === 0 ? (
@@ -153,20 +153,23 @@ export default function BroadcastNotificationDrawer({ isOpen, onClose, accounts 
               ))
             )}
           </div>
-          <p className="text-[11px] text-slate-500">{selectedIds.length} selected</p>
+          <p className="text-2xs text-slate-500">{selectedIds.length} selected</p>
         </div>
       )}
 
       <div className="space-y-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Message</p>
+        <p className="text-2xs font-semibold uppercase tracking-wider text-slate-400">Message</p>
+        {/* .field-input is 2.5rem tall by default; a textarea keeps the
+            height its `rows` ask for. */}
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value.slice(0, MAX_MESSAGE))}
           rows={4}
           placeholder="e.g. The store will close early at 3 PM on Friday."
-          className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange"
+          className="field-input"
+          style={{ height: 'auto' }}
         />
-        <p className="text-[11px] text-slate-400 text-right">
+        <p className="text-2xs text-slate-400 text-right">
           {message.length}/{MAX_MESSAGE}
         </p>
       </div>

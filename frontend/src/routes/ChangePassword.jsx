@@ -25,7 +25,7 @@ function PasswordField({ label, name, value, onChange, placeholder }) {
         <button
           type="button"
           onClick={() => setShow((s) => !s)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-455 hover:text-brand-orange transition-colors"
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange transition-colors"
         >
           {show ? 'Hide' : 'Show'}
         </button>

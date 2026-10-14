@@ -245,7 +245,11 @@ class SecurityAPI extends Controller
                 try {
                     $token = \App\Support\ApiToken::issue($employee);
                 } catch (\Throwable $e) {
-                    $token = $employee->createToken('auth_token')->plainTextToken;
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Login failed',
+                        'error' => $e->getMessage(),
+                    ], 500);
                 }
 
                 if ($employee->emp_login_failed !== null && \Schema::hasColumn('employee', 'emp_login_failed')) {

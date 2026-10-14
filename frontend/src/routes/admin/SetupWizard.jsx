@@ -65,13 +65,13 @@ function passwordError(value) {
 function Field({ label, hint, error, touched, children }) {
   return (
     <label className="block">
-      <span className="block text-[11px] font-bold text-slate-600 mb-1">{label}</span>
+      <span className="block text-2xs font-bold text-slate-600 mb-1">{label}</span>
       {children}
       {/* Rule 67 - the message shows directly under its own field. */}
       {touched && error ? (
-        <span className="block text-[11px] font-semibold text-red-500 mt-1">{error}</span>
+        <span className="block text-2xs font-semibold text-red-500 mt-1">{error}</span>
       ) : hint ? (
-        <span className="block text-[11px] text-slate-400 mt-1">{hint}</span>
+        <span className="block text-2xs text-slate-400 mt-1">{hint}</span>
       ) : null}
     </label>
   )
@@ -306,7 +306,7 @@ export default function SetupWizard({ embedded = false }) {
                 <section className="space-y-3 pt-4 border-t border-slate-100">
                   <div>
                     <h2 className="text-sm font-black text-slate-800 uppercase tracking-wide">First super admin</h2>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-2xs text-slate-400 mt-0.5">
                       Leave the password blank to automatically generate a secure temporary password.
                     </p>
                   </div>

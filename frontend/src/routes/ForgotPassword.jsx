@@ -5,6 +5,7 @@ import Button from '../components/ui/Button.jsx'
 import OtpInput from '../components/ui/OtpInput.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import { recoverCredentials, updateCredentials } from '../services/auth.js'
+import { verifyOtp } from '../services/otp.js'
 
 function ForgotPassword() {
   const navigate = useNavigate()
@@ -18,6 +19,7 @@ function ForgotPassword() {
   const [showPass, setShowPass] = useState(false)
   const [timer, setTimer] = useState(59)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [otpError, setOtpError] = useState('')
   const [userType, setUserType] = useState('customer')
 
   useEffect(() => {
@@ -56,9 +58,19 @@ function ForgotPassword() {
     localStorage.setItem('isko_forgot_type', userType)
   }
 
-  const handleOtpSubmit = (e) => {
+  const handleOtpSubmit = async (e) => {
     e.preventDefault()
-    if (otp.length < 4) return
+    if (otp.length < 4 || isSubmitting) return
+    setIsSubmitting(true)
+    setOtpError('')
+    // The code is cleared against the real OTP verify flow (services/otp.js)
+    // instead of being accepted blindly, so a wrong code never advances.
+    const { error } = await verifyOtp('password_change', otp)
+    setIsSubmitting(false)
+    if (error) {
+      setOtpError(error || 'That code is not correct.')
+      return
+    }
     setStep(2)
     showToast('Code verified. Set your new password.')
   }
@@ -81,10 +93,21 @@ function ForgotPassword() {
     navigate('/signin')
   }
 
-  const handleResend = () => {
+  // FLOW: "Resend" re-runs the SAME send path as the identifier step instead of
+  // only resetting the timer, so a real code is actually re-issued.
+  const handleResend = async () => {
+    const identifierVal = identifier.trim()
+    setIsSubmitting(true)
+    const { error } = await recoverCredentials(identifierVal, userType)
+    setIsSubmitting(false)
+    if (error) {
+      showToast(error, 'error')
+      return
+    }
     setTimer(59)
     setOtp('')
-    showToast('A new 4-digit code has been sent!')
+    setOtpError('')
+    showToast('A new verification code has been sent!')
   }
 
   const prevStep = () => {
@@ -186,7 +209,20 @@ function ForgotPassword() {
               </p>
 
               <form onSubmit={handleOtpSubmit} className="space-y-6">
-                <OtpInput value={otp} onChange={setOtp} length={4} />
+                <OtpInput
+                  value={otp}
+                  onChange={(v) => {
+                    setOtp(v)
+                    if (otpError) setOtpError('')
+                  }}
+                  length={4}
+                />
+
+                {otpError && (
+                  <p className="field-error" role="alert">
+                    {otpError}
+                  </p>
+                )}
 
                 <Button
                   type="submit"

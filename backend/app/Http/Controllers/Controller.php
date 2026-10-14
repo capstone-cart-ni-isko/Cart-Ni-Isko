@@ -622,7 +622,7 @@ abstract class Controller
 
         return [
             'cust_nickname' => trim($customer->cust_givname . ' ' . $customer->cust_surname),
-            'cust_birthday' => $customer->cust_bday?->format('Y-m-d'),
+            'cust_birthday' => $customer->cust_bday !== null ? Carbon::parse($customer->cust_bday)->format('Y-m-d') : null,
             'cust_photo' => $customer->cust_avatar,
             'cust_brgy' => $address[0] ?? '',
             'cust_city' => $address[1] ?? '',

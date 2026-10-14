@@ -189,7 +189,7 @@ function Shop() {
               className={`h-10 px-5 rounded-xl border flex items-center gap-2 text-sm font-bold active:scale-95 transition-all cursor-pointer ${
                 Object.values(activeFilters).some((v, i) => (i === 0 ? v !== 'All' : i === 1 ? v !== 'All' : !!v))
                   ? 'bg-brand-orange border-brand-orange text-white'
-                  : 'bg-white border-gray-250 text-gray-700 hover:border-gray-300'
+                  : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
               }`}
             >
               <svg
@@ -248,7 +248,7 @@ function Shop() {
             <ServerErrorNotice message={error} onRetry={reload} />
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-20 animate-fade-in">
-              <div className="w-16 h-16 bg-gray-55 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-gray-400">
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />

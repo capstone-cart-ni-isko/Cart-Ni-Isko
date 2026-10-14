@@ -36,12 +36,14 @@ function OtpInput({ length = 6, value, onChange }) {
           ref={(el) => { inputsRef.current[i] = el }}
           type="text"
           inputMode="numeric"
+          autoComplete="one-time-code"
           maxLength={1}
+          aria-label={`Digit ${i + 1} of ${length}`}
           value={value[i] || ''}
           onChange={(e) => handleChange(i, e.target.value)}
           onKeyDown={(e) => handleKeyDown(i, e)}
           onPaste={handlePaste}
-          className="w-12 h-14 text-center text-xl font-bold border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange transition-all"
+          className="field-input field-input--otp"
         />
       ))}
     </div>

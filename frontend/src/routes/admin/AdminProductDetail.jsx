@@ -368,12 +368,12 @@ export default function AdminProductDetail() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h1 className="text-base font-bold text-slate-900 truncate">{row.name}</h1>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-2xs text-slate-400 mt-0.5">
                       {row.sku} • {row.categoryName}
                     </p>
                   </div>
                   <span
-                    className={`shrink-0 inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold ${
+                    className={`shrink-0 inline-block px-2.5 py-1 rounded-md text-2xs font-semibold ${
                       row.disabled
                         ? 'bg-slate-100 text-slate-600 border border-slate-200'
                         : row.availability === 'Pre-order'
@@ -386,19 +386,19 @@ export default function AdminProductDetail() {
                 </div>
                 <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Base price</p>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Base price</p>
                     <p className="text-sm font-bold text-slate-900 mt-0.5">{money(row.price)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total stock</p>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Total stock</p>
                     <p className="text-sm font-bold text-slate-900 mt-0.5">{row.totalStock}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Units sold</p>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Units sold</p>
                     <p className="text-sm font-bold text-slate-900 mt-0.5">{row.orders}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Rating</p>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Rating</p>
                     <p className="text-sm font-bold text-slate-900 mt-0.5">
                       {row.rating ? `${row.rating} ★ (${row.reviewCount})` : '—'}
                     </p>
@@ -419,19 +419,19 @@ export default function AdminProductDetail() {
                     <span className="font-medium text-slate-400">({row.variants.length})</span>
                   </h2>
                   {axisSummary.length > 0 && (
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-2xs text-slate-400 mt-0.5">
                       Varies by {axisSummary.map((entry) => entry.axis).join(' × ')}
                     </p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  <span className="text-2xs text-slate-400 hidden sm:inline">
                     Low stock ≤ {row.lowStockThreshold} units
                   </span>
                   <button
                     type="button"
                     onClick={() => openComboEditor(null)}
-                    className="h-7 px-2.5 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-[11px] font-semibold cursor-pointer"
+                    className="h-7 px-2.5 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-2xs font-semibold cursor-pointer"
                   >
                     + Combination
                   </button>
@@ -458,7 +458,7 @@ export default function AdminProductDetail() {
                           <td className="px-4 py-2">
                             <div className="font-bold text-slate-900">{variant.label || variant.name}</div>
                             {Object.keys(variant.options || {}).length > 0 && (
-                              <div className="text-[10px] font-semibold text-slate-400">
+                              <div className="text-2xs font-semibold text-slate-400">
                                 {Object.entries(variant.options)
                                   .map(([axis, value]) => `${axis}: ${value}`)
                                   .join(' · ')}
@@ -491,14 +491,14 @@ export default function AdminProductDetail() {
                                   })
                                     .then(() => load())
                                 }
-                                className="px-2 py-1 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                                className="px-2 py-1 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                               >
                                 {variant.available ? 'Disable' : 'Enable'}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openComboEditor(variant)}
-                                className="px-2 py-1 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                                className="px-2 py-1 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
                               >
                                 Edit
                               </button>
@@ -562,21 +562,21 @@ export default function AdminProductDetail() {
 
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 px-4 py-3 border-b border-slate-100">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Units sold</p>
+                  <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Units sold</p>
                   <p className="text-sm font-bold text-slate-900 mt-0.5">{salesEntry?.total_qty ?? 0}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Revenue</p>
+                  <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Revenue</p>
                   <p className="text-sm font-bold text-slate-900 mt-0.5">{money(salesEntry?.total_revenue ?? 0)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Walk-in</p>
+                  <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Walk-in</p>
                   <p className="text-sm font-bold text-slate-900 mt-0.5">
                     {(salesEntry?.days || []).reduce((sum, day) => sum + (Number(day.walkin) || 0), 0)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Preorder</p>
+                  <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Preorder</p>
                   <p className="text-sm font-bold text-slate-900 mt-0.5">
                     {(salesEntry?.days || []).reduce((sum, day) => sum + (Number(day.preorder) || 0), 0)}
                   </p>
@@ -584,7 +584,7 @@ export default function AdminProductDetail() {
                 {/* FLOW-MANAGE_INV-08: the trend across the window (second half
                     against the first half), computed from prodsales. */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Trend</p>
+                  <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Trend</p>
                   <p className="text-sm font-bold text-slate-900 mt-0.5 flex items-center gap-1">
                     {!salesEntry?.trend || salesEntry.trend.direction === 'flat' ? (
                       <span className="text-slate-500">Flat</span>
@@ -665,11 +665,11 @@ export default function AdminProductDetail() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="field-label mb-0">Ways to vary</label>
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-2xs text-slate-400">
                     {axisSummary.length}/{MAX_OPTION_AXES} axes in use
                   </span>
                 </div>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-2xs text-slate-500">
                     One combination is one row. Pick a value on each axis you want
                     this row to cover — color&nbsp;×&nbsp;size, or
                     color&nbsp;×&nbsp;material.
@@ -727,12 +727,12 @@ export default function AdminProductDetail() {
                       ))}
                   </datalist>
                   {comboOptions && Object.keys(comboOptions).length > 0 && (
-                    <p className="text-[11px] font-semibold text-slate-600">
+                    <p className="text-2xs font-semibold text-slate-600">
                       This row will be <span className="text-slate-900">{optionLabel({ prodvar_options: comboOptions })}</span>
                     </p>
                   )}
                   {comboDuplicate && (
-                    <p className="text-[11px] font-semibold text-rose-600">
+                    <p className="text-2xs font-semibold text-rose-600">
                       {comboDuplicate.label || comboDuplicate.name} already covers this combination.
                     </p>
                   )}
@@ -773,7 +773,7 @@ export default function AdminProductDetail() {
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                <label className="flex items-center gap-2 text-2xs font-semibold text-slate-600">
                   <input
                     type="checkbox"
                     checked={comboDraft.preorder}
@@ -797,7 +797,7 @@ export default function AdminProductDetail() {
                       type="button"
                       disabled={isUploadingPhoto}
                       onClick={() => comboPhotoRef.current?.click()}
-                      className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+                      className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
                     >
                       {isUploadingPhoto ? 'Uploading…' : 'Upload'}
                     </button>

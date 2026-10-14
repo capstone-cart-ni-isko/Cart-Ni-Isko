@@ -472,7 +472,7 @@ export default function AdminPos() {
                     key={cat}
                     type="button"
                     onClick={() => setSelectedCategory(cat)}
-                    className={`h-8 px-3 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                    className={`h-8 px-3 rounded-lg text-2xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
                       selectedCategory === cat
                         ? 'bg-brand-orange text-white'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
@@ -517,18 +517,18 @@ export default function AdminPos() {
                             className="h-full w-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
                           />
                           {product.preorder && (
-                            <span className="absolute top-2 left-2 bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                            <span className="absolute top-2 left-2 bg-blue-50 border border-blue-200 text-blue-700 text-2xs font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
                               Pre-order
                             </span>
                           )}
                           {Number(product.totalStock) <= 0 && (
-                            <span className="absolute top-2 right-2 bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
+                            <span className="absolute top-2 right-2 bg-rose-50 border border-rose-200 text-rose-700 text-2xs font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
                               Sold out
                             </span>
                           )}
                         </div>
                         <div>
-                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
+                          <p className="text-2xs font-extrabold uppercase tracking-wider text-gray-400">
                             {product.category}
                           </p>
                           <h3 className="text-xs font-black text-gray-900 line-clamp-2 mt-0.5">
@@ -581,7 +581,7 @@ export default function AdminPos() {
                     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                   </svg>
                   <p className="text-xs font-bold text-gray-600">Register is empty</p>
-                  <p className="text-[11px] text-gray-400 mt-1">Tap items on the left to add to sale</p>
+                  <p className="text-2xs text-gray-400 mt-1">Tap items on the left to add to sale</p>
                 </div>
               ) : (
                 posCart.map((item, idx) => (
@@ -594,7 +594,7 @@ export default function AdminPos() {
                       />
                       <div className="min-w-0">
                         <h4 className="text-xs font-bold text-gray-900 truncate">{item.name}</h4>
-                        <p className="text-[10px] text-gray-400 truncate">{item.variant}</p>
+                        <p className="text-2xs text-gray-400 truncate">{item.variant}</p>
                         <p className="text-xs font-black text-gray-900 mt-0.5">
                           ₱{((Number(item?.price) || 0) * (Number(item?.qty) || 1)).toFixed(2)}
                         </p>
@@ -659,7 +659,7 @@ export default function AdminPos() {
               </div>
 
               <div className="space-y-1.5">
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Payment Method</p>
+                <p className="text-2xs font-extrabold uppercase tracking-wider text-gray-400">Payment Method</p>
                 {/* Segmented toggle: one bordered track, active segment highlighted */}
                 <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 border border-gray-200 rounded-xl">
                   <button
@@ -696,7 +696,7 @@ export default function AdminPos() {
 
               {paymentMethod === 'Cash' && posCart.length > 0 && (
                 <div className="space-y-1">
-                  <div className="flex justify-between items-center text-[11px]">
+                  <div className="flex justify-between items-center text-2xs">
                     <span className="font-bold text-gray-600">Amount Tendered</span>
                     {tenderedNum >= total && (
                       <span className="font-bold text-emerald-600">
@@ -761,7 +761,7 @@ export default function AdminPos() {
                   </div>
                   <div>
                     <p className="text-xs font-bold text-gray-900 leading-tight">POS Register</p>
-                    <p className="text-[10px] text-gray-400">In-store POS</p>
+                    <p className="text-2xs text-gray-400">In-store POS</p>
                   </div>
                 </div>
                 <button
@@ -889,10 +889,10 @@ export default function AdminPos() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4 className="text-xs font-bold text-gray-900 truncate leading-tight">{product.name}</h4>
-                          <p className="text-[10px] text-gray-400 mt-0.5">
+                          <p className="text-2xs text-gray-400 mt-0.5">
                             {product.category} • {product.preorder ? 'Pre-order' : 'Regular'}
                           </p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">
+                          <p className="text-2xs text-gray-400 mt-0.5">
                             SKU: {skuCode}{' '}
                             <span className={`font-bold ml-1 ${Number(product.totalStock) > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                               • {Number(product.totalStock) > 0 ? 'In stock' : 'Out of stock'}
@@ -907,7 +907,7 @@ export default function AdminPos() {
                               e.stopPropagation()
                               handleProductClick(product)
                             }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-300 text-gray-700 text-[11px] font-bold hover:bg-gray-50 cursor-pointer"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-300 text-gray-700 text-2xs font-bold hover:bg-gray-50 cursor-pointer"
                           >
                             + Add
                           </button>
@@ -927,7 +927,7 @@ export default function AdminPos() {
                           <img src={getImageUrl(product.image)} alt={product.name} className="w-full h-full object-contain p-1" />
                         </div>
                         <div>
-                          <p className="text-[10px] text-gray-400 font-bold uppercase">{product.category}</p>
+                          <p className="text-2xs text-gray-400 font-bold uppercase">{product.category}</p>
                           <h4 className="text-xs font-bold text-gray-900 truncate">{product.name}</h4>
                           <p className="text-xs font-black text-gray-900 mt-1">₱{(Number(product.price) || 0).toFixed(2)}</p>
                         </div>
@@ -946,12 +946,12 @@ export default function AdminPos() {
                         <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
                         <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                       </svg>
-                      <span className="absolute -top-1.5 -right-2 w-4 h-4 bg-brand-orange text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                      <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-0.5 bg-brand-orange text-white text-2xs font-black rounded-full flex items-center justify-center">
                         {cartCount}
                       </span>
                     </div>
                     <div>
-                      <p className="text-[10px] text-gray-400 font-bold">{cartCount} items</p>
+                      <p className="text-2xs text-gray-400 font-bold">{cartCount} items</p>
                       <p className="text-sm font-black text-gray-900">₱{(Number(total) || 0).toFixed(2)}</p>
                     </div>
                   </div>
@@ -985,7 +985,7 @@ export default function AdminPos() {
                   </button>
                   <div>
                     <h2 className="text-sm font-bold text-gray-900 leading-tight">Current Sale</h2>
-                    <p className="text-[10px] text-gray-400">{cartCount} items</p>
+                    <p className="text-2xs text-gray-400">{cartCount} items</p>
                   </div>
                 </div>
                 {posCart.length > 0 && (
@@ -1019,10 +1019,10 @@ export default function AdminPos() {
                             <div>
                               <h4 className="text-xs font-bold text-gray-900 leading-tight">{item.name}</h4>
                               {item.variant && (
-                                <p className="text-[10px] text-gray-400 mt-0.5">{item.variant}</p>
+                                <p className="text-2xs text-gray-400 mt-0.5">{item.variant}</p>
                               )}
                               {cartSku(products, item) && (
-                                <p className="text-[10px] text-gray-400">SKU: {cartSku(products, item)}</p>
+                                <p className="text-2xs text-gray-400">SKU: {cartSku(products, item)}</p>
                               )}
                             </div>
                             <div className="flex items-center gap-2">
@@ -1194,13 +1194,13 @@ export default function AdminPos() {
                     }`}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 mb-1 ${heldSale ? 'text-brand-orange' : 'text-gray-500'}`}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    <span className={`text-[9px] font-bold text-center leading-tight ${heldSale ? 'text-brand-orange' : 'text-gray-600'}`}>
+                    <span className={`text-2xs font-bold text-center leading-tight ${heldSale ? 'text-brand-orange' : 'text-gray-600'}`}>
                       {heldSale ? 'Resume Held' : 'Hold Transaction'}
                     </span>
                   </button>
                   <button type="button" onClick={handleOpenRecentSales} className="flex flex-col items-center justify-center p-2 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-500 mb-1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    <span className="text-[9px] font-bold text-gray-600 text-center leading-tight">Recent Sales</span>
+                    <span className="text-2xs font-bold text-gray-600 text-center leading-tight">Recent Sales</span>
                   </button>
                   <button
                     type="button"
@@ -1211,7 +1211,7 @@ export default function AdminPos() {
                     }`}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`w-4 h-4 mb-1 ${discountAmount > 0 ? 'text-rose-500' : 'text-gray-500'}`}><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                    <span className={`text-[9px] font-bold text-center leading-tight ${discountAmount > 0 ? 'text-rose-600' : 'text-gray-600'}`}>
+                    <span className={`text-2xs font-bold text-center leading-tight ${discountAmount > 0 ? 'text-rose-600' : 'text-gray-600'}`}>
                       {discountAmount > 0 ? `−₱${discountAmount.toFixed(2)}` : 'Apply Discount'}
                     </span>
                   </button>
@@ -1225,7 +1225,7 @@ export default function AdminPos() {
                     className="flex flex-col items-center justify-center p-2 rounded-xl border border-rose-100 hover:bg-rose-50 transition-colors cursor-pointer"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-rose-500 mb-1"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    <span className="text-[9px] font-bold text-rose-600 text-center leading-tight">Clear Transaction</span>
+                    <span className="text-2xs font-bold text-rose-600 text-center leading-tight">Clear Transaction</span>
                   </button>
                 </div>
               </div>
@@ -1354,7 +1354,7 @@ export default function AdminPos() {
                 </div>
               )}
               {modalVariants.length === 0 && (
-                <p className="text-[11px] text-gray-400 font-medium">
+                <p className="text-2xs text-gray-400 font-medium">
                   No variation of this product is offered right now.
                 </p>
               )}
@@ -1412,15 +1412,15 @@ export default function AdminPos() {
         >
             <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 p-3 rounded-md border border-gray-100">
               <div>
-                <p className="text-[10px] text-gray-400 font-bold uppercase">Customer</p>
+                <p className="text-2xs text-gray-400 font-bold uppercase">Customer</p>
                 <p className="font-bold text-gray-900">{customerName.trim() || 'Walk-in'}</p>
-                <p className="text-[10px] text-gray-500">ID: {studentId.trim() || 'N/A'}</p>
+                <p className="text-2xs text-gray-500">ID: {studentId.trim() || 'N/A'}</p>
               </div>
               <div>
-                <p className="text-[10px] text-gray-400 font-bold uppercase">Payment Method</p>
+                <p className="text-2xs text-gray-400 font-bold uppercase">Payment Method</p>
                 <p className="font-bold text-brand-orange">{paymentMethod}</p>
                 {paymentMethod === 'Cash' && tenderedNum > 0 && (
-                  <p className="text-[10px] text-emerald-600 font-bold">
+                  <p className="text-2xs text-emerald-600 font-bold">
                     Change: ₱{changeDue.toFixed(2)}
                   </p>
                 )}
@@ -1434,7 +1434,7 @@ export default function AdminPos() {
                   <div key={i} className="py-2 flex items-center justify-between text-xs">
                     <div className="min-w-0 pr-2">
                       <p className="font-bold text-gray-900 truncate">{item.name}</p>
-                      <p className="text-[10px] text-gray-400">{item.qty}x • {item.variant}</p>
+                      <p className="text-2xs text-gray-400">{item.qty}x • {item.variant}</p>
                     </div>
                     <p className="font-bold text-gray-900 shrink-0">₱{((item.price || 0) * item.qty).toFixed(2)}</p>
                   </div>
@@ -1455,7 +1455,7 @@ export default function AdminPos() {
             </div>
 
             {checkoutError && (
-              <p className="text-[11px] font-semibold text-rose-600">{checkoutError}</p>
+              <p className="text-2xs font-semibold text-rose-600">{checkoutError}</p>
             )}
         </Modal>
       )}
@@ -1536,13 +1536,13 @@ export default function AdminPos() {
           }
         >
           <div className="modal-scroll space-y-2">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider text-center">
+            <p className="text-2xs font-bold text-gray-400 uppercase tracking-wider text-center">
               {lastPlacedOrder.id} • {lastPlacedOrder.fulfillment}
             </p>
 
             {/* Receipt Details */}
             <div className="border-t border-b border-dashed border-gray-200 py-3 space-y-2 text-xs">
-              <div className="flex justify-between text-gray-500 text-[11px]">
+              <div className="flex justify-between text-gray-500 text-2xs">
                 <span>Customer:</span>
                 <span className="font-bold text-gray-900">
                   {lastPlacedOrder.customer}
@@ -1552,18 +1552,18 @@ export default function AdminPos() {
                   )}
                 </span>
               </div>
-              <div className="flex justify-between text-gray-500 text-[11px]">
+              <div className="flex justify-between text-gray-500 text-2xs">
                 <span>Payment:</span>
                 <span className="font-bold text-gray-900">
                   {lastPlacedOrder.paymentMethod}
                   {lastPlacedOrder.payMethod ? ` (${lastPlacedOrder.payMethod})` : ''}
                 </span>
               </div>
-              <div className="flex justify-between text-gray-500 text-[11px]">
+              <div className="flex justify-between text-gray-500 text-2xs">
                 <span>Reference:</span>
                 <span className="font-bold text-gray-900">{lastPlacedOrder.payRef || '—'}</span>
               </div>
-              <div className="flex justify-between text-gray-500 text-[11px]">
+              <div className="flex justify-between text-gray-500 text-2xs">
                 <span>Tendered:</span>
                 <span className="font-bold text-gray-900">
                   ₱{(Number(lastPlacedOrder.amountTendered) || 0).toFixed(2)}
@@ -1624,7 +1624,7 @@ export default function AdminPos() {
                 <div key={sale.ordId} className="py-2.5 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs font-black text-gray-900 truncate">{sale.id}</p>
-                    <p className="text-[10px] text-gray-400 truncate">
+                    <p className="text-2xs text-gray-400 truncate">
                       {sale.customer} • {sale.date}
                     </p>
                   </div>

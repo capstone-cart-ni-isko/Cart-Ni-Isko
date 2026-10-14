@@ -16,7 +16,8 @@ import {
   parseDate,
 } from '../../services/dashboard.js'
 
-// SRS order status vocabulary (staff dashboard / REQ-SD-02)
+// SRS order status vocabulary (staff dashboard / REQ-SD-02) - the statuses a
+// staff member may set on an order (ORDER STATE MACHINE, OrdersAPI).
 const STATUS_OPTIONS = [
   'To Process',
   'To Claim',
@@ -27,6 +28,34 @@ const STATUS_OPTIONS = [
   'Returned',
   'Refunded',
 ]
+
+/**
+ * Every display status a row can carry (mapOrderRow), so the Status filter can
+ * also surface states that are system- or customer-set and therefore never
+ * appear in STATUS_OPTIONS: the cancel/return requests (FLOW-MANAGE_PRE-05),
+ * RECEIVED and PAID. Filtering only; nothing here is written back to an order.
+ */
+const FILTER_STATUS_OPTIONS = [
+  'Processing',
+  'To Process',
+  'To Claim',
+  'To Receive',
+  'Claimed',
+  'Received',
+  'Unclaimed',
+  'Cancel Requested',
+  'Return Requested',
+  'Cancelled',
+  'Returned',
+  'Refunded',
+  'Paid',
+]
+
+// The customer orders list labels TO PROCESS as "Processing"; accept that
+// spelling so a staff filter and a customer status line agree.
+const STATUS_FILTER_ALIASES = {
+  Processing: ['To Process'],
+}
 
 // Sort select choices - backed by GET /cart/sort (sort_by: date|status|id)
 const SORT_OPTIONS = [
@@ -162,7 +191,9 @@ export default function AdminOrders() {
         filterFulfillment === 'All' ||
         order.fulfillment?.toLowerCase().includes(filterFulfillment.toLowerCase())
 
-      const matchStatus = filterStatus === 'All' || order.status === filterStatus
+      const matchStatus =
+        filterStatus === 'All' ||
+        (STATUS_FILTER_ALIASES[filterStatus] || [filterStatus]).includes(order.status)
 
       const matchItem =
         filterItem === 'All' ||
@@ -247,7 +278,7 @@ export default function AdminOrders() {
           >
             {row.id}
           </button>
-          {row.batch && <p className="text-[10px] text-gray-400 font-medium">{row.batch}</p>}
+          {row.batch && <p className="text-2xs text-gray-400 font-medium">{row.batch}</p>}
         </div>
       ),
     },
@@ -333,7 +364,7 @@ export default function AdminOrders() {
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Orders</h1>
+            <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">Orders</h1>
             <p className="text-xs font-normal text-slate-500 mt-0.5">
               Manage and track all online and in-store sales.
             </p>
@@ -343,7 +374,7 @@ export default function AdminOrders() {
             <button
               type="button"
               onClick={handleExportCSV}
-              className="h-8 px-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-md border border-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="btn btn--secondary"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -357,7 +388,7 @@ export default function AdminOrders() {
               <button
                 type="button"
                 onClick={() => setShowBulkModal(true)}
-                className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="btn btn--primary"
               >
                 <span>Bulk update ({selectedOrderIds.length})</span>
               </button>
@@ -471,7 +502,7 @@ export default function AdminOrders() {
               className="h-8 px-2.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none"
             >
               <option value="All">Status: All</option>
-              {STATUS_OPTIONS.map((status) => (
+              {FILTER_STATUS_OPTIONS.map((status) => (
                 <option key={status} value={status}>
                   {status}
                 </option>
@@ -556,13 +587,13 @@ export default function AdminOrders() {
 
           {activeChips.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
+              <span className="text-2xs font-medium text-slate-400 uppercase tracking-wider">
                 Applied:
               </span>
               {activeChips.map((chip) => (
                 <span
                   key={chip.key}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 text-[11px] font-medium border border-slate-200"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 text-2xs font-medium border border-slate-200"
                 >
                   <span className="max-w-[160px] truncate">{chip.label}</span>
                   <button
@@ -586,6 +617,12 @@ export default function AdminOrders() {
           selectedIds={selectedOrderIds}
           onSelectionChange={setSelectedOrderIds}
           defaultPageSize={10}
+          emptyTitle={orders.length === 0 ? 'No orders yet' : 'No orders match your filters'}
+          emptyHint={
+            orders.length === 0
+              ? 'Orders appear here once customers check out or a walk-in sale is rung up.'
+              : 'Try clearing the search box or the applied filters above.'
+          }
         />
       </div>
 
@@ -599,14 +636,14 @@ export default function AdminOrders() {
         {activeOrderDetail && (
           <div className="space-y-6 text-xs">
             <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-              <p className="font-semibold text-gray-600 uppercase text-[10px] tracking-wider">
+              <p className="font-semibold text-gray-600 uppercase text-2xs tracking-wider">
                 Update order status
               </p>
               <select
                 value={activeOrderDetail.status}
                 disabled={actionBusy}
                 onChange={(e) => applyStatus(activeOrderDetail, e.target.value)}
-                className="w-full p-2 bg-white border border-gray-200 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange disabled:opacity-60"
+                className="field-input w-full"
               >
                 {!STATUS_OPTIONS.includes(activeOrderDetail.status) && (
                   <option value={activeOrderDetail.status}>{activeOrderDetail.status}</option>
@@ -631,7 +668,7 @@ export default function AdminOrders() {
                           : 'Returned'
                       )
                     }
-                    className="flex-1 h-8 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60"
+                    className="btn btn--primary flex-1"
                   >
                     Approve {activeOrderDetail.rawStatus === 'CANCEL REQUESTED' ? 'cancel' : 'return'}
                   </button>
@@ -646,14 +683,14 @@ export default function AdminOrders() {
                           : 'Claimed'
                       )
                     }
-                    className="flex-1 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-60"
+                    className="btn btn--secondary flex-1"
                   >
                     Reject request
                   </button>
                 </div>
               )}
 
-              <p className="text-[10px] text-gray-400 pt-1">
+              <p className="text-2xs text-gray-400 pt-1">
                 Status changes are saved on the server and the list re-syncs automatically.
               </p>
             </div>
@@ -677,7 +714,7 @@ export default function AdminOrders() {
                     <span className="font-semibold text-gray-700">Fulfillment method</span>
                     {activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
                     activeOrderDetail.fulfillment?.toLowerCase().includes('delivery') ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-medium">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-2xs font-medium">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5">
                           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -685,7 +722,7 @@ export default function AdminOrders() {
                         <span>Delivery locked</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-medium">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-2xs font-medium">
                         Store pickup
                       </span>
                     )}
@@ -693,7 +730,7 @@ export default function AdminOrders() {
                   <p className="text-gray-600 font-medium">{activeOrderDetail.fulfillment}</p>
                   {(activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
                     activeOrderDetail.fulfillment?.toLowerCase().includes('delivery')) && (
-                    <div className="text-[11px] text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 mt-1 space-y-0.5">
+                    <div className="text-2xs text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 mt-1 space-y-0.5">
                       <p className="font-semibold">Method locked</p>
                       <p className="text-amber-800">
                         Delivery fee paid or courier dispatch confirmed. The fulfillment method can no
@@ -712,7 +749,7 @@ export default function AdminOrders() {
                   <div key={idx} className="p-3 bg-white flex items-center justify-between">
                     <div>
                       <p className="font-semibold text-gray-900">{item.name}</p>
-                      <p className="text-gray-400 text-[10px]">
+                      <p className="text-gray-400 text-2xs">
                         Qty: {item.qty} {item.category ? `• ${item.category}` : ''}
                       </p>
                     </div>

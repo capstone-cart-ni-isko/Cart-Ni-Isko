@@ -65,7 +65,7 @@ export default function ScheduleShiftList({
             <p className="text-xs font-bold text-slate-900 truncate">
               {shift.employee_name || `Employee #${shift.emp_id}`}
             </p>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-2xs text-slate-500">
               {fmtTime(shift.shift_start)} – {fmtTime(shift.shift_end)}
               {' · block #'}
               {shift.shift_id}
@@ -81,7 +81,7 @@ export default function ScheduleShiftList({
                 type="button"
                 onClick={() => onEdit(shift)}
                 disabled={busyId === shift.shift_id}
-                className="h-7 px-2.5 rounded-md text-[11px] font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50 cursor-pointer"
+                className="h-7 px-2.5 rounded-md text-2xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 Edit
               </button>
@@ -92,7 +92,7 @@ export default function ScheduleShiftList({
                 type="button"
                 onClick={() => onCancel(shift)}
                 disabled={busyId === shift.shift_id}
-                className="h-7 px-2.5 rounded-md text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
+                className="h-7 px-2.5 rounded-md text-2xs font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {busyId === shift.shift_id ? 'Working…' : 'Cancel'}
               </button>

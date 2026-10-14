@@ -99,7 +99,7 @@ export default function ScheduleMonthGrid({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div>
           <h2 className="text-sm font-bold text-slate-900">Monthly Staffing Overview</h2>
-          <p className="text-[11px] text-slate-400 font-normal mt-0.5">
+          <p className="text-2xs text-slate-400 font-normal mt-0.5">
             {monthLabel} · in-store headcount per day and the {MIN_WEEKLY_MINUTES}-minute
             weekly minimum
           </p>
@@ -124,7 +124,7 @@ export default function ScheduleMonthGrid({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-7 gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
+          <div className="grid grid-cols-7 gap-1.5 text-2xs font-bold uppercase tracking-wider text-slate-400 select-none">
             {DAY_LABELS.map((label) => (
               <span key={label} className="text-center">
                 {label}
@@ -168,14 +168,14 @@ export default function ScheduleMonthGrid({
                   } hover:border-brand-orange`}
                 >
                   <span className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-700">{day.getDate()}</span>
+                    <span className="text-2xs font-bold text-slate-700">{day.getDate()}</span>
                     {headcount > 0 && (
-                      <span className="text-[9px] font-bold text-slate-500">{headcount} in</span>
+                      <span className="text-2xs font-bold text-slate-500">{headcount} in</span>
                     )}
                   </span>
 
                   {locked && (
-                    <span className="block text-[9px] font-semibold text-rose-500 mt-0.5">locked</span>
+                    <span className="block text-2xs font-semibold text-rose-500 mt-0.5">locked</span>
                   )}
 
                   <span className="mt-1 flex flex-wrap gap-0.5">
@@ -187,7 +187,7 @@ export default function ScheduleMonthGrid({
                       />
                     ))}
                     {offDuty > 0 && (
-                      <span className="text-[9px] font-bold text-slate-400">
+                      <span className="text-2xs font-bold text-slate-400">
                         +{offDuty} off
                       </span>
                     )}
@@ -197,7 +197,7 @@ export default function ScheduleMonthGrid({
             })}
           </div>
 
-          <p className="text-[11px] text-slate-400">
+          <p className="text-2xs text-slate-400">
             {scheduledMinutes} scheduled minutes across the month ·{' '}
             {[...weekTotals.entries()]
               .sort(([a], [b]) => a.localeCompare(b))

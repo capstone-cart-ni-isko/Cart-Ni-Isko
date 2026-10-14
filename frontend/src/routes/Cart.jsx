@@ -8,6 +8,7 @@ import PageHeader from '../components/ui/PageHeader.jsx'
 import QuantityStepper from '../components/ui/QuantityStepper.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import Button from '../components/ui/Button.jsx'
+import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
 import { CartIcon, ShirtIcon, AlertTriangleIcon, TruckIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
@@ -33,6 +34,7 @@ function Cart() {
   const { showToast } = useToast()
 
   const [showLogin, setShowLogin] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
 
   // FLOW-BAG-06: the total amount due always comes from the server subtotal
   // (sum of every live line); the local sum is the offline fallback.
@@ -69,10 +71,10 @@ function Cart() {
   // FLOW-BAG-07: one visible action empties the whole bag, after confirming.
   const handleClearBag = () => {
     if (cartItems.length === 0) return
-    const ok = window.confirm(
-      'Clear your entire bag? Every item will be removed and this cannot be undone.'
-    )
-    if (!ok) return
+    setShowClearConfirm(true)
+  }
+
+  const confirmClearBag = () => {
     clearCart()
     showToast('Your bag has been cleared.', 'info')
   }
@@ -568,6 +570,19 @@ function Cart() {
         isOpen={showLogin}
         onClose={() => setShowLogin(false)}
         message="Sign in to proceed with checkout and reserve your BU merchandise."
+      />
+
+      {/* FLOW-BAG-07: clearing the whole bag is destructive, so it is
+          confirmed through the shared dialog instead of window.confirm. */}
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={confirmClearBag}
+        title="Clear entire bag?"
+        message="Clear your entire bag? Every item will be removed and this cannot be undone."
+        confirmText="Clear bag"
+        cancelText="Keep items"
+        isDestructive
       />
 
     </AppShell>

@@ -30,12 +30,12 @@ function RibbonIcon({ label, onClick, active, badge, children }) {
       >
         {children}
         {badge > 0 && (
-          <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
+          <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-2xs font-black min-w-4 h-4 px-0.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
             {badge > 99 ? '99+' : badge}
           </span>
         )}
       </button>
-      <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
+      <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-2xs font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
         {label}
       </span>
     </div>
@@ -46,7 +46,7 @@ function RibbonIcon({ label, onClick, active, badge, children }) {
  * DOMAIN 3 / DOMAIN 31 - the navigation ribbon:
  *   left  = "Tindahan ni Isko" logo (FLOW-EMP_HOME-02)
  *   center = search bar, centermost (FLOW-EMP_HOME-03)
- *   right = home · QR · notifications · dark mode · profile, in that order
+ *   right = home · QR · notifications · dark mode · settings, in that order
  *           (FLOW-EMP_HOME-04, exactly five icons)
  *
  * The dark-mode icon flips to a light-mode icon while dark mode is on
@@ -168,8 +168,11 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
         </Link>
 
         {/* CENTER — search bar (FLOW-EMP_HOME-03). min-w-0 lets it shrink on
-            narrow viewports instead of pushing the five ribbon icons out. */}
-        <form onSubmit={submitSearch} className="flex-1 max-w-lg mx-auto relative min-w-0">
+            narrow viewports instead of pushing the five ribbon icons out.
+            Below `sm` the ribbon cannot hold a search field at all (it was
+            squeezed to a ~30px sliver at 375px), so the search moves into the
+            mobile menu panel instead - same query, same destination. */}
+        <form onSubmit={submitSearch} className="hidden sm:block flex-1 max-w-lg mx-auto relative min-w-0">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -257,16 +260,17 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
             )}
           </RibbonIcon>
 
-          {/* 5 — profile (FLOW-EMP_PROF-01 / FLOW-EMP_SET-01): opens the
-              focused settings page, which lands on its "Profile" tab. */}
+          {/* 5 — settings (rules 72-75 + FLOW-EMP_HOME-04: home · QR ·
+              notifications · dark mode · settings, left to right). It opens the
+              employee settings page, which lands on its "Profile" tab. */}
           <RibbonIcon
-            label="Profile"
+            label="Settings"
             onClick={() => navigate('/admin/settings')}
             active={location.pathname.startsWith('/admin/settings')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
           </RibbonIcon>
         </div>

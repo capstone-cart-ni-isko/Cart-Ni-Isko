@@ -351,8 +351,10 @@ function Orders() {
       </div>
       <PageHeader title="My Orders" backTo="/profile" />
 
-      {/* Tabs Filter Bar (Sticky) */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-2xs">
+      {/* Tabs Filter Bar (Sticky) — on mobile it docks below the sticky
+          PageHeader (~3.5rem) instead of overlapping it; on desktop the
+          header is hidden so the bar docks at the very top. */}
+      <div className="bg-white border-b border-gray-100 sticky top-14 md:top-0 z-20 shadow-2xs">
         <div className="max-w-3xl mx-auto flex gap-2 overflow-x-auto px-4 py-3 scrollbar-none select-none">
           {tabs.map((tab) => (
             <button
