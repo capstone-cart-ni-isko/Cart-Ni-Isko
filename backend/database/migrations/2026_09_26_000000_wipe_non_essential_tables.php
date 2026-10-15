@@ -20,6 +20,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Disabled: this one-time cleanup truncated every business table
+        // (products, orders, inventory...). The live database was never
+        // recorded as having run it, so any `migrate` would wipe production
+        // data. Kept as a no-op so the migration history stays intact.
+        return;
+
         if (! Schema::hasTable('customer')) return;
 
         // This migration is for PostgreSQL only; SQLite-based tests

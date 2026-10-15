@@ -47,26 +47,4 @@ EXPOSE 10000
 # DB_PERSISTENT each `php -S` worker then holds a keep-alive handle to the
 # Tokyo pooler, so the ~0.8 s TLS handshake is paid once at boot instead of on
 # the first real user request.
-CMD sh -c '
-  set -e
-  php artisan config:clear
-  php artisan migrate --force
-  php artisan db:seed --force
-  php artisan config:cache
-  php artisan route:cache
-  php artisan event:cache
-
-  php artisan serve --host=0.0.0.0 --port=${PORT:-10000} &
-  server=$!
-  # REQ-AN-03 watchdog: without a running scheduler the heartbeat file is
-  # never written and GET /api/health/scheduler answers 503 forever, even
-  # though the app itself is healthy.
-  php artisan schedule:work >/dev/null 2>&1 &
-  sleep 2
-  i=0
-  while [ $i -lt "${PHP_CLI_SERVER_WORKERS:-8}" ]; do
-    curl -s -o /dev/null "http://127.0.0.1:${PORT:-10000}/api/products/filter" &
-    i=$((i + 1))
-  done
-  wait $server
-'
+CMD ["sh", "/app/docker-start.sh"]
