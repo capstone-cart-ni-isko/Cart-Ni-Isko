@@ -1,2 +1,8 @@
-*
+/*
 !.gitignore
+# Catalog images referenced by prodvar.prodvar_pic. Shipped with the repo so
+# the Docker image (Render has no persistent disk) can serve them.
+!/uploads/
+/uploads/*
+!/uploads/product/
+!/uploads/product/*

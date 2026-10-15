@@ -14,6 +14,10 @@ if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
   php artisan db:seed --force
 fi
 
+# Serve storage/app/public (catalog images) at /storage. The link is not in
+# git, so without this every /storage/uploads/... image answers 404.
+php artisan storage:link --force || true
+
 php artisan config:cache
 php artisan route:cache
 php artisan event:cache
