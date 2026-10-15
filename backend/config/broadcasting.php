@@ -54,9 +54,12 @@ return [
 
         'reverb' => [
             'driver' => 'reverb',
-            'key' => env('REVERB_APP_KEY'),
-            'secret' => env('REVERB_APP_SECRET'),
-            'app_id' => env('REVERB_APP_ID'),
+            // Same fallbacks as config/reverb.php: channels are registered at
+            // boot, so a null key here breaks `composer install` and startup
+            // wherever REVERB_* is not set (the Docker build, Render).
+            'key' => env('REVERB_APP_KEY', 'cartniisko-key'),
+            'secret' => env('REVERB_APP_SECRET', 'cartniisko-secret'),
+            'app_id' => env('REVERB_APP_ID', 'cartniisko'),
             'options' => [
                 'host' => env('REVERB_HOST', '127.0.0.1'),
                 'port' => env('REVERB_PORT', 8080),
