@@ -51,7 +51,7 @@ services:
       # PWA and web build is refused by CORS, however healthy the API is.
       # The Vercel preview domain belongs on the same list when it is known.
       - key: CORS_ALLOWED_ORIGINS
-        value: https://cartniisko.com,https://www.cartniisko.com
+        value: https://cartniisko.com,https://www.cartniisko.com,https://cart-ni-isko.vercel.app
       # REQ-CHECKOUT-03: absolute origin of the SPA - where PayMongo sends
       # the browser back after the hosted checkout. Frontend, not API.
       - key: FRONTEND_URL
