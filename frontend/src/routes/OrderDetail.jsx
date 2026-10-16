@@ -22,7 +22,7 @@ import { fetchOrder,
   requestCancel,
 } from '../services/orders.js'
 import { getTrack, scanQr } from '../services/tracking.js'
-import { parseDate } from '../services/dashboard.js'
+import { parseDate, paymentSummary } from '../services/dashboard.js'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
@@ -286,6 +286,9 @@ function OrderDetail() {
     : 0
   const total = Number(order.raw?.ord_amount ?? subtotal + deliveryFee)
   const statusContext = STATUS_CONTEXT[order.status] || order.statusContext
+  // DOMAIN 26: what the payment produced - the method chosen at checkout, what
+  // was due, what the customer tendered and the change returned.
+  const pay = paymentSummary(order.raw || {})
   const appointment = {
     start: formatStamp(order.raw?.appoint_start),
     end: formatStamp(order.raw?.appoint_end),
@@ -673,6 +676,44 @@ function OrderDetail() {
               <span className="font-black text-brand-orange text-base">
                 {formatPrice(total)}
               </span>
+            </div>
+          </div>
+
+          {/* DOMAIN 26: the payment that settled this order - the method the
+              customer picked, what was due, what was tendered and the change,
+              exactly as the backend recorded it. */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+              Payment
+            </h3>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-gray-500">Payment method</span>
+                <span className="font-semibold text-gray-800">{pay.method}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-gray-500">Amount due</span>
+                <span className="font-semibold text-gray-800">{formatPrice(pay.due)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-gray-500">Amount received</span>
+                <span className="font-semibold text-gray-800">
+                  {pay.given != null ? formatPrice(pay.given) : 'Not paid yet'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-gray-500">Change</span>
+                <span className="font-semibold text-gray-800">
+                  {pay.change != null ? formatPrice(pay.change) : '—'}
+                </span>
+              </div>
+              <div className="h-px bg-slate-200 my-1" />
+              <div className="flex items-start justify-between gap-3 text-xs">
+                <span className="text-gray-500 shrink-0">Payment reference</span>
+                <span className="font-mono text-[11px] text-gray-600 break-all text-right">
+                  {pay.ref || '—'}
+                </span>
+              </div>
             </div>
           </div>
 

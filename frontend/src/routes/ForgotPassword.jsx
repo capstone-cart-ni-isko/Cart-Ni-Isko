@@ -5,7 +5,7 @@ import Button from '../components/ui/Button.jsx'
 import OtpInput from '../components/ui/OtpInput.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import { recoverCredentials, updateCredentials } from '../services/auth.js'
-import { verifyOtp } from '../services/otp.js'
+import { verifyOtp, fetchAutoFilledCode } from '../services/otp.js'
 
 function ForgotPassword() {
   const navigate = useNavigate()
@@ -51,6 +51,13 @@ function ForgotPassword() {
     if (error) {
       showToast(error, 'error')
       return
+    }
+
+    // AUTO-FILL: the code that was just sent is placed in the input on its
+    // own, so the user does not have to type it.
+    const filled = await fetchAutoFilledCode()
+    if (!filled.error && filled.data?.code) {
+      setOtp(filled.data.code)
     }
     setStep(1)
     setTimer(59)

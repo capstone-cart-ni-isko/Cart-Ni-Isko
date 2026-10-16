@@ -584,6 +584,38 @@ abstract class Controller
         }
     }
 
+    // AUTO-FILL: loads the code that was just sent, so the user need not type it.
+    protected function currentOtpCode(object $user): ?string
+    {
+        if (! config('otp.autofill', true)) {
+            return null;
+        }
+
+        $subjectId = $this->otpSubjectId($user);
+        $createdAt = $user instanceof Employee
+            ? 'empnotif_created'
+            : 'custnotif_created';
+
+        $notifications = ($user instanceof Employee
+            ? EmpNotif::where('emp_id', $subjectId)
+            : CustNotif::where('cust_id', $subjectId))
+            ->where($createdAt, '>=', now()->subMinutes(self::otpTtlMinutes))
+            ->orderByDesc($createdAt)
+            ->get();
+
+        foreach ($notifications as $notification) {
+            $message = $user instanceof Employee
+                ? (string) $notification->empnotif_msg
+                : (string) $notification->custnotif_msg;
+
+            if (preg_match('/\bYour verification code is (\d{6})\b/', $message, $matches) === 1) {
+                return $matches[1];
+            }
+        }
+
+        return null;
+    }
+
     protected function settingValue(string $key, $default = null)
     {
         return SystemSettings::get($key, $default);

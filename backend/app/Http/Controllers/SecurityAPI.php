@@ -508,6 +508,49 @@ class SecurityAPI extends Controller
         ], 200);
     }
 
+    // AUTO-FILL: loads the code that was just sent, so the user need not type it.
+    public function autoFillOtp(Request $json)
+    {
+        try {
+            return $this->performAutoFillOtp($json);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->fail('Could not load the verification code. Please try again.', 500);
+        }
+    }
+
+    private function performAutoFillOtp(Request $json)
+    {
+        $user = $json->user('api');
+
+        if (! $user instanceof Customer && ! $user instanceof Employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Phone OTP verification is only available to customer and employee accounts.',
+            ], 403);
+        }
+
+        $code = $this->currentOtpCode($user);
+
+        if ($user instanceof Employee) {
+            $this->logEmployee((int) $user->emp_id, 'view', 'POST /api/otp/auto_fill');
+        } else {
+            $this->logCustomer((int) $user->cust_id, 'view', 'POST /api/otp/auto_fill');
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $code === null
+                ? 'No verification code is waiting to be filled.'
+                : 'The verification code has been loaded.',
+            'data'    => [
+                'code'        => $code,
+                'expires_in'  => self::otpTtlMinutes * 60,
+            ],
+        ], 200);
+    }
+
     public function startChallenge(Request $json)
     {
         try {

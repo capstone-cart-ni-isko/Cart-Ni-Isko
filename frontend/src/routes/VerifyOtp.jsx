@@ -46,6 +46,14 @@ function VerifyOtp() {
     }
     setInboxError('')
     setInboxCode(data?.code || '')
+
+    // AUTO-FILL: the delivered code is placed in the input on its own, so
+    // the customer does not have to type the six digits. The delivered code
+    // stays visible above for comparison, and manual entry is always
+    // possible if this ever does not apply.
+    if (data?.code) {
+      setOtp((current) => (current === '' ? data.code : current))
+    }
   }, [challenge, purpose])
 
   useEffect(() => {

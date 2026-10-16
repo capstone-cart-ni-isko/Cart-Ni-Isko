@@ -32,6 +32,25 @@ export async function verifyOtp(purpose, code) {
 }
 
 /**
+ * POST /otp/auto_fill - the code that was just delivered, so the screen can
+ * pre-fill the OTP input instead of asking the user to type it.
+ *
+ * This is the "auto-fill OTP" feature and it is strictly an aid: the manual
+ * entry stays available whenever this call has nothing to offer, which is
+ * also how it behaves once real email and phone number delivery is connected.
+ * The call never writes anything, and a failure simply leaves the field for
+ * the user to fill by hand.
+ */
+export async function fetchAutoFilledCode() {
+  try {
+    const data = await apiPost('/otp/auto_fill', {})
+    return { data: data.data || {}, error: null }
+  } catch (err) {
+    return { data: null, error: err.message || 'Unable to load the verification code' }
+  }
+}
+
+/**
  * DOMAIN 17 / DOMAIN 18 - the pre-session challenge.
  *
  * A signup (FLOW-CUST_SIGNUP-05) and a stale login (FLOW-CUST_LOGIN-02) are

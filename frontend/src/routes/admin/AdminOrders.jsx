@@ -743,6 +743,46 @@ export default function AdminOrders() {
             </div>
 
             <div className="space-y-2">
+              <h4 className="font-bold text-gray-900 text-sm">Payment</h4>
+              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-gray-700">Payment method</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {activeOrderDetail.paymentMethod}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-gray-700">Amount due</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    ₱{(Number(activeOrderDetail.payDue) || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-gray-700">Amount received</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {activeOrderDetail.payGiven != null
+                      ? `₱${Number(activeOrderDetail.payGiven).toFixed(2)}`
+                      : 'Not paid yet'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-gray-700">Change</span>
+                  <span className="text-sm font-semibold text-gray-800">
+                    {activeOrderDetail.payChange != null
+                      ? `₱${Number(activeOrderDetail.payChange).toFixed(2)}`
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex items-start justify-between gap-2 pt-1 border-t border-gray-200/60">
+                  <span className="font-semibold text-gray-700 shrink-0">Payment reference</span>
+                  <span className="font-mono text-[11px] text-gray-500 break-all text-right">
+                    {activeOrderDetail.payRef || '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <h4 className="font-bold text-gray-900 text-sm">Ordered items</h4>
               <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
                 {(activeOrderDetail.items || []).map((item, idx) => (

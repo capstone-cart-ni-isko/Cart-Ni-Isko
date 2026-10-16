@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Button from './Button.jsx'
 import Modal from './Modal.jsx'
 import OtpInput from './OtpInput.jsx'
-import { issueOtp, verifyOtp } from '../../services/otp.js'
+import { issueOtp, verifyOtp, fetchAutoFilledCode } from '../../services/otp.js'
 
 /**
  * DOMAIN 29 / REQ-CUST_SET-02 - the phone OTP every sensitive settings
@@ -12,6 +12,12 @@ import { issueOtp, verifyOtp } from '../../services/otp.js'
  * inbox for a customer, the Bicol University mailbox for an employee); it is
  * never echoed back into the UI, so the customer must read it where it was
  * sent.
+ *
+ * The AUTO-FILL feature (both portals) additionally loads the just-delivered
+ * code and places it in the input on its own, so the user does not have to
+ * type the six digits. Manual entry always stays available, and the call is
+ * best effort: it simply has nothing to offer once real email and phone
+ * delivery is connected.
  *
  * Props
  *   isOpen     - renders the sheet when true
@@ -47,6 +53,15 @@ function OtpVerifyModal({ isOpen, purpose, title, onClose, onVerified }) {
     setPhone(data.email || data.phone || '')
     setCooldown(RESEND_COOLDOWN)
     setCode('')
+
+    // AUTO-FILL: the delivered code is placed in the input on its own, so
+    // the user does not have to type it. When there is nothing to fill (for
+    // example once real email and phone delivery is connected), the manual
+    // entry the user types stays exactly as before.
+    const filled = await fetchAutoFilledCode()
+    if (!filled.error && filled.data?.code) {
+      setCode((current) => (current === '' ? filled.data.code : current))
+    }
   }, [purpose])
 
   // First open: request a code straight away.

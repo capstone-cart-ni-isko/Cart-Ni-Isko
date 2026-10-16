@@ -120,6 +120,42 @@ function isTruthy(value) {
 }
 
 /**
+ * DOMAIN 26 payment display. The backend derives the payment method from the
+ * order's pay reference: `cash` / `digital` for a walk-in order, and nothing
+ * at all once the order travels through the online gateway (rule 55 - every
+ * preorder is paid online). This side speaks the register's own vocabulary,
+ * so both are mapped onto what the screens show.
+ */
+export function paymentMethodLabel(raw) {
+  const value = String(raw ?? '').trim().toLowerCase()
+  if (value === 'digital') return 'Digital Wallet'
+  if (value === 'cash') return 'Cash'
+  return 'Online Payment'
+}
+
+/**
+ * Read the payment fields the backend already computes for every order row
+ * (never a write - pure, like the rest of the row mapping). `pay_due` falls
+ * back to the order total, `pay_given` is null until something was received,
+ * and `pay_change` is derived from the tender when the server did not send it.
+ */
+export function paymentSummary(row) {
+  const given = row?.pay_given != null ? Number(row.pay_given) : null
+  const due = row?.pay_due != null ? Number(row.pay_due) : Number(row?.ord_amount ?? 0)
+  let change = row?.pay_change
+  if (change == null && given != null) {
+    change = Math.max(0, Math.round((given - due) * 100) / 100)
+  }
+  return {
+    method: paymentMethodLabel(row?.pay_method),
+    due,
+    given,
+    change: change == null ? null : Number(change),
+    ref: row?.pay_ref ?? row?.pay_reference ?? null,
+  }
+}
+
+/**
  * Map a backend `Order::with(['items.product','customer','pickup','parcel.delivery'])` row into the shape
  * every admin orders/fulfillment/dashboard table renders.
  */
@@ -163,6 +199,7 @@ export function mapOrderRow(row) {
   // status guess only covers rows fetched before those relations existed.
   const mode = dispatchModeOf(row)
   const delivery = row.parcel?.delivery || null
+  const pay = paymentSummary(row)
   const fulfillment = isPos
     ? 'Instant POS'
     : mode === 'delivery' || (!mode && rawStatus === 'TO RECEIVE')
@@ -197,7 +234,14 @@ export function mapOrderRow(row) {
     deliverAddress: delivery?.deliver_address || '',
     deliverDate: delivery?.deliver_date || null,
     deliverQr: delivery?.deliver_qr || null,
-    paymentMethod: 'Cash',
+    // DOMAIN 26: how the order was paid (cash / digital / online) together
+    // with the amounts the payment produced - what was due, tendered and the
+    // change, exactly as the backend computed them.
+    paymentMethod: pay.method,
+    payDue: pay.due,
+    payGiven: pay.given,
+    payChange: pay.change,
+    payRef: pay.ref,
     createdAt: row.ord_created || null,
     completedAt: row.ord_completed || null,
     date: formatDateLabel(row.ord_created),

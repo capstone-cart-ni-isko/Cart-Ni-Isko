@@ -76,6 +76,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/otp/issue', [SecurityAPI::class, 'issue']);
     Route::post('/otp/verify', [SecurityAPI::class, 'verify']);
 
+    // AUTO-FILL: loads the code that was just sent, so the user need not type it.
+    Route::post('/otp/auto_fill', [SecurityAPI::class, 'autoFillOtp']);
+
     // Cart API Routes (DOMAIN 25: customer bag lives in the `bag` table)
     Route::post('/cart/add', [UserAPI::class, 'addOrder']);
     Route::match(['get', 'post'], '/cart/display', [UserAPI::class, 'displayOrders']);
