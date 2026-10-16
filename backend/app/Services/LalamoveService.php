@@ -248,19 +248,24 @@ class LalamoveService
         $this->assertConfigured();
 
         $json       = $body === null ? '' : json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $url        = $this->baseUrl() . $path;
+        // Lalamove signs the full API path (e.g. /v3/quotations), not just /quotations
+        $signPath   = parse_url($url, PHP_URL_PATH);
         $timestamp  = (string) (int) (microtime(true) * 1000);
-        $raw        = $timestamp . "\r\n" . strtoupper($method) . "\r\n" . $path . "\r\n\r\n" . $json;
+        $raw        = $timestamp . "\r\n" . strtoupper($method) . "\r\n" . $signPath . "\r\n\r\n" . $json;
         $signature  = hash_hmac('sha256', $raw, (string) $this->apiSecret);
 
-        $url = $this->baseUrl() . $path;
-
         try {
-            $response = Http::withHeaders([
+            $pending = Http::withHeaders([
                 'Authorization' => 'hmac ' . $this->apiKey . ':' . $timestamp . ':' . $signature,
                 'Market'        => $this->market,
                 'Request-ID'    => (string) \Illuminate\Support\Str::uuid(),
-                'Content-Type'  => 'application/json',
-            ])->timeout(20)->$method($url, $body === null ? [] : $body);
+            ])->timeout(20);
+
+            // Send the exact JSON string that was signed to avoid body-mismatch auth failures
+            $response = $body !== null
+                ? $pending->withBody($json, 'application/json')->$method($url)
+                : $pending->$method($url);
         } catch (\Throwable $e) {
             Log::warning('LalaMove request failed', ['method' => $method, 'path' => $path, 'error' => $e->getMessage()]);
             throw new LalamoveUnavailableException('The courier service could not be reached.');
