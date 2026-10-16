@@ -495,6 +495,7 @@ class UserAPI extends Controller
         $product = $prodvar ? $prodvar->product : null;
         $present = $product ? ProductsAPI::present($product) : null;
         $pic     = $prodvar ? $prodvar->prodvar_pic : null;
+        $picUrl  = filled($pic) ? ProductsAPI::publicPicture($pic) : null;
         $unit    = $product
             ? round((float) $product->prod_price + (float) ($prodvar->prodvar_markup ?? 0), 2)
             : round((float) $bag->bag_amount, 2);
@@ -525,12 +526,12 @@ class UserAPI extends Controller
             'prod_tag'      => $product ? $product->prod_tag : null,
             'prod_name'     => $product ? $product->prod_name : null,
             'prodvar_name'  => $prodvar ? $prodvar->prodvar_name : null,
-            'prodvar_pic'   => $pic,
+            'prodvar_pic'   => $picUrl,
             'prodvar_stock' => (int) ($prodvar ? $prodvar->prodvar_stock : 0),
             'unit_price'    => $unit,
             'size'          => $prodvar ? $prodvar->prodvar_name : null,
-            'color'         => filled($pic) && $prodvar
-                ? ['name' => $prodvar->prodvar_name, 'image' => $pic, 'gallery' => [$pic]]
+            'color'         => filled($picUrl) && $prodvar
+                ? ['name' => $prodvar->prodvar_name, 'image' => $picUrl, 'gallery' => [$picUrl]]
                 : null,
             'product'       => $present,
             'available'     => $present ? (bool) $present['available'] : false,

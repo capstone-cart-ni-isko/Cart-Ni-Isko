@@ -151,10 +151,28 @@ class OrdersAPI extends Controller
         }
 
         $priorKey  = $this->trackingNormalizeStatus($priorStatus) ?? strtolower(trim($priorStatus));
-        $targetKey = $this->trackingNormalizeStatus($status);
-        $allowed   = $this->transitions()[$priorKey] ?? [];
+        $targetKey = $this->employeeStatusKey($status);
 
-        if ($targetKey === null || ! in_array($targetKey, $allowed, true)) {
+        if (in_array($targetKey, $this->scanOnlyStatuses(), true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Claimed, Received and Unclaimed come from the system only - a verified QR scan '
+                    . 'or the pickup-window sweep - and cannot be set by hand.',
+                'code'    => 'SYSTEM_STATUS',
+            ], 422);
+        }
+
+        if ($targetKey === null || ! in_array($targetKey, $this->employeeStatusChoices($order), true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An employee may only set ' . $this->employeeChoiceLabels($order) . ' on this order.',
+                'code'    => 'STATUS_NOT_SELECTABLE',
+            ], 422);
+        }
+
+        $allowed = $this->transitions()[$priorKey] ?? [];
+
+        if (! in_array($targetKey, $allowed, true)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Cannot move order from "'
@@ -482,7 +500,14 @@ class OrdersAPI extends Controller
             $totalDue    = round($subtotal + $dispatchFee, 2);
 
             if ($dispatchType === 'pickup') {
-                $slotStart = $this->slotStartFrom($json) ?? $this->defaultSlotStart();
+                $slotStart = $this->slotStartFrom($json);
+                if ($slotStart === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please book an in-store pickup time slot before continuing.',
+                        'code'    => 'PICKUP_SLOT_REQUIRED',
+                    ], 422);
+                }
                 $slotEnd   = $slotStart->copy()->addMinutes($this->slotMinutes());
                 $appointId = (int) $json->input('appoint_id', 0);
 
@@ -1591,7 +1616,10 @@ class OrdersAPI extends Controller
 
     protected function bookingAppointment(Request $json, int $custId): Visit
     {
-        $slotStart = $this->slotStartFrom($json) ?? $this->defaultSlotStart();
+        $slotStart = $this->slotStartFrom($json);
+        if ($slotStart === null) {
+            throw new \RuntimeException('A valid appointment time slot is required.');
+        }
         $slotEnd   = $slotStart->copy()->addMinutes($this->slotMinutes());
 
         if ($slotStart->isPast()) {
@@ -3080,6 +3108,23 @@ class OrdersAPI extends Controller
                 ], 200);
             }
 
+            if (in_array($status, $this->scanOnlyStatuses(), true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Claimed, Received and Unclaimed come from the system only - a verified QR scan '
+                        . 'or the pickup-window sweep - and cannot be set by hand.',
+                    'code'    => 'SYSTEM_STATUS',
+                ], 422);
+            }
+
+            if (! in_array($status, $this->employeeStatusChoices($order), true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An employee may only set ' . $this->employeeChoiceLabels($order) . ' on this order.',
+                    'code'    => 'STATUS_NOT_SELECTABLE',
+                ], 422);
+            }
+
             $allowed = $this->transitions();
             if (! in_array($status, $allowed[$priorStatus] ?? [], true)) {
                 return response()->json([
@@ -3946,15 +3991,67 @@ class OrdersAPI extends Controller
     {
         return [
             'processing' => ['to claim', 'delivering', 'to cancel', 'cancelled'],
-            'to cancel'  => ['cancelled', 'processing'],
-            'to claim'   => ['claimed', 'unclaimed', 'cancelled'],
-            'delivering' => ['to receive', 'received', 'cancelled'],
-            'to receive' => ['received', 'claimed', 'cancelled'],
-            'claimed'    => ['cancelled', 'received'],
-            'received'   => [],
+            'to cancel'  => ['cancelled', 'processing', 'returned', 'refunded'],
+            'to claim'   => ['claimed', 'unclaimed', 'cancelled', 'processing'],
+            'delivering' => ['to receive', 'received', 'cancelled', 'processing'],
+            'to receive' => ['received', 'claimed', 'cancelled', 'processing', 'delivering'],
+            'claimed'    => ['cancelled', 'received', 'returned', 'refunded'],
+            'received'   => ['returned', 'refunded'],
             'unclaimed'  => ['cancelled', 'to claim'],
-            'cancelled'  => [],
+            'returned'   => ['claimed', 'refunded'],
+            'refunded'   => [],
+            'cancelled'  => ['refunded'],
         ];
+    }
+
+    protected function scanOnlyStatuses(): array
+    {
+        return ['claimed', 'received', 'unclaimed'];
+    }
+
+    /** The two workflow steps of this order's claiming type, plus the cancel/return/refund outcomes. */
+    protected function employeeStatusChoices(Order $order): array
+    {
+        $outcomes = ['cancelled', 'returned', 'refunded'];
+        $isDelivery = strtolower((string) $order->ord_claiming) === 'delivery'
+            || Delivery::where('ord_id', $order->ord_id)->exists();
+
+        return $isDelivery
+            ? array_merge(['processing', 'delivering'], $outcomes)
+            : array_merge(['processing', 'to claim'], $outcomes);
+    }
+
+    protected function employeeChoiceLabels(Order $order): string
+    {
+        $labels = array_map(
+            fn (string $key) => $this->statusLabel($key),
+            $this->employeeStatusChoices($order)
+        );
+
+        return implode(', ', array_slice($labels, 0, -1)) . ' or ' . end($labels);
+    }
+
+    protected function statusLabel(string $key): string
+    {
+        return [
+            'processing' => 'To Process',
+            'to claim'   => 'To Claim',
+            'delivering' => 'In Transit',
+            'cancelled'  => 'Cancelled',
+            'returned'   => 'Returned',
+            'refunded'   => 'Refunded',
+        ][$key] ?? ucfirst(str_replace('-', ' ', $key));
+    }
+
+    protected function employeeStatusKey(?string $status): ?string
+    {
+        $key = strtolower(trim((string) $status));
+
+        if (in_array($key, ['returned', 'refunded'], true)) {
+            return $key;
+        }
+
+        return $this->trackingNormalizeStatus($status);
     }
 
     public function trackingNormalizeStatus(?string $raw): ?string

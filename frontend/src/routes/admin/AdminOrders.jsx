@@ -92,6 +92,7 @@ export default function AdminOrders() {
   const [selectedOrderIds, setSelectedOrderIds] = useState([])
 
   const [activeOrderDetail, setActiveOrderDetail] = useState(null)
+  const [adminTab, setAdminTab] = useState('orders')
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkNewStatus, setBulkNewStatus] = useState('To Process')
   // Type / Fulfillment / Item are secondary to search, sort and status, so
@@ -206,6 +207,15 @@ export default function AdminOrders() {
     return searchRows ? sortClientSide(rows, sortValue) : rows
   }, [orders, searchRows, sortedRows, sortValue, filterType, filterFulfillment, filterStatus, filterItem])
 
+  // "Refunds" subtab (admin "Orders" tab): only return/refund rows.
+  const REFUND_STATUSES = ['RETURN REQUESTED', 'RETURNED', 'REFUNDED']
+  const visibleOrders = useMemo(() => {
+    if (adminTab !== 'refunds') return filteredOrders
+    return filteredOrders.filter((order) =>
+      REFUND_STATUSES.includes(String(order.rawStatus || '').toUpperCase())
+    )
+  }, [filteredOrders, adminTab])
+
   const applyStatus = useCallback(
     async (order, nextStatus) => {
       setActionBusy(true)
@@ -219,7 +229,7 @@ export default function AdminOrders() {
         })
         showToast(`${order.id} is now ${titleCaseStatus(nextStatus)}.`, 'success')
       } else {
-        showToast('Failed to update the order.', 'error')
+        showToast(result?.error || 'Failed to update the order.', 'error')
       }
       return result
     },
@@ -394,6 +404,32 @@ export default function AdminOrders() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Subtabs: Orders vs Refunds (returns and refunds handled here) */}
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+          <button
+            type="button"
+            onClick={() => setAdminTab('orders')}
+            className={`px-3 h-8 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+              adminTab === 'orders'
+                ? 'bg-brand-orange text-white'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            Orders
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminTab('refunds')}
+            className={`px-3 h-8 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+              adminTab === 'refunds'
+                ? 'bg-brand-orange text-white'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            Refunds
+          </button>
         </div>
 
         {/* Stat cards */}
@@ -611,7 +647,7 @@ export default function AdminOrders() {
 
         <DataTable
           columns={columns}
-          data={filteredOrders}
+          data={visibleOrders}
           keyField="id"
           selectable
           selectedIds={selectedOrderIds}
@@ -645,14 +681,34 @@ export default function AdminOrders() {
                 onChange={(e) => applyStatus(activeOrderDetail, e.target.value)}
                 className="field-input w-full"
               >
-                {!STATUS_OPTIONS.includes(activeOrderDetail.status) && (
-                  <option value={activeOrderDetail.status}>{activeOrderDetail.status}</option>
-                )}
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
+                {(() => {
+                  const fulfillment = String(activeOrderDetail.fulfillment || '')
+                  const isDelivery =
+                    fulfillment.toLowerCase().includes('delivery') ||
+                    fulfillment.toLowerCase().includes('courier')
+                  const allowedChoices = isDelivery
+                    ? [
+                        { label: 'Processing', value: 'To Process' },
+                        { label: 'In Transit', value: 'Delivering' },
+                      ]
+                    : [
+                        { label: 'Processing', value: 'To Process' },
+                        { label: 'To claim', value: 'To Claim' },
+                      ]
+                  const values = allowedChoices.map((c) => c.value)
+                  return (
+                    <>
+                      {!values.includes(activeOrderDetail.status) && (
+                        <option value={activeOrderDetail.status}>{activeOrderDetail.status}</option>
+                      )}
+                      {allowedChoices.map((choice) => (
+                        <option key={choice.value} value={choice.value}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </>
+                  )
+                })()}
               </select>
 
               {pendingAction && (
@@ -680,7 +736,7 @@ export default function AdminOrders() {
                         activeOrderDetail,
                         activeOrderDetail.rawStatus === 'CANCEL REQUESTED'
                           ? 'To Process'
-                          : 'Claimed'
+                          : 'To Process'
                       )
                     }
                     className="btn btn--secondary flex-1"
