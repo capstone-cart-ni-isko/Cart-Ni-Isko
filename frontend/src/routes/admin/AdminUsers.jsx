@@ -429,7 +429,7 @@ export default function AdminUsers() {
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-slate-400">
                       <span className="inline-flex items-center gap-2">
-                        <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-brand-orange animate-spin" />
+                        <span className="spinner-circle !w-3.5 !h-3.5" />
                         Loading staff directory…
                       </span>
                     </td>

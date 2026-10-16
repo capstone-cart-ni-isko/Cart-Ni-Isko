@@ -8,6 +8,7 @@ import StatCard from '../../components/admin/StatCard.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import DataTable from '../../components/admin/DataTable.jsx'
 import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
+import DigitalReceipt from '../../components/ui/DigitalReceipt.jsx'
 import { searchOrders, sortOrders } from '../../services/orders.js'
 import {
   mapOrderRows,
@@ -16,18 +17,7 @@ import {
   parseDate,
 } from '../../services/dashboard.js'
 
-// SRS order status vocabulary (staff dashboard / REQ-SD-02) - the statuses a
-// staff member may set on an order (ORDER STATE MACHINE, OrdersAPI).
-const STATUS_OPTIONS = [
-  'To Process',
-  'To Claim',
-  'To Receive',
-  'Claimed',
-  'Unclaimed',
-  'Cancelled',
-  'Returned',
-  'Refunded',
-]
+const REFUND_STATUSES = ['RETURN REQUESTED', 'RETURNED', 'REFUNDED']
 
 /**
  * Every display status a row can carry (mapOrderRow), so the Status filter can
@@ -208,7 +198,6 @@ export default function AdminOrders() {
   }, [orders, searchRows, sortedRows, sortValue, filterType, filterFulfillment, filterStatus, filterItem])
 
   // "Refunds" subtab (admin "Orders" tab): only return/refund rows.
-  const REFUND_STATUSES = ['RETURN REQUESTED', 'RETURNED', 'REFUNDED']
   const visibleOrders = useMemo(() => {
     if (adminTab !== 'refunds') return filteredOrders
     return filteredOrders.filter((order) =>
@@ -866,6 +855,9 @@ export default function AdminOrders() {
                 ₱{(Number(activeOrderDetail?.total) || 0).toFixed(2)}
               </span>
             </div>
+
+            {/* Digital receipt - issued once the order is claimed / received */}
+            <DigitalReceipt order={activeOrderDetail.raw} customer={activeOrderDetail.customer} />
           </div>
         )}
       </DrawerPanel>
@@ -902,9 +894,14 @@ export default function AdminOrders() {
             onChange={(e) => setBulkNewStatus(e.target.value)}
             className="field-input"
           >
-            {['To Process', 'To Claim', 'To Receive', 'Cancelled'].map((status) => (
-              <option key={status} value={status}>
-                {status}
+            {[
+              { label: 'Processing', value: 'To Process' },
+              { label: 'To claim', value: 'To Claim' },
+              { label: 'In Transit', value: 'Delivering' },
+              { label: 'Cancelled', value: 'Cancelled' },
+            ].map((choice) => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
               </option>
             ))}
           </select>

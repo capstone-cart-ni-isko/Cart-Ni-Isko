@@ -4,6 +4,8 @@
   can clock themselves in or out; a super admin can do it for anyone, which
   mirrors what PUT /accounts/update allows.
 */
+import Avatar from '../../ui/Avatar.jsx'
+
 export default function OnDutyWidget({ roster = [], currentEmpId, canManageAll = false, pendingIds = [], onToggleClock }) {
   if (roster.length === 0) {
     return (
@@ -21,8 +23,8 @@ export default function OnDutyWidget({ roster = [], currentEmpId, canManageAll =
         const pending = pendingIds.includes(staff.empId)
         return (
           <li key={staff.empId} className="flex items-center gap-2.5 p-2 rounded-md border border-slate-100 bg-slate-50/60">
-            <span className="relative w-8 h-8 rounded-full bg-slate-200 text-slate-700 text-2xs font-semibold flex items-center justify-center shrink-0">
-              {staff.avatar}
+            <span className="relative w-8 h-8 shrink-0">
+              <Avatar name={staff.name} userId={staff.empId} size={32} />
               <span
                 className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${staff.clockedIn ? 'bg-emerald-500' : 'bg-slate-300'}`}
                 title={staff.clockedIn ? 'Clocked in' : 'Clocked out'}

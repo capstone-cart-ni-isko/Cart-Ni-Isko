@@ -26,6 +26,7 @@ import { parseDate, paymentSummary } from '../services/dashboard.js'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
 
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
 const CAN_CANCEL = ['TO PROCESS']
@@ -754,6 +755,12 @@ function OrderDetail() {
               </p>
             </div>
           )}
+
+          {/* Digital receipt - issued once the order is claimed / received */}
+          <DigitalReceipt
+            order={order.raw}
+            customer={currentUser?.cust_nickname || currentUser?.nickname || currentUser?.name || ''}
+          />
 
           {/* Navigation Actions */}
           <div className="flex items-center gap-2 pt-2">

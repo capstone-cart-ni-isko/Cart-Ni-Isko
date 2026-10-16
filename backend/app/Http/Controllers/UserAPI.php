@@ -2346,12 +2346,25 @@ class UserAPI extends Controller
                         ->get();
                 }
 
+                $isOtpMessage = static function ($msg): bool {
+                    $m = (string) $msg;
+                    return preg_match('/\byour verification code is\b/i', $m) === 1
+                        || preg_match('/\bverification code\b/i', $m) === 1;
+                };
+
+                $filteredNotifications = $notifications->reject(function ($notif) use ($recipientType, $isOtpMessage) {
+                    $msg = $recipientType === 'customer'
+                        ? $notif->custnotif_msg
+                        : $notif->empnotif_msg;
+                    return $isOtpMessage($msg);
+                })->values();
+
                 $this->logActor($json, 'view', 'GET /api/notif/display');
 
                 return response()->json([
                     'success' => true,
                     'message' => 'Notifications retrieved successfully',
-                    'data'    => $notifications
+                    'data'    => $filteredNotifications
                 ], 200);
 
             } catch (\Exception $e) {

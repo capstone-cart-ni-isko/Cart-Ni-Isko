@@ -1,4 +1,5 @@
 import StatusPill from './StatusPill.jsx'
+import Avatar from '../ui/Avatar.jsx'
 import { fmtTime } from './scheduleTime.js'
 
 /**
@@ -72,13 +73,7 @@ export default function OfficerRosterGrid({
             className="p-4 rounded-lg border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all flex flex-col justify-between space-y-3"
           >
             <div className="flex items-center gap-3">
-              <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                  officer.avatarColor || 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                {officer.initials}
-              </div>
+              <Avatar name={officer.name} userId={officer.id} size={36} />
               <div className="min-w-0">
                 <p className="font-bold text-slate-900 text-xs truncate">{officer.name}</p>
                 <p className="text-2xs text-slate-500 font-semibold truncate">

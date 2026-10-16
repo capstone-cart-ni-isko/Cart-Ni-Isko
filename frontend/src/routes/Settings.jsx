@@ -38,11 +38,11 @@ const settingsSupportItems = [
 function SettingsSection({ title, items }) {
   return (
     <div className="space-y-2">
-      <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{title}</h2>
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden divide-y divide-gray-50">
+      <h2 className="text-[11px] font-bold text-gray-400 dark:text-[var(--muted)] uppercase tracking-wider px-1">{title}</h2>
+      <div className="bg-white dark:bg-[var(--surface)] rounded-lg border border-slate-200 dark:border-[var(--line)] shadow-xs overflow-hidden divide-y divide-slate-100 dark:divide-[var(--line)]">
         {items.map(({ to, onClick, label, icon, description }) => {
           const content = (
-            <div className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors w-full text-left cursor-pointer">
+            <div className="flex items-center justify-between px-4 py-3.5 hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] active:bg-slate-100 transition-colors w-full text-left cursor-pointer">
               <div className="flex items-center gap-3.5 min-w-0">
                 <span className="shrink-0">{icon}</span>
                 <div className="min-w-0">

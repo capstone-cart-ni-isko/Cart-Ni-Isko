@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import LoadingSpinner from '../../components/ui/LoadingSpinner.jsx'
+import DefaultAvatar from '../../components/ui/Avatar.jsx'
 import QRScanner from '../../components/ui/QRScanner.jsx'
 import StatusPill from '../../components/admin/StatusPill.jsx'
 import Panel from '../../components/admin/kit/Panel.jsx'
@@ -179,18 +180,9 @@ function SlotStatusBadge({ status }) {
   return null
 }
 
-// ─── Avatar helper (brand tints) ──────────────────────────────────────────
-const AVATAR_TINTS = ['bg-isko-blue/15 text-isko-blue-dark', 'bg-isko-orange/15 text-isko-orange-dark', 'bg-slate-200 text-slate-700']
-
+// ─── Avatar helper: the shared lava / ice default avatars ─────────────────
 function Avatar({ initials, size = 'sm' }) {
-  let hash = 0
-  for (const ch of String(initials || '#')) hash = (hash + ch.charCodeAt(0)) % AVATAR_TINTS.length
-  const sz = size === 'sm' ? 'w-7 h-7 text-2xs' : 'w-8 h-8 text-xs'
-  return (
-    <div className={`${sz} ${AVATAR_TINTS[hash]} rounded-full flex items-center justify-center font-semibold shrink-0`}>
-      {initials}
-    </div>
-  )
+  return <DefaultAvatar name={String(initials || '')} userId={initials} size={size === 'sm' ? 28 : 32} />
 }
 
 // Shared table chrome: sticky header row inside a panel that scrolls

@@ -175,22 +175,22 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4 font-sans">
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 font-sans bg-slate-50 dark:bg-[var(--surface-2)]">
       {/* One login card for both portals: same surface, same corner, same
           padding, same fields and the same primary button (index.css). */}
-      <div className="w-full max-w-md bg-white rounded-md p-6 border border-slate-200 space-y-5 animate-fade-in">
+      <div className="w-full max-w-md bg-white dark:bg-[var(--surface)] rounded-lg p-6 sm:p-8 border border-slate-200 dark:border-[var(--line)] shadow-xs space-y-6 animate-fade-in">
         {/* Brand Header */}
         <div className="text-center space-y-3">
           <div className="flex justify-center">
             <img
               src={brandLogo}
               alt="Tindahan ni Isko"
-              className="h-16 w-auto object-contain"
+              className="h-14 w-auto object-contain"
             />
           </div>
           <div>
-            <h1 className="page-title text-gray-900">Staff &amp; Admin Portal</h1>
-            <p className="text-sm text-gray-500 font-medium mt-1">
+            <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">Staff &amp; Admin Portal</h1>
+            <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium mt-1">
               Authorized Bicol University Staff &amp; Officer Access Only
             </p>
           </div>
@@ -234,7 +234,7 @@ export default function AdminLogin() {
                   clearSubmitMsgs()
                 }}
                 aria-invalid={emailMsg ? 'true' : undefined}
-                className="field-input field-input--lg pl-10"
+                className="field-input field-input--lg !pl-10"
               />
             </div>
             {/* FLOW-EMP_LOGIN-02/03 - "User not found" under the email field */}
@@ -272,7 +272,7 @@ export default function AdminLogin() {
                   clearSubmitMsgs()
                 }}
                 aria-invalid={passwordMsg ? 'true' : undefined}
-                className="field-input field-input--lg pl-10 pr-11"
+                className="field-input field-input--lg !pl-10 !pr-11"
               />
               <button
                 type="button"
@@ -308,10 +308,17 @@ export default function AdminLogin() {
           <button
             type="submit"
             disabled={loading}
-            className="btn btn--lg btn--block btn--primary text-white btn-press cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+            className={`btn btn--lg btn--block ${
+              !loading
+                ? 'btn--primary text-white cursor-pointer btn-press'
+                : 'btn--secondary cursor-not-allowed opacity-70'
+            }`}
           >
             {loading ? (
-              <span>Authenticating...</span>
+              <span className="flex items-center justify-center gap-2" role="status" aria-live="polite">
+                <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                Authenticating…
+              </span>
             ) : (
               <>
                 <span>Sign In</span>

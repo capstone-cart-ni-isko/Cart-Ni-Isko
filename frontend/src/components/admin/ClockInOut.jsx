@@ -206,7 +206,7 @@ export default function ClockInOut() {
   if (isLoading) {
     return (
       <p className="px-2.5 py-1.5 text-2xs font-semibold text-gray-400 flex items-center gap-2">
-        <span className="spinner-circle !w-3 h-3" /> Loading your schedule…
+        <span className="spinner-circle !w-3.5 !h-3.5 shrink-0" /> Loading your schedule…
       </p>
     )
   }
@@ -232,6 +232,7 @@ export default function ClockInOut() {
             </svg>
           </span>
           <span className="truncate">{isBusy ? 'Saving…' : 'Clock Out'}</span>
+          {isBusy && <span className="spinner-circle !w-3.5 !h-3.5 shrink-0 ml-auto" />}
         </button>
       ) : (
         <button
@@ -252,6 +253,7 @@ export default function ClockInOut() {
             </svg>
           </span>
           <span className="truncate">{isBusy ? 'Saving…' : 'Clock In'}</span>
+          {isBusy && <span className="spinner-circle !w-3.5 !h-3.5 shrink-0 ml-auto" />}
         </button>
       )}
 

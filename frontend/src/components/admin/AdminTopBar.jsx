@@ -13,10 +13,6 @@ import { empHomePath, empIsStaff } from './schema.js'
     THAT person's saved preference instead of inheriting the last one. */
 let themeHydratedFor = null
 
-// Same geometry as the customer ribbon: a 40px hit area, 20px glyph.
-const ICON_BTN =
-  'p-2 rounded-lg hover:bg-slate-100 transition-all relative flex items-center justify-center'
-
 /** One ribbon entry: hit area, active tint, hover chip and optional badge. */
 function RibbonIcon({ label, onClick, active, badge, children }) {
   return (
@@ -26,11 +22,15 @@ function RibbonIcon({ label, onClick, active, badge, children }) {
         onClick={onClick}
         title={label}
         aria-label={label}
-        className={`${ICON_BTN} ${active ? 'bg-slate-100 text-brand-orange' : ''}`}
+        className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[var(--surface-3)] transition-all relative flex items-center justify-center cursor-pointer ${
+          active
+            ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange'
+            : 'text-[#757575] dark:text-[var(--muted)]'
+        }`}
       >
         {children}
         {badge > 0 && (
-          <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-2xs font-black min-w-4 h-4 px-0.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
+          <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-[10px] font-black min-w-4 h-4 px-0.5 rounded-full flex items-center justify-center border-2 border-white animate-scale-in">
             {badge > 99 ? '99+' : badge}
           </span>
         )}

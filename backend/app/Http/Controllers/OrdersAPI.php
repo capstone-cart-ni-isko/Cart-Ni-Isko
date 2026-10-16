@@ -20,6 +20,7 @@ use App\Http\Controllers\ProductsAPI;
 use App\Services\LalamoveService;
 use App\Services\LalamoveUnavailableException;
 use App\Services\PayMongoService;
+use App\Services\Receipts\ReceiptPrinter;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -3574,6 +3575,9 @@ class OrdersAPI extends Controller
         $order->refresh();
         $appointment->refresh();
         $pickup->setRelation('appointment', $appointment);
+
+        // Physical copy of the receipt for the claimed pickup order.
+        ReceiptPrinter::printFor($order);
 
         return response()->json([
             'success' => true,

@@ -302,10 +302,10 @@ export default function AdminSidebar({ onCloseMobile }) {
                       type="button"
                       onClick={() => navigate(to)}
                       aria-current={isActive ? 'page' : undefined}
-                      className={`flex items-center w-full gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-150 cursor-pointer ${
+                      className={`flex items-center w-full gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer ${
                         isActive
-                          ? 'bg-brand-orange/10 text-brand-orange'
-                          : 'text-gray-600 dark:text-[var(--muted)] hover:bg-gray-100 dark:hover:bg-[var(--surface-3)] hover:text-gray-900 dark:hover:text-[var(--ink)]'
+                          ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange shadow-2xs'
+                          : 'text-slate-600 dark:text-[var(--muted)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] hover:text-slate-900 dark:hover:text-[var(--ink)]'
                       }`}
                     >
                       <span className="shrink-0">{icon}</span>

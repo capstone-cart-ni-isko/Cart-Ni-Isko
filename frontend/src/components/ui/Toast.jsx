@@ -2,7 +2,7 @@
  * A toast notification component for transient messages.
  * Use this for success, error, and info notifications.
  */
-export default function Toast({ message, type = 'info', onClose, duration = 4000 }) {
+export default function Toast({ message, type = 'info', onClose }) {
   if (!message) return null
 
   const types = {

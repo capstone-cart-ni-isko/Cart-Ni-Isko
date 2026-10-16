@@ -493,7 +493,7 @@ export default function AdminAccount({ embedded = false }) {
         {isLoadingRecord ? (
           <div className="bg-white rounded-2xl border border-slate-200/80 p-8 flex items-center justify-center">
             <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-              <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-200 border-t-brand-orange animate-spin" />
+              <span className="spinner-circle !w-3.5 !h-3.5" />
               Loading profile…
             </span>
           </div>

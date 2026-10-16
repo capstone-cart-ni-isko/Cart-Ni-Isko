@@ -103,7 +103,13 @@ function DesktopHeader() {
     { to: '/notifications', label: 'Notifications', icon: Painted, src: notificationIcon, badge: unreadNotifCount },
   ]
   const path = location.pathname
-  const isOn = (item) => (item.active || [item.to]).some((p) => path === p || path.startsWith(p))
+  const isOn = (item) =>
+    (item.active || [item.to]).some((p) => {
+      if (p === '/' || p === '/home') {
+        return path === '/' || path === '/home'
+      }
+      return path === p || path.startsWith(`${p}/`)
+    })
 
   const q = searchParams.get('search') || ''
   const [prevQ, setPrevQ] = useState(q)

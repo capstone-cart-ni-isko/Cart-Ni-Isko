@@ -18,7 +18,12 @@ export async function fetchNotifications(recipientType, recipientId) {
     recipient_type: recipientType,
     recipient_id: recipientId,
   })
-  const rows = Array.isArray(data.data) ? data.data : []
+  const isOtp = (row) => {
+    const text = String(row?.custnotif_msg || row?.empnotif_msg || row?.message || '').toLowerCase()
+    return text.includes('verification code') || text.includes('otp')
+  }
+  const rawRows = Array.isArray(data.data) ? data.data : []
+  const rows = rawRows.filter((r) => !isOtp(r))
   writeNotificationsCache(recipientType, recipientId, rows)
   return rows
 }
