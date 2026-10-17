@@ -652,7 +652,7 @@ export default function AdminSettings() {
                     <div>
                       <h2 className="text-sm font-bold text-gray-900">Notifications &amp; theme</h2>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        Saved to your account the moment you change them (REQ-EMP_SET-04).
+                        Your preferences are automatically saved to your account.
                       </p>
                     </div>
                   </div>
@@ -687,8 +687,7 @@ export default function AdminSettings() {
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-slate-900">Dark mode</p>
                       <p className="text-2xs text-slate-400 mt-0.5">
-                        FLOW-EMP_SET-05 — the choice is stored with your account and restored on your next
-                        sign-in (REQ-EMP_SET-03).
+                        Your theme preference is saved to your account and remembered whenever you sign in.
                       </p>
                     </div>
                     <Toggle checked={dark} onChange={handleDarkMode} size="md" />
@@ -805,8 +804,7 @@ export default function AdminSettings() {
                     <div>
                       <h2 className="text-sm font-bold text-gray-900">Appointments &amp; scheduling</h2>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        Store-wide parameters from FLOW-EMP_SET-07. They apply to every user immediately
-                        (REQ-EMP_SET-05).
+                        Store-wide parameters for appointment capacity and scheduling intervals.
                       </p>
                     </div>
                   </div>

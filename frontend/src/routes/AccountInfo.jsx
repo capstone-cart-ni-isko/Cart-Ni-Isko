@@ -241,7 +241,7 @@ function AccountInfo() {
                 className={`${inputClasses} bg-gray-50 text-gray-500 cursor-not-allowed`}
               />
               <p className="mt-1 text-[11px] font-medium text-gray-400">
-                Your sign-in email cannot be changed here (REQ-CUST_PROF-01).
+                Your sign-in email cannot be changed.
               </p>
             </div>
             <div>
@@ -392,7 +392,7 @@ function AccountInfo() {
                     className={`${inputClasses} bg-gray-50 text-gray-500 cursor-not-allowed`}
                   />
                   <p className="mt-1 text-[11px] font-medium text-gray-400">
-                    Your sign-in email cannot be changed here (REQ-CUST_PROF-01).
+                    Your sign-in email cannot be changed.
                   </p>
                 </div>
                 <div>

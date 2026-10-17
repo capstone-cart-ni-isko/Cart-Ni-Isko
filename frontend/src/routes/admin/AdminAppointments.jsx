@@ -227,7 +227,7 @@ export default function AdminAppointments() {
           type: 'free',
           typeLabel: s.type === 'CLAIM' ? 'Claim 30m' : 'Visit 10m',
           title: `${remaining} of ${s.capacity} slots open`,
-          subtitle: `${s.occupied} booked · unbookable slots are flagged with a reason (REQ-AB-04)`,
+          subtitle: `${s.occupied} booked · unavailable slots include the cancellation reason`,
           icon: 'clock',
         })
       } else {
@@ -651,7 +651,7 @@ export default function AdminAppointments() {
                 <div>
                   <h4 className="text-sm font-bold text-gray-900">Need to cancel a booking?</h4>
                   <p className="text-xs text-gray-600 mt-0.5">
-                    Closing an appointment requires a reason and is logged for audit (REQ-SC-04).
+                    Canceling an appointment requires a reason and is recorded in the audit log.
                   </p>
                 </div>
               </div>

@@ -323,7 +323,7 @@ class SystemAPI extends Controller
             if (! $actor instanceof Employee || (int) $actor->getKey() !== (int) $shift->emp_id) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You may only change your own schedule (rule 38).',
+                    'message' => 'You may only modify your own duty schedule.',
                 ], 403);
             }
 
@@ -536,11 +536,10 @@ class SystemAPI extends Controller
         $clash = $this->overlappingShift($empId, $start, $end, $ignoreShiftId);
         if ($clash !== null) {
             return $this->fail(
-                'That time block overlaps block #' . $clash->sched_id . ' ('
-                . $clash->sched_time_start->toDateTimeString() . ' to '
-                . $clash->sched_time_end->toDateTimeString()
-                . ') already scheduled for the same employee. Overlapping schedule blocks are not allowed '
-                . '(REQ-EMP_SCHED-04) - pick a window that does not cross it.'
+                'That time block overlaps with an existing shift ('
+                . $clash->sched_time_start->format('H:i') . ' to '
+                . $clash->sched_time_end->format('H:i')
+                . ') for the same employee. Overlapping duty blocks are not allowed. Please choose a different timeslot.'
             );
         }
 
@@ -556,8 +555,7 @@ class SystemAPI extends Controller
         }
 
         return $this->fail(
-            'Schedule blocks are set in 10-minute steps (FLOW-EMP_SCHED-03), and '
-            . $time->format('H:i') . ' is not on that grid. Use a start or end time like 08:00, 08:10 or 08:20.'
+            'Duty shifts must be set in 10-minute intervals (for example: 08:00, 08:10, or 08:20).'
         );
     }
 
@@ -572,8 +570,7 @@ class SystemAPI extends Controller
         }
 
         return $this->fail(
-            'Schedule blocks that start more than 24 hours in the past cannot be written (REQ-EMP_SCHED-03). '
-            . 'A super admin may still override the roster.'
+            'Schedule blocks that start more than 24 hours in the past cannot be scheduled.'
         );
     }
 
@@ -617,8 +614,7 @@ class SystemAPI extends Controller
 
         return $this->fail(
             'That change would leave the employee with ' . $minutes . ' scheduled minutes that week, below the '
-            . $floor . '-minute weekly minimum (FLOW-EMP_SCHED-05). Extend the block, schedule the rest of the '
-            . 'week first, or ask a super admin to re-plan the roster.'
+            . $floor . '-minute weekly minimum. Please add more duty hours to satisfy the weekly requirement.'
         );
     }
 

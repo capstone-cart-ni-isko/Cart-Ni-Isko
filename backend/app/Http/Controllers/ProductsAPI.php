@@ -1305,7 +1305,7 @@ class ProductsAPI extends Controller
                 } else {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Either prod_id or prod_tag must be provided'
+                        'message' => 'Please provide a product identifier or barcode tag'
                     ], 400);
                 }
 

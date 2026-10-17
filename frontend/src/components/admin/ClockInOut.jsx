@@ -277,9 +277,8 @@ export default function ClockInOut() {
           }
         >
           <p className="text-sm text-gray-600 font-medium leading-relaxed">
-            You will be marked out of the store and your remaining block
-            {remaining.length === 1 ? '' : 's'} today will stop staffing the roster. Super
-            admins are alerted to find a substitute (REQ-SS-03).
+            You will be marked out of the store, and your remaining duty shift
+            {remaining.length === 1 ? '' : 's'} today will be flagged so a supervisor can assign a replacement if needed.
           </p>
         </Modal>
       )}

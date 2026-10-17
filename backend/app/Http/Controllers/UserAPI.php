@@ -345,7 +345,7 @@ class UserAPI extends Controller
             if ($bagId === null || $bagId === '') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'bag_id is required.',
+                    'message' => 'Cart item ID is required.',
                 ], 400);
             }
 
@@ -403,13 +403,13 @@ class UserAPI extends Controller
             if ($bagId === null || $bagId === '') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'bag_id is required.',
+                    'message' => 'Cart item ID is required.',
                 ], 400);
             }
             if (! $json->has('item_qty')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'item_qty is required.',
+                    'message' => 'Item quantity is required.',
                 ], 400);
             }
 
@@ -1674,19 +1674,16 @@ class UserAPI extends Controller
                 $end = Carbon::parse($block['shift_date'] . ' ' . $block['shift_end']);
 
                 if ($start->minute % 10 !== 0 || $end->minute % 10 !== 0) {
-                    return 'Duty blocks are set in 10-minute steps (FLOW-EMP_SCHED-03), and '
-                        . $block['shift_start'] . '–' . $block['shift_end'] . ' is not on that grid.';
+                    return 'Duty shifts must be set in 10-minute intervals (for example: 09:00, 09:10, or 09:20).';
                 }
 
                 if (! $start->isFuture() && $start->lt(now()->subDay())) {
-                    return 'Duty block ' . $block['shift_date'] . ' ' . $block['shift_start']
-                        . ' is more than 24 hours in the past (REQ-EMP_SCHED-03).';
+                    return 'Duty shift start time cannot be scheduled in the past.';
                 }
 
                 foreach ($windows as $window) {
                     if ($start->lt($window['end']) && $end->gt($window['start'])) {
-                        return 'Duty block ' . $block['shift_date'] . ' ' . $block['shift_start']
-                            . '–' . $block['shift_end'] . ' overlaps another block on the enrollment schedule.';
+                        return 'Duty shift from ' . $block['shift_start'] . ' to ' . $block['shift_end'] . ' overlaps another shift on the same day.';
                     }
                 }
                 $windows[] = ['start' => $start, 'end' => $end];
@@ -1699,8 +1696,7 @@ class UserAPI extends Controller
 
             foreach ($weekMinutes as $weekKey => $minutes) {
                 if ($minutes < $floor) {
-                    return 'The week of ' . $weekKey . ' has ' . $minutes . ' scheduled minutes, below the '
-                        . $floor . '-minute weekly minimum (FLOW-EMP_SCHED-05). Add more duty time to that week.';
+                    return 'The weekly duty schedule must total at least ' . $floor . ' minutes (3 hours). Currently scheduled: ' . $minutes . ' minutes.';
                 }
             }
 
