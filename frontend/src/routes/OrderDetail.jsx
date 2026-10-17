@@ -20,6 +20,7 @@ import {
 import { fetchOrder,
   fetchOrders,
   requestCancel,
+  updateOrder,
 } from '../services/orders.js'
 import { getTrack, scanQr } from '../services/tracking.js'
 import { parseDate, paymentSummary } from '../services/dashboard.js'
@@ -30,6 +31,7 @@ import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
 
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
 const CAN_CANCEL = ['TO PROCESS']
+const CAN_REFUND = ['CLAIMED', 'RECEIVED', 'DELIVERED', 'COMPLETED']
 
 /** LalaMove booking states the order carries, in the customer's own words. */
 const COURIER_STATUS_LABELS = {
@@ -205,6 +207,23 @@ function OrderDetail() {
       load()
     } catch {
       showToast('Unable to request cancellation.', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleRequestRefund = async () => {
+    if (busy) return
+    if (!window.confirm('Are you sure you want to request a return and refund for this order? The store will review your request.')) {
+      return
+    }
+    setBusy(true)
+    try {
+      await updateOrder(order.id, { ord_status: 'RETURN REQUESTED' })
+      showToast('Return requested. The store will review it shortly.', 'success')
+      load()
+    } catch (err) {
+      showToast(err?.message || 'Unable to request return and refund.', 'error')
     } finally {
       setBusy(false)
     }
@@ -607,6 +626,8 @@ function OrderDetail() {
                 const prodvar = entry?.prodvar || null
                 const productImage =
                   prodvar?.prodvar_pic ||
+                  entry?.prodvar_pic ||
+                  entry?.pic ||
                   product.main_image ||
                   (Array.isArray(product.prod_images) ? product.prod_images[0] : product.prod_images) ||
                   order.image ||
@@ -622,22 +643,41 @@ function OrderDetail() {
                     ? { name: prodvar.prodvar_name || 'Variation', value: '#FF6A00' }
                     : entry?.color ?? order.color ?? null
                 const itemKey = entry?.item_id ?? `${entry?.bag_id ?? 'line'}-${idx}`
+                const targetProdId = entry?.prod_id || product?.prod_tag || product?.prod_id || order.productId
 
-                return (
-                  <div key={itemKey} className="flex gap-3.5 items-center">
-                    <div className="w-16 h-16 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 p-1">
+                const rowContent = (
+                  <div className="flex gap-3.5 items-center p-2 -m-2 rounded-xl hover:bg-slate-50 transition-colors group">
+                    <div className="w-16 h-16 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 p-1 group-hover:border-brand-orange/40 transition-colors">
                       {productImage ? (
                         <img
                           src={getImageUrl(productImage)}
                           alt={name}
                           className="w-full h-full object-contain"
+                          onError={(e) => {
+                            // If variation picture fails, fallback gracefully
+                            if (order.image && e.currentTarget.src !== getImageUrl(order.image)) {
+                              e.currentTarget.src = getImageUrl(order.image)
+                            }
+                          }}
                         />
                       ) : (
                         <ShirtIcon className="w-6 h-6 text-brand-orange opacity-40" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-gray-900 text-sm truncate">{name}</h4>
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-semibold text-gray-900 text-sm truncate group-hover:text-brand-orange transition-colors">
+                          {name}
+                        </h4>
+                        {targetProdId != null && (
+                          <span className="text-[11px] font-medium text-brand-orange shrink-0 flex items-center gap-0.5 opacity-80 group-hover:opacity-100">
+                            <span>View</span>
+                            <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="9 18 15 12 9 6" />
+                            </svg>
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 flex-wrap">
                         {size && (
                           <>
@@ -665,6 +705,22 @@ function OrderDetail() {
                         {formatPrice(price)} each
                       </p>
                     </div>
+                  </div>
+                )
+
+                return targetProdId != null ? (
+                  <Link
+                    key={itemKey}
+                    to={`/product/${targetProdId}`}
+                    state={{ from: `/orders/${order.id}` }}
+                    className="block focus:outline-none"
+                    title={`View ${name}`}
+                  >
+                    {rowContent}
+                  </Link>
+                ) : (
+                  <div key={itemKey}>
+                    {rowContent}
                   </div>
                 )
               })}
@@ -778,6 +834,40 @@ function OrderDetail() {
               <p className="text-[11px] text-gray-500">
                 Cancellation is a request: the store reviews it and you'll get a notification
                 once it's approved (the order then shows “Cancel requested”).
+              </p>
+            </div>
+          )}
+
+          {/* Refund / Return Request (FLOW-ORD_LIST-04 / C11: customer requests return & refund after claiming) */}
+          {CAN_REFUND.includes(order.status) && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-2 shadow-2xs">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Returns & Refunds
+              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleRequestRefund}
+                  className="px-4 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  {busy ? 'Sending…' : 'Request for Refund'}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                If there is an issue with your received items, you can request a return and refund. The store will review your request.
+              </p>
+            </div>
+          )}
+
+          {/* Return / Refund Requested Notice */}
+          {['RETURN REQUESTED', 'TO CANCEL', 'CANCEL REQUESTED'].includes(order.status) && (
+            <div className="bg-amber-50/70 rounded-2xl border border-amber-200/80 p-4 sm:p-5 space-y-1 shadow-2xs text-xs">
+              <h3 className="font-semibold text-amber-900">
+                {order.status === 'RETURN REQUESTED' ? 'Return & Refund Requested' : 'Cancellation Requested'}
+              </h3>
+              <p className="text-amber-800 text-[11px]">
+                Your request is currently under review by our store administrators. We will update you once processed.
               </p>
             </div>
           )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useCart } from '../hooks/useCart.js'
 import { useWishlist } from '../hooks/useWishlist.js'
@@ -22,6 +22,8 @@ import { getImageUrl } from '../utils/imageUtils.js'
 function ProductDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const returnTo = location.state?.from || location.state?.returnTo || null
   const { currentUser } = useAuth()
   const { addToCart } = useCart()
   const { toggleWishlist, isInWishlist } = useWishlist()
@@ -259,27 +261,57 @@ function ProductDetail() {
   return (
     <AppShell showBottomNav={false}>
       <div className="px-4 pb-32 md:px-0 md:pb-16 animate-fade-in max-w-7xl mx-auto">
-        {/* Breadcrumb Context */}
-        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-gray-400 mb-4 flex-wrap">
-          <Link to="/home" className="hover:text-brand-orange transition-colors">
-            Home
-          </Link>
-          <span>/</span>
-          <Link to="/shop" className="hover:text-brand-orange transition-colors">
-            Shop
-          </Link>
-          <span>/</span>
-          <Link
-            to={`/shop?category=${encodeURIComponent(product.category)}`}
-            className="hover:text-brand-orange transition-colors"
-          >
-            {product.category}
-          </Link>
-          <span>/</span>
-          <span className="text-gray-800 font-semibold truncate max-w-[200px] sm:max-w-none">
-            {product.name}
-          </span>
-        </nav>
+        {/* Breadcrumb Context / Back Action */}
+        <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-gray-400 flex-wrap">
+            {returnTo && returnTo.startsWith('/orders') ? (
+              <>
+                <Link to="/orders" className="hover:text-brand-orange transition-colors">
+                  Orders
+                </Link>
+                <span>/</span>
+                <Link to={returnTo} className="hover:text-brand-orange transition-colors">
+                  Order Details
+                </Link>
+                <span>/</span>
+              </>
+            ) : (
+              <>
+                <Link to="/home" className="hover:text-brand-orange transition-colors">
+                  Home
+                </Link>
+                <span>/</span>
+                <Link to="/shop" className="hover:text-brand-orange transition-colors">
+                  Shop
+                </Link>
+                <span>/</span>
+                <Link
+                  to={`/shop?category=${encodeURIComponent(product.category)}`}
+                  className="hover:text-brand-orange transition-colors"
+                >
+                  {product.category}
+                </Link>
+                <span>/</span>
+              </>
+            )}
+            <span className="text-gray-800 font-semibold truncate max-w-[200px] sm:max-w-none">
+              {product.name}
+            </span>
+          </nav>
+
+          {returnTo && (
+            <button
+              type="button"
+              onClick={() => navigate(returnTo)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-orange hover:text-brand-orange-dark hover:underline cursor-pointer transition-colors"
+            >
+              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              <span>Back to Order Details</span>
+            </button>
+          )}
+        </div>
 
         {/* Main Product Layout Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
@@ -290,7 +322,7 @@ function ProductDetail() {
               {/* Mobile Back button */}
               <button
                 type="button"
-                onClick={() => navigate(-1)}
+                onClick={() => (returnTo ? navigate(returnTo) : navigate(-1))}
                 className="md:hidden absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md active:scale-95 transition-transform"
                 aria-label="Go back"
               >

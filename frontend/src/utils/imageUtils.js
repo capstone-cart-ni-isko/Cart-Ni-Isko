@@ -57,11 +57,19 @@ export function getImageUrl(path) {
     return imageMap[normalizedPath]
   }
 
-  // Fallback: try matching by filename
+  // Fallback: try matching by filename for bundled assets
   const filename = path.split('/').pop()
   const match = Object.entries(imageMap).find(([key]) => key.endsWith(filename))
   if (match) {
     return match[1]
+  }
+
+  // If the path refers to backend storage or uploads, prepend the backend host
+  if (path.startsWith('/storage/') || path.startsWith('storage/') || path.startsWith('/uploads/') || path.startsWith('uploads/')) {
+    const rawBase = import.meta.env?.VITE_API_BASE_URL || ''
+    const backendOrigin = rawBase.replace(/\/api\/?$/, '')
+    const cleanPath = path.startsWith('/') ? path : `/${path}`
+    return backendOrigin ? `${backendOrigin}${cleanPath}` : cleanPath
   }
 
   return path
