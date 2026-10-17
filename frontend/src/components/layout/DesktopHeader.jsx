@@ -161,7 +161,7 @@ function DesktopHeader() {
                 >
                   <Glyph active={on} src={src} alt={label} />
                   {badge > 0 && (
-                    <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-xs animate-scale-in">
+                    <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-[10px] font-semibold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-xs animate-scale-in">
                       {badge}
                     </span>
                   )}

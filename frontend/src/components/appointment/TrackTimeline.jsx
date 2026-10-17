@@ -22,11 +22,11 @@ export default function TrackTimeline({ status = 'upcoming', type = 'VISIT' }) {
 
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Track</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Track</p>
 
       {isCancelled ? (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-          <p className="text-xs font-bold text-red-700">Cancelled</p>
+          <p className="text-xs font-semibold text-red-700">Cancelled</p>
           <p className="text-[11px] text-red-600 leading-snug">
             This slot is no longer active. Book a new one to reschedule.
           </p>
@@ -67,7 +67,7 @@ export default function TrackTimeline({ status = 'upcoming', type = 'VISIT' }) {
                 <p
                   className={`mt-1 text-[10px] leading-tight pr-1 ${
                     index === activeIndex
-                      ? 'text-brand-orange font-extrabold'
+                      ? 'text-brand-orange font-semibold'
                       : done
                       ? 'text-slate-600 font-semibold'
                       : 'text-slate-400'

@@ -11,7 +11,7 @@ export default function ProgressSteps({ steps, currentStep }) {
         return (
           <div key={label} className="flex items-center gap-2 flex-1">
             <div className="flex items-center gap-2">
-              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+              <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
                 isComplete
                   ? 'bg-emerald-500 text-white'
                   : isCurrent

@@ -27,7 +27,7 @@ function stamp(value) {
 
 function Row({ label, value, strong = false }) {
   return (
-    <div className={`flex items-start justify-between gap-3 ${strong ? 'font-black text-gray-900' : 'text-gray-600'}`}>
+    <div className={`flex items-start justify-between gap-3 ${strong ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
       <span>{label}</span>
       <span className="text-right break-all">{value}</span>
     </div>
@@ -54,9 +54,9 @@ export default function DigitalReceipt({ order, customer = '' }) {
       className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs font-mono text-xs space-y-3 max-w-md mx-auto w-full"
     >
       <div className="text-center space-y-0.5">
-        <p className="text-sm font-black tracking-wide text-gray-900">TINDAHAN NI ISKO</p>
+        <p className="text-sm font-semibold tracking-wide text-gray-900">TINDAHAN NI ISKO</p>
         <p className="text-[11px] text-gray-500">Bicol University Student Council</p>
-        <p className="text-[11px] font-bold text-gray-900 pt-1">OFFICIAL RECEIPT</p>
+        <p className="text-[11px] font-semibold text-gray-900 pt-1">OFFICIAL RECEIPT</p>
       </div>
 
       <div className="border-t border-dashed border-slate-300 pt-3 space-y-1">
@@ -72,7 +72,7 @@ export default function DigitalReceipt({ order, customer = '' }) {
           const name = item.prod_name || item.product?.prod_name || 'Item'
           return (
             <div key={item.item_id ?? idx}>
-              <p className="font-bold text-gray-900">
+              <p className="font-semibold text-gray-900">
                 {name}
                 {item.prodvar_name ? ` (${item.prodvar_name})` : ''}
               </p>
@@ -100,7 +100,7 @@ export default function DigitalReceipt({ order, customer = '' }) {
       </div>
 
       <div className="border-t border-dashed border-slate-300 pt-3 text-center space-y-0.5">
-        <p className="font-bold text-gray-900">Thank you, Iskolar!</p>
+        <p className="font-semibold text-gray-900">Thank you, Iskolar!</p>
         <p className="text-[11px] text-gray-500">Keep this receipt as proof of purchase.</p>
       </div>
     </section>

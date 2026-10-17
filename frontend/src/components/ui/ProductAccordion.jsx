@@ -70,9 +70,9 @@ export default function ProductAccordion({ details = {}, preOrder = false }) {
   ]
 
   return (
-    <div className="border border-gray-200 rounded-3xl divide-y divide-gray-100 bg-white overflow-hidden shadow-2xs">
-      <div className="px-5 py-3.5 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
-        <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Product Details</h3>
+    <div className="border border-gray-200 rounded-2xl divide-y divide-gray-100 bg-white overflow-hidden shadow-2xs">
+      <div className="px-4 py-2.5 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-widest">Product Details</h3>
         <span className="text-[11px] text-gray-400 font-medium">Fabric & Care Specs</span>
       </div>
 
@@ -83,13 +83,13 @@ export default function ProductAccordion({ details = {}, preOrder = false }) {
             <button
               type="button"
               onClick={() => toggleSection(key)}
-              className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-gray-50/70 transition-colors cursor-pointer"
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50/70 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center">
+                <span className="w-6 h-6 rounded-md bg-orange-50 flex items-center justify-center">
                   {icon}
                 </span>
-                <span className="text-sm font-bold text-gray-800">{title}</span>
+                <span className="text-sm font-semibold text-gray-800">{title}</span>
               </div>
               <svg
                 viewBox="0 0 24 24"
@@ -105,7 +105,7 @@ export default function ProductAccordion({ details = {}, preOrder = false }) {
             </button>
 
             {isOpen && (
-              <div className="px-5 pb-4 pt-1 text-xs md:text-sm text-gray-600 leading-relaxed pl-14 animate-fade-in">
+              <div className="px-4 pb-3 pt-1 text-xs md:text-sm text-gray-600 leading-relaxed pl-12 animate-fade-in">
                 {content}
               </div>
             )}

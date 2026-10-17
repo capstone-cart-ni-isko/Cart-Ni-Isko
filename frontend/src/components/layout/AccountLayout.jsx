@@ -34,7 +34,7 @@ function AccountLayout({ children, className = '' }) {
           >
             <div className="flex-1 min-w-0">
               {isOffline && (
-                <div className="bg-amber-500 text-white text-xs font-bold py-2 px-4 text-center sticky top-0 z-[99999]">
+                <div className="bg-amber-500 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[99999]">
                   You are currently offline. Browsing in cached mode.
                 </div>
               )}

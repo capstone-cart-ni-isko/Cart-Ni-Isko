@@ -8,7 +8,7 @@ function DesktopFooter() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-3">
           {/* Logo & Description */}
           <div className="space-y-1.5">
-            <h3 className="text-sm font-black text-gray-900 tracking-wide">
+            <h3 className="text-sm font-semibold text-gray-900 tracking-wide">
               Tindahan <span className="text-brand-orange">ni Isko</span>
             </h3>
             <p className="text-[11px] text-gray-500 leading-relaxed max-w-[280px]">
@@ -36,7 +36,7 @@ function DesktopFooter() {
 
           {/* SUPPORT Column */}
           <div>
-            <h4 className="text-[11px] font-bold text-gray-900 uppercase tracking-wider mb-1.5">SUPPORT</h4>
+            <h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-1.5">SUPPORT</h4>
             <ul className="space-y-1">
               <li>
                 <span className="text-[11px] text-gray-500 font-medium">FAQ &amp; Size Guide</span>
@@ -52,7 +52,7 @@ function DesktopFooter() {
 
           {/* INFORMATION Column */}
           <div>
-            <h4 className="text-[11px] font-bold text-gray-900 uppercase tracking-wider mb-1.5">INFORMATION</h4>
+            <h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-1.5">INFORMATION</h4>
             <ul className="space-y-1">
               <li>
                 <Link to="/orders" className="text-[11px] text-gray-500 hover:text-brand-orange transition-colors font-medium">

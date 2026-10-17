@@ -17,7 +17,7 @@ export default function RatingStars({ rating = 0, max = 5, size = 'sm', showValu
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
         </svg>
       ))}
-      {showValue && <span className="ml-1 text-xs font-bold text-gray-600 dark:text-[var(--muted)]">{rating.toFixed(1)}</span>}
+      {showValue && <span className="ml-1 text-xs font-semibold text-gray-600 dark:text-[var(--muted)]">{rating.toFixed(1)}</span>}
     </div>
   )
 }

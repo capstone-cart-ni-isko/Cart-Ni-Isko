@@ -482,7 +482,7 @@ function CheckoutPlaceholder() {
             <div className="flex items-center gap-3">
               <img src={logo} alt="Tindahan ni Isko" className="h-8 object-contain" />
               <div>
-                <h1 className="text-xl font-bold text-gray-900 leading-tight">
+                <h1 className="text-xl font-semibold text-gray-900 leading-tight">
                   Review &amp; Confirm Order
                 </h1>
                 <p className="text-sm text-gray-500">
@@ -501,7 +501,7 @@ function CheckoutPlaceholder() {
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
                 Customer Details
               </p>
-              <p className="font-bold text-gray-900">{currentUser?.fullName || 'Customer'}</p>
+              <p className="font-semibold text-gray-900">{currentUser?.fullName || 'Customer'}</p>
               <p className="text-gray-500 truncate">{currentUser?.email || currentUser?.phone}</p>
               <p className="text-gray-500 font-mono">
                 ID: {currentUser?.studentId || custId || '—'}
@@ -551,7 +551,7 @@ function CheckoutPlaceholder() {
               {slot ? (
                 <div className="p-3.5 rounded-lg border border-orange-200 bg-orange-50/70 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-900">Pickup slot selected</p>
+                    <p className="text-sm font-semibold text-slate-900">Pickup slot selected</p>
                     <p className="text-xs text-slate-600 truncate">
                       {String(slot.appoint_start).replace('T', ' ')} · claimed with your order
                     </p>
@@ -559,7 +559,7 @@ function CheckoutPlaceholder() {
                   <button
                     type="button"
                     onClick={bookPickupSlot}
-                    className="shrink-0 h-8 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                    className="shrink-0 h-8 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
                   >
                     Change slot
                   </button>
@@ -571,7 +571,7 @@ function CheckoutPlaceholder() {
                     touch('slot')
                     bookPickupSlot()
                   }}
-                  className="w-full h-11 rounded-lg border-2 border-dashed border-brand-orange text-brand-orange text-sm font-bold hover:bg-orange-50 transition-colors cursor-pointer"
+                  className="w-full h-11 rounded-lg border-2 border-dashed border-brand-orange text-brand-orange text-sm font-semibold hover:bg-orange-50 transition-colors cursor-pointer"
                 >
                   Book your in-store pickup slot
                 </button>
@@ -585,7 +585,7 @@ function CheckoutPlaceholder() {
           {/* FLOW-CHECKOUT-07: delivery expands with address AND date. */}
           {dispatchType === 'delivery' && (
             <div className="space-y-3 text-sm">
-              <p className="font-bold text-gray-900">Delivery Address</p>
+              <p className="font-semibold text-gray-900">Delivery Address</p>
               {sortedAddresses.length > 0 && (
                 <div className="space-y-1.5">
                   {sortedAddresses.map((addr, idx) => (
@@ -603,7 +603,7 @@ function CheckoutPlaceholder() {
                           : 'border-slate-100 bg-white hover:bg-gray-50'
                       }`}
                     >
-                      <span className="font-bold text-gray-800">
+                      <span className="font-semibold text-gray-800">
                         {addr.recipient || `Address ${idx + 1}`}
                       </span>
                       {addr.isDefault && (
@@ -648,7 +648,7 @@ function CheckoutPlaceholder() {
               )}
 
               <div>
-                <p className="font-bold text-gray-900 mb-1.5">Delivery Date</p>
+                <p className="font-semibold text-gray-900 mb-1.5">Delivery Date</p>
                 <input
                   type="date"
                   value={deliverExpect}
@@ -666,7 +666,7 @@ function CheckoutPlaceholder() {
                 )}
               </div>
 
-              <p className="font-bold text-gray-900">Delivery Speed</p>
+              <p className="font-semibold text-gray-900">Delivery Speed</p>
               <div className="grid grid-cols-3 gap-2">
                 {DELIVERY_TIERS.map((t) => (
                   <button
@@ -691,7 +691,7 @@ function CheckoutPlaceholder() {
 
           {/* Itemized Order Review List */}
           <div className="space-y-2">
-            <p className="text-sm font-bold text-gray-900 flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900 flex items-center justify-between">
               <span>Order Items ({itemsToCheckout.length})</span>
               <button
                 type="button"
@@ -719,14 +719,14 @@ function CheckoutPlaceholder() {
                         className="w-10 h-10 rounded-md object-contain bg-white p-1 shrink-0"
                       />
                       <div className="min-w-0">
-                        <p className="font-bold text-gray-900 truncate">{product.name}</p>
+                        <p className="font-semibold text-gray-900 truncate">{product.name}</p>
                         <p className="text-xs text-gray-500">
                           Qty: {itemQty}
                           {variantText ? ` • ${variantText}` : ''} • ₱{itemPrice.toFixed(2)} each
                         </p>
                       </div>
                     </div>
-                    <p className="font-bold text-gray-900 shrink-0">
+                    <p className="font-semibold text-gray-900 shrink-0">
                       ₱{(itemPrice * itemQty).toFixed(2)}
                     </p>
                   </div>
@@ -757,9 +757,9 @@ function CheckoutPlaceholder() {
                 store's tier price.
               </p>
             )}
-            <div className="flex justify-between items-baseline text-sm font-bold text-gray-900 pt-2 border-t border-orange-200/60">
+            <div className="flex justify-between items-baseline text-sm font-semibold text-gray-900 pt-2 border-t border-orange-200/60">
               <span>Total Due</span>
-              <span className="text-lg font-bold text-brand-orange">
+              <span className="text-lg font-semibold text-brand-orange">
                 ₱{totalDue.toFixed(2)}
               </span>
             </div>
@@ -785,7 +785,7 @@ function CheckoutPlaceholder() {
               </div>
             </div>
             <p className="text-[11px] text-gray-400">
-              Amount due: <span className="font-bold text-gray-600">₱{totalDue.toFixed(2)}</span> —
+              Amount due: <span className="font-semibold text-gray-600">₱{totalDue.toFixed(2)}</span> —
               a one-time phone code is required before the order is saved.
             </p>
           </div>
@@ -797,7 +797,7 @@ function CheckoutPlaceholder() {
             <Button
               onClick={handlePlaceOrder}
               disabled={busy}
-              className={`w-full py-3.5 rounded-lg font-bold text-sm transition-all cursor-pointer ${
+              className={`w-full py-3.5 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
                 busy
                   ? 'bg-slate-200 text-slate-500 cursor-wait'
                   : 'bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98'
@@ -858,13 +858,13 @@ function CheckoutPlaceholder() {
           }
         >
           <p className="text-sm text-gray-500 leading-relaxed">
-            <span className="font-bold text-gray-800">₱{totalDue.toFixed(2)}</span> due ·{' '}
+            <span className="font-semibold text-gray-800">₱{totalDue.toFixed(2)}</span> due ·{' '}
             {itemsToCheckout.length} {itemsToCheckout.length === 1 ? 'item' : 'items'} ·{' '}
             {dispatchType === 'pickup' ? 'Store pickup' : 'Courier delivery'}.
           </p>
           <p className="field-hint">
             This confirmation closes in{' '}
-            <span className="font-bold text-brand-orange">{Math.max(0, confirmSeconds)}s</span>.
+            <span className="font-semibold text-brand-orange">{Math.max(0, confirmSeconds)}s</span>.
           </p>
         </Modal>
       )}

@@ -9,7 +9,7 @@ export function formatPrice(amount) {
 
 function PriceTag({ amount, className = '', tone = 'brand' }) {
   return (
-    <span className={`${tone === 'neutral' ? 'font-semibold text-black' : 'font-bold text-brand-orange'} ${className}`}>
+    <span className={`${tone === 'neutral' ? 'font-semibold text-black' : 'font-semibold text-brand-orange'} ${className}`}>
       {formatPrice(amount)}
     </span>
   )

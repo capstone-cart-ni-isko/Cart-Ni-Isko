@@ -213,7 +213,7 @@ function AccountInfo() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 bg-brand-orange hover:bg-brand-orange-dark text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-md active:scale-95 transition-all"
+                className="absolute bottom-0 right-0 bg-brand-orange hover:bg-brand-orange-dark text-white text-[10px] font-semibold px-3 py-1 rounded-full shadow-md active:scale-95 transition-all"
               >
                 EDIT
               </button>
@@ -289,7 +289,7 @@ function AccountInfo() {
 
           {/* Additional Information Section */}
           <div className="space-y-5">
-            <h2 className="text-base font-black text-gray-900">Additional Information</h2>
+            <h2 className="text-base font-semibold text-gray-900">Additional Information</h2>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelClasses}>Pronoun</label>
@@ -307,7 +307,7 @@ function AccountInfo() {
                 <label className={labelClasses}>Delivery Addresses</label>
                 <Link
                   to="/settings/address"
-                  className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-xl text-sm font-bold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
+                  className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-xl text-sm font-semibold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
                 >
                   Manage your addresses
                   <span className="text-lg leading-none">›</span>
@@ -322,7 +322,7 @@ function AccountInfo() {
           <button
             type="submit"
             disabled={saveState === 'Saving…' || hasErrors}
-            className="w-full h-12 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-xl shadow-md active:scale-[0.98] transition-all disabled:opacity-60"
+            className="w-full h-12 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold rounded-xl shadow-md active:scale-[0.98] transition-all disabled:opacity-60"
           >
             {saveState || 'Save Changes'}
           </button>
@@ -335,13 +335,13 @@ function AccountInfo() {
         <div className="flex items-center gap-2 text-sm">
           <Link to="/settings" className="text-gray-400 hover:text-gray-600 transition-colors">Account Settings</Link>
           <span className="text-gray-300">/</span>
-          <span className="text-gray-900 font-bold">Edit Profile</span>
+          <span className="text-gray-900 font-semibold">Edit Profile</span>
         </div>
 
         {/* Page Title */}
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-2xl font-black text-gray-900">Edit Profile</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Edit Profile</h1>
             <p className="text-sm text-gray-400">Keep your personal information up to date.</p>
           </div>
         </div>
@@ -354,13 +354,13 @@ function AccountInfo() {
               <Avatar name={fullName} size={64} className="w-full h-full" userId={currentUser?.cust_id} src={photo} />
             </div>
             <div className="min-w-0">
-              <h3 className="text-lg font-bold text-gray-900">{fullName}</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{fullName}</h3>
               <p className="text-sm text-gray-400 truncate">{form.email}</p>
             </div>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="ml-auto flex items-center gap-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm px-5 py-2.5 rounded-xl shadow-sm active:scale-95 transition-all shrink-0"
+              className="ml-auto flex items-center gap-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-sm active:scale-95 transition-all shrink-0"
             >
               <PencilIcon className="w-3.5 h-3.5" />
               <span>Edit Photo</span>
@@ -370,7 +370,7 @@ function AccountInfo() {
             {/* Personal Information Section */}
             <div className="px-7 py-6 border-b border-gray-100 space-y-5">
               <div className="flex items-center justify-between">
-                <h2 className="text-base font-black text-gray-900">Personal Information</h2>
+                <h2 className="text-base font-semibold text-gray-900">Personal Information</h2>
                 <p className="text-xs text-gray-400"><span className="text-red-500">*</span> Fields marked with an asterisk are required.</p>
               </div>
 
@@ -409,7 +409,7 @@ function AccountInfo() {
 
             {/* Additional Information Section */}
             <div className="px-7 py-6 border-b border-gray-100 space-y-5">
-              <h2 className="text-base font-black text-gray-900">Additional Information</h2>
+              <h2 className="text-base font-semibold text-gray-900">Additional Information</h2>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <label className={labelClasses}>Pronoun</label>
@@ -427,7 +427,7 @@ function AccountInfo() {
                   <label className={labelClasses}>Delivery Addresses</label>
                   <Link
                     to="/settings/address"
-                    className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-xl text-sm font-bold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
+                    className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-xl text-sm font-semibold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
                   >
                     Manage your addresses
                     <span className="text-lg leading-none">›</span>
@@ -441,7 +441,7 @@ function AccountInfo() {
 
             {/* Academic Information Section */}
             <div className="px-7 py-6 border-b border-gray-100 space-y-5">
-              <h2 className="text-base font-black text-gray-900">Academic Information</h2>
+              <h2 className="text-base font-semibold text-gray-900">Academic Information</h2>
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
@@ -479,14 +479,14 @@ function AccountInfo() {
               <button
                 type="button"
                 onClick={() => navigate('/profile')}
-                className="px-7 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50 active:scale-95 transition-all"
+                className="px-7 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50 active:scale-95 transition-all"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saveState === 'Saving…' || hasErrors}
-                className="px-7 py-2.5 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm shadow-sm active:scale-95 transition-all disabled:opacity-60"
+                className="px-7 py-2.5 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-sm shadow-sm active:scale-95 transition-all disabled:opacity-60"
               >
                 {saveState || 'Save Changes'}
               </button>

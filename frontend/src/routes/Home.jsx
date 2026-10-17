@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
+import SkeletonCard from '../components/ui/SkeletonCard.jsx'
 import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import Avatar from '../components/ui/Avatar.jsx'
@@ -106,7 +107,7 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
                 <Avatar name={user?.fullName} size={56} className="w-full h-full" userId={user?.cust_id} />
               </div>
               <div>
-                <p className="font-bold text-lg">{user ? user.fullName : 'Guest Isko'}</p>
+                <p className="font-semibold text-lg">{user ? user.fullName : 'Guest Isko'}</p>
                 <p className="text-white/85 text-xs truncate max-w-[170px]">{user ? user.email : 'Explore campus merch'}</p>
               </div>
             </div>
@@ -184,6 +185,46 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
   )
 }
 
+function MissionVisionSection({ className = '' }) {
+  return (
+    <section className={`home-purpose-section ${className}`} aria-labelledby="home-purpose-title">
+      <div className="px-5 py-6 sm:px-7 sm:py-8">
+        <div className="mb-5">
+          <span className="text-[11px] font-semibold uppercase text-brand-orange">Our purpose</span>
+          <h2 id="home-purpose-title" className="mt-1 text-xl font-semibold text-slate-900 sm:text-2xl">
+            Mission &amp; Vision
+          </h2>
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-2 md:gap-8">
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-slate-900">Mission</h3>
+            <p className="text-sm leading-relaxed text-slate-600">
+              To provide accessible, high-quality official merchandise that strengthens university pride while supporting sustainable student initiatives.
+            </p>
+          </div>
+          <div>
+            <h3 className="mb-1 text-sm font-semibold text-slate-900">Vision</h3>
+            <p className="text-sm leading-relaxed text-slate-600">
+              To be the recognized student-led merchandise brand that represents the identity, values, and unity of every Iskolar ng Bayan.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 border-t border-slate-200/80 pt-4">
+          <p className="text-sm font-semibold text-slate-900">By the Students, For the Students</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-600 sm:text-sm">
+            Tindahan ni Isko operates under the official authority of the Bicol University – University Student Council and the Office of the BU USC Business Manager.
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600 sm:text-sm">
+            We are committed to the highest standards of financial accountability and transparency. Our operations strictly follow university policies on student enterprises, ensuring that our growth as a brand always translates into better service for the student body.
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function Home() {
   const navigate = useNavigate()
   const { currentUser, logout } = useAuth()
@@ -191,8 +232,8 @@ function Home() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [searchVal, setSearchVal] = useState('')
   const [slideIndex, setSlideIndex] = useState(0)
-  const featuredMobileRef = useRef(null)
-  const featuredDesktopRef = useRef(null)
+  const categoryMobileRef = useRef(null)
+  const categoryDesktopRef = useRef(null)
 
   // Auto rotate banner carousel
   useEffect(() => {
@@ -209,24 +250,27 @@ function Home() {
     }
   }
 
-  const { products: productsData, error: catalogError, reload: reloadCatalog } = useCatalog()
-  const featuredProductsMobile = productsData.slice(0, 4)
-  const featuredProductsDesktop = productsData.slice(0, 8)
-  const scrollFeatured = (rail, direction) => {
+  const { products: productsData, loading: catalogLoading, error: catalogError, reload: reloadCatalog } = useCatalog()
+  const featuredProducts = productsData.slice(0, 8)
+  const featuredProductsMobile = featuredProducts.slice(0, 4)
+  const scrollRail = (rail, direction) => {
     if (rail.current) {
-      rail.current.scrollLeft += rail.current.clientWidth * direction
+      rail.current.scrollBy({
+        left: rail.current.clientWidth * direction,
+        behavior: 'smooth',
+      })
     }
   }
 
   return (
-    <AppShell showSideNav={false}>
+    <AppShell showSideNav={false} className="home-page-canvas">
       {/* ────────────────── MOBILE HOME PAGE LAYOUT ────────────────── */}
       <div className="md:hidden pb-28">
         {/* Sidebar menu drawer */}
         <ProfileMenu open={menuOpen} onClose={() => setMenuOpen(false)} user={currentUser} onLogout={logout} />
 
         {/* Top ribbon bar */}
-        <header className="bg-white border-b border-gray-50 px-5 py-4 flex items-center justify-between sticky top-0 z-30">
+        <header className="bg-white/85 backdrop-blur-sm border-b border-gray-50 px-5 py-4 flex items-center justify-between sticky top-0 z-30">
           {/* Hamburger left */}
           <button
             type="button"
@@ -251,7 +295,7 @@ function Home() {
         </header>
 
         {/* Floating search container inside main stream */}
-        <div className="p-4 bg-gray-50">
+        <div className="p-4 bg-white/35">
           <form onSubmit={handleSearchSubmit} className="relative">
             <img src={searchIcon} alt="" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 opacity-40" />
             <input
@@ -283,22 +327,22 @@ function Home() {
                   <div className="max-w-xl">
                     <div className="flex items-center gap-2 mb-1.5">
                       {slide.isLimitedStock ? (
-                        <span className="inline-block bg-red-600 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md animate-pulse">
+                        <span className="inline-block bg-red-600 text-white text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md animate-pulse">
                           Limited Stock
                         </span>
                       ) : (
-                        <span className="inline-block bg-brand-orange text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-white/20">
+                        <span className="inline-block bg-brand-orange text-white text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border border-white/20">
                           {slide.pillText}
                         </span>
                       )}
                       <span className="text-white/80 text-[11px] font-medium">{slide.subtitle}</span>
                     </div>
-                    <h2 className="text-white text-2xl sm:text-3xl font-bold max-w-xl leading-tight mb-3">
+                    <h2 className="text-white text-2xl sm:text-3xl font-semibold max-w-xl leading-tight mb-3">
                       {slide.title}
                     </h2>
                     <Link
                       to={slide.ctaLink}
-                      className="inline-flex items-center gap-1 h-9 px-4 bg-brand-orange text-white text-xs font-bold rounded-md"
+                      className="inline-flex items-center gap-1 h-9 px-4 bg-brand-orange text-white text-xs font-semibold rounded-md"
                     >
                       <span>{slide.ctaText}</span>
                     </Link>
@@ -326,13 +370,17 @@ function Home() {
         {/* 2. Shop by Category (Mobile) */}
         <div className="px-4 pt-6 space-y-3">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-base font-extrabold text-gray-900 tracking-tight">Shop by Category</h2>
-            <Link to="/shop" className="text-xs font-black text-brand-orange hover:underline">
-              See all
-            </Link>
+            <h2 className="text-base font-semibold text-gray-900 tracking-tight">Shop by Category</h2>
+            <div className="flex items-center gap-2">
+              <button type="button" aria-label="Previous categories" onClick={() => scrollRail(categoryMobileRef, -1)} className="h-8 w-8 rounded-full border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange transition-colors">‹</button>
+              <button type="button" aria-label="Next categories" onClick={() => scrollRail(categoryMobileRef, 1)} className="h-8 w-8 rounded-full border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange transition-colors">›</button>
+              <Link to="/shop" className="text-xs font-semibold text-brand-orange hover:underline">
+                See all
+              </Link>
+            </div>
           </div>
 
-          <div className="flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none">
+          <div ref={categoryMobileRef} className="flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none">
             {shopCategories.map((cat) => (
               <Link
                 key={cat.name}
@@ -346,7 +394,7 @@ function Home() {
                     <PackageIcon className="h-10 w-10 text-gray-300" aria-hidden="true" />
                   )}
                 </span>
-                <h3 className="mt-2 text-xs font-bold text-gray-800 leading-tight group-hover:text-brand-orange transition-colors">
+                <h3 className="mt-2 text-xs font-semibold text-gray-800 leading-tight group-hover:text-brand-orange transition-colors">
                   {cat.name}
                 </h3>
               </Link>
@@ -357,21 +405,24 @@ function Home() {
         {/* 3. Featured Products (Mobile) */}
         <div className="px-4 pt-6 space-y-4">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-base font-extrabold text-gray-900 tracking-wide">Featured Products</h2>
-            <Link to="/shop" className="text-xs font-black text-brand-orange hover:underline">
+            <h2 className="text-base font-semibold text-gray-900 tracking-wide">Featured Products</h2>
+            <Link to="/shop" className="text-xs font-semibold text-brand-orange hover:underline">
               See all
             </Link>
           </div>
 
           {catalogError ? (
             <ServerErrorNotice message={catalogError} onRetry={reloadCatalog} className="py-8" />
-          ) : (
-            <div ref={featuredMobileRef} className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
-              {featuredProductsMobile.map((prod) => (
-                <div key={prod.id} className="w-[calc((100%-1rem)/2)] shrink-0 snap-start">
-                  <ProductCard product={prod} />
-                </div>
+          ) : catalogLoading ? (
+            <div className="grid grid-cols-2 gap-4" aria-busy={catalogLoading} aria-live="polite">
+              <span className="sr-only">Loading featured products</span>
+              {Array.from({ length: 4 }, (_, index) => (
+                <SkeletonCard key={index} />
               ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              {featuredProductsMobile.map((prod) => <ProductCard key={prod.id} product={prod} />)}
             </div>
           )}
         </div>
@@ -380,31 +431,31 @@ function Home() {
         <div className="px-4 pt-8">
           <div className="bg-white dark:bg-[var(--surface)] rounded-2xl p-5 border border-gray-100 dark:border-[var(--line)] shadow-xs space-y-4">
             <div className="text-center space-y-1">
-              <span className="text-[10px] font-black uppercase text-brand-orange tracking-wider">Simple Process</span>
-              <h2 className="text-lg font-black text-gray-900 dark:text-[var(--ink)]">How It Works</h2>
+              <span className="text-[10px] font-semibold uppercase text-brand-orange tracking-wider">Simple Process</span>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-[var(--ink)]">How It Works</h2>
             </div>
 
             <div className="space-y-3">
               <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 dark:bg-[var(--surface-3)]">
-                <span className="text-lg font-black text-brand-orange shrink-0">01</span>
+                <span className="text-lg font-semibold text-brand-orange shrink-0">01</span>
                 <div>
-                  <h3 className="text-xs font-black text-gray-900 dark:text-[var(--ink)]">Shop</h3>
+                  <h3 className="text-xs font-semibold text-gray-900 dark:text-[var(--ink)]">Shop</h3>
                   <p className="text-[11px] text-gray-600 dark:text-[var(--muted)]">Browse official BU merchandise and choose what you want.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80">
-                <span className="text-lg font-black text-brand-orange shrink-0">02</span>
+                <span className="text-lg font-semibold text-brand-orange shrink-0">02</span>
                 <div>
-                  <h3 className="text-xs font-black text-gray-900">Place Your Order</h3>
+                  <h3 className="text-xs font-semibold text-gray-900">Place Your Order</h3>
                   <p className="text-[11px] text-gray-600">Select your preferred way to receive your order.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80">
-                <span className="text-lg font-black text-brand-orange shrink-0">03</span>
+                <span className="text-lg font-semibold text-brand-orange shrink-0">03</span>
                 <div>
-                  <h3 className="text-xs font-black text-gray-900">Track Your Order</h3>
+                  <h3 className="text-xs font-semibold text-gray-900">Track Your Order</h3>
                   <p className="text-[11px] text-gray-600">Stay updated as your order is prepared and becomes ready for pickup or delivery.</p>
                 </div>
               </div>
@@ -412,11 +463,13 @@ function Home() {
           </div>
         </div>
 
+        <MissionVisionSection className="mx-4 mt-6" />
+
         {/* 5. Noticeable but Compact About Us Section (Mobile) - rounder corners */}
         <div className="px-4 pt-6">
           <div className="rounded-xl bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-slate-900 dark:text-[var(--ink)] p-5 space-y-2.5">
-            <span className="inline-block text-[10px] font-bold uppercase text-brand-orange tracking-wider">About Us</span>
-            <h2 className="text-base font-extrabold leading-snug">
+            <span className="inline-block text-[10px] font-semibold uppercase text-brand-orange tracking-wider">About Us</span>
+            <h2 className="text-base font-semibold leading-snug">
               More than merchandise. <br />
               <span className="text-brand-orange">It's BU pride you can wear.</span>
             </h2>
@@ -426,7 +479,7 @@ function Home() {
             <div className="pt-1">
               <Link
                 to="/settings/about"
-                className="inline-flex items-center justify-center h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold rounded-md transition-colors"
+                className="inline-flex items-center justify-center h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold rounded-md transition-colors"
               >
                 Learn More About Us
               </Link>
@@ -457,25 +510,25 @@ function Home() {
                   <div className="space-y-3 max-w-xl">
                     <div className="flex items-center gap-2.5">
                       {slide.isLimitedStock ? (
-                        <span className="inline-block bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md animate-pulse">
+                        <span className="inline-block bg-red-600 text-white text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md animate-pulse">
                           Limited Stock
                         </span>
                       ) : (
-                        <span className="inline-block bg-brand-orange text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
+                        <span className="inline-block bg-brand-orange text-white text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-md">
                           {slide.pillText}
                         </span>
                       )}
-                      <span className="inline-block bg-white/90 backdrop-blur-xs text-slate-900 text-[10px] font-bold px-2.5 py-1 rounded-md">
+                      <span className="inline-block bg-white/90 backdrop-blur-xs text-slate-900 text-[10px] font-semibold px-2.5 py-1 rounded-md">
                         {slide.subtitle}
                       </span>
                     </div>
-                    <h1 className="text-3xl lg:text-4xl font-extrabold leading-tight tracking-wide">
+                    <h1 className="text-3xl lg:text-4xl font-semibold leading-tight tracking-wide">
                       {slide.title}
                     </h1>
                     <div>
                       <Link
                         to={slide.ctaLink}
-                        className="inline-flex items-center justify-center h-8 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-xs rounded-md transition-colors"
+                        className="inline-flex items-center justify-center h-8 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md transition-colors"
                       >
                         <span>{slide.ctaText}</span>
                       </Link>
@@ -504,14 +557,20 @@ function Home() {
         <section className="space-y-6 mb-16">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Shop by Category</h2>
+              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Shop by Category</h2>
             </div>
-            <Link to="/shop" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
-              Browse all
-            </Link>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <button type="button" aria-label="Previous categories" onClick={() => scrollRail(categoryDesktopRef, -1)} className="h-8 w-8 rounded-full border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange transition-colors">‹</button>
+                <button type="button" aria-label="Next categories" onClick={() => scrollRail(categoryDesktopRef, 1)} className="h-8 w-8 rounded-full border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange transition-colors">›</button>
+              </div>
+              <Link to="/shop" className="text-xs font-semibold text-brand-orange hover:underline flex items-center gap-1">
+                Browse all
+              </Link>
+            </div>
           </div>
 
-          <div className="flex gap-8 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none">
+          <div ref={categoryDesktopRef} className="flex gap-8 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none">
             {shopCategories.map((cat) => (
               <Link
                 key={cat.name}
@@ -537,28 +596,25 @@ function Home() {
         <section className="space-y-6 mb-16">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Featured Products</h2>
+              <h2 className="text-xl font-semibold text-slate-900 tracking-tight">Featured Products</h2>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1">
-                <button type="button" aria-label="Previous featured products" onClick={() => scrollFeatured(featuredDesktopRef, -1)} className="h-8 w-8 rounded-full border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange transition-colors">‹</button>
-                <button type="button" aria-label="Next featured products" onClick={() => scrollFeatured(featuredDesktopRef, 1)} className="h-8 w-8 rounded-full border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange transition-colors">›</button>
-              </div>
-              <Link to="/shop" className="text-xs font-bold text-brand-orange hover:underline flex items-center gap-1">
-                See all
-              </Link>
-            </div>
+            <Link to="/shop" className="text-xs font-semibold text-brand-orange hover:underline flex items-center gap-1">
+              See all
+            </Link>
           </div>
 
           {catalogError ? (
             <ServerErrorNotice message={catalogError} onRetry={reloadCatalog} />
-          ) : (
-            <div ref={featuredDesktopRef} className="flex gap-6 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none">
-              {featuredProductsDesktop.map((prod) => (
-                <div key={prod.id} className="w-[calc((100%-4.5rem)/4)] shrink-0 snap-start">
-                  <ProductCard product={prod} />
-                </div>
+          ) : catalogLoading ? (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6" aria-busy={catalogLoading} aria-live="polite">
+              <span className="sr-only">Loading featured products</span>
+              {Array.from({ length: 8 }, (_, index) => (
+                <SkeletonCard key={index} />
               ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+              {featuredProducts.map((prod) => <ProductCard key={prod.id} product={prod} />)}
             </div>
           )}
         </section>
@@ -566,7 +622,7 @@ function Home() {
 {/* 4. How It Works Section (Desktop) */}
 <section className="mb-12 bg-white rounded-xl p-6 lg:p-10 border border-slate-200">
   <div className="text-center max-w-xl mx-auto mb-10 space-y-2">
-    <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">How To Order</h2>
+    <h2 className="text-2xl font-semibold text-slate-900 tracking-tight">How To Order</h2>
     <p className="text-sm text-slate-500">
       Getting your BU merchandise takes three simple steps.
     </p>
@@ -593,13 +649,13 @@ function Home() {
       <div key={step.num}>
         {/* Number badge + connecting line */}
         <div className="flex items-center mb-4">
-          <span className="flex items-center justify-center w-10 h-10 shrink-0 rounded-full border border-orange-200 bg-orange-50 text-sm font-extrabold text-brand-orange">
+          <span className="flex items-center justify-center w-10 h-10 shrink-0 rounded-full border border-orange-200 bg-orange-50 text-sm font-semibold text-brand-orange">
             {step.num}
           </span>
           {i < arr.length - 1 && <div className="flex-1 h-px bg-slate-200 dark:bg-[var(--line)] ml-4" />}
         </div>
 
-        <h3 className="text-base font-bold text-slate-900 mb-1.5">{step.title}</h3>
+        <h3 className="text-base font-semibold text-slate-900 mb-1.5">{step.title}</h3>
         <p className="text-sm text-slate-600 leading-relaxed pr-4">{step.desc}</p>
       </div>
     ))}
@@ -609,18 +665,20 @@ function Home() {
   <div className="mt-10 pt-6 border-t border-slate-100 text-center">
     <a
       href="/shop"
-      className="inline-block px-6 py-2.5 rounded-md bg-brand-orange text-white text-sm font-bold hover:opacity-90"
+      className="inline-block px-6 py-2.5 rounded-md bg-brand-orange text-white text-sm font-semibold hover:opacity-90"
     >
       Start Shopping
     </a>
   </div>
 </section>
 
+  <MissionVisionSection className="mb-8" />
+
         {/* 5. Noticeable but Compact About Us Section (Desktop) - rounder corners */}
         <section className="mb-8 rounded-xl bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-slate-900 dark:text-[var(--ink)] p-6 lg:p-8 relative overflow-hidden">
           <div className="relative z-10 max-w-2xl space-y-3">
-            <span className="inline-block text-xs font-bold uppercase text-brand-orange tracking-wider">About Us</span>
-            <h2 className="text-2xl lg:text-3xl font-extrabold leading-tight tracking-tight">
+            <span className="inline-block text-xs font-semibold uppercase text-brand-orange tracking-wider">About Us</span>
+            <h2 className="text-2xl lg:text-3xl font-semibold leading-tight tracking-tight">
               More than merchandise. <br />
               <span className="text-brand-orange">It's BU pride you can wear.</span>
             </h2>
@@ -630,7 +688,7 @@ function Home() {
             <div className="pt-1">
               <Link
                 to="/settings/about"
-                className="inline-flex items-center justify-center h-8 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold rounded-md transition-colors"
+                className="inline-flex items-center justify-center h-8 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold rounded-md transition-colors"
               >
                 <span>Learn More About Us</span>
               </Link>

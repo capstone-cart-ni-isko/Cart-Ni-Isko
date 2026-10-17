@@ -21,7 +21,7 @@ export default function CopyButton({ text, label = 'Copy', className = '' }) {
     <button
       type="button"
       onClick={handleCopy}
-      className={`inline-flex items-center gap-1 text-xs font-bold transition-colors cursor-pointer ${copied ? 'text-emerald-600' : 'text-gray-400 hover:text-brand-orange'} ${className}`}
+      className={`inline-flex items-center gap-1 text-xs font-semibold transition-colors cursor-pointer ${copied ? 'text-emerald-600' : 'text-gray-400 hover:text-brand-orange'} ${className}`}
       title={copied ? 'Copied!' : label}
     >
       {copied ? (

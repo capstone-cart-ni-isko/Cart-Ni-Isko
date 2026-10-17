@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
+import SkeletonGrid from '../components/ui/SkeletonGrid.jsx'
 import FiltersModal from '../components/ui/FiltersModal.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
-import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import backIcon from '../assets/icons/common/back.svg'
 import searchIcon from '../assets/icons/common/search.svg'
@@ -173,10 +173,10 @@ function Shop() {
         {/* Desktop-specific shop toolbar */}
         <div className="hidden lg:flex items-center justify-between border-b border-gray-200 pb-5 mb-6">
           <div>
-            <h1 className="text-2xl font-black text-gray-900">Shop Merchandise</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Shop Merchandise</h1>
             {query.trim() && (
               <p className="text-sm text-gray-400 mt-1">
-                Showing results for <span className="font-bold text-gray-700">"{query}"</span>
+                Showing results for <span className="font-semibold text-gray-700">"{query}"</span>
               </p>
             )}
           </div>
@@ -186,7 +186,7 @@ function Shop() {
             <button
               type="button"
               onClick={() => setFilterModalOpen(true)}
-              className={`h-10 px-5 rounded-xl border flex items-center gap-2 text-sm font-bold active:scale-95 transition-all cursor-pointer ${
+              className={`h-10 px-5 rounded-xl border flex items-center gap-2 text-sm font-semibold active:scale-95 transition-all cursor-pointer ${
                 Object.values(activeFilters).some((v, i) => (i === 0 ? v !== 'All' : i === 1 ? v !== 'All' : !!v))
                   ? 'bg-brand-orange border-brand-orange text-white'
                   : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
@@ -225,7 +225,7 @@ function Shop() {
                 key={cat}
                 type="button"
                 onClick={() => handleCategoryPillClick(cat)}
-                className={`px-4.5 py-1.5 rounded-full text-xs font-bold shrink-0 transition-all border cursor-pointer ${
+                className={`px-4.5 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all border cursor-pointer ${
                   isActive
                     ? 'bg-brand-orange border-brand-orange text-white shadow-sm'
                     : 'bg-white border-gray-100 text-gray-500 hover:border-gray-200'
@@ -240,10 +240,7 @@ function Shop() {
         {/* Results grid */}
         <div className="px-4 py-4 lg:px-0 lg:py-0">
           {loading ? (
-            <div className="flex items-center justify-center py-20 gap-3">
-              <LoadingSpinner size={28} />
-              <span className="text-sm font-semibold text-gray-500">Loading catalog…</span>
-            </div>
+            <SkeletonGrid count={8} isLoading={loading} />
           ) : error ? (
             <ServerErrorNotice message={error} onRetry={reload} />
           ) : filteredProducts.length === 0 ? (
@@ -254,7 +251,7 @@ function Shop() {
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
               </div>
-              <h3 className="font-bold text-gray-700">No results found</h3>
+              <h3 className="font-semibold text-gray-700">No results found</h3>
               <p className="text-sm text-gray-450 mt-1 max-w-[220px] mx-auto leading-relaxed">
                 We couldn't find anything matching your filters. Try resetting them.
               </p>

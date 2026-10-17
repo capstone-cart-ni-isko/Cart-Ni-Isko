@@ -132,13 +132,13 @@ function VerifyOtp() {
     return (
       <div className="min-h-dvh bg-gray-50 flex flex-col items-center justify-center p-6">
         <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-100 shadow-xl p-8 text-center space-y-5 animate-fade-in">
-          <h1 className="text-2xl font-extrabold text-gray-900">Verification session expired</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Verification session expired</h1>
           <p className="text-sm text-gray-500 leading-relaxed">
             Please sign in or sign up again to request a new verification code.
           </p>
           <Button
             onClick={() => navigate('/login', { replace: true })}
-            className="w-full h-12 rounded-full font-bold shadow-md"
+            className="w-full h-12 rounded-full font-semibold shadow-md"
           >
             Back to Login
           </Button>
@@ -160,8 +160,8 @@ function VerifyOtp() {
             />
           </div>
 
-          <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Verify Phone</h1>
-          <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mt-4 mb-2">
+          <h1 className="text-3xl font-semibold text-gray-900 mb-2">Verify Phone</h1>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mt-4 mb-2">
             Check your notification inbox
           </h2>
           <p className="text-sm text-gray-500 mb-6 leading-relaxed">
@@ -174,15 +174,15 @@ function VerifyOtp() {
             {inboxCode ? (
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                     Your code
                   </p>
-                  <p className="text-xl font-black text-gray-900 tracking-[0.3em]">{inboxCode}</p>
+                  <p className="text-xl font-semibold text-gray-900 tracking-[0.3em]">{inboxCode}</p>
                 </div>
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="text-xs font-black text-brand-orange hover:underline focus:outline-none"
+                  className="text-xs font-semibold text-brand-orange hover:underline focus:outline-none"
                 >
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
@@ -207,7 +207,7 @@ function VerifyOtp() {
             <Button
               type="submit"
               disabled={otp.length < 6 || isSubmitting}
-              className="w-full h-12 rounded-full shadow-md font-bold"
+              className="w-full h-12 rounded-full shadow-md font-semibold"
             >
               {isSubmitting ? 'Verifying...' : 'Verify'}
             </Button>
@@ -217,7 +217,7 @@ function VerifyOtp() {
         <div className="text-center pt-6">
           {timer > 0 ? (
             <p className="text-sm text-gray-400 font-semibold">
-              Resend code in <span className="text-brand-orange font-bold">{formatTime(timer)}</span>
+              Resend code in <span className="text-brand-orange font-semibold">{formatTime(timer)}</span>
             </p>
           ) : (
             <p className="text-sm text-gray-500 font-semibold">
@@ -225,7 +225,7 @@ function VerifyOtp() {
               <button
                 type="button"
                 onClick={handleResend}
-                className="text-brand-orange font-black hover:underline focus:outline-none"
+                className="text-brand-orange font-semibold hover:underline focus:outline-none"
               >
                 Resend code
               </button>

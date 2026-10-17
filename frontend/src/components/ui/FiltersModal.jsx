@@ -172,7 +172,7 @@ function FiltersModal({ isOpen, onClose, initialFilters, onApply, categoryOption
                 >
                   {isSelected && (
                     <span
-                      className={`text-[10px] font-bold ${
+                      className={`text-[10px] font-semibold ${
                         c.name === 'White' ? 'text-gray-900' : 'text-white'
                       }`}
                     >
@@ -190,7 +190,7 @@ function FiltersModal({ isOpen, onClose, initialFilters, onApply, categoryOption
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Price Range</h3>
           <div className="flex items-center gap-2">
             <div className="flex-1 relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">₱</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">₱</span>
               <input
                 type="number"
                 placeholder="Min"
@@ -199,9 +199,9 @@ function FiltersModal({ isOpen, onClose, initialFilters, onApply, categoryOption
                 className="field-input pl-6"
               />
             </div>
-            <span className="text-gray-300 font-bold">—</span>
+            <span className="text-gray-300 font-semibold">—</span>
             <div className="flex-1 relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">₱</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400">₱</span>
               <input
                 type="number"
                 placeholder="Max"

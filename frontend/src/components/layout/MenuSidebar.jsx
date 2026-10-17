@@ -140,7 +140,7 @@ function MenuSidebar() {
         className={`${PANEL} ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-black text-gray-900 dark:text-[var(--ink)] uppercase tracking-wider">Menu</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-[var(--ink)] uppercase tracking-wider">Menu</span>
           <button
             type="button"
             onClick={close}
@@ -156,7 +156,7 @@ function MenuSidebar() {
             key={key}
             type="button"
             onClick={onClick}
-            className="flex items-center gap-3 w-full px-3 py-3 rounded-lg bg-gray-50 dark:bg-[var(--surface-3)] border border-gray-100 dark:border-[var(--line)] text-sm font-bold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-100 dark:hover:bg-[var(--surface-4)] transition-colors text-left cursor-pointer"
+            className="flex items-center gap-3 w-full px-3 py-3 rounded-lg bg-gray-50 dark:bg-[var(--surface-3)] border border-gray-100 dark:border-[var(--line)] text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-100 dark:hover:bg-[var(--surface-4)] transition-colors text-left cursor-pointer"
           >
             <span className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center shrink-0">
               {icon}

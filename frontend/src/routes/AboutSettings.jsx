@@ -53,7 +53,7 @@ function Card({ icon, title, children }) {
     <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="px-5 pt-5 pb-3 flex items-center gap-2.5">
         <span className="shrink-0">{icon}</span>
-        <h2 className="text-sm font-bold text-gray-900">{title}</h2>
+        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
       </div>
       <div className="px-5 pb-5">{children}</div>
     </section>
@@ -66,7 +66,7 @@ function AboutSettings() {
       <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
         {/* Desktop Title */}
         <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-black text-gray-900">About</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">About</h1>
           <p className="text-sm text-gray-400 mt-1">
             Store information, the people who built it, and what changed.
           </p>
@@ -79,25 +79,25 @@ function AboutSettings() {
 
         <div className="space-y-5">
           <Card icon={<StoreIcon className="w-4 h-4 text-brand-orange" />} title="Store information">
-            <p className="text-lg font-black text-gray-900">{STORE.name}</p>
+            <p className="text-lg font-semibold text-gray-900">{STORE.name}</p>
             <p className="text-xs font-semibold text-brand-orange uppercase tracking-wider mt-0.5">
               {STORE.tagline}
             </p>
             <dl className="mt-4 space-y-2.5 text-sm">
               <div>
-                <dt className="text-xs font-bold text-gray-400 uppercase tracking-wider">Address</dt>
+                <dt className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Address</dt>
                 <dd className="text-gray-700 font-medium">{STORE.address}</dd>
               </div>
               <div>
-                <dt className="text-xs font-bold text-gray-400 uppercase tracking-wider">Hours</dt>
+                <dt className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Hours</dt>
                 <dd className="text-gray-700 font-medium">{STORE.hours}</dd>
               </div>
               <div>
-                <dt className="text-xs font-bold text-gray-400 uppercase tracking-wider">Email</dt>
+                <dt className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Email</dt>
                 <dd className="text-gray-700 font-medium">{STORE.email}</dd>
               </div>
               <div>
-                <dt className="text-xs font-bold text-gray-400 uppercase tracking-wider">Phone</dt>
+                <dt className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Phone</dt>
                 <dd className="text-gray-700 font-medium">{STORE.phone}</dd>
               </div>
             </dl>
@@ -108,7 +108,7 @@ function AboutSettings() {
               {DEVELOPERS.map((dev) => (
                 <li key={dev.name} className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate">{dev.name}</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{dev.name}</p>
                     <p className="text-xs text-gray-400">{dev.role}</p>
                   </div>
                 </li>
@@ -128,7 +128,7 @@ function AboutSettings() {
               {VERSIONS.map((entry) => (
                 <li key={entry.version} className="border-l-2 border-brand-orange/40 pl-3.5">
                   <div className="flex items-baseline gap-2">
-                    <p className="text-sm font-black text-gray-900">v{entry.version}</p>
+                    <p className="text-sm font-semibold text-gray-900">v{entry.version}</p>
                     <p className="text-xs font-semibold text-gray-400">{entry.date}</p>
                   </div>
                   <ul className="mt-1.5 space-y-1">

@@ -37,7 +37,7 @@ function AppShell({ children, showNav = true, showBottomNav = true, showHeader =
       <MenuProvider>
         <div className="min-h-screen bg-white dark:bg-[var(--surface)] md:bg-[#F8F9FA] md:dark:bg-[var(--surface)] flex flex-col w-full customer-desktop-scale">
           {isOffline && (
-            <div className="bg-amber-500 text-white text-xs font-bold py-2 px-4 text-center sticky top-0 z-[99999] shadow-sm">
+            <div className="bg-amber-500 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[99999] shadow-sm">
               You are currently offline. Browsing in cached mode.
             </div>
           )}
@@ -69,7 +69,7 @@ function AppShell({ children, showNav = true, showBottomNav = true, showHeader =
         className={className}
       >
         {isOffline && (
-          <div className="bg-amber-500 text-white text-xs font-bold py-2 px-4 text-center sticky top-0 z-[99999] shadow-sm">
+          <div className="bg-amber-500 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[99999] shadow-sm">
             You are currently offline. Browsing in cached mode.
           </div>
         )}

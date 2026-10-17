@@ -168,7 +168,7 @@ function SignIn() {
           }`}
         />
         {identifierOk && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#16A34A] text-white text-xs font-black animate-scale-in">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#16A34A] text-white text-xs font-semibold animate-scale-in">
             ✓
           </span>
         )}
@@ -210,7 +210,7 @@ function SignIn() {
         <button
           type="button"
           onClick={() => setShowPassword((prev) => !prev)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500 hover:text-brand-orange transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-500 hover:text-brand-orange transition-colors"
         >
           {showPassword ? 'Hide' : 'Show'}
         </button>
@@ -285,7 +285,7 @@ function SignIn() {
 
         <p className="text-center text-sm text-gray-500 dark:text-[var(--muted)] font-semibold pt-6">
           Don&apos;t have an account?{' '}
-          <Link to="/signup/role" className="text-brand-orange font-bold hover:underline">
+          <Link to="/signup/role" className="text-brand-orange font-semibold hover:underline">
             Sign up
           </Link>
         </p>
@@ -348,7 +348,7 @@ function SignIn() {
 
           <p className="text-center text-sm text-gray-500 dark:text-[var(--muted)] font-semibold">
             Don&apos;t have an account?{' '}
-            <Link to="/signup/role" className="text-brand-orange font-bold hover:underline">
+            <Link to="/signup/role" className="text-brand-orange font-semibold hover:underline">
               Sign Up
             </Link>
           </p>

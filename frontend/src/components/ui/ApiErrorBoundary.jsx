@@ -80,7 +80,7 @@ export class ApiErrorBoundary extends Component {
               <img src={logo} alt="Tindahan ni Isko" className="w-8 h-8 object-contain" />
             </div>
           </div>
-          <h1 className="text-base font-extrabold text-slate-900">This page hit an error</h1>
+          <h1 className="text-base font-semibold text-slate-900">This page hit an error</h1>
           <p className="text-sm text-slate-600 break-words">
             Something unexpected went wrong while showing this page. Please try
             again in a moment.

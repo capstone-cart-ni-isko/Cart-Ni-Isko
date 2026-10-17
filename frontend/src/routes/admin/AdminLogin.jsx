@@ -191,7 +191,7 @@ export default function AdminLogin() {
           <div>
             <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">Staff &amp; Admin Portal</h1>
             <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium mt-1">
-              Authorized Bicol University Staff &amp; Officer Access Only
+              Authorized Bicol University - USC Access Only
             </p>
           </div>
         </div>
@@ -212,7 +212,7 @@ export default function AdminLogin() {
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label htmlFor="emp-email" className="field-label">
-              Staff ID / University Email
+              BU Email
             </label>
             <div className="relative">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true">
@@ -247,7 +247,7 @@ export default function AdminLogin() {
 
           <div>
             <label htmlFor="emp-password" className="field-label">
-              Security Password
+              Password
             </label>
             <div className="relative">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true">
@@ -322,10 +322,7 @@ export default function AdminLogin() {
             ) : (
               <>
                 <span>Sign In</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4" aria-hidden="true">
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
-                </svg>
+
               </>
             )}
           </button>

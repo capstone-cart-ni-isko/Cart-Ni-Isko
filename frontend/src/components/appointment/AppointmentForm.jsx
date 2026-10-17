@@ -260,7 +260,7 @@ export default function AppointmentForm({
   return (
     <div className="bg-white rounded-xl p-4 border border-slate-200 space-y-3">
       <div>
-        <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
+        <h2 className="text-base font-semibold text-slate-900 tracking-tight">
           {title ||
             (reschedule
               ? `Reschedule ${TYPE_LABEL[appointType]}`
@@ -274,7 +274,7 @@ export default function AppointmentForm({
           <button
             type="button"
             onClick={onCancel}
-            className="mt-1.5 text-xs font-bold text-brand-orange hover:underline cursor-pointer"
+            className="mt-1.5 text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
           >
             ← Keep my current slot
           </button>
@@ -294,7 +294,7 @@ export default function AppointmentForm({
                   setAppointType(t)
                   setSlot('')
                 }}
-                className={`py-2 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                className={`py-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                   appointType === t
                     ? 'bg-brand-orange text-white border-brand-orange'
                     : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
@@ -381,7 +381,7 @@ export default function AppointmentForm({
         type="button"
         disabled={booking || !slot}
         onClick={handleBook}
-        className="w-full h-9 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full h-9 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {booking
           ? 'Saving…'

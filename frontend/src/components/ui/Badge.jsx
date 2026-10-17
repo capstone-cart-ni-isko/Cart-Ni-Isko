@@ -12,7 +12,7 @@ export default function Badge({ children, variant = 'brand', className = '' }) {
     neutral: 'bg-gray-100 dark:bg-[var(--surface-3)] text-gray-600 dark:text-[var(--muted)]',
   }
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${variants[variant]} ${className}`}>
+    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${variants[variant]} ${className}`}>
       {children}
     </span>
   )
