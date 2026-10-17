@@ -368,6 +368,7 @@ class DatabaseAPI extends Controller
             'cust_categ'   => 'required|in:student,alumni,faculty',
             'cust_college' => 'required|string|max:120',
             'cust_dept'    => 'required|string|max:120',
+            'address'      => 'sometimes|nullable|string|max:255',
             'email'        => 'required|email:rfc|ends_with:bicol-u.edu.ph',
         ], [
             'cust_categ.required'   => 'Please choose your category (student, alumni, or faculty).',
@@ -395,6 +396,18 @@ class DatabaseAPI extends Controller
             'backup_email' => ['backupemail', 'backup_email'],
             'type'         => ['cust_type', 'role'],
         ];
+
+        if (! $json->filled('address')) {
+            $composite = implode(', ', array_filter([
+                $json->input('brgy'),
+                $json->input('city'),
+                $json->input('province'),
+                $json->input('country'),
+            ]));
+            if (trim($composite) !== '') {
+                $json->merge(['address' => trim($composite)]);
+            }
+        }
 
         foreach ($pairs as $canonical => $aliases) {
             if ($json->filled($canonical)) {

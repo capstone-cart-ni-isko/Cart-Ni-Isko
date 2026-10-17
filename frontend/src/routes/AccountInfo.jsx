@@ -93,7 +93,7 @@ function AccountInfo() {
   useEffect(() => {
     if (form.college && availableColleges.length > 0) {
       const collegeObj = availableColleges.find((col) => col.name === form.college)
-      setAvailableDepartments(collegeObj ? collegeObj.programs : [])
+      setAvailableDepartments(collegeObj ? (collegeObj.departments || collegeObj.programs || []) : [])
     } else {
       setAvailableDepartments([])
     }
