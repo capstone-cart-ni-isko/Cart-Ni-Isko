@@ -147,42 +147,54 @@ function DesktopHeader() {
           />
         </form>
 
-        {/* Ribbon: every icon is the same 20px box, no hover illumination */}
-        <div className="flex items-center gap-1.5 lg:gap-2 text-gray-700 shrink-0">
-          {ribbon.map(({ to, label, icon: Glyph, src, badge, active }) => {
-            const on = isOn({ to, active })
-            return (
-              <div key={to} className="relative flex items-center justify-center">
-                <Link
-                  to={to}
-                  onClick={to === '/home' ? undefined : guardGuest}
-                  aria-label={label}
-                  className={`p-2 rounded-lg relative flex items-center justify-center transition-colors ${on ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
-                >
-                  <Glyph active={on} src={src} alt={label} />
-                  {badge > 0 && (
-                    <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-[10px] font-semibold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-xs animate-scale-in">
-                      {badge}
-                    </span>
-                  )}
-                </Link>
-              </div>
-            )
-          })}
+        {/* Ribbon: when no customer is logged in, the entire ribbon icons must be replaced with a "Log in" button whose width is exactly the same as the array */}
+        {currentUser ? (
+          <div className="flex items-center gap-1.5 lg:gap-2 text-gray-700 shrink-0">
+            {ribbon.map(({ to, label, icon: Glyph, src, badge, active }) => {
+              const on = isOn({ to, active })
+              return (
+                <div key={to} className="relative flex items-center justify-center">
+                  <Link
+                    to={to}
+                    onClick={to === '/home' ? undefined : guardGuest}
+                    aria-label={label}
+                    className={`p-2 rounded-lg relative flex items-center justify-center transition-colors ${on ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
+                  >
+                    <Glyph active={on} src={src} alt={label} />
+                    {badge > 0 && (
+                      <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-[10px] font-semibold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-xs animate-scale-in">
+                        {badge}
+                      </span>
+                    )}
+                  </Link>
+                </div>
+              )
+            })}
 
-          {/* Menu: opens the right-side drawer the mobile ribbon also opens */}
-          <div className="relative flex items-center justify-center">
-            <button
-              type="button"
-              onClick={openMenu}
-              aria-label="Menu"
-              aria-expanded={isMenuOpen}
-              className={`p-2 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${isMenuOpen ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
-            >
-              <MenuIcon />
-            </button>
+            {/* Menu: opens the right-side drawer the mobile ribbon also opens */}
+            <div className="relative flex items-center justify-center">
+              <button
+                type="button"
+                onClick={openMenu}
+                aria-label="Menu"
+                aria-expanded={isMenuOpen}
+                className={`p-2 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${isMenuOpen ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
+              >
+                <MenuIcon />
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center text-gray-700 shrink-0 w-[184px] lg:w-[196px]">
+            <Link
+              to="/signin"
+              id="customer-ribbon-login-btn"
+              className="w-full h-9 rounded-lg bg-brand-orange hover:bg-brand-orange/90 active:scale-[0.98] text-white text-xs font-semibold flex items-center justify-center tracking-tight transition-all shadow-2xs hover:shadow-xs cursor-pointer select-none"
+            >
+              Log in
+            </Link>
+          </div>
+        )}
       </div>
 
       <LoginPromptModal

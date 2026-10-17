@@ -156,7 +156,6 @@ function VerifyOtp() {
           <div className="flex items-center mb-6">
             <BackButton
               to={state.fromSignIn ? '/login' : '/signup/role'}
-              label={state.fromSignIn ? 'Back to Login' : 'Back to Sign Up'}
             />
           </div>
 

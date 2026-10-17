@@ -312,7 +312,6 @@ export default function AdminProductDetail() {
         <div className="flex items-center justify-between gap-3">
           <BackButton
             to="/admin/inventory"
-            label="Back to inventory"
           />
           <div className="flex items-center gap-2">
             <button

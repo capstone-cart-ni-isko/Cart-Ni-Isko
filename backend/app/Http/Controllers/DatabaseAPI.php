@@ -471,7 +471,7 @@ class DatabaseAPI extends Controller
     public function otpChallengeStart(Request $json)
     {
         return $this->validateFields($json, [
-            'purpose'   => 'required|in:signup,login',
+            'purpose'   => 'required|in:signup,login,recovery',
             'challenge' => 'required|string',
         ], [
             'purpose.required'   => 'A verification purpose is required.',
@@ -483,7 +483,7 @@ class DatabaseAPI extends Controller
     public function otpChallengeVerify(Request $json)
     {
         return $this->validateFields($json, [
-            'purpose'   => 'required|in:signup,login',
+            'purpose'   => 'required|in:signup,login,recovery',
             'challenge' => 'required|string',
             'code'      => 'required|string|digits:6',
         ], [
@@ -1002,6 +1002,21 @@ class DatabaseAPI extends Controller
             'identifier.required'   => 'Identifier (phone or email) is required.',
             'account_type.required' => 'Account type is required.',
             'account_type.in'       => 'Account type must be customer or employee.',
+        ]);
+    }
+
+    public function resetCredentials(Request $json)
+    {
+        return $this->validateFields($json, [
+            'challenge'                 => 'required|string',
+            'new_password'              => 'required|string|min:8|regex:/^[^\s\x00-\x1F\x7F]+$/',
+            'new_password_confirmation' => 'nullable|same:new_password',
+        ], [
+            'challenge.required'             => 'The recovery session expired. Please start again.',
+            'new_password.required'          => 'New password is required.',
+            'new_password.min'               => 'New password must be at least 8 characters.',
+            'new_password.regex'             => 'New password contains invalid characters.',
+            'new_password_confirmation.same' => 'New password confirmation does not match.',
         ]);
     }
 

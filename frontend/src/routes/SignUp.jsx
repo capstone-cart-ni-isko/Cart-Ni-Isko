@@ -365,7 +365,7 @@ function SignUp() {
         <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-100 shadow-xl p-8 flex flex-col justify-between min-h-[580px] z-10 animate-fade-in relative">
           <div>
             <div className="flex items-center justify-between mb-8">
-              <BackButton onClick={handleBack} label="Back" className="w-10 justify-center" />
+              <BackButton onClick={handleBack} />
               <div className="flex gap-1.5 w-32 justify-end">
                 {steps.map((_, i) => (
                   <div
@@ -807,7 +807,7 @@ function SignUp() {
           {(step === 1 || step === 2) && (
             <div className="p-10 animate-fade-in bg-white min-h-[540px] flex flex-col justify-between">
               <div>
-                <BackButton onClick={handleBack} label="Back to Role Selection" className="mb-6" />
+                <BackButton onClick={handleBack} className="mb-6" />
                 <div className="mb-8">
                   <h1 className="text-3xl font-semibold text-gray-900 leading-tight">Sign Up</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
@@ -991,7 +991,7 @@ function SignUp() {
           {step === 3 && isBueño && (
             <div className="p-10 animate-fade-in bg-white min-h-[520px] flex flex-col justify-between">
               <div>
-                <BackButton onClick={handleBack} label="Back to Password" className="mb-6" />
+                <BackButton onClick={handleBack} className="mb-6" />
                 <div className="mb-6">
                   <h1 className="page-title text-gray-900">Academic Details</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2">

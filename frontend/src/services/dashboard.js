@@ -41,6 +41,10 @@ export function isCartRow(row) {
 export function titleCaseStatus(raw) {
   const value = String(raw || '').trim()
   if (!value) return 'Pending'
+  const lower = value.toLowerCase()
+  if (lower === 'delivering' || lower === 'delvering' || lower === 'transit') {
+    return 'In Transit'
+  }
   return value
     .toLowerCase()
     .replace(/(^|\s|-)([a-z])/g, (_, pre, ch) => `${pre}${ch.toUpperCase()}`)
@@ -98,20 +102,28 @@ export function timeAgoLabel(value) {
 
 function mapItemRow(item) {
   if (!item) return null
-  const qty = Number(item.item_qty) || 0
-  const lineTotal = Number(item.item_amount) || 0
+  const qty = Number(item.item_qty ?? item.qty) || 0
+  const lineTotal = Number(item.item_amount ?? item.line_total) || 0
   const product = item.product || null
+  const prodvar = item.prodvar || item.variation || null
+  const varPic = item.prodvar_pic || prodvar?.prodvar_pic || ''
+  const prodImages = Array.isArray(product?.prod_images) ? product.prod_images : []
+  const image = varPic || prodImages[0] || (Array.isArray(product?.images) && product.images[0]) || ''
+
   return {
-    prodId: item.prod_id,
-    name: product?.prod_name || `Item #${item.prod_id}`,
+    prodId: item.prod_id || product?.prod_id || null,
+    prodvarId: item.prodvar_id || prodvar?.prodvar_id || null,
+    name: product?.prod_name || item.prod_name || `Item #${item.prod_id}`,
+    prodvarName: item.prodvar_name || prodvar?.prodvar_name || '',
     qty,
     // item_amount is the LINE TOTAL (price x qty) - derive the unit price.
     price: qty > 0 ? lineTotal / qty : lineTotal,
     lineTotal,
     category: normalizeProductCategory(product?.prod_categ, product?.prod_name),
-    image: (Array.isArray(product?.prod_images) && product.prod_images[0]) || '',
-    preorder: isTruthy(product?.prod_preorder),
+    image,
+    preorder: isTruthy(product?.prod_preorder || prodvar?.prodvar_preorder),
     product,
+    prodvar,
   }
 }
 

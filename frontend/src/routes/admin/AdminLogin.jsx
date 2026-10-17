@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { apiRequest, preconnectApi } from '../../services/api.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import BackButton from '../../components/ui/BackButton.jsx'
 import { empHomePath } from '../../components/admin/schema.js'
 
 /* REQ-EMP_LOGIN-06: whatever is typed stays on screen - the draft lives in
@@ -176,16 +177,21 @@ export default function AdminLogin() {
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center p-4 font-sans bg-slate-50 dark:bg-[var(--surface-2)]">
-      {/* One login card for both portals: same surface, same corner, same
-          padding, same fields and the same primary button (index.css). */}
-      <div className="w-full max-w-md bg-white dark:bg-[var(--surface)] rounded-lg p-6 sm:p-8 border border-slate-200 dark:border-[var(--line)] shadow-xs space-y-6 animate-fade-in">
+      {/* Standardized login card for both portals: same surface, same corner, same
+          padding, same fields, back affordance at top-left (Rule 69) and primary button (index.css). */}
+      <div className="w-full max-w-md bg-white dark:bg-[var(--surface)] rounded-2xl p-6 sm:p-8 border border-slate-200 dark:border-[var(--line)] shadow-sm space-y-6 animate-fade-in relative">
+        {/* Rule 69: Back button sits at the top-left of the focused container */}
+        <div className="flex justify-start">
+          <BackButton to="/home" />
+        </div>
+
         {/* Brand Header */}
         <div className="text-center space-y-3">
           <div className="flex justify-center">
             <img
               src={brandLogo}
               alt="Tindahan ni Isko"
-              className="h-14 w-auto object-contain"
+              className="h-16 w-auto object-contain"
             />
           </div>
           <div>
@@ -198,7 +204,7 @@ export default function AdminLogin() {
 
         {/* Error notification (account level, never a field message) */}
         {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium rounded-md flex items-center gap-2 animate-slide-up" role="alert">
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium rounded-xl flex items-center gap-2 animate-slide-up" role="alert">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
@@ -209,13 +215,13 @@ export default function AdminLogin() {
         )}
 
         {/* Login Form - FLOW-EMP_LOGIN-01 */}
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-4.5" noValidate>
           <div>
             <label htmlFor="emp-email" className="field-label">
               BU Email
             </label>
             <div className="relative">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                 <circle cx="12" cy="7" r="4" />
               </svg>
@@ -234,7 +240,7 @@ export default function AdminLogin() {
                   clearSubmitMsgs()
                 }}
                 aria-invalid={emailMsg ? 'true' : undefined}
-                className="field-input field-input--lg !pl-10"
+                className="field-input field-input--lg !pl-10.5 rounded-xl font-medium"
               />
             </div>
             {/* FLOW-EMP_LOGIN-02/03 - "User not found" under the email field */}
@@ -250,7 +256,7 @@ export default function AdminLogin() {
               Password
             </label>
             <div className="relative">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden="true">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
@@ -272,13 +278,13 @@ export default function AdminLogin() {
                   clearSubmitMsgs()
                 }}
                 aria-invalid={passwordMsg ? 'true' : undefined}
-                className="field-input field-input--lg !pl-10 !pr-11"
+                className="field-input field-input--lg !pl-10.5 !pr-11 rounded-xl font-medium"
               />
               <button
                 type="button"
                 onClick={() => setMasked((current) => !current)}
                 aria-label={masked ? 'Unmask password' : 'Mask password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer p-1"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer p-1"
                 tabIndex={-1}
               >
                 {masked ? (
@@ -305,10 +311,20 @@ export default function AdminLogin() {
             )}
           </div>
 
+          {/* Standardized "Forgot password?" clickable hyperlink */}
+          <div className="flex items-center justify-end pt-0.5">
+            <Link
+              to="/forgot-password?type=employee"
+              className="text-xs font-semibold text-brand-orange hover:text-brand-orange-dark hover:underline transition-colors cursor-pointer"
+            >
+              Forgot password?
+            </Link>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
-            className={`btn btn--lg btn--block ${
+            className={`btn btn--lg btn--block rounded-xl ${
               !loading
                 ? 'btn--primary text-white cursor-pointer btn-press'
                 : 'btn--secondary cursor-not-allowed opacity-70'
@@ -320,17 +336,14 @@ export default function AdminLogin() {
                 Authenticating…
               </span>
             ) : (
-              <>
-                <span>Sign In</span>
-
-              </>
+              <span>Sign In</span>
             )}
           </button>
         </form>
 
         {/* Security disclaimer */}
-        <div className="text-center pt-1 border-t border-gray-100">
-          <p className="text-2xs text-gray-400">
+        <div className="text-center pt-2 border-t border-slate-100 dark:border-[var(--line)]">
+          <p className="text-xs text-gray-400 dark:text-[var(--muted)]">
             Protected by Bicol University Student Council IAM System
           </p>
         </div>

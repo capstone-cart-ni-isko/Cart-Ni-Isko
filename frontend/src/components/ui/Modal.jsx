@@ -81,9 +81,17 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title || undefined}
-        className={`modal-panel${size === 'wide' ? ' modal-panel--wide' : ''}${
-          sheet ? ' modal-panel--sheet' : ''
-        } ${className}`}
+        className={`modal-panel${
+          size === 'wide'
+            ? ' modal-panel--wide'
+            : size === 'xl'
+            ? ' modal-panel--xl'
+            : size === '2xl'
+            ? ' modal-panel--2xl'
+            : size && size !== 'sm'
+            ? ` ${size}`
+            : ''
+        }${sheet ? ' modal-panel--sheet' : ''} ${className}`}
       >
         {(title || subtitle) && (
           <div className="modal-head">

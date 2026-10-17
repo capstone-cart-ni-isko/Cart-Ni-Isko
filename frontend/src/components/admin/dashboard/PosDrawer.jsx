@@ -82,23 +82,23 @@ export default function PosDrawer({ isOpen, onClose, onCompleted }) {
     <DrawerPanel isOpen={isOpen} onClose={onClose} title="New POS order" subtitle="Walk-in sale, paid at the counter" footer={footer}>
       {receipt ? (
         <div className="space-y-3 text-sm">
-          <div className="rounded-lg border border-slate-200 p-3 space-y-1.5">
-            <div className="flex justify-between font-semibold text-slate-900">
-              <span>{receipt.id}</span>
-              <span>{peso(receipt.total)}</span>
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 shadow-2xs space-y-2">
+            <div className="flex justify-between font-bold text-[var(--ink)] text-sm">
+              <span className="font-mono">{receipt.id}</span>
+              <span className="text-brand-orange">{peso(receipt.total)}</span>
             </div>
-            <p className="text-xs text-slate-500">{receipt.customer} · {receipt.paymentMethod}</p>
-            <ul className="text-xs text-slate-600 divide-y divide-slate-100">
+            <p className="text-xs text-[var(--muted)]">{receipt.customer} · {receipt.paymentMethod}</p>
+            <ul className="text-xs text-[var(--ink)] divide-y divide-[var(--line)]">
               {receipt.items.map((item, i) => (
-                <li key={i} className="flex justify-between py-1">
+                <li key={i} className="flex justify-between py-1.5">
                   <span>{item.qty} × {item.name}</span>
-                  <span className="tabular-nums">{peso(item.price * item.qty)}</span>
+                  <span className="tabular-nums font-semibold">{peso(item.price * item.qty)}</span>
                 </li>
               ))}
             </ul>
-            <div className="flex justify-between text-xs pt-1 border-t border-slate-100">
-              <span className="text-slate-500">Tendered / change</span>
-              <span className="font-semibold tabular-nums">{peso(receipt.amountTendered)} / {peso(receipt.change)}</span>
+            <div className="flex justify-between text-xs pt-2 border-t border-[var(--line)]">
+              <span className="text-[var(--muted)]">Tendered / change</span>
+              <span className="font-semibold tabular-nums text-[var(--ink)]">{peso(receipt.amountTendered)} / {peso(receipt.change)}</span>
             </div>
           </div>
         </div>

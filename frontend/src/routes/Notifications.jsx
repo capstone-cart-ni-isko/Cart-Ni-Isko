@@ -289,7 +289,7 @@ export default function Notifications() {
         {/* Header (Matching Photo 5 on desktop & Photo 2 on mobile) */}
         <div className="flex items-start gap-4 mb-8">
           <div className="flex-1">
-            <BackButton to="/home" label="Back to Home" className="lg:hidden mb-4" />
+            <BackButton to="/home" className="lg:hidden mb-4" />
             <h1 className="text-3xl lg:text-4xl font-semibold text-gray-900 tracking-tight">Notifications</h1>
             <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
               Stay updated with your orders, production, and important announcements.

@@ -6,9 +6,9 @@ const TYPE_LABEL = { CLAIM: 'Order Claiming', VISIT: 'Store Visit' }
 
 function Row({ label, value }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-2 border-b border-slate-100 last:border-0">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 shrink-0">{label}</span>
-      <span className="text-xs font-semibold text-slate-800 text-right break-words">{value}</span>
+    <div className="flex items-start justify-between gap-4 py-2 border-b border-[var(--line)] last:border-0">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)] shrink-0">{label}</span>
+      <span className="text-xs font-semibold text-[var(--ink)] text-right break-words">{value}</span>
     </div>
   )
 }
@@ -22,6 +22,8 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit, 
       isOpen={!!appointment}
       onClose={onClose}
       title={`Appointment #${appointment.id}`}
+      subtitle="Scheduled visit or pickup reservation"
+      size="wide"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} className="flex-1">
@@ -33,7 +35,7 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit, 
                 <Button
                   variant="ghost"
                   onClick={() => onCancel(appointment)}
-                  className="flex-1 border border-red-200 text-red-600 hover:bg-red-50"
+                  className="flex-1 border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10"
                 >
                   Cancel
                 </Button>
@@ -46,10 +48,12 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit, 
         </>
       }
     >
-      <div className="modal-scroll space-y-4">
-        <TrackTimeline status={appointment.status} type={appointment.type} />
+      <div className="modal-scroll space-y-4 pr-0.5">
+        <div className="p-3.5 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs">
+          <TrackTimeline status={appointment.status} type={appointment.type} />
+        </div>
 
-        <div>
+        <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs">
           <Row label="Status" value={appointment.status} />
           <Row label="Type" value={TYPE_LABEL[appointment.type] || appointment.type} />
           <Row label="Date" value={[appointment.date, appointment.dayOfWeek].filter(Boolean).join(', ')} />
@@ -61,15 +65,15 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit, 
         </div>
 
         {appointment.items.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-              Items ({appointment.itemCount})
+          <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] mb-2">
+              Reserved Items ({appointment.itemCount})
             </p>
-            <ul className="space-y-1">
+            <ul className="divide-y divide-[var(--line)]">
               {appointment.items.map((item, index) => (
-                <li key={index} className="text-xs text-slate-700">
-                  <span className="font-semibold">{item.name}</span>
-                  <span className="text-slate-500"> · {item.details}</span>
+                <li key={index} className="py-2 text-xs flex items-center justify-between">
+                  <span className="font-semibold text-[var(--ink)]">{item.name}</span>
+                  <span className="text-[var(--muted)] text-2xs">{item.details}</span>
                 </li>
               ))}
             </ul>

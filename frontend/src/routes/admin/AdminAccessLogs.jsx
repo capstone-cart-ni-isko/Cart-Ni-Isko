@@ -169,10 +169,11 @@ export default function AdminAccessLogs({ embedded = false }) {
               onClick={() => navigate('/admin/settings')}
               title="Back"
               aria-label="Back"
-              className="mt-1 p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer"
+              className="mt-1 p-2 rounded-full text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer border-0 shadow-none focus:outline-none"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-                <polyline points="15 18 9 12 15 6" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
               </svg>
             </button>
             <div className="min-w-0">

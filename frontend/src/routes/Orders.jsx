@@ -14,6 +14,7 @@ import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon } from '../comp
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
+import CustomerOrderDetailModal from '../components/orders/CustomerOrderDetailModal.jsx'
 import { fetchOrders, requestCancel, orderFilterBucket } from '../services/orders.js'
 import { parseDate } from '../services/dashboard.js'
 
@@ -208,6 +209,7 @@ function Orders() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
   const [claimTarget, setClaimTarget] = useState(null)
+  const [selectedOrder, setSelectedOrder] = useState(null)
   const firstLoad = useRef(true)
 
   const load = useCallback(
@@ -664,14 +666,15 @@ function Orders() {
                         </Link>
                       )}
 
-                    {/* Primary Action */}
-                    <Link
-                      to={`/orders/${order.id}`}
+                    {/* Primary Action — Standardized Order Details Popup */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrder(order)}
                       className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-all shadow-2xs hover:shadow-xs active:scale-98 flex items-center gap-1.5 cursor-pointer"
                     >
                       <span>View Order Details</span>
                       <span>→</span>
-                    </Link>
+                    </button>
                   </div>
                 </div>
               </article>
@@ -679,6 +682,16 @@ function Orders() {
           })
         )}
       </div>
+
+      {/* Standardized Customer Order Details Popup Modal */}
+      {selectedOrder && (
+        <CustomerOrderDetailModal
+          order={selectedOrder}
+          isOpen={Boolean(selectedOrder)}
+          onClose={() => setSelectedOrder(null)}
+          onOrderUpdated={() => load({ silent: true })}
+        />
+      )}
 
       {/* FLOW-ORD_CLAIM-01/07: camera scan of appoint_qr (pickup) or deliver_qr (delivery). */}
       <QrScanModal

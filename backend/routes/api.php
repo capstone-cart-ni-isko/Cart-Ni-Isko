@@ -31,17 +31,27 @@ Route::post('/auth/emp_login', [SecurityAPI::class, 'employeeLogin']);
 // for an answer "immediately") without leaving the window where the inline
 // messages would go silent.
 Route::post('/auth/emp_login/check', [SecurityAPI::class, 'employeeLoginCheck'])->middleware('throttle:180,1');
-Route::post('/auth/recover_credentials', [SecurityAPI::class, 'recoverCredentials']);
+// DOMAIN 2 - password recovery. Public because the caller owns no session
+// yet, and throttled because it answers "does this account exist" and sends
+// an OTP to the registered contact without proving anything first (the same
+// reason the setup wizard and the login field checks are throttled). The
+// per-account 45-second OTP cooldown bounds abuse per victim; these budgets
+// bound it per client without touching a normal recover -> resend -> reset
+// run, which stays far below them.
+Route::post('/auth/recover_credentials', [SecurityAPI::class, 'recoverCredentials'])->middleware('throttle:20,1');
+Route::post('/auth/reset_credentials', [SecurityAPI::class, 'resetCredentials'])->middleware('throttle:10,1');
 
 // DOMAIN 17 / DOMAIN 18 - the phone OTP challenge that gates a signup
 // (FLOW-CUST_SIGNUP-05) and a login taken more than fifteen days after the
 // last logout (FLOW-CUST_LOGIN-02). They stay outside `auth:api` because
 // neither caller owns a session yet: the signed, purpose-scoped challenge in
 // the request body is what identifies the account, and it is rejected by
-// ApiToken::parse() - so it can never open a protected route.
-Route::post('/otp/challenge/start', [SecurityAPI::class, 'startChallenge']);
-Route::post('/otp/challenge/verify', [SecurityAPI::class, 'verifyChallenge']);
-Route::post('/otp/challenge/inbox', [SecurityAPI::class, 'challengeInbox']);
+// ApiToken::parse() - so it can never open a protected route. The resend
+// budget covers a full minute of ordinary use (the UI resends after 59 s),
+// and the inbox budget covers the auto-read that follows each issued code.
+Route::post('/otp/challenge/start', [SecurityAPI::class, 'startChallenge'])->middleware('throttle:30,1');
+Route::post('/otp/challenge/verify', [SecurityAPI::class, 'verifyChallenge'])->middleware('throttle:60,1');
+Route::post('/otp/challenge/inbox', [SecurityAPI::class, 'challengeInbox'])->middleware('throttle:60,1');
 
 // Public Products API Routes (guest catalog browsing)
 Route::get('/products/filter', [ProductsAPI::class, 'filterCatalog']);

@@ -172,11 +172,12 @@ class ApiToken
      */
     public const CHALLENGE_TTL = 30 * 60;
 
-    /** Signs a signup / login OTP challenge for an account. */
+    /** Signs a signup / login / recovery OTP challenge for an account. */
     public static function challenge(object $user, string $purpose): string
     {
         $payload = json_encode([
             't' => 'otp',
+            'u' => $user instanceof Employee ? 'emp' : 'cust',
             'p' => $purpose,
             'i' => (int) $user->getKey(),
             'a' => time(),
@@ -191,7 +192,7 @@ class ApiToken
     /**
      * Verifies a challenge issued by self::challenge().
      *
-     * @return array{user: Customer, purpose: string}|null
+     * @return array{user: Customer|Employee, purpose: string}|null
      */
     public static function parseChallenge(?string $token): ?array
     {
@@ -220,13 +221,24 @@ class ApiToken
         }
 
         $purpose = (string) ($payload['p'] ?? '');
-        if (! in_array($purpose, ['signup', 'login'], true)) {
+        if (! in_array($purpose, ['signup', 'login', 'recovery'], true)) {
             return null;
         }
 
-        $user = Customer::find((int) ($payload['i'] ?? 0));
-        if (! $user || $user->cust_deleted !== null || $user->cust_suspended !== null) {
-            return null;
+        $isEmployee = ($payload['u'] ?? '') === 'emp';
+        if ($isEmployee) {
+            $user = Employee::find((int) ($payload['i'] ?? 0));
+            if (! $user || $user->emp_deleted !== null || $user->emp_suspended !== null) {
+                return null;
+            }
+            if (isset($user->emp_disabled) && $user->emp_disabled !== null) {
+                return null;
+            }
+        } else {
+            $user = Customer::find((int) ($payload['i'] ?? 0));
+            if (! $user || $user->cust_deleted !== null || $user->cust_suspended !== null) {
+                return null;
+            }
         }
 
         return ['user' => $user, 'purpose' => $purpose];

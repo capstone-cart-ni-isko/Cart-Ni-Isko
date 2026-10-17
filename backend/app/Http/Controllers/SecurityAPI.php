@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CustNotif;
 use App\Models\Customer;
 use App\Models\EmpLog;
+use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Schedule;
 use App\Support\ApiToken;
@@ -384,10 +385,166 @@ class SecurityAPI extends Controller
                 return $validator;
             }
 
+            $accountType = (string) $json->input('account_type');
+            $rawIdentifier = trim((string) $json->input('identifier'));
+            $user = null;
+
+            if ($accountType === 'employee') {
+                $user = Employee::where('emp_email', strtolower($rawIdentifier))->first();
+                if ($user && ($user->emp_deleted !== null || $user->emp_suspended !== null || (isset($user->emp_disabled) && $user->emp_disabled !== null))) {
+                    $user = null;
+                }
+            } else {
+                if (str_contains($rawIdentifier, '@')) {
+                    $user = Customer::where('cust_email', strtolower($rawIdentifier))->first();
+                } else {
+                    $phone = preg_replace('/[^0-9]/', '', $rawIdentifier) ?: $rawIdentifier;
+                    if (strlen($phone) >= 12 && str_starts_with($phone, '63')) {
+                        $phone = '0' . substr($phone, 2);
+                    }
+                    $user = Customer::where('cust_phone', $phone)->first();
+                }
+
+                if ($user && ($user->cust_deleted !== null || $user->cust_suspended !== null || (isset($user->cust_disabled) && $user->cust_disabled !== null))) {
+                    $user = null;
+                }
+            }
+
+            if (! $user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No active account found with the provided details.',
+                ], 404);
+            }
+
+            [$code, $error] = $this->issueOtpCode($user, 'recovery');
+            if ($code === null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $error ?: 'Please wait before requesting another code.',
+                ], 429);
+            }
+
+            $isEmployee = $user instanceof Employee;
+            $challenge = ApiToken::challenge($user, 'recovery');
+            $maskedContact = $isEmployee
+                ? $this->maskEmail((string) $user->emp_email)
+                : $this->maskPhone((string) $user->cust_phone);
+
+            if ($isEmployee) {
+                $this->logEmployee((int) $user->emp_id, 'authentication',
+                    'POST /api/auth/recover_credentials - employee recovery challenge issued');
+            } else {
+                $this->logCustomer((int) $user->cust_id, 'authentication',
+                    'POST /api/auth/recover_credentials - customer recovery challenge issued');
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'If the account exists, recovery instructions will be sent to its registered contact.',
-            ]);
+                'message' => 'Verification code sent to ' . $maskedContact . '.',
+                'data' => [
+                    'challenge'    => $challenge,
+                    'purpose'      => 'recovery',
+                    'account_type' => $accountType,
+                    // The code itself is never echoed here - exactly like the
+                    // signup and stale-login challenges, it is delivered only
+                    // through the account's own inbox (or university email for
+                    // employees) and read back with the signed challenge.
+                    'channel'      => $isEmployee ? 'email' : 'phone',
+                    'contact'      => $maskedContact,
+                    'delivery'     => $isEmployee ? 'email' : 'in_app_notification',
+                    'expires_in'   => self::otpTtlMinutes * 60,
+                ],
+            ], 200);
+        }
+
+        public function resetCredentials(Request $json)
+        {
+            try {
+                return $this->performResetCredentials($json);
+            } catch (\Throwable $e) {
+                report($e);
+
+                return $this->fail('Password reset failed. Please try again.', 500);
+            }
+        }
+
+        private function performResetCredentials(Request $json)
+        {
+            $validator = (new DatabaseAPI())->resetCredentials($json);
+            if ($validator) {
+                return $validator;
+            }
+
+            $challenge = $this->challengeAccount($json, 'recovery');
+            if ($challenge instanceof \Illuminate\Http\JsonResponse) {
+                return $challenge;
+            }
+
+            $user = $challenge['user'];
+            $isEmployee = $user instanceof Employee;
+
+            $scope = $this->otpScope($user);
+            $userId = $this->otpSubjectId($user);
+            if (! Cache::get($this->otpVerifiedKey($userId, 'recovery', $scope))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Verification code must be verified before resetting password.',
+                    'code'    => 'OTP_REQUIRED',
+                ], 428);
+            }
+
+            $newPassword = (string) $json->input('new_password');
+
+            $employeeCategory = $isEmployee
+                ? (string) ($user->emp_categ ?: $user->emp_type)
+                : '';
+            $isSuperAdmin = in_array(
+                strtoupper(str_replace([' ', '-'], '_', trim($employeeCategory))),
+                ['SUPER_ADMIN', 'SUPERADMIN'],
+                true
+            );
+
+            if ($isSuperAdmin && ! EmployeePassword::meetsStandard($newPassword)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Super admin passwords must be at least 16 characters and include an uppercase letter, a lowercase letter, a number and a symbol.',
+                    'code' => 'WEAK_PASSWORD',
+                ], 422);
+            }
+
+            if ($isEmployee) {
+                $user->emp_password = EmployeePassword::make($newPassword);
+                $user->emp_login_active = null;
+                if (\Schema::hasColumn('employee', 'emp_cred_changed')) {
+                    $user->emp_cred_changed = now();
+                }
+                $user->save();
+                $this->logEmployee((int) $user->emp_id, 'edit',
+                    'POST /api/auth/reset_credentials - password recovered and reset');
+            } else {
+                $user->cust_password = Hash::make($newPassword);
+                // Revoke every Sanctum-style token of the account when the
+                // table is present; the stateless ApiToken sessions are
+                // revoked through the nonce below either way.
+                if (\Schema::hasTable('personal_access_tokens')) {
+                    $user->tokens()->delete();
+                }
+                $user->cust_login_active = null;
+                if (\Schema::hasColumn('customer', 'cust_cred_changed')) {
+                    $user->cust_cred_changed = now();
+                }
+                $user->save();
+                $this->logCustomer((int) $user->cust_id, 'edit',
+                    'POST /api/auth/reset_credentials - password recovered and reset');
+            }
+
+            Cache::forget($this->otpVerifiedKey($userId, 'recovery', $scope));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset successfully. Please sign in with your new password.',
+            ], 200);
         }
 
     public function issue(Request $json)
@@ -571,22 +728,37 @@ class SecurityAPI extends Controller
         if ($challenge instanceof \Illuminate\Http\JsonResponse) return $challenge;
 
         $purpose = (string) $json->input('purpose');
-        [$code, $error] = $this->issueOtpCode($challenge['user'], $purpose);
+        $user = $challenge['user'];
+        [$code, $error] = $this->issueOtpCode($user, $purpose);
 
         if ($code === null) {
             return response()->json(['success' => false, 'message' => $error], 429);
         }
 
-        $this->logCustomer((int) $challenge['user']->cust_id, 'authentication',
-            'POST /api/otp/challenge/start - ' . $purpose . ' code issued');
+        $isEmployee = $user instanceof Employee;
+        if ($isEmployee) {
+            $this->logEmployee((int) $user->emp_id, 'authentication',
+                'POST /api/otp/challenge/start - ' . $purpose . ' code issued');
+        } else {
+            $this->logCustomer((int) $user->cust_id, 'authentication',
+                'POST /api/otp/challenge/start - ' . $purpose . ' code issued');
+        }
+
+        $contact = $isEmployee
+            ? $this->maskEmail((string) $user->emp_email)
+            : $this->maskPhone((string) $user->cust_phone);
 
         return response()->json([
             'success' => true,
-            'message' => 'Verification code sent to your notification inbox.',
+            'message' => $isEmployee
+                ? 'Verification code sent to your Bicol University email.'
+                : 'Verification code sent to your notification inbox.',
             'data'    => [
                 'purpose'    => $purpose,
-                'phone'      => $this->maskPhone($challenge['user']->cust_phone),
-                'delivery'   => 'in_app_notification',
+                'channel'    => $isEmployee ? 'email' : 'phone',
+                'contact'    => $contact,
+                'phone'      => $contact,
+                'delivery'   => $isEmployee ? 'email' : 'in_app_notification',
                 'expires_in' => self::otpTtlMinutes * 60,
             ],
         ], 200);
@@ -613,24 +785,51 @@ class SecurityAPI extends Controller
 
         $purpose = (string) $json->input('purpose');
         $user = $challenge['user'];
+        $isEmployee = $user instanceof Employee;
 
         [$ok, $message] = $this->verifyOtpCode($user, $purpose, (string) $json->input('code'));
 
-        $this->logCustomer((int) $user->cust_id, 'authentication',
-            'POST /api/otp/challenge/verify - ' . $purpose . ($ok ? ' verified' : ' failed'));
+        if ($isEmployee) {
+            $this->logEmployee((int) $user->emp_id, 'authentication',
+                'POST /api/otp/challenge/verify - ' . $purpose . ($ok ? ' verified' : ' failed'));
+        } else {
+            $this->logCustomer((int) $user->cust_id, 'authentication',
+                'POST /api/otp/challenge/verify - ' . $purpose . ($ok ? ' verified' : ' failed'));
+        }
 
         if (! $ok) {
             return response()->json(['success' => false, 'message' => $message], 422);
         }
 
-        if ($purpose === 'signup') {
+        if ($purpose === 'signup' && ! $isEmployee) {
             Cache::forget($this->signupPendingKey((int) $user->cust_id));
+        }
+
+        // DOMAIN 17 / DOMAIN 18: only a signup and a stale login redeem the
+        // challenge for a session. A recovery challenge proves control of the
+        // registered contact for the password reset - it must not sign the
+        // account in, rotate its session nonce or expose its record before
+        // the new password has been set (least privilege).
+        if ($purpose === 'recovery') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Code verified. Set your new password.',
+                'data'    => [
+                    'purpose'  => $purpose,
+                    'verified' => true,
+                ],
+            ], 200);
         }
 
         $token = ApiToken::issue($user);
 
-        $this->logCustomer((int) $user->cust_id, 'authentication',
-            'POST /api/otp/challenge/verify - ' . $purpose . ' cleared, session opened');
+        if ($isEmployee) {
+            $this->logEmployee((int) $user->emp_id, 'authentication',
+                'POST /api/otp/challenge/verify - ' . $purpose . ' cleared, session opened');
+        } else {
+            $this->logCustomer((int) $user->cust_id, 'authentication',
+                'POST /api/otp/challenge/verify - ' . $purpose . ' cleared, session opened');
+        }
 
         return response()->json([
             'success' => true,
@@ -664,6 +863,41 @@ class SecurityAPI extends Controller
         if ($challenge instanceof \Illuminate\Http\JsonResponse) return $challenge;
 
         $user = $challenge['user'];
+        $isEmployee = $user instanceof Employee;
+
+        if ($isEmployee) {
+            $notifications = EmpNotif::where('emp_id', (int) $user->emp_id)
+                ->where('empnotif_created', '>=', now()->subMinutes(15))
+                ->orderByDesc('empnotif_created')
+                ->get();
+
+            foreach ($notifications as $notification) {
+                if (! $notification->empnotif_read) {
+                    $notification->update(['empnotif_read' => now()]);
+                }
+            }
+
+            $this->logEmployee((int) $user->emp_id, 'view', 'POST /api/otp/challenge/inbox');
+
+            $code = $notifications
+                ->map(static fn ($row) => preg_match('/\b(\d{6})\b/', (string) $row->empnotif_msg, $m) ? $m[1] : null)
+                ->filter()
+                ->first();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Notification inbox retrieved successfully.',
+                'data'    => [
+                    'purpose'       => (string) $json->input('purpose'),
+                    'channel'       => 'email',
+                    'contact'       => $this->maskEmail((string) $user->emp_email),
+                    'phone'         => $this->maskEmail((string) $user->emp_email),
+                    'code'          => $code,
+                    'notifications' => $notifications->values(),
+                    'expires_in'    => self::otpTtlMinutes * 60,
+                ],
+            ], 200);
+        }
 
         $notifications = CustNotif::where('cust_id', (int) $user->cust_id)
             ->where('custnotif_created', '>=', now()->subMinutes(15))
@@ -688,7 +922,9 @@ class SecurityAPI extends Controller
             'message' => 'Notification inbox retrieved successfully.',
             'data'    => [
                 'purpose'       => (string) $json->input('purpose'),
-                'phone'         => $this->maskPhone($user->cust_phone),
+                'channel'       => 'phone',
+                'contact'       => $this->maskPhone((string) $user->cust_phone),
+                'phone'         => $this->maskPhone((string) $user->cust_phone),
                 'code'          => $code,
                 'notifications' => $notifications->values(),
                 'expires_in'    => self::otpTtlMinutes * 60,
@@ -696,9 +932,9 @@ class SecurityAPI extends Controller
         ], 200);
     }
 
-    private function challengeAccount(Request $json)
+    private function challengeAccount(Request $json, ?string $explicitPurpose = null)
     {
-        $purpose = (string) $json->input('purpose');
+        $purpose = $explicitPurpose ?: (string) $json->input('purpose');
         $parsed = ApiToken::parseChallenge((string) $json->input('challenge'));
 
         if (! $parsed || $parsed['purpose'] !== $purpose) {

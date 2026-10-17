@@ -64,7 +64,7 @@ function FocusedLayout({
           <div className="flex items-center gap-3 min-w-0">
             <BackButton
               onClick={handleBack}
-              label={backLabel}
+              label={backLabel === 'Back' ? null : backLabel}
             />
             {title && (
               <div className="min-w-0">

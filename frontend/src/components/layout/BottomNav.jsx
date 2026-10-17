@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import React from 'react'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useCart } from '../../hooks/useCart.js'
@@ -91,49 +91,61 @@ function BottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 z-[110000] safe-bottom md:bottom-4 lg:hidden">
       <div className="mx-auto max-w-lg md:max-w-xl px-4">
         <div className="flex items-center justify-around bg-white dark:bg-[var(--surface)] rounded-lg px-2 py-1.5 border border-slate-200 dark:border-[var(--line)]">
-          {ROUTE_TABS.map(({ to, label, icon, end, badge, glyph, active }) => {
-            // Bag badge = bag quantity; bell badge = unread notifications.
-            const count = to === '/bag' ? bagCount : badge ? unread : 0
-            // FLOW-BAG-03: the ribbon tab is "/bag"; "/cart" stays an alias
-            // for old links, so either path lights the same tab up.
-            const paths = active || [to]
-            const isActive = paths.some(
-              (p) => pathname === p || (!end && pathname.startsWith(`${p}/`))
-            )
+          {currentUser ? (
+            <>
+              {ROUTE_TABS.map(({ to, label, icon, end, badge, glyph, active }) => {
+                // Bag badge = bag quantity; bell badge = unread notifications.
+                const count = to === '/bag' ? bagCount : badge ? unread : 0
+                // FLOW-BAG-03: the ribbon tab is "/bag"; "/cart" stays an alias
+                // for old links, so either path lights the same tab up.
+                const paths = active || [to]
+                const isActive = paths.some(
+                  (p) => pathname === p || (!end && pathname.startsWith(`${p}/`))
+                )
 
-            return (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                onClick={(e) => guard(e, to)}
-                className={`${TAB_CLASS} ${isActive ? 'text-brand-orange font-semibold bg-orange-50/50 dark:bg-[var(--tint-brand-bg)]' : 'text-text-muted dark:text-[var(--muted)]'}`}
-              >
-                <>
-                  <span className="relative">
-                    {glyph === 'calendar' ? <CalendarGlyph /> : <Glyph src={icon} active={isActive} />}
-                    {count > 0 && (
-                      <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-[#FF6A00] text-white text-[9px] font-semibold flex items-center justify-center">
-                        {count > 99 ? '99+' : count}
+                return (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={end}
+                    onClick={(e) => guard(e, to)}
+                    className={`${TAB_CLASS} ${isActive ? 'text-brand-orange font-semibold bg-orange-50/50 dark:bg-[var(--tint-brand-bg)]' : 'text-text-muted dark:text-[var(--muted)]'}`}
+                  >
+                    <>
+                      <span className="relative">
+                        {glyph === 'calendar' ? <CalendarGlyph /> : <Glyph src={icon} active={isActive} />}
+                        {count > 0 && (
+                          <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-[#FF6A00] text-white text-[9px] font-semibold flex items-center justify-center">
+                            {count > 99 ? '99+' : count}
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <span className="text-[11px] font-medium leading-tight whitespace-nowrap">{label}</span>
-                </>
-              </NavLink>
-            )
-          })}
+                      <span className="text-[11px] font-medium leading-tight whitespace-nowrap">{label}</span>
+                    </>
+                  </NavLink>
+                )
+              })}
 
-          <button
-            type="button"
-            onClick={openMenu}
-            aria-label="Open menu"
-            aria-expanded={isMenuOpen}
-            className={`${TAB_CLASS} text-text-muted dark:text-[var(--muted)] cursor-pointer`}
-          >
-            <MenuIcon />
-            <span className="text-[11px] font-medium leading-tight whitespace-nowrap">Menu</span>
-          </button>
+              <button
+                type="button"
+                onClick={openMenu}
+                aria-label="Open menu"
+                aria-expanded={isMenuOpen}
+                className={`${TAB_CLASS} text-text-muted dark:text-[var(--muted)] cursor-pointer`}
+              >
+                <MenuIcon />
+                <span className="text-[11px] font-medium leading-tight whitespace-nowrap">Menu</span>
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/signin"
+              id="customer-mobile-ribbon-login-btn"
+              className="w-full h-10 rounded-lg bg-brand-orange hover:bg-brand-orange/90 active:scale-[0.98] text-white text-xs font-semibold flex items-center justify-center tracking-tight transition-all shadow-2xs hover:shadow-xs cursor-pointer select-none"
+            >
+              Log in
+            </Link>
+          )}
         </div>
       </div>
     </nav>

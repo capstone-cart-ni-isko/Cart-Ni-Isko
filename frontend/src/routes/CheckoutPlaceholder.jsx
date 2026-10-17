@@ -475,7 +475,7 @@ function CheckoutPlaceholder() {
       <div className="min-h-dvh flex flex-col items-center justify-center p-4 pb-28 md:p-8 animate-fade-in bg-slate-50/60">
         <div className="w-full max-w-xl bg-white rounded-xl p-6 md:p-8 border border-slate-100 space-y-6">
           {/* Back to the previous view of this step-by-step process */}
-          <BackButton to="/bag" label="Back to Bag" />
+          <BackButton to="/bag" />
 
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">

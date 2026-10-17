@@ -205,6 +205,21 @@ export async function updateCredentials(payload) {
   }
 }
 
+/** POST /auth/reset_credentials - reset password using recovery challenge token. */
+export async function resetCredentials(payload) {
+  try {
+    const data = await apiPost('/auth/reset_credentials', payload)
+    return { data, error: null, code: null, status: null }
+  } catch (err) {
+    return {
+      data: null,
+      error: err.message || 'Could not reset the password.',
+      code: err?.payload?.code || null,
+      status: err?.status || null,
+    }
+  }
+}
+
 /**
  * POST /auth/backup_credentials - DOMAIN 15 / FLOW-EMP_SET-03: the backup
  * phone and email an employee keeps reachable for account recovery.

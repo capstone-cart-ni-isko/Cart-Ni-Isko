@@ -27,18 +27,18 @@ function stamp(value) {
 
 function Row({ label, value, strong = false }) {
   return (
-    <div className={`flex items-start justify-between gap-3 ${strong ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
+    <div className={`flex items-start justify-between gap-3 ${strong ? 'font-semibold text-[var(--ink)]' : 'text-[var(--muted)]'}`}>
       <span>{label}</span>
-      <span className="text-right break-all">{value}</span>
+      <span className="text-right break-all text-[var(--ink)]">{value}</span>
     </div>
   )
 }
 
-export default function DigitalReceipt({ order, customer = '' }) {
+export default function DigitalReceipt({ order, customer = '', alwaysShow = false }) {
   if (!order) return null
 
   const status = String(order.ord_status || order.status || '').toLowerCase()
-  if (!hasReceipt(status)) return null
+  if (!alwaysShow && !hasReceipt(status)) return null
 
   const items = order.items || []
   const isDelivery = order.dispatch_type === 'delivery'
@@ -51,15 +51,15 @@ export default function DigitalReceipt({ order, customer = '' }) {
   return (
     <section
       aria-label="Digital receipt"
-      className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs font-mono text-xs space-y-3 max-w-md mx-auto w-full"
+      className="bg-[var(--surface)] rounded-2xl border border-[var(--line)] p-4 sm:p-5 shadow-2xs font-mono text-xs space-y-3 max-w-md mx-auto w-full text-[var(--ink)]"
     >
       <div className="text-center space-y-0.5">
-        <p className="text-sm font-semibold tracking-wide text-gray-900">TINDAHAN NI ISKO</p>
-        <p className="text-[11px] text-gray-500">Bicol University Student Council</p>
-        <p className="text-[11px] font-semibold text-gray-900 pt-1">OFFICIAL RECEIPT</p>
+        <p className="text-sm font-semibold tracking-wide text-[var(--ink)]">TINDAHAN NI ISKO</p>
+        <p className="text-[11px] text-[var(--muted)]">Bicol University Student Council</p>
+        <p className="text-[11px] font-semibold text-[var(--ink)] pt-1">OFFICIAL RECEIPT</p>
       </div>
 
-      <div className="border-t border-dashed border-slate-300 pt-3 space-y-1">
+      <div className="border-t border-dashed border-[var(--line-2)] pt-3 space-y-1">
         <Row label="Receipt No." value={receiptNo} />
         <Row label="Order" value={order.ord_tag || `#${order.ord_id}`} />
         <Row label={status === 'received' ? 'Received on' : 'Claimed on'} value={when || '—'} />
@@ -67,12 +67,12 @@ export default function DigitalReceipt({ order, customer = '' }) {
         <Row label="Fulfillment" value={isDelivery ? 'Courier Delivery' : 'Store Pickup'} />
       </div>
 
-      <div className="border-t border-dashed border-slate-300 pt-3 space-y-2">
+      <div className="border-t border-dashed border-[var(--line-2)] pt-3 space-y-2">
         {items.map((item, idx) => {
           const name = item.prod_name || item.product?.prod_name || 'Item'
           return (
             <div key={item.item_id ?? idx}>
-              <p className="font-semibold text-gray-900">
+              <p className="font-semibold text-[var(--ink)]">
                 {name}
                 {item.prodvar_name ? ` (${item.prodvar_name})` : ''}
               </p>
@@ -85,7 +85,7 @@ export default function DigitalReceipt({ order, customer = '' }) {
         })}
       </div>
 
-      <div className="border-t border-dashed border-slate-300 pt-3 space-y-1">
+      <div className="border-t border-dashed border-[var(--line-2)] pt-3 space-y-1">
         {fee > 0 && (
           <>
             <Row label="Subtotal" value={formatPrice(subtotal)} />
@@ -99,9 +99,9 @@ export default function DigitalReceipt({ order, customer = '' }) {
         {order.pay_ref && <Row label="Ref" value={order.pay_ref} />}
       </div>
 
-      <div className="border-t border-dashed border-slate-300 pt-3 text-center space-y-0.5">
-        <p className="font-semibold text-gray-900">Thank you, Iskolar!</p>
-        <p className="text-[11px] text-gray-500">Keep this receipt as proof of purchase.</p>
+      <div className="border-t border-dashed border-[var(--line-2)] pt-3 text-center space-y-0.5">
+        <p className="font-semibold text-[var(--ink)]">Thank you, Iskolar!</p>
+        <p className="text-[11px] text-[var(--muted)]">Keep this receipt as proof of purchase.</p>
       </div>
     </section>
   )

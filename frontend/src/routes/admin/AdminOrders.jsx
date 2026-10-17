@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -10,6 +11,7 @@ import DataTable from '../../components/admin/DataTable.jsx'
 import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
 import DigitalReceipt from '../../components/ui/DigitalReceipt.jsx'
 import { searchOrders, sortOrders } from '../../services/orders.js'
+import { getImageUrl } from '../../utils/imageUtils.js'
 import {
   mapOrderRows,
   isCartRow,
@@ -30,6 +32,7 @@ const FILTER_STATUS_OPTIONS = [
   'To Process',
   'To Claim',
   'To Receive',
+  'In Transit',
   'Claimed',
   'Received',
   'Unclaimed',
@@ -45,6 +48,7 @@ const FILTER_STATUS_OPTIONS = [
 // spelling so a staff filter and a customer status line agree.
 const STATUS_FILTER_ALIASES = {
   Processing: ['To Process'],
+  'In Transit': ['In Transit', 'Delivering', 'To Receive'],
 }
 
 // Sort select choices - backed by GET /cart/sort (sort_by: date|status|id)
@@ -70,6 +74,7 @@ function sortClientSide(rows, sortValue) {
 }
 
 export default function AdminOrders() {
+  const navigate = useNavigate()
   const { orders: rawOrders = [], refreshOrders, updateOrderStatus, products = [] } = useAdmin()
   const { showToast } = useToast()
 
@@ -85,6 +90,7 @@ export default function AdminOrders() {
   const [adminTab, setAdminTab] = useState('orders')
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkNewStatus, setBulkNewStatus] = useState('To Process')
+  const [confirmStatusModal, setConfirmStatusModal] = useState(null) // { order, nextStatus }
   // Type / Fulfillment / Item are secondary to search, sort and status, so
   // they open on demand instead of crowding the default toolbar. Their state
   // still shows as chips, so nothing hidden ever becomes invisible.
@@ -651,216 +657,430 @@ export default function AdminOrders() {
         />
       </div>
 
-      {/* Order details drawer */}
+      {/* Order details popup form */}
       <DrawerPanel
         isOpen={!!activeOrderDetail}
         onClose={() => setActiveOrderDetail(null)}
         title={activeOrderDetail ? `Order ${activeOrderDetail.id}` : ''}
         subtitle={activeOrderDetail ? `Placed: ${activeOrderDetail.date}` : ''}
+        width="max-w-xl"
+        footer={
+          <button
+            type="button"
+            onClick={() => setActiveOrderDetail(null)}
+            className="btn btn--secondary w-full sm:w-auto"
+          >
+            Close
+          </button>
+        }
       >
         {activeOrderDetail && (
-          <div className="space-y-6 text-xs">
-            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-2">
-              <p className="font-semibold text-gray-600 uppercase text-2xs tracking-wider">
-                Update order status
-              </p>
-              <select
-                value={activeOrderDetail.status}
-                disabled={actionBusy}
-                onChange={(e) => applyStatus(activeOrderDetail, e.target.value)}
-                className="field-input w-full"
-              >
-                {(() => {
-                  const fulfillment = String(activeOrderDetail.fulfillment || '')
-                  const isDelivery =
-                    fulfillment.toLowerCase().includes('delivery') ||
-                    fulfillment.toLowerCase().includes('courier')
-                  const allowedChoices = isDelivery
-                    ? [
-                        { label: 'Processing', value: 'To Process' },
-                        { label: 'In Transit', value: 'Delivering' },
-                      ]
-                    : [
-                        { label: 'Processing', value: 'To Process' },
-                        { label: 'To claim', value: 'To Claim' },
-                      ]
-                  const values = allowedChoices.map((c) => c.value)
-                  return (
-                    <>
-                      {!values.includes(activeOrderDetail.status) && (
-                        <option value={activeOrderDetail.status}>{activeOrderDetail.status}</option>
-                      )}
-                      {allowedChoices.map((choice) => (
-                        <option key={choice.value} value={choice.value}>
-                          {choice.label}
-                        </option>
-                      ))}
-                    </>
-                  )
-                })()}
-              </select>
-
-              {pendingAction && (
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    disabled={actionBusy}
-                    onClick={() =>
-                      applyStatus(
-                        activeOrderDetail,
-                        activeOrderDetail.rawStatus === 'CANCEL REQUESTED'
-                          ? 'Cancelled'
-                          : 'Returned'
-                      )
-                    }
-                    className="btn btn--primary flex-1"
-                  >
-                    Approve {activeOrderDetail.rawStatus === 'CANCEL REQUESTED' ? 'cancel' : 'return'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={actionBusy}
-                    onClick={() =>
-                      applyStatus(
-                        activeOrderDetail,
-                        activeOrderDetail.rawStatus === 'CANCEL REQUESTED'
-                          ? 'To Process'
-                          : 'To Process'
-                      )
-                    }
-                    className="btn btn--secondary flex-1"
-                  >
-                    Reject request
-                  </button>
+          <div className="space-y-4 text-xs">
+            {/* Header Hero Banner with order badge & status */}
+            <div className="relative overflow-hidden p-4 rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/5 to-transparent border border-orange-500/20">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-white dark:bg-[var(--surface)] text-[var(--ink)] shadow-2xs border border-[var(--line)]">
+                      {activeOrderDetail.id}
+                    </span>
+                    <span className="text-2xs text-[var(--muted)]">
+                      Placed {activeOrderDetail.date}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-[var(--ink)] tracking-tight">
+                    {activeOrderDetail.customer}
+                  </h3>
                 </div>
-              )}
-
-              <p className="text-2xs text-gray-400 pt-1">
-                Status changes are saved on the server and the list re-syncs automatically.
-              </p>
+                <div className="text-right">
+                  <p className="text-2xs uppercase tracking-wider font-semibold text-[var(--muted)]">Grand Total</p>
+                  <p className="text-lg font-bold text-brand-orange">
+                    ₱{(Number(activeOrderDetail?.total) || 0).toFixed(2)}
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <h4 className="font-bold text-gray-900 text-sm">Customer &amp; fulfillment info</h4>
-              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100 space-y-2.5">
-                <div>
-                  <p className="font-semibold text-gray-900">{activeOrderDetail.customer}</p>
-                  <p className="text-gray-500">Order type: {activeOrderDetail.type}</p>
-                  {activeOrderDetail.custPhone && (
-                    <p className="text-gray-500">Contact: {activeOrderDetail.custPhone}</p>
-                  )}
-                  {activeOrderDetail.batch && (
-                    <p className="text-gray-500">Batch code: {activeOrderDetail.batch}</p>
+            {/* Status Manager Card */}
+            {(() => {
+              const currentStatusNormalized = String(activeOrderDetail.status || activeOrderDetail.rawStatus || '').trim().toLowerCase()
+              const isLocked = currentStatusNormalized === 'claimed' || currentStatusNormalized === 'received'
+
+              return (
+                <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${isLocked ? 'bg-emerald-500' : 'bg-brand-orange animate-pulse'}`} />
+                      <span className="font-semibold text-[var(--muted)] uppercase text-2xs tracking-wider">
+                        {isLocked ? 'Order Status (Completed)' : 'Update Order Status'}
+                      </span>
+                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-bold uppercase tracking-wider ${
+                      isLocked
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                        : 'bg-brand-orange/10 text-brand-orange border border-brand-orange/20'
+                    }`}>
+                      {activeOrderDetail.status}
+                    </span>
+                  </div>
+
+                  {isLocked ? (
+                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <path d="m9 12 2 2 4-4" />
+                      </svg>
+                      <p className="text-2xs font-medium">
+                        This order has already been <strong>{activeOrderDetail.status.toLowerCase()}</strong>. The order status is locked and cannot be changed.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={activeOrderDetail.status === 'Delivering' ? 'In Transit' : activeOrderDetail.status}
+                        disabled={actionBusy}
+                        onChange={(e) => {
+                          const next = e.target.value
+                          if (next !== activeOrderDetail.status && next !== (activeOrderDetail.status === 'Delivering' ? 'In Transit' : activeOrderDetail.status)) {
+                            setConfirmStatusModal({ order: activeOrderDetail, nextStatus: next })
+                          }
+                        }}
+                        className="field-input w-full font-semibold text-sm py-2 px-3"
+                      >
+                        {(() => {
+                          const fulfillment = String(activeOrderDetail.fulfillment || '')
+                          const isDelivery =
+                            fulfillment.toLowerCase().includes('delivery') ||
+                            fulfillment.toLowerCase().includes('courier')
+                          const allowedChoices = isDelivery
+                            ? [
+                                { label: 'Processing', value: 'To Process' },
+                                { label: 'In Transit', value: 'Delivering' },
+                              ]
+                            : [
+                                { label: 'Processing', value: 'To Process' },
+                                { label: 'To claim', value: 'To Claim' },
+                              ]
+                          const currentDisplay = activeOrderDetail.status === 'Delivering' ? 'In Transit' : activeOrderDetail.status
+                          const values = allowedChoices.map((c) => c.value)
+                          return (
+                            <>
+                              {!values.includes(activeOrderDetail.status) && (
+                                <option value={activeOrderDetail.status}>{currentDisplay}</option>
+                              )}
+                              {allowedChoices.map((choice) => (
+                                <option key={choice.value} value={choice.value}>
+                                  {choice.label}
+                                </option>
+                              ))}
+                            </>
+                          )
+                        })()}
+                      </select>
+
+                      {pendingAction && (
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={actionBusy}
+                            onClick={() =>
+                              setConfirmStatusModal({
+                                order: activeOrderDetail,
+                                nextStatus: activeOrderDetail.rawStatus === 'CANCEL REQUESTED' ? 'Cancelled' : 'Returned',
+                              })
+                            }
+                            className="btn btn--primary flex-1 shadow-2xs hover:shadow-xs py-2 text-xs font-semibold"
+                          >
+                            Approve {activeOrderDetail.rawStatus === 'CANCEL REQUESTED' ? 'cancel' : 'return'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actionBusy}
+                            onClick={() =>
+                              setConfirmStatusModal({
+                                order: activeOrderDetail,
+                                nextStatus: 'To Process',
+                              })
+                            }
+                            className="btn btn--secondary flex-1 py-2 text-xs font-semibold"
+                          >
+                            Reject request
+                          </button>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-[var(--muted-2)]">
+                        Status changes are confirmed, recorded on the server, and sync in realtime.
+                      </p>
+                    </>
                   )}
                 </div>
+              )
+            })()}
 
-                <div className="pt-2 border-t border-gray-200/60 space-y-1">
+            {/* 2-Column Grid: Customer & Fulfillment + Payment */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Customer & Fulfillment Card */}
+              <div className="p-4.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] shadow-2xs flex flex-col justify-between space-y-3.5">
+                <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-700">Fulfillment method</span>
+                    <span className="font-bold text-[var(--ink)] text-sm">Customer Details</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-md bg-[var(--surface-3)] text-[var(--muted)] font-medium">
+                      {activeOrderDetail.type}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-xs text-[var(--muted)]">
+                    <p><strong className="text-[var(--ink-2)]">Name:</strong> {activeOrderDetail.customer}</p>
+                    {activeOrderDetail.custPhone && (
+                      <p><strong className="text-[var(--ink-2)]">Contact:</strong> {activeOrderDetail.custPhone}</p>
+                    )}
+                    {activeOrderDetail.batch && (
+                      <p><strong className="text-[var(--ink-2)]">Batch:</strong> {activeOrderDetail.batch}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-[var(--line)] space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[var(--ink-2)] text-xs">Fulfillment</span>
                     {activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
                     activeOrderDetail.fulfillment?.toLowerCase().includes('delivery') ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-2xs font-medium">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-2.5 h-2.5">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
                           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                         </svg>
-                        <span>Delivery locked</span>
+                        <span>Delivery Locked</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-2xs font-medium">
-                        Store pickup
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+                        Store Pickup
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-600 font-medium">{activeOrderDetail.fulfillment}</p>
-                  {(activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
-                    activeOrderDetail.fulfillment?.toLowerCase().includes('delivery')) && (
-                    <div className="text-2xs text-amber-900 bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 mt-1 space-y-0.5">
-                      <p className="font-semibold">Method locked</p>
-                      <p className="text-amber-800">
-                        Delivery fee paid or courier dispatch confirmed. The fulfillment method can no
-                        longer be switched to store pickup.
-                      </p>
-                    </div>
-                  )}
+                  <p className="text-[var(--ink)] font-semibold text-xs sm:text-sm">{activeOrderDetail.fulfillment}</p>
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <h4 className="font-bold text-gray-900 text-sm">Payment</h4>
-              <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-100 space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-gray-700">Payment method</span>
-                  <span className="text-sm font-semibold text-gray-800">
+              {/* Payment Summary Card */}
+              <div className="p-4.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[var(--ink)] text-sm">Payment Information</span>
+                  <span className="text-xs font-semibold text-[var(--ink)] px-2.5 py-0.5 rounded-md bg-[var(--surface-3)]">
                     {activeOrderDetail.paymentMethod}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-gray-700">Amount due</span>
-                  <span className="text-sm font-semibold text-gray-800">
-                    ₱{(Number(activeOrderDetail.payDue) || 0).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-gray-700">Amount received</span>
-                  <span className="text-sm font-semibold text-gray-800">
-                    {activeOrderDetail.payGiven != null
-                      ? `₱${Number(activeOrderDetail.payGiven).toFixed(2)}`
-                      : 'Not paid yet'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-gray-700">Change</span>
-                  <span className="text-sm font-semibold text-gray-800">
-                    {activeOrderDetail.payChange != null
-                      ? `₱${Number(activeOrderDetail.payChange).toFixed(2)}`
-                      : '—'}
-                  </span>
-                </div>
-                <div className="flex items-start justify-between gap-2 pt-1 border-t border-gray-200/60">
-                  <span className="font-semibold text-gray-700 shrink-0">Payment reference</span>
-                  <span className="font-mono text-[11px] text-gray-500 break-all text-right">
-                    {activeOrderDetail.payRef || '—'}
-                  </span>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-[var(--muted)]">Amount due</span>
+                    <span className="font-semibold text-[var(--ink)] text-sm">
+                      ₱{(Number(activeOrderDetail.payDue) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[var(--muted)]">Amount received</span>
+                    <span className="font-semibold text-[var(--ink)] text-sm">
+                      {activeOrderDetail.payGiven != null
+                        ? `₱${Number(activeOrderDetail.payGiven).toFixed(2)}`
+                        : 'Not paid yet'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[var(--muted)]">Change</span>
+                    <span className="font-semibold text-[var(--ink)] text-sm">
+                      {activeOrderDetail.payChange != null
+                        ? `₱${Number(activeOrderDetail.payChange).toFixed(2)}`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="pt-2.5 border-t border-[var(--line)] flex items-start justify-between gap-2">
+                    <span className="text-[var(--muted)] shrink-0">Reference</span>
+                    <span className="font-mono text-xs text-[var(--ink-2)] break-all text-right">
+                      {activeOrderDetail.payRef || '—'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <h4 className="font-bold text-gray-900 text-sm">Ordered items</h4>
-              <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
-                {(activeOrderDetail.items || []).map((item, idx) => (
-                  <div key={idx} className="p-3 bg-white flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">{item.name}</p>
-                      <p className="text-gray-400 text-2xs">
-                        Qty: {item.qty} {item.category ? `• ${item.category}` : ''}
-                      </p>
+            {/* Ordered Items Section with variation photo and click-to-redirect */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-[var(--ink)] text-sm">
+                  Ordered Items ({activeOrderDetail.items?.length || 0})
+                </h4>
+                <span className="text-xs text-[var(--muted)]">Click an item to view product details</span>
+              </div>
+              <div className="divide-y divide-[var(--line)] rounded-2xl border border-[var(--line)] overflow-hidden bg-[var(--surface)] shadow-2xs">
+                {(activeOrderDetail.items || []).map((item, idx) => {
+                  const targetProdId = item.prodId || item.product?.prod_id || item.product?.id
+                  const imgSrc = item.image ? getImageUrl(item.image) : ''
+
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => {
+                        if (targetProdId) {
+                          setActiveOrderDetail(null)
+                          navigate(`/admin/inventory/${targetProdId}`)
+                        }
+                      }}
+                      role={targetProdId ? 'button' : undefined}
+                      tabIndex={targetProdId ? 0 : undefined}
+                      className={`p-4 flex items-center justify-between gap-3.5 transition-colors ${
+                        targetProdId ? 'hover:bg-[var(--surface-2)] cursor-pointer group' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        {/* Product Variation Photo */}
+                        <div className="w-14 h-14 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] flex items-center justify-center shrink-0 overflow-hidden relative group-hover:scale-105 transition-transform">
+                          {imgSrc ? (
+                            <img
+                              src={imgSrc}
+                              alt={item.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none'
+                                e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                              }}
+                            />
+                          ) : null}
+                          <div className={`${imgSrc ? 'hidden' : 'flex'} items-center justify-center w-full h-full text-[var(--muted)]`}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-6 h-6">
+                              <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                              <circle cx="9" cy="9" r="2" />
+                              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 min-w-0">
+                          <p className="font-bold text-[var(--ink)] text-sm truncate group-hover:text-brand-orange transition-colors">
+                            {item.name}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 text-[var(--muted)] text-xs">
+                            {item.prodvarName && (
+                              <span className="px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--ink-2)] font-medium">
+                                {item.prodvarName}
+                              </span>
+                            )}
+                            <span>Qty: <strong className="text-[var(--ink-2)]">{item.qty}</strong></span>
+                            {item.category && <span>• {item.category}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span className="font-bold text-[var(--ink)] text-base">
+                          ₱{(Number(item?.lineTotal) || 0).toFixed(2)}
+                        </span>
+                        {targetProdId && (
+                          <span className="text-[var(--muted)] group-hover:text-brand-orange group-hover:translate-x-0.5 transition-all text-sm">
+                            →
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span className="font-semibold text-gray-900">
-                      ₱{(Number(item?.lineTotal) || 0).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
+                  )
+                })}
                 {(activeOrderDetail.items || []).length === 0 && (
-                  <p className="p-3 bg-white text-gray-400 text-xs">No items recorded.</p>
+                  <p className="p-4 text-center text-[var(--muted)] text-xs">No items recorded.</p>
                 )}
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex justify-between items-center text-sm font-bold text-gray-900">
-              <span>Grand total</span>
-              <span className="text-base">
-                ₱{(Number(activeOrderDetail?.total) || 0).toFixed(2)}
-              </span>
-            </div>
+            {/* Digital copy of receipt:
+                Rule: receipt must not yet show if the order is for pickup and the order status is not yet "claimed" */}
+            {(() => {
+              const fulfillmentStr = String(activeOrderDetail.fulfillment || '').toLowerCase()
+              const isPickup = fulfillmentStr.includes('pickup') || fulfillmentStr.includes('store')
+              const statusStr = String(activeOrderDetail.status || activeOrderDetail.rawStatus || '').toLowerCase()
+              const isClaimed = statusStr.includes('claimed')
 
-            {/* Digital receipt - issued once the order is claimed / received */}
-            <DigitalReceipt order={activeOrderDetail.raw} customer={activeOrderDetail.customer} />
+              if (isPickup && !isClaimed) {
+                return (
+                  <div className="p-4 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] text-center space-y-1">
+                    <p className="font-semibold text-xs text-[var(--ink)]">Digital Receipt Pending</p>
+                    <p className="text-2xs text-[var(--muted)]">
+                      The official digital receipt is issued once the customer claims their pickup order at the counter.
+                    </p>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="pt-2">
+                  <DigitalReceipt
+                    order={activeOrderDetail.raw}
+                    customer={activeOrderDetail.customer}
+                    alwaysShow={true}
+                  />
+                </div>
+              )
+            })()}
           </div>
         )}
       </DrawerPanel>
+
+      {/* Confirmation Modal on top of existing order details popup before changing order status */}
+      {confirmStatusModal && (
+        <Modal
+          isOpen={Boolean(confirmStatusModal)}
+          onClose={() => setConfirmStatusModal(null)}
+          title="Confirm Status Change"
+          subtitle={`Are you sure you want to update ${confirmStatusModal.order?.id}?`}
+          size="sm"
+          footer={
+            <div className="flex items-center justify-end gap-2.5 w-full">
+              <Button
+                variant="secondary"
+                disabled={actionBusy}
+                onClick={() => setConfirmStatusModal(null)}
+                className="px-4 py-2 text-xs font-semibold"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                disabled={actionBusy}
+                onClick={async () => {
+                  const target = confirmStatusModal
+                  setConfirmStatusModal(null)
+                  await applyStatus(target.order, target.nextStatus)
+                }}
+                className="px-4 py-2 text-xs font-semibold shadow-xs"
+              >
+                {actionBusy ? 'Updating…' : 'Yes, Update Status'}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3 py-1 text-xs">
+            <div className="p-3.5 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] space-y-2">
+              <div className="flex items-center justify-between text-2xs text-[var(--muted)]">
+                <span>Current Status:</span>
+                <span className="font-bold text-[var(--ink)] uppercase">
+                  {confirmStatusModal.order?.status === 'Delivering' ? 'In Transit' : confirmStatusModal.order?.status}
+                </span>
+              </div>
+              <div className="flex items-center justify-center py-0.5 text-brand-orange">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+                  <path d="M12 5v14M19 12l-7 7-7-7" />
+                </svg>
+              </div>
+              <div className="flex items-center justify-between text-2xs text-[var(--muted)]">
+                <span>New Status:</span>
+                <span className="font-bold text-brand-orange uppercase">
+                  {titleCaseStatus(confirmStatusModal.nextStatus)}
+                </span>
+              </div>
+            </div>
+            <p className="text-2xs text-[var(--muted)] leading-relaxed">
+              This will update the order immediately on the server and notify the customer in realtime.
+            </p>
+          </div>
+        </Modal>
+      )}
 
       {/* Bulk update modal — the shared popup shell (index.css primitives). */}
       {showBulkModal && (

@@ -226,7 +226,7 @@ function SignIn() {
         <div>
           <div className="flex items-center gap-3 mb-8">
             {/* Rule 69: a "back" button sits at the TOP LEFT. */}
-            <BackButton to="/home" label="Back to Homepage" className="shrink-0" />
+            <BackButton to="/home" className="shrink-0" />
           </div>
 
           <div className="flex flex-col items-center text-center gap-3 mb-8">
@@ -243,8 +243,8 @@ function SignIn() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-[var(--surface)] rounded-md border border-slate-200 dark:border-[var(--line)] p-5 space-y-5">
-            <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+          <div className="bg-white dark:bg-[var(--surface)] rounded-2xl border border-slate-200 dark:border-[var(--line)] shadow-sm p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4.5" noValidate>
               {phoneField(
                 'mobile'
               )}
@@ -253,10 +253,10 @@ function SignIn() {
                 'mobile'
               )}
 
-              <div className="flex items-center justify-end">
+              <div className="flex items-center justify-end pt-0.5">
                 <Link
-                  to="/forgot-password"
-                  className="text-xs font-semibold text-gray-500 dark:text-[var(--muted)] hover:text-brand-orange transition-colors"
+                  to="/forgot-password?type=customer"
+                  className="text-xs font-semibold text-brand-orange hover:text-brand-orange-dark hover:underline transition-colors cursor-pointer"
                 >
                   Forgot password?
                 </Link>
@@ -271,9 +271,9 @@ function SignIn() {
               <button
                 type="submit"
                 disabled={!formValid || isSubmitting}
-                className={`btn btn--lg btn--block ${
+                className={`btn btn--lg btn--block rounded-xl ${
                   formValid && !isSubmitting
-                    ? 'btn--primary text-white'
+                    ? 'btn--primary text-white cursor-pointer btn-press'
                     : 'btn--secondary cursor-not-allowed opacity-60'
                 }`}
               >
@@ -293,11 +293,11 @@ function SignIn() {
 
       {/* DESKTOP LOGIN LAYOUT (Image 3 Wireframe) */}
       <div className="hidden md:flex flex-col justify-center min-h-[460px] px-4 py-10 animate-fade-in">
-        <div className="w-full max-w-md mx-auto bg-white dark:bg-[var(--surface)] rounded-md border border-slate-200 dark:border-[var(--line)] p-6 space-y-5">
+        <div className="w-full max-w-md mx-auto bg-white dark:bg-[var(--surface)] rounded-2xl border border-slate-200 dark:border-[var(--line)] shadow-sm p-6 sm:p-8 space-y-6">
           {/* Rule 69: the "back" button sits at the TOP LEFT of the container,
               before the branding, not stranded mid-card. */}
           <div className="flex justify-start">
-            <BackButton to="/home" label="Back to Homepage" />
+            <BackButton to="/home" />
           </div>
 
           <div className="space-y-3 text-center">
@@ -314,14 +314,14 @@ function SignIn() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+          <form onSubmit={handleSubmit} className="space-y-4.5" noValidate>
             {phoneField('desktop')}
             {passwordField('desktop')}
 
-            <div className="flex items-center justify-end">
+            <div className="flex items-center justify-end pt-0.5">
               <Link
-                to="/forgot-password"
-                className="text-xs font-semibold text-gray-500 hover:text-brand-orange transition-colors"
+                to="/forgot-password?type=customer"
+                className="text-xs font-semibold text-brand-orange hover:text-brand-orange-dark hover:underline transition-colors cursor-pointer"
               >
                 Forgot password?
               </Link>
@@ -336,9 +336,9 @@ function SignIn() {
             <button
               type="submit"
               disabled={!formValid || isSubmitting}
-              className={`btn btn--lg btn--block ${
+              className={`btn btn--lg btn--block rounded-xl ${
                 formValid && !isSubmitting
-                  ? 'btn--primary text-white'
+                  ? 'btn--primary text-white cursor-pointer btn-press'
                   : 'btn--secondary cursor-not-allowed opacity-60'
               }`}
             >
@@ -346,7 +346,7 @@ function SignIn() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 dark:text-[var(--muted)] font-semibold">
+          <p className="text-center text-sm text-gray-500 dark:text-[var(--muted)] font-semibold pt-1 border-t border-slate-100 dark:border-[var(--line)]">
             Don&apos;t have an account?{' '}
             <Link to="/signup/role" className="text-brand-orange font-semibold hover:underline">
               Sign Up
