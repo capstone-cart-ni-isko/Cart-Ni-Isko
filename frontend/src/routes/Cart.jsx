@@ -129,57 +129,25 @@ function Cart() {
           <button
             type="button"
             onClick={() => navigate('/shop')}
-            className="text-xs font-bold text-brand-orange hover:underline cursor-pointer"
+            className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer lg:inline-flex lg:items-center lg:gap-2 lg:rounded-lg lg:bg-orange-50 lg:px-4 lg:py-2.5 lg:text-sm lg:no-underline lg:transition-colors lg:hover:bg-orange-100"
           >
-            Shop
+            <span className="lg:hidden">Shop</span>
+            <span className="hidden lg:inline">Continue Shopping</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="hidden lg:block w-3.5 h-3.5">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
           </button>
         }
       />
 
       <div className="px-4 py-4 pb-44 md:px-0 md:py-2 lg:pb-16 animate-fade-in max-w-5xl mx-auto">
-        {/* Desktop Top Nav & Page Title (item count beside Shopping Bag) */}
-        <div className="hidden lg:flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white text-sm font-semibold text-gray-600 hover:text-brand-orange transition-colors cursor-pointer"
-              title="Go back to previous page"
-              aria-label="Go back"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              <span>Go Back</span>
-            </button>
-            <div className="flex items-center gap-3">
-              <h1 className="page-title text-gray-900">Shopping Bag</h1>
-              <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-brand-orange text-xs font-bold">
-                {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
-              </span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => navigate('/shop')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-brand-orange font-semibold text-sm transition-colors cursor-pointer"
-            title="Browse university merchandise catalog"
-          >
-            <span>Continue Shopping</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-
         {cartItems.length === 0 ? (
           /* Empty Bag State */
           <div className="text-center py-12 flex flex-col items-center justify-center bg-white rounded-lg border border-slate-100 p-6">
             <div className="w-12 h-12 bg-slate-50 rounded-md flex items-center justify-center mb-2">
               <CartIcon className="w-5 h-5 text-slate-400" />
             </div>
-            <h3 className="font-bold text-gray-800 mt-2 text-base">Your bag is empty</h3>
+            <h3 className="font-semibold text-gray-800 mt-2 text-base">Your bag is empty</h3>
             <p className="text-xs text-gray-500 mt-1 max-w-[280px] mx-auto leading-relaxed">
               Explore our official BU hoodies, caps, varsity jackets, and campus essentials!
             </p>
@@ -209,7 +177,7 @@ function Cart() {
                   <div className="flex items-start gap-2">
                     <AlertTriangleIcon className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                     <div className="space-y-1 flex-1">
-                      <h4 className="font-bold text-amber-950">
+                      <h4 className="font-semibold text-amber-950">
                         Separate Orders Required for In-Stock & Pre-Order Items
                       </h4>
                       <p className="text-amber-900/90 leading-relaxed text-[11px]">
@@ -258,7 +226,7 @@ function Cart() {
                   <button
                     type="button"
                     onClick={handleClearBag}
-                    className="text-xs font-bold text-red-500 hover:text-red-600 hover:underline cursor-pointer"
+                    className="text-xs font-semibold text-red-500 hover:text-red-600 hover:underline cursor-pointer"
                     title="Remove every item from your bag"
                   >
                     Clear bag
@@ -323,18 +291,18 @@ function Cart() {
                               <div className="flex items-center gap-2 flex-wrap">
                                 <Link
                                   to={`/product/${item.product.id}`}
-                                  className="text-base sm:text-lg font-bold text-gray-900 hover:text-brand-orange transition-colors truncate block"
+                                  className="text-base sm:text-lg font-semibold text-gray-900 hover:text-brand-orange transition-colors truncate block"
                                 >
                                   {item.product.name}
                                 </Link>
 
                                 {/* In Stock / Pre-Order Badge (Requirement 14) */}
                                 {item.product.preOrder ? (
-                                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
                                     Pre-order
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
                                     In Stock
                                   </span>
                                 )}
@@ -398,14 +366,14 @@ function Cart() {
                               max={maxStock}
                             />
                             {isMaxStockReached && (
-                              <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                              <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
                                 Max stock ({maxStock})
                               </span>
                             )}
                           </div>
 
                           <div className="text-right">
-                            <span className="text-base sm:text-lg font-black text-brand-orange">
+                            <span className="text-base sm:text-lg font-semibold text-brand-orange">
                               {formatPrice(item.product.price * item.qty)}
                             </span>
                             {item.qty > 1 && (
@@ -426,7 +394,7 @@ function Cart() {
             <div className="lg:col-span-5 mt-6 lg:mt-0 space-y-4">
               <div className="bg-white rounded-lg p-6 space-y-4 border border-slate-100">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">
+                  <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
                     Order Summary
                   </h3>
                   <span className="text-xs font-semibold text-gray-500">
@@ -438,14 +406,14 @@ function Cart() {
                   {/* Dynamic Subtotal (Requirement 5) */}
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 font-medium">Selected Subtotal</span>
-                    <span className="font-bold text-gray-900 text-base">{formatPrice(subtotal)}</span>
+                    <span className="font-semibold text-gray-900 text-base">{formatPrice(subtotal)}</span>
                   </div>
 
                   {/* FLOW-BAG-06: total amount due for the whole bag, straight
                       from the server `subtotal` on every cart response. */}
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 font-medium">Total Amount Due</span>
-                    <span className="font-bold text-brand-orange text-base">
+                    <span className="font-semibold text-brand-orange text-base">
                       {formatPrice(bagSubtotal)}
                     </span>
                   </div>
@@ -468,12 +436,12 @@ function Cart() {
                   {/* Total */}
                   <div className="flex justify-between items-baseline">
                     <div>
-                      <span className="text-base font-bold text-gray-900 block">Total</span>
+                      <span className="text-base font-semibold text-gray-900 block">Total</span>
                       <span className="text-xs text-gray-400 font-normal">
                         (Excluding final delivery fee)
                       </span>
                     </div>
-                    <span className="font-black text-brand-orange text-2xl">
+                    <span className="font-semibold text-brand-orange text-2xl">
                       {formatPrice(subtotal)}
                     </span>
                   </div>
@@ -481,7 +449,7 @@ function Cart() {
 
                 {/* Fulfillment note (Requirement 15) */}
                 <div className="bg-slate-50 rounded-lg p-3.5 text-sm text-gray-600 space-y-1.5 leading-relaxed">
-                  <p className="flex items-center gap-2 font-bold text-gray-800">
+                  <p className="flex items-center gap-2 font-semibold text-gray-800">
                     <TruckIcon className="w-4 h-4 text-brand-orange shrink-0" />
                     <span>Campus Pickup & Delivery</span>
                   </p>
@@ -495,7 +463,7 @@ function Cart() {
                   <Button
                     disabled={isNoneSelected || hasMixedSelection}
                     onClick={handleCheckout}
-                    className={`w-full h-12 rounded-lg font-bold text-sm sm:text-base transition-all ${
+                    className={`w-full h-12 rounded-lg font-semibold text-sm sm:text-base transition-all ${
                       hasMixedSelection
                         ? 'opacity-60 cursor-not-allowed bg-amber-600'
                         : isNoneSelected
@@ -533,7 +501,7 @@ function Cart() {
                 <p className="text-xs text-gray-500 font-semibold uppercase">
                   {selectedItems.length} selected
                 </p>
-                <span className="text-base font-black text-brand-orange block leading-tight">
+                <span className="text-base font-semibold text-brand-orange block leading-tight">
                   {formatPrice(subtotal)}
                 </span>
                 {/* FLOW-BAG-06: the bag's total amount due stays visible here too */}
@@ -547,7 +515,7 @@ function Cart() {
               type="button"
               disabled={isNoneSelected || hasMixedSelection}
               onClick={handleCheckout}
-              className={`flex-1 h-11 rounded-lg font-bold text-sm transition-all px-4 cursor-pointer ${
+              className={`flex-1 h-11 rounded-lg font-semibold text-sm transition-all px-4 cursor-pointer ${
                 hasMixedSelection
                   ? 'bg-amber-500 text-white cursor-not-allowed'
                   : isNoneSelected

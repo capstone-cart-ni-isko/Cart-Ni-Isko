@@ -47,14 +47,14 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <span
-            className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${
+            className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${
               STATUS_STYLE[status] || STATUS_STYLE.upcoming
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-current" />
             {status}
           </span>
-          <h3 className="mt-1.5 text-sm font-extrabold text-slate-900 truncate">
+          <h3 className="mt-1.5 text-sm font-semibold text-slate-900 truncate">
             Appointment #{appointment.id}
           </h3>
           <p className="text-[11px] text-slate-500 truncate">
@@ -68,7 +68,7 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-xs font-bold text-slate-900 uppercase leading-tight">
+          <p className="text-xs font-semibold text-slate-900 uppercase leading-tight">
             {appointment.date}
           </p>
           <p className="text-[11px] text-slate-500">{appointment.dayOfWeek}</p>
@@ -90,7 +90,7 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
                 )}
               </span>
               <span className="min-w-0">
-                <span className="block text-xs font-bold text-slate-900 truncate">{item.name}</span>
+                <span className="block text-xs font-semibold text-slate-900 truncate">{item.name}</span>
                 <span className="block text-[11px] text-slate-500">{item.details}</span>
               </span>
             </li>
@@ -101,10 +101,10 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
       {/* QR code: the customer views it, staff scan it at the counter */}
       {appointment.qr && (
         <div className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             QR
           </span>
-          <code className="text-xs font-mono font-bold text-slate-700 break-all">
+          <code className="text-xs font-mono font-semibold text-slate-700 break-all">
             {appointment.qr}
           </code>
           <span className="ml-auto text-[10px] text-slate-400 font-medium">
@@ -119,7 +119,7 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
         <button
           type="button"
           onClick={onView}
-          className="flex-1 h-8 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+          className="flex-1 h-8 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
         >
           View
         </button>
@@ -127,7 +127,7 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
           <button
             type="button"
             onClick={() => onCancel?.(appointment)}
-            className="flex-1 h-8 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors cursor-pointer"
+            className="flex-1 h-8 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -139,7 +139,7 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
                 ? 'This slot can no longer be cancelled.'
                 : `${status === 'done' ? 'Completed' : status === 'cancelled' ? 'Cancelled' : 'Marked absent'} appointments cannot be cancelled.`
             }
-            className="flex-1 h-8 rounded-lg bg-slate-100 text-slate-400 text-xs font-bold flex items-center justify-center cursor-not-allowed"
+            className="flex-1 h-8 rounded-lg bg-slate-100 text-slate-400 text-xs font-semibold flex items-center justify-center cursor-not-allowed"
           >
             Cancel
           </span>
@@ -147,7 +147,7 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
         {appointment.orderId && (
           <Link
             to={`/orders/${appointment.orderId}`}
-            className="flex-1 h-8 rounded-lg bg-white border border-brand-orange text-brand-orange text-xs font-bold flex items-center justify-center hover:bg-orange-50 transition-colors"
+            className="flex-1 h-8 rounded-lg bg-white border border-brand-orange text-brand-orange text-xs font-semibold flex items-center justify-center hover:bg-orange-50 transition-colors"
           >
             Order
           </Link>

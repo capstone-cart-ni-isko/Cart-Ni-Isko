@@ -7,12 +7,12 @@ import { useAuth } from '../hooks/useAuth.js'
 import { useApiChange } from '../hooks/useApiChange.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageTitle from '../components/ui/PageTitle.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon } from '../components/ui/Icons.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import { fetchOrders, requestCancel, orderFilterBucket } from '../services/orders.js'
 import { parseDate } from '../services/dashboard.js'
@@ -346,22 +346,33 @@ function Orders() {
 
   return (
     <AccountLayout>
-      <div className="hidden md:block">
-        <PageTitle title="My Orders" subtitle="Track and manage your merchandise orders" />
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          onClick={() => navigate('/profile')}
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-gray-700 transition-colors hover:border-brand-orange hover:text-brand-orange"
+          aria-label="Back to profile"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+        <div className="min-w-0 flex-1">
+          <PageTitle title="My Orders" subtitle="Track and manage your merchandise orders" />
+        </div>
       </div>
-      <PageHeader title="My Orders" backTo="/profile" />
 
       {/* Tabs Filter Bar (Sticky) — on mobile it docks below the sticky
           PageHeader (~3.5rem) instead of overlapping it; on desktop the
           header is hidden so the bar docks at the very top. */}
       <div className="bg-white border-b border-gray-100 sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="max-w-3xl mx-auto flex gap-2 overflow-x-auto px-4 py-3 scrollbar-none select-none">
+        <div className="mx-auto flex max-w-7xl flex-nowrap gap-2 overflow-x-auto px-4 py-3 scrollbar-none select-none md:flex-wrap md:justify-center md:overflow-visible">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => selectTab(tab.key)}
-              className={`px-4 py-2 rounded-full text-xs font-bold shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-full text-xs font-semibold shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 ${
                 activeTab === tab.key
                   ? 'bg-brand-orange border-brand-orange text-white shadow-xs'
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900'
@@ -369,7 +380,7 @@ function Orders() {
             >
               <span>{tab.label}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
                   activeTab === tab.key ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
                 }`}
               >
@@ -383,23 +394,48 @@ function Orders() {
       {/* Single Vertical Column Layout */}
       <div className="px-4 py-6 pb-32 animate-fade-in max-w-3xl mx-auto space-y-4">
         {loading ? (
-          <div className="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-xs flex items-center justify-center gap-3">
-            <LoadingSpinner size={26} />
-            <p className="text-sm text-gray-450 font-semibold">Loading your orders…</p>
+          <div className="space-y-4" aria-busy={loading} aria-live="polite">
+            <span className="sr-only">Loading your orders</span>
+            {Array.from({ length: 3 }, (_, index) => (
+              <article key={index} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs animate-pulse" aria-hidden="true">
+                <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-slate-50/50 p-4">
+                  <div className="space-y-2">
+                    <SkeletonBlock className="h-4 w-32 rounded" />
+                    <SkeletonBlock className="h-3 w-24 rounded" />
+                  </div>
+                  <SkeletonBlock className="h-6 w-24 rounded-full" />
+                </div>
+                <SkeletonBlock className="h-10 w-full rounded-none" />
+                <div className="flex items-center gap-4 p-4">
+                  <SkeletonBlock className="h-16 w-16 shrink-0 rounded-xl sm:h-20 sm:w-20" />
+                  <div className="flex-1 space-y-2">
+                    <SkeletonBlock className="h-4 w-2/3 rounded" />
+                    <SkeletonBlock className="h-3 w-1/2 rounded" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <div className="space-y-2">
+                    <SkeletonBlock className="h-3 w-16 rounded" />
+                    <SkeletonBlock className="h-5 w-24 rounded" />
+                  </div>
+                  <SkeletonBlock className="h-9 w-28 rounded-xl" />
+                </div>
+              </article>
+            ))}
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="text-center py-20 flex flex-col items-center justify-center bg-white rounded-3xl border border-gray-100 p-8 shadow-xs">
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-100 mb-2">
               <PackageIcon className="w-7 h-7 text-gray-400" />
             </div>
-            <h3 className="font-bold text-gray-800 mt-3 text-lg">No orders in this category</h3>
+            <h3 className="font-semibold text-gray-800 mt-3 text-lg">No orders in this category</h3>
             <p className="text-sm text-gray-450 mt-1 max-w-[260px] mx-auto">
               Your BU campus merchandise orders will show up here as their status updates.
             </p>
             <button
               type="button"
               onClick={() => selectTab('all')}
-              className="mt-5 text-brand-orange font-bold text-xs hover:underline cursor-pointer"
+              className="mt-5 text-brand-orange font-semibold text-xs hover:underline cursor-pointer"
             >
               View All Orders
             </button>
@@ -426,7 +462,7 @@ function Orders() {
                 <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-slate-50/50 flex items-start justify-between gap-3 flex-wrap">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-base font-bold text-gray-900 tracking-tight">
+                      <span className="text-base font-semibold text-gray-900 tracking-tight">
                         Order #{order.id}
                       </span>
                       {/* Copy Order ID Button */}
@@ -445,17 +481,17 @@ function Orders() {
 
                       {/* Fulfillment chip */}
                       {isDelivery ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">
                           <LockIcon className="w-2.5 h-2.5 text-slate-600" />
                           Courier Delivery
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
                           Store Pickup
                         </span>
                       )}
                       {order.preOrder && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-semibold">
                           Pre-order
                         </span>
                       )}
@@ -487,7 +523,7 @@ function Orders() {
                         <MapPinIcon className="w-3.5 h-3.5 text-blue-600" />
                       )}
                     </span>
-                    <span className="font-bold">
+                    <span className="font-semibold">
                       {order.fulfillment?.method || 'Store Pickup'}:
                     </span>
                     <span className="text-blue-900 truncate">
@@ -496,7 +532,7 @@ function Orders() {
                   </div>
 
                   {RECEIVING.includes(order.status) && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
                       {order.status === 'TO CLAIM' ? 'Claim QR ready' : 'Tracking active'}
                     </span>
                   )}
@@ -520,7 +556,7 @@ function Orders() {
 
                     {/* Product Specs with Explicit Labels */}
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-sm sm:text-base font-extrabold text-gray-900 truncate">
+                      <h3 className="text-sm sm:text-base font-semibold text-gray-900 truncate">
                         {order.name}
                       </h3>
 
@@ -555,10 +591,10 @@ function Orders() {
                 {/* ── Level 5 & 6: Financial Total & Actions ── */}
                 <div className="px-4 sm:px-5 py-3.5 bg-gray-50/70 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
                   <div>
-                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                    <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block">
                       Order Total
                     </span>
-                    <span className="text-base sm:text-lg font-black text-gray-900">
+                    <span className="text-base sm:text-lg font-semibold text-gray-900">
                       {formatPrice(orderTotal)}
                     </span>
                   </div>
@@ -574,7 +610,7 @@ function Orders() {
                             title: `Scan to claim · Order #${order.id}`,
                           })
                         }
-                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
                       >
                         Scan to claim
                       </button>
@@ -591,7 +627,7 @@ function Orders() {
                             delivery: true,
                           })
                         }
-                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
                       >
                         Scan to receive
                       </button>
@@ -601,7 +637,7 @@ function Orders() {
                       <button
                         type="button"
                         onClick={() => navigate(`/orders/${order.id}`)}
-                        className="px-3.5 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors cursor-pointer"
+                        className="px-3.5 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 text-xs font-semibold hover:bg-blue-100 transition-colors cursor-pointer"
                       >
                         Claim Pass
                       </button>
@@ -612,7 +648,7 @@ function Orders() {
                         type="button"
                         disabled={busyId === order.id}
                         onClick={() => handleCancel(order)}
-                        className="px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
+                        className="px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
                       >
                         {busyId === order.id ? <><LoadingSpinner size={14} /> Sending…</> : 'Cancel Order'}
                       </button>
@@ -622,7 +658,7 @@ function Orders() {
                       order.productId != null && (
                         <Link
                           to={`/product/${order.productId}`}
-                          className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+                          className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-semibold hover:bg-gray-50 transition-colors cursor-pointer"
                         >
                           Buy Again
                         </Link>
@@ -631,7 +667,7 @@ function Orders() {
                     {/* Primary Action */}
                     <Link
                       to={`/orders/${order.id}`}
-                      className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-black hover:bg-brand-orange-dark transition-all shadow-2xs hover:shadow-xs active:scale-98 flex items-center gap-1.5 cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-all shadow-2xs hover:shadow-xs active:scale-98 flex items-center gap-1.5 cursor-pointer"
                     >
                       <span>View Order Details</span>
                       <span>→</span>

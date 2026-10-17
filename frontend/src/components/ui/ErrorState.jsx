@@ -17,7 +17,7 @@ export default function ErrorState({ title = 'Something went wrong', hint, onRet
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
       </div>
-      <h3 className="font-extrabold text-gray-900 dark:text-[var(--ink)] text-lg">{title}</h3>
+      <h3 className="font-semibold text-gray-900 dark:text-[var(--ink)] text-lg">{title}</h3>
       {hint && (
         <p className="text-sm text-gray-500 dark:text-[var(--muted)] mt-2 max-w-[280px] mx-auto leading-relaxed">
           {hint}
@@ -27,7 +27,7 @@ export default function ErrorState({ title = 'Something went wrong', hint, onRet
         <button
           type="button"
           onClick={onRetry}
-          className="mt-6 px-5 py-2.5 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white font-bold text-sm transition-colors cursor-pointer"
+          className="mt-6 px-5 py-2.5 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-sm transition-colors cursor-pointer"
         >
           Try Again
         </button>

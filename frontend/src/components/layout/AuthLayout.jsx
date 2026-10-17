@@ -21,13 +21,13 @@ function AuthLayout({ children, panelTitle = 'Wear the pride.', panelSubtitle = 
             <div className="relative z-10 flex items-center gap-3">
               <img src={brandLogo} alt="Tindahan ni Isko" className="w-12 h-12 object-contain brightness-0 invert" />
               <div>
-                <p className="text-lg font-bold leading-tight">Tindahan</p>
-                <p className="text-lg font-bold leading-tight opacity-90">ni Isko</p>
+                <p className="text-lg font-semibold leading-tight">Tindahan</p>
+                <p className="text-lg font-semibold leading-tight opacity-90">ni Isko</p>
               </div>
             </div>
 
             <div className="relative z-10">
-              <h2 className="text-4xl font-black leading-tight mb-3">{panelTitle}</h2>
+              <h2 className="text-4xl font-semibold leading-tight mb-3">{panelTitle}</h2>
               <p className="text-white/85 text-base leading-relaxed max-w-sm">{panelSubtitle}</p>
             </div>
 

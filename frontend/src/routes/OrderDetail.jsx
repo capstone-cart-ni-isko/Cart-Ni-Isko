@@ -25,7 +25,7 @@ import { getTrack, scanQr } from '../services/tracking.js'
 import { parseDate, paymentSummary } from '../services/dashboard.js'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
-import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
 
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
@@ -241,9 +241,35 @@ function OrderDetail() {
           <div className="lg:hidden -mx-4 -mt-4 mb-4">
             <PageHeader title="Order Details" backTo="/orders" />
           </div>
-          <div className="flex items-center justify-center py-24 text-center gap-3">
-            <LoadingSpinner size={26} />
-            <p className="text-sm text-gray-450 font-semibold">Loading order…</p>
+          <div className="space-y-4" aria-busy={loading} aria-live="polite">
+            <span className="sr-only">Loading order details</span>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs animate-pulse">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <SkeletonBlock className="h-5 w-36 rounded" />
+                  <SkeletonBlock className="h-3 w-28 rounded" />
+                </div>
+                <SkeletonBlock className="h-6 w-24 rounded-full" />
+              </div>
+              <SkeletonBlock className="mt-4 h-10 w-full rounded-xl" />
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs animate-pulse">
+              <SkeletonBlock className="mb-4 h-4 w-32 rounded" />
+              <div className="flex flex-col items-center gap-4 rounded-xl bg-slate-50 p-4 sm:flex-row">
+                <SkeletonBlock className="h-40 w-40 shrink-0 rounded-lg" />
+                <div className="w-full space-y-3">
+                  <SkeletonBlock className="h-4 w-2/3 rounded" />
+                  <SkeletonBlock className="h-3 w-full rounded" />
+                  <SkeletonBlock className="h-3 w-3/4 rounded" />
+                  <SkeletonBlock className="h-9 w-32 rounded-lg" />
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs animate-pulse">
+              <SkeletonBlock className="mb-4 h-4 w-28 rounded" />
+              <SkeletonBlock className="h-4 w-full rounded" />
+              <SkeletonBlock className="mt-2 h-4 w-3/4 rounded" />
+            </div>
           </div>
         </div>
       </AccountLayout>
@@ -264,11 +290,11 @@ function OrderDetail() {
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-200 mb-2">
               <PackageIcon className="w-7 h-7 text-gray-400" />
             </div>
-            <h2 className="text-lg font-black text-gray-900">Order not found</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Order not found</h2>
             <p className="text-sm text-gray-450 mt-2">This order doesn't exist or may have been removed.</p>
             <button
               onClick={() => navigate('/orders')}
-              className="mt-6 text-brand-orange font-bold text-sm hover:underline cursor-pointer"
+              className="mt-6 text-brand-orange font-semibold text-sm hover:underline cursor-pointer"
             >
               Back to Orders
             </button>
@@ -327,7 +353,7 @@ function OrderDetail() {
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base sm:text-lg font-black text-gray-900">
+                  <span className="text-base sm:text-lg font-semibold text-gray-900">
                     Order #{order.id}
                   </span>
                   <button
@@ -362,7 +388,7 @@ function OrderDetail() {
           {(showQr || timeline.length > 0) && (
             <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-4 shadow-2xs">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   {isDelivery ? 'Delivery Tracking' : 'Pickup Claim Pass'}
                 </h3>
                 <StatusBadge status={order.status} className="px-2 py-0.5" />
@@ -382,7 +408,7 @@ function OrderDetail() {
                     </div>
                   )}
                   <div className="text-xs text-gray-600 space-y-1.5 text-center sm:text-left">
-                    <p className="font-black text-gray-900 text-sm">
+                    <p className="font-semibold text-gray-900 text-sm">
                       {isDelivery
                         ? 'Courier verification code'
                         : 'Show this QR at the pickup counter'}
@@ -400,7 +426,7 @@ function OrderDetail() {
                         <button
                           type="button"
                           onClick={() => setScanMode('delivery')}
-                          className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
+                          className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
                         >
                           Scan Parcel QR Code
                         </button>
@@ -408,7 +434,7 @@ function OrderDetail() {
                           type="button"
                           onClick={handleConfirmReceipt}
                           disabled={busy}
-                          className="mt-2 px-4 py-2 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
+                          className="mt-2 px-4 py-2 rounded-lg bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
                         >
                           {busy ? 'Confirming…' : 'I received this order (manual)'}
                         </button>
@@ -419,7 +445,7 @@ function OrderDetail() {
                       <button
                         type="button"
                         onClick={() => setScanMode('pickup')}
-                        className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-bold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
+                        className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
                       >
                         Scan to claim
                       </button>
@@ -467,7 +493,7 @@ function OrderDetail() {
                         )}
                       </div>
                       <div className="pb-4 text-xs min-w-0">
-                        <p className="font-bold text-gray-900">
+                        <p className="font-semibold text-gray-900">
                           {String(step.label).replace(/_/g, ' ')}
                         </p>
                         {step.time && (
@@ -487,10 +513,10 @@ function OrderDetail() {
           {/* Fulfillment Method Info */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3.5 shadow-2xs">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Fulfillment Method
               </h3>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase tracking-wider">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold uppercase tracking-wider">
                 Paid at checkout
               </span>
             </div>
@@ -500,7 +526,7 @@ function OrderDetail() {
                 {isDelivery ? <TruckIcon className="w-5 h-5" /> : <MapPinIcon className="w-5 h-5" />}
               </span>
               <div className="flex-1 min-w-0 text-xs space-y-1">
-                <strong className="text-gray-900 text-sm font-bold block">
+                <strong className="text-gray-900 text-sm font-semibold block">
                   {order.fulfillment?.method || 'Store Pickup'}
                 </strong>
                 <p className="text-gray-600">
@@ -544,7 +570,7 @@ function OrderDetail() {
             {courier && (courierTrackUrl || courier.order_id || courier.status) && (
               <div className="p-3 rounded-xl border border-slate-100 bg-white flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                     Courier
                   </p>
                   <p className="text-xs font-semibold text-gray-800">
@@ -561,7 +587,7 @@ function OrderDetail() {
                     href={courierTrackUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="shrink-0 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-brand-orange hover:bg-orange-50 transition-colors"
+                    className="shrink-0 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-brand-orange hover:bg-orange-50 transition-colors"
                   >
                     Track parcel
                   </a>
@@ -572,7 +598,7 @@ function OrderDetail() {
 
           {/* Items Ordered Card */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
               Items Ordered
             </h3>
             <div className="space-y-3.5">
@@ -611,7 +637,7 @@ function OrderDetail() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-gray-900 text-sm truncate">{name}</h4>
+                      <h4 className="font-semibold text-gray-900 text-sm truncate">{name}</h4>
                       <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 flex-wrap">
                         {size && (
                           <>
@@ -635,7 +661,7 @@ function OrderDetail() {
                           Qty: <strong className="text-gray-800">{qty}</strong>
                         </span>
                       </div>
-                      <p className="text-xs font-bold text-brand-orange mt-1">
+                      <p className="text-xs font-semibold text-brand-orange mt-1">
                         {formatPrice(price)} each
                       </p>
                     </div>
@@ -647,7 +673,7 @@ function OrderDetail() {
 
           {/* Pricing Breakdown */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-2.5 shadow-2xs">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
               Order Financial Summary
             </h3>
             <div className="flex justify-between text-xs">
@@ -673,8 +699,8 @@ function OrderDetail() {
             )}
             <div className="h-px bg-slate-200 my-1" />
             <div className="flex justify-between items-baseline">
-              <span className="font-bold text-gray-900 text-xs">Order Total</span>
-              <span className="font-black text-brand-orange text-base">
+              <span className="font-semibold text-gray-900 text-xs">Order Total</span>
+              <span className="font-semibold text-brand-orange text-base">
                 {formatPrice(total)}
               </span>
             </div>
@@ -684,7 +710,7 @@ function OrderDetail() {
               customer picked, what was due, what was tendered and the change,
               exactly as the backend recorded it. */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
               Payment
             </h3>
             <div className="space-y-1">
@@ -720,10 +746,10 @@ function OrderDetail() {
 
           {/* Student Recipient Info */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-1 text-xs shadow-2xs">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
               Claimant / Student Information
             </h3>
-            <p className="text-xs font-bold text-gray-900">
+            <p className="text-xs font-semibold text-gray-900">
               {currentUser?.fullName || '—'}
             </p>
             <p className="text-gray-500">Contact: {currentUser?.phone || currentUser?.email || '—'}</p>
@@ -736,7 +762,7 @@ function OrderDetail() {
           {/* Cancel (customer-requested, staff-approved - FLOW-ORD_LIST-04) */}
           {CAN_CANCEL.includes(order.status) && (
             <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-2 shadow-2xs">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Need help with this order?
               </h3>
               <div className="flex items-center gap-2 flex-wrap">
@@ -744,7 +770,7 @@ function OrderDetail() {
                   type="button"
                   disabled={busy}
                   onClick={handleCancel}
-                  className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
+                  className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
                 >
                   {busy ? 'Sending…' : 'Cancel Order'}
                 </button>
@@ -766,14 +792,14 @@ function OrderDetail() {
           <div className="flex items-center gap-2 pt-2">
             <Link
               to="/orders"
-              className="flex-1 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs flex items-center justify-center hover:bg-slate-50 transition-colors shadow-2xs"
+              className="flex-1 h-9 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold text-xs flex items-center justify-center hover:bg-slate-50 transition-colors shadow-2xs"
             >
               Back to Orders
             </Link>
             {order.productId != null && (
               <Link
                 to={`/product/${order.productId}`}
-                className="flex-1 h-9 rounded-xl bg-brand-orange text-white font-bold text-xs flex items-center justify-center hover:bg-brand-orange-dark transition-colors shadow-xs"
+                className="flex-1 h-9 rounded-xl bg-brand-orange text-white font-semibold text-xs flex items-center justify-center hover:bg-brand-orange-dark transition-colors shadow-xs"
               >
                 View Product Page
               </Link>

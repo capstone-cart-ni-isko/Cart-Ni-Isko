@@ -53,7 +53,7 @@ export default function DesktopAccountSidebar() {
       <aside className="w-full shrink-0 flex flex-col space-y-2.5">
         <div className="bg-white rounded-lg p-3 border border-gray-100">
           <div className="px-2 pt-0.5 pb-1.5 mb-1 border-b border-gray-100">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Account Menu</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Account Menu</p>
           </div>
 
           <nav className="space-y-0.5">

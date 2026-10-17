@@ -6,12 +6,17 @@ import SkeletonCard from './SkeletonCard.jsx'
  *
  * @param {number} count - Number of skeleton cards to render (default: 8)
  */
-export default function SkeletonGrid({ count = 8 }) {
+export default function SkeletonGrid({ count = 8, isLoading = true }) {
+  if (!isLoading) return null
+
   return (
-    <div className="grid-catalog" aria-hidden="true">
-      {Array.from({ length: count }, (_, i) => (
-        <SkeletonCard key={i} />
-      ))}
+    <div aria-busy={isLoading} aria-live="polite">
+      <span className="sr-only">Loading products</span>
+      <div className="grid-catalog">
+        {Array.from({ length: count }, (_, i) => (
+          <SkeletonCard key={i} />
+        ))}
+      </div>
     </div>
   )
 }

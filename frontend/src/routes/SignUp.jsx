@@ -382,8 +382,8 @@ function SignUp() {
             {step === 0 && (
               <div className="space-y-6 animate-fade-in">
                 <div>
-                  <h1 className="text-2xl font-black text-gray-900 leading-tight">Tell us who you are</h1>
-                  <p className="text-xs text-gray-400 font-bold mt-1 uppercase tracking-wider">
+                  <h1 className="text-2xl font-semibold text-gray-900 leading-tight">Tell us who you are</h1>
+                  <p className="text-xs text-gray-400 font-semibold mt-1 uppercase tracking-wider">
                     Choose &quot;BUeño&quot; or &quot;guest&quot;
                   </p>
                 </div>
@@ -398,7 +398,7 @@ function SignUp() {
                       key={option.type}
                       type="button"
                       onClick={() => handleTypeSelect(option.type)}
-                      className={`w-full min-h-14 rounded-2xl border-2 flex items-center justify-between px-5 py-3 font-bold transition-all text-sm ${
+                      className={`w-full min-h-14 rounded-2xl border-2 flex items-center justify-between px-5 py-3 font-semibold transition-all text-sm ${
                         form.custType === option.type
                           ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-inner'
                           : 'border-gray-100 bg-white text-gray-700 hover:border-gray-200'
@@ -420,7 +420,7 @@ function SignUp() {
                 {/* FLOW-CUST_SIGNUP-03: a BUeño also specifies cust_categ */}
                 {form.custType === 'BUENO' && (
                   <div className="space-y-3">
-                    <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">
+                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">
                       I am a...
                     </p>
                     <div className="flex gap-2">
@@ -429,7 +429,7 @@ function SignUp() {
                           key={role}
                           type="button"
                           onClick={() => updateForm({ role })}
-                          className={`flex-1 h-11 rounded-xl border-2 font-bold transition-all text-xs ${
+                          className={`flex-1 h-11 rounded-xl border-2 font-semibold transition-all text-xs ${
                             form.role === role
                               ? 'border-brand-orange bg-brand-orange/5 text-brand-orange'
                               : 'border-gray-100 bg-white text-gray-700 hover:border-gray-200'
@@ -445,7 +445,7 @@ function SignUp() {
                 <Button
                   onClick={handleRoleNext}
                   disabled={!roleReady}
-                  className="w-full h-12 rounded-full font-bold shadow-md mt-6"
+                  className="w-full h-12 rounded-full font-semibold shadow-md mt-6"
                 >
                   Next
                 </Button>
@@ -456,8 +456,8 @@ function SignUp() {
             {step === 1 && (
               <form onSubmit={handleDetailsNext} className="space-y-5 animate-fade-in">
                 <div>
-                  <h1 className="text-2xl font-black text-gray-900 leading-tight">Create Account</h1>
-                  <p className="text-xs text-gray-400 font-bold mt-1 uppercase tracking-wider">
+                  <h1 className="text-2xl font-semibold text-gray-900 leading-tight">Create Account</h1>
+                  <p className="text-xs text-gray-400 font-semibold mt-1 uppercase tracking-wider">
                     Provide your basic details
                   </p>
                 </div>
@@ -465,7 +465,7 @@ function SignUp() {
                 <div className="space-y-4">
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                      <label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">
                         First Name
                       </label>
                       <input
@@ -479,7 +479,7 @@ function SignUp() {
                       {fieldError('firstName', form.firstName, firstNameError)}
                     </div>
                     <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                      <label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">
                         Last Name
                       </label>
                       <input
@@ -495,7 +495,7 @@ function SignUp() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    <label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">
                       Phone Number
                     </label>
                     <input
@@ -512,7 +512,7 @@ function SignUp() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    <label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">
                       Email Address
                     </label>
                     <input
@@ -529,7 +529,7 @@ function SignUp() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    <label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">
                       Username
                     </label>
                     <input
@@ -546,7 +546,7 @@ function SignUp() {
                   </div>
                 </div>
 
-                <Button type="submit" disabled={!!(firstNameError || lastNameError || phoneError || emailError) || !form.username} className="w-full h-12 rounded-full font-bold mt-2 shadow-md">
+                <Button type="submit" disabled={!!(firstNameError || lastNameError || phoneError || emailError) || !form.username} className="w-full h-12 rounded-full font-semibold mt-2 shadow-md">
                   Continue
                 </Button>
               </form>
@@ -556,12 +556,12 @@ function SignUp() {
             {step === 2 && (
               <form onSubmit={handlePasswordNext} className="space-y-5 animate-fade-in">
                 <div>
-                  <h1 className="text-2xl font-black text-gray-900 leading-tight">Secure Account</h1>
+                  <h1 className="text-2xl font-semibold text-gray-900 leading-tight">Secure Account</h1>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Password</label>
+                    <label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Password</label>
                     <div className="relative">
                       <input
                         type={showPass ? 'text' : 'password'}
@@ -571,7 +571,7 @@ function SignUp() {
                         onBlur={() => touch('password')}
                         className="w-full h-11 px-3.5 pr-12 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/40"
                       />
-                      <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450">
+                      <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-450">
                         {showPass ? 'Hide' : 'Show'}
                       </button>
                     </div>
@@ -579,7 +579,7 @@ function SignUp() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Confirm Password</label>
+                    <label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Confirm Password</label>
                     <input
                       type="password"
                       placeholder="Confirm password"
@@ -613,7 +613,7 @@ function SignUp() {
                   </div>
                 </div>
 
-                <Button type="submit" disabled={!!(passwordError || confirmError) || !agreeToTerms} className="w-full h-12 rounded-full font-bold mt-2 shadow-md">
+                <Button type="submit" disabled={!!(passwordError || confirmError) || !agreeToTerms} className="w-full h-12 rounded-full font-semibold mt-2 shadow-md">
                   {isBueño ? 'Continue' : 'Create Account'}
                 </Button>
               </form>
@@ -623,7 +623,7 @@ function SignUp() {
             {step === 3 && isBueño && (
               <form onSubmit={handleCollegeNext} className="space-y-5 animate-fade-in">
                 <div className="flex justify-between items-start">
-                  <h1 className="text-2xl font-black text-gray-900">Your College</h1>
+                  <h1 className="text-2xl font-semibold text-gray-900">Your College</h1>
                 </div>
                 <div className="space-y-4">
                   <div>
@@ -702,7 +702,7 @@ function SignUp() {
                     </div>
                   </div>
                 </div>
-                <Button type="submit" disabled={academicErrors || isSubmitting} className="w-full h-12 rounded-full font-bold">
+                <Button type="submit" disabled={academicErrors || isSubmitting} className="w-full h-12 rounded-full font-semibold">
                   {isSubmitting ? 'Creating account…' : 'Create Account'}
                 </Button>
               </form>
@@ -714,15 +714,15 @@ function SignUp() {
                 <div className="w-24 h-24 bg-brand-orange/10 rounded-full flex items-center justify-center mx-auto">
                   <img src={logo} alt="Tindahan ni Isko" className="w-16 animate-bounce" />
                 </div>
-                <h1 className="text-2xl font-black text-gray-900">All Set!</h1>
-                <Button onClick={() => navigate('/signin')} className="w-full h-12 rounded-full font-bold">Go to Sign In</Button>
+                <h1 className="text-2xl font-semibold text-gray-900">All Set!</h1>
+                <Button onClick={() => navigate('/signin')} className="w-full h-12 rounded-full font-semibold">Go to Sign In</Button>
               </div>
             )}
           </div>
 
           {step <= 2 && (
             <p className="text-center text-sm text-gray-400 font-semibold pt-6">
-              Already have an account? <Link to="/signin" className="text-brand-orange font-bold">Sign in</Link>
+              Already have an account? <Link to="/signin" className="text-brand-orange font-semibold">Sign in</Link>
             </p>
           )}
         </div>
@@ -736,14 +736,14 @@ function SignUp() {
             <div className="p-10 animate-fade-in bg-white min-h-[460px] flex flex-col justify-between">
               <div>
                 <div className="mb-8">
-                  <h1 className="text-3xl font-black text-gray-900 leading-tight">Tell Us More About You</h1>
+                  <h1 className="text-3xl font-semibold text-gray-900 leading-tight">Tell Us More About You</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2">
                     Just a few more details to personalize your shopping experience.
                   </p>
                 </div>
 
                 <div className="space-y-6">
-                  <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide">I am a...</h2>
+                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">I am a...</h2>
 
                   {/* FLOW-CUST_SIGNUP-02: cust_type is either "BUeño" or "guest" */}
                   <div className="grid grid-cols-2 gap-4">
@@ -755,7 +755,7 @@ function SignUp() {
                         key={option.type}
                         type="button"
                         onClick={() => handleTypeSelect(option.type)}
-                        className={`min-h-14 rounded-xl border-2 flex flex-col items-start justify-center px-4 py-3 font-bold transition-all text-sm cursor-pointer ${
+                        className={`min-h-14 rounded-xl border-2 flex flex-col items-start justify-center px-4 py-3 font-semibold transition-all text-sm cursor-pointer ${
                           form.custType === option.type
                             ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-md'
                             : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
@@ -778,7 +778,7 @@ function SignUp() {
                             key={role}
                             type="button"
                             onClick={() => updateForm({ role })}
-                            className={`h-14 rounded-xl border font-bold text-sm transition-all flex items-center justify-center cursor-pointer ${
+                            className={`h-14 rounded-xl border font-semibold text-sm transition-all flex items-center justify-center cursor-pointer ${
                               form.role === role
                                 ? 'bg-brand-blue border-brand-blue text-white shadow-md'
                                 : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
@@ -796,7 +796,7 @@ function SignUp() {
               <Button
                 onClick={handleDesktopRoleContinue}
                 disabled={!roleReady}
-                className="w-full h-12 font-bold rounded-xl shadow-md mt-8 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
+                className="w-full h-12 font-semibold rounded-xl shadow-md mt-8 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
               >
                 Continue
               </Button>
@@ -809,7 +809,7 @@ function SignUp() {
               <div>
                 <BackButton onClick={handleBack} label="Back to Role Selection" className="mb-6" />
                 <div className="mb-8">
-                  <h1 className="text-3xl font-black text-gray-900 leading-tight">Sign Up</h1>
+                  <h1 className="text-3xl font-semibold text-gray-900 leading-tight">Sign Up</h1>
                   <p className="text-sm text-gray-500 font-medium mt-2 leading-relaxed">
                     Sign up to get started.
                   </p>
@@ -818,7 +818,7 @@ function SignUp() {
                 <form onSubmit={handleDesktopCredentialsSubmit} className="space-y-4">
                   <div className="flex gap-4">
                     <div className="flex-1">
-                      <label className="block text-sm font-bold text-gray-700 mb-2">First Name</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">First Name</label>
                       <input
                         type="text"
                         placeholder="First Name"
@@ -831,7 +831,7 @@ function SignUp() {
                       {fieldError('firstName', form.firstName, firstNameError)}
                     </div>
                     <div className="flex-1">
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Last Name</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Last Name</label>
                       <input
                         type="text"
                         placeholder="Last Name"
@@ -847,7 +847,7 @@ function SignUp() {
 
                   {/* Username */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Username</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Username</label>
                     <input
                       type="text"
                       placeholder="Enter username"
@@ -862,7 +862,7 @@ function SignUp() {
 
                   {/* Phone Number */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Phone Number</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
                     <input
                       type="tel"
                       placeholder="0912345678"
@@ -880,7 +880,7 @@ function SignUp() {
 
                   {/* Email Address */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
                     <input
                       type="email"
                       placeholder="student@bicol-u.edu.ph"
@@ -895,7 +895,7 @@ function SignUp() {
 
                   {/* Password */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Password</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
                     <div className="relative">
                       <input
                         type={showPass ? 'text' : 'password'}
@@ -909,7 +909,7 @@ function SignUp() {
                       <button
                         type="button"
                         onClick={() => setShowPass(!showPass)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-450 hover:text-brand-orange"
                       >
                         {showPass ? 'Hide' : 'Show'}
                       </button>
@@ -919,7 +919,7 @@ function SignUp() {
 
                   {/* Confirm Password */}
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Confirm Password</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password</label>
                     <div className="relative">
                       <input
                         type={showConfirmPass ? 'text' : 'password'}
@@ -933,7 +933,7 @@ function SignUp() {
                       <button
                         type="button"
                         onClick={() => setShowConfirmPass(!showConfirmPass)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-450 hover:text-brand-orange"
                       >
                         {showConfirmPass ? 'Hide' : 'Show'}
                       </button>
@@ -971,7 +971,7 @@ function SignUp() {
                         !agreeToTerms
                       )
                     }
-                    className="w-full h-12 font-bold rounded-xl shadow-md mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
+                    className="w-full h-12 font-semibold rounded-xl shadow-md mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
                   >
                     Sign Up
                   </Button>
@@ -980,7 +980,7 @@ function SignUp() {
 
               <p className="text-center text-sm text-gray-500 font-semibold pt-6">
                 Already have an account?{' '}
-                <Link to="/signin" className="text-brand-orange font-bold hover:underline">
+                <Link to="/signin" className="text-brand-orange font-semibold hover:underline">
                   Sign In
                 </Link>
               </p>
@@ -1001,7 +1001,7 @@ function SignUp() {
 
                 <form onSubmit={handleDesktopPersonalizeSubmit} className="space-y-4">
                       <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Campus</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Campus</label>
                         <select
                           value={form.campus}
                           onChange={(e) => updateForm({ campus: e.target.value })}
@@ -1018,7 +1018,7 @@ function SignUp() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">College/Institute</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">College/Institute</label>
                         <select
                           value={form.college}
                           onChange={(e) => updateForm({ college: e.target.value })}
@@ -1036,7 +1036,7 @@ function SignUp() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">Department</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
                         <select
                           value={form.course}
                           onChange={(e) => updateForm({ course: e.target.value })}
@@ -1055,7 +1055,7 @@ function SignUp() {
 
                       <div className="flex gap-4">
                         <div className="flex-1">
-                          <label className="block text-sm font-bold text-gray-700 mb-2">Year</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Year</label>
                           <select
                             value={form.yearLevel}
                             onChange={(e) => updateForm({ yearLevel: e.target.value })}
@@ -1073,7 +1073,7 @@ function SignUp() {
                           {fieldError('yearLevel', form.yearLevel, yearLevelError)}
                         </div>
                         <div className="flex-1">
-                          <label className="block text-sm font-bold text-gray-700 mb-2">Block (Optional)</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">Block (Optional)</label>
                           <input
                             type="text"
                             placeholder="e.g. A"
@@ -1092,7 +1092,7 @@ function SignUp() {
                   <Button
                     type="submit"
                     disabled={academicErrors}
-                    className="w-full h-12 font-bold rounded-xl mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
+                    className="w-full h-12 font-semibold rounded-xl mt-6 bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
                   >
                     Finish
                   </Button>
@@ -1101,7 +1101,7 @@ function SignUp() {
 
               <p className="text-center text-sm text-gray-500 font-semibold pt-6">
                 Already have an account?{' '}
-                <Link to="/signin" className="text-brand-orange font-bold hover:underline">
+                <Link to="/signin" className="text-brand-orange font-semibold hover:underline">
                   Sign In
                 </Link>
               </p>

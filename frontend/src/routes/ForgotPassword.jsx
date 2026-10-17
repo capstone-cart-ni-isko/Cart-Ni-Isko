@@ -176,7 +176,7 @@ function ForgotPassword() {
 
           {step === 0 && (
             <div className="animate-fade-in">
-              <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Confirm it's you</h1>
+              <h1 className="text-3xl font-semibold text-gray-900 mb-2">Confirm it's you</h1>
               <p className="text-sm text-gray-500 font-semibold mb-8 leading-relaxed">
                 {userType === 'customer'
                   ? 'Enter the phone number associated with your account.'
@@ -185,7 +185,7 @@ function ForgotPassword() {
 
               <form onSubmit={handleIdentifierSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
                     {userType === 'customer' ? 'Phone Number' : 'Email Address'}
                   </label>
                   <input
@@ -199,7 +199,7 @@ function ForgotPassword() {
                   <Button
                     type="submit"
                     disabled={identifier.trim().length < (userType === 'customer' ? 10 : undefined) || isSubmitting}
-                    className="w-full h-12 rounded-full font-bold shadow-md"
+                    className="w-full h-12 rounded-full font-semibold shadow-md"
                   >
                     {isSubmitting ? 'Sending...' : 'Continue'}
                   </Button>
@@ -210,7 +210,7 @@ function ForgotPassword() {
 
           {step === 1 && (
             <div className="animate-fade-in">
-              <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Verify Code</h1>
+              <h1 className="text-3xl font-semibold text-gray-900 mb-2">Verify Code</h1>
               <p className="text-sm text-gray-500 font-semibold mb-8 leading-relaxed">
                 Enter the 4-digit code sent to <span className="font-semibold text-gray-700">{identifier}</span>
               </p>
@@ -234,7 +234,7 @@ function ForgotPassword() {
                 <Button
                   type="submit"
                   disabled={otp.length < 4 || isSubmitting}
-                  className="w-full h-12 rounded-full font-bold shadow-md"
+                  className="w-full h-12 rounded-full font-semibold shadow-md"
                 >
                   {isSubmitting ? 'Verifying...' : 'Continue'}
                 </Button>
@@ -244,14 +244,14 @@ function ForgotPassword() {
 
           {step === 2 && (
             <div className="animate-fade-in">
-              <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Reset Password</h1>
+              <h1 className="text-3xl font-semibold text-gray-900 mb-2">Reset Password</h1>
               <p className="text-sm text-gray-500 font-semibold mb-8 leading-relaxed">
                 Set a strong and secure password for your student storefront account.
               </p>
 
               <form onSubmit={handleResetSubmit} className="space-y-5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
                     New Password
                   </label>
                   <div className="relative">
@@ -265,7 +265,7 @@ function ForgotPassword() {
                     <button
                       type="button"
                       onClick={() => setShowPass(!showPass)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange transition-colors"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-450 hover:text-brand-orange transition-colors"
                     >
                       {showPass ? 'Hide' : 'Show'}
                     </button>
@@ -277,7 +277,7 @@ function ForgotPassword() {
                   )}
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
                       Confirm New Password
                     </label>
                     <input
@@ -298,7 +298,7 @@ function ForgotPassword() {
                 <Button
                   type="submit"
                   disabled={!resetValid || isSubmitting}
-                  className="w-full h-12 rounded-full font-bold shadow-md mt-4"
+                  className="w-full h-12 rounded-full font-semibold shadow-md mt-4"
                 >
                   {isSubmitting ? 'Resetting...' : 'Reset'}
                 </Button>
@@ -310,7 +310,7 @@ function ForgotPassword() {
             <div className="text-center pt-6">
               {timer > 0 ? (
                 <p className="text-sm text-gray-400 font-semibold">
-                  Resend code in <span className="text-brand-orange font-bold">{formatTime(timer)}</span>
+                  Resend code in <span className="text-brand-orange font-semibold">{formatTime(timer)}</span>
                 </p>
               ) : (
                 <p className="text-sm text-gray-500 font-semibold">
@@ -318,7 +318,7 @@ function ForgotPassword() {
                   <button
                     type="button"
                     onClick={handleResend}
-                    className="text-brand-orange font-black hover:underline"
+                    className="text-brand-orange font-semibold hover:underline"
                   >
                     Resend
                   </button>

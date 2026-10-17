@@ -7,6 +7,7 @@ import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
 import AppointmentCard from '../components/appointment/AppointmentCard.jsx'
 import AppointmentDetailsModal from '../components/appointment/AppointmentDetailsModal.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
+import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import {
@@ -300,7 +301,7 @@ function Appointments() {
           className="add-appointment-cta w-full h-24 px-5 flex items-center justify-between gap-4 rounded-xl bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] text-white text-left cursor-pointer transition-transform active:scale-[0.99]"
         >
           <span className="min-w-0">
-            <span className="block text-base font-extrabold">Add Appointment</span>
+            <span className="block text-base font-semibold">Add Appointment</span>
             <span className="block text-xs font-medium text-white/85 leading-snug mt-0.5">
               Reserve a 10-minute store visit or an order pickup slot.
             </span>
@@ -314,7 +315,7 @@ function Appointments() {
 
         {/* Filter row: four pill toggles, the list follows without a reload */}
         <div className="bg-white rounded-xl p-4 border border-slate-200">
-          <h1 className="text-base font-extrabold text-slate-900 tracking-tight">My Appointments</h1>
+          <h1 className="text-base font-semibold text-slate-900 tracking-tight">My Appointments</h1>
           <p className="text-xs text-slate-500 leading-relaxed mt-0.5 mb-3">
             Your pickup schedule and store visits. Arrive at the campus store at your designated slot.
           </p>
@@ -325,7 +326,7 @@ function Appointments() {
                 type="button"
                 onClick={() => setFilter(id)}
                 aria-pressed={filter === id}
-                className={`h-8 px-4 rounded-full text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+                className={`h-8 px-4 rounded-full text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
                   filter === id
                     ? 'bg-brand-orange text-white'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
@@ -339,7 +340,7 @@ function Appointments() {
 
         {/* A failed refresh keeps the last good list on screen under this note */}
         {error && list.length > 0 && (
-          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-600">
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-semibold text-red-600">
             {error}
           </p>
         )}
@@ -364,18 +365,18 @@ function Appointments() {
           <Skeleton />
         ) : error && list.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center border border-slate-200 space-y-3">
-            <p className="text-sm font-bold text-red-500">{error}</p>
+            <p className="text-sm font-semibold text-red-500">{error}</p>
             <button
               type="button"
               onClick={refresh}
-              className="h-8 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="h-8 px-4 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
             >
               Try again
             </button>
           </div>
         ) : list.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center border border-slate-200">
-            <p className="text-sm font-bold text-slate-500">No appointments found</p>
+            <p className="text-sm font-semibold text-slate-500">No appointments found</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -396,7 +397,7 @@ function Appointments() {
                     onClick={() =>
                       setClaimTarget({ code: appt.qr, orderId: appt.orderId, id: appt.id })
                     }
-                    className="w-full h-9 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                    className="w-full h-9 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
                   >
                     Scan to claim{appt.orderId ? ` · Order #${appt.orderId}` : ''}
                   </button>
@@ -405,7 +406,7 @@ function Appointments() {
             ))}
 
             {switching && (
-              <p className="flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
+              <p className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-500">
                 <span className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-brand-orange animate-spin" />
                 Loading…
               </p>
@@ -415,7 +416,7 @@ function Appointments() {
               <button
                 type="button"
                 onClick={() => setLimit(limit + PAGE_SIZE)}
-                className="w-full h-9 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="w-full h-9 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 Load more ({list.length - cards.length} left)
               </button>
@@ -464,18 +465,19 @@ function Appointments() {
 /** Placeholder cards shown while the first list request is in flight. */
 function Skeleton() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading appointments</span>
       {[0, 1, 2].map((row) => (
-        <div key={row} className="bg-white rounded-xl p-4 border border-slate-200 space-y-3">
+        <div key={row} className="bg-white dark:bg-[var(--surface)] rounded-xl p-4 border border-slate-200 dark:border-[var(--line)] space-y-3 animate-pulse" aria-hidden="true">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2 flex-1">
-              <div className="h-3 w-20 rounded-full bg-slate-100 animate-pulse" />
-              <div className="h-3.5 w-32 rounded-full bg-slate-100 animate-pulse" />
+              <SkeletonBlock className="h-3 w-20 rounded-full" />
+              <SkeletonBlock className="h-3.5 w-32 rounded-full" />
             </div>
-            <div className="h-8 w-24 rounded-full bg-slate-100 animate-pulse" />
+            <SkeletonBlock className="h-8 w-24 rounded-full" />
           </div>
-          <div className="h-2 w-full rounded-full bg-slate-100 animate-pulse" />
-          <div className="h-8 w-full rounded-xl bg-slate-100 animate-pulse" />
+          <SkeletonBlock className="h-2 w-full rounded-full" />
+          <SkeletonBlock className="h-8 w-full rounded-xl" />
         </div>
       ))}
     </div>

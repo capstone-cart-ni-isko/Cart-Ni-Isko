@@ -139,14 +139,14 @@ function OtpVerifyModal({ isOpen, purpose, title, onClose, onVerified }) {
       <div className="text-center text-sm">
         {cooldown > 0 ? (
           <p className="text-gray-500 font-semibold">
-            Resend code in <span className="text-brand-orange font-bold">{cooldown}s</span>
+            Resend code in <span className="text-brand-orange font-semibold">{cooldown}s</span>
           </p>
         ) : (
           <button
             type="button"
             onClick={sendCode}
             disabled={busy}
-            className="text-brand-orange font-black hover:underline disabled:opacity-60"
+            className="text-brand-orange font-semibold hover:underline disabled:opacity-60"
           >
             Resend code
           </button>

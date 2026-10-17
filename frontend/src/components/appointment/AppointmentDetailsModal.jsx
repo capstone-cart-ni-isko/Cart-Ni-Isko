@@ -7,7 +7,7 @@ const TYPE_LABEL = { CLAIM: 'Order Claiming', VISIT: 'Store Visit' }
 function Row({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2 border-b border-slate-100 last:border-0">
-      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 shrink-0">{label}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 shrink-0">{label}</span>
       <span className="text-xs font-semibold text-slate-800 text-right break-words">{value}</span>
     </div>
   )
@@ -62,7 +62,7 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit, 
 
         {appointment.items.length > 0 && (
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
               Items ({appointment.itemCount})
             </p>
             <ul className="space-y-1">

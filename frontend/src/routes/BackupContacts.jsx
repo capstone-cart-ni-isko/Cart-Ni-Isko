@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import Button from '../components/ui/Button.jsx'
+import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
 import { useToast } from '../hooks/useToast.js'
 import { fetchMyPreferences, updateMyPreferences } from '../services/settings.js'
@@ -47,7 +48,7 @@ function ContactList({ title, items, inputType, placeholder, onAdd, onRemove, bu
 
   return (
     <div className="px-5 py-5">
-      <h3 className="text-sm font-bold text-gray-900">{title}</h3>
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
 
       <ul className="mt-3 space-y-2">
         {items.length === 0 && (
@@ -63,7 +64,7 @@ function ContactList({ title, items, inputType, placeholder, onAdd, onRemove, bu
               type="button"
               onClick={() => onRemove(item, index)}
               disabled={busyIndex === index}
-              className="text-xs font-bold text-red-500 hover:text-red-600 disabled:opacity-60 shrink-0"
+              className="text-xs font-semibold text-red-500 hover:text-red-600 disabled:opacity-60 shrink-0"
             >
               {busyIndex === index ? 'Verifying…' : 'Remove'}
             </button>
@@ -85,7 +86,7 @@ function ContactList({ title, items, inputType, placeholder, onAdd, onRemove, bu
           />
           {localError && <p className="mt-1.5 text-xs text-red-500 font-semibold">{localError}</p>}
         </div>
-        <Button type="submit" className="h-11 px-5 rounded-xl font-bold shrink-0">
+        <Button type="submit" className="h-11 px-5 rounded-xl font-semibold shrink-0">
           Add
         </Button>
       </form>
@@ -175,7 +176,7 @@ function BackupContacts() {
       <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
         {/* Desktop Title */}
         <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-black text-gray-900">Backup Contacts</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Backup Contacts</h1>
           <p className="text-sm text-gray-400 mt-1">
             Alternate numbers and emails we can reach if your primary contact fails.
           </p>
@@ -195,9 +196,19 @@ function BackupContacts() {
           {loadError ? (
             <p className="text-sm text-red-500 font-semibold">{loadError}</p>
           ) : loading ? (
-            <div className="space-y-3">
-              {[0, 1].map((i) => (
-                <div key={i} className="h-40 bg-gray-100 rounded-2xl animate-pulse" />
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm divide-y divide-gray-50" aria-busy={loading} aria-live="polite">
+              <span className="sr-only">Loading backup contacts</span>
+              {[0, 1].map((section) => (
+                <div key={section} className="px-5 py-5 animate-pulse" aria-hidden="true">
+                  <SkeletonBlock className="h-4 w-40 rounded" />
+                  <div className="mt-3 space-y-2">
+                    <SkeletonBlock className="h-10 w-full rounded-xl" />
+                  </div>
+                  <div className="mt-4 flex items-start gap-2">
+                    <SkeletonBlock className="h-11 flex-1 rounded-xl" />
+                    <SkeletonBlock className="h-11 w-16 shrink-0 rounded-xl" />
+                  </div>
+                </div>
               ))}
             </div>
           ) : (

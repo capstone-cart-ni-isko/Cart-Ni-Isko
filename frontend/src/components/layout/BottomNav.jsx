@@ -107,13 +107,13 @@ function BottomNav() {
                 to={to}
                 end={end}
                 onClick={(e) => guard(e, to)}
-                className={`${TAB_CLASS} ${isActive ? 'text-brand-orange font-bold bg-orange-50/50 dark:bg-[var(--tint-brand-bg)]' : 'text-text-muted dark:text-[var(--muted)]'}`}
+                className={`${TAB_CLASS} ${isActive ? 'text-brand-orange font-semibold bg-orange-50/50 dark:bg-[var(--tint-brand-bg)]' : 'text-text-muted dark:text-[var(--muted)]'}`}
               >
                 <>
                   <span className="relative">
                     {glyph === 'calendar' ? <CalendarGlyph /> : <Glyph src={icon} active={isActive} />}
                     {count > 0 && (
-                      <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-[#FF6A00] text-white text-[9px] font-black flex items-center justify-center">
+                      <span className="absolute -top-1.5 -right-2 min-w-4 h-4 px-1 rounded-full bg-[#FF6A00] text-white text-[9px] font-semibold flex items-center justify-center">
                         {count > 99 ? '99+' : count}
                       </span>
                     )}

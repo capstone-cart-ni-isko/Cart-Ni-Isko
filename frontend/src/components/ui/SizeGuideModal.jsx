@@ -136,7 +136,7 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodies' }
       <div className="modal-scroll space-y-4">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-xs font-bold text-gray-800">{currentChart.title}</h3>
+            <h3 className="text-xs font-semibold text-gray-800">{currentChart.title}</h3>
             <span className="text-[10px] font-semibold text-brand-orange bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md">
               Standard BU Unisex Sizing
             </span>
@@ -149,7 +149,7 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodies' }
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-gray-600 font-semibold border-b border-slate-200">
               <tr>
-                <th className="py-2 px-2.5 font-bold text-gray-700">Size</th>
+                <th className="py-2 px-2.5 font-semibold text-gray-700">Size</th>
                 <th className="py-2 px-2.5">Chest (Width)</th>
                 <th className="py-2 px-2.5">Body Length</th>
                 <th className="py-2 px-2.5">Shoulder</th>
@@ -159,7 +159,7 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodies' }
             <tbody className="divide-y divide-slate-100 text-gray-700">
               {rows.map((r, idx) => (
                 <tr key={r.size} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
-                  <td className="py-1.5 px-2.5 font-bold text-brand-orange">{r.size}</td>
+                  <td className="py-1.5 px-2.5 font-semibold text-brand-orange">{r.size}</td>
                   <td className="py-1.5 px-2.5">{r.chest}</td>
                   <td className="py-1.5 px-2.5">{r.length}</td>
                   <td className="py-1.5 px-2.5">{r.shoulder}</td>
@@ -172,7 +172,7 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodies' }
 
         {/* How to Measure Section */}
         <div className="bg-orange-50/40 border border-orange-200 rounded-md p-3.5">
-          <h4 className="text-xs font-bold text-orange-950 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <h4 className="text-xs font-semibold text-orange-950 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <HelpIcon className="w-3.5 h-3.5 text-brand-orange shrink-0" />
             <span>How to Find Your Best Fit</span>
           </h4>

@@ -25,21 +25,21 @@ function Welcome() {
         <div className="w-full space-y-3.5 mt-8">
           <Link
             to="/signup/role"
-            className="block w-full h-12 leading-[3rem] text-center bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-full transition-all duration-200 shadow-md hover:shadow-lg active:scale-98"
+            className="block w-full h-12 leading-[3rem] text-center bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold rounded-full transition-all duration-200 shadow-md hover:shadow-lg active:scale-98"
           >
             Create an account
           </Link>
 
           <Link
             to="/signin"
-            className="block w-full h-12 leading-[2.75rem] text-center border border-gray-200 hover:border-brand-orange hover:text-brand-orange text-gray-700 font-bold rounded-full transition-all duration-200 active:scale-98"
+            className="block w-full h-12 leading-[2.75rem] text-center border border-gray-200 hover:border-brand-orange hover:text-brand-orange text-gray-700 font-semibold rounded-full transition-all duration-200 active:scale-98"
           >
             Sign In
           </Link>
 
           <Link
             to="/home"
-            className="flex items-center justify-center gap-1.5 w-full pt-4 text-center text-gray-400 hover:text-brand-orange font-bold text-xs transition-colors duration-200"
+            className="flex items-center justify-center gap-1.5 w-full pt-4 text-center text-gray-400 hover:text-brand-orange font-semibold text-xs transition-colors duration-200"
           >
             <span>Explore as Guest</span>
             <span className="text-sm">➔</span>
@@ -61,7 +61,7 @@ function Welcome() {
             className="w-64 mb-8 hover:scale-102 transition-transform duration-300"
           />
           <p className="text-gray-500 font-medium text-base leading-relaxed max-w-[320px]">
-            Wear the pride, carry the identity, and support the <span className="text-brand-orange font-bold">Iskolar ng Bayan.</span>
+            Wear the pride, carry the identity, and support the <span className="text-brand-orange font-semibold">Iskolar ng Bayan.</span>
           </p>
         </div>
 
@@ -69,21 +69,21 @@ function Welcome() {
         <div className="w-full space-y-3.5 mt-8">
           <Link
             to="/signup/role"
-            className="block w-full h-12 leading-[3rem] text-center bg-brand-orange hover:bg-brand-orange-dark text-white font-bold rounded-xl transition-all duration-200 shadow-md active:scale-98"
+            className="block w-full h-12 leading-[3rem] text-center bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold rounded-xl transition-all duration-200 shadow-md active:scale-98"
           >
             Create an account
           </Link>
 
           <Link
             to="/signin"
-            className="block w-full h-12 leading-[2.75rem] text-center border border-gray-200 hover:border-brand-orange hover:text-brand-orange text-gray-700 font-bold rounded-xl transition-all duration-200 active:scale-98"
+            className="block w-full h-12 leading-[2.75rem] text-center border border-gray-200 hover:border-brand-orange hover:text-brand-orange text-gray-700 font-semibold rounded-xl transition-all duration-200 active:scale-98"
           >
             Sign In
           </Link>
 
           <Link
             to="/home"
-            className="flex items-center justify-center gap-1.5 w-full pt-4 text-center text-gray-400 hover:text-brand-orange font-bold text-sm transition-colors duration-200"
+            className="flex items-center justify-center gap-1.5 w-full pt-4 text-center text-gray-400 hover:text-brand-orange font-semibold text-sm transition-colors duration-200"
           >
             <span>Explore as Guest</span>
             <span className="text-sm">➔</span>

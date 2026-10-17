@@ -59,7 +59,7 @@ function BookAppointment() {
           <button
             type="button"
             onClick={() => setShowLogin(true)}
-            className="h-10 px-5 rounded-lg bg-brand-orange text-white text-sm font-bold cursor-pointer"
+            className="h-10 px-5 rounded-lg bg-brand-orange text-white text-sm font-semibold cursor-pointer"
           >
             Sign In
           </button>
@@ -85,7 +85,7 @@ function BookAppointment() {
           {!pickupMode && (
             <Link
               to="/appointments"
-              className="text-xs font-bold text-brand-orange hover:underline cursor-pointer"
+              className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
             >
               My Appointments
             </Link>
@@ -93,7 +93,7 @@ function BookAppointment() {
         </div>
 
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
             {pickupMode ? 'Choose Your Pickup Slot' : 'Book an Appointment'}
           </h1>
           <p className="text-xs text-slate-500 leading-relaxed mt-1">

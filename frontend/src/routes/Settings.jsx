@@ -38,7 +38,7 @@ const settingsSupportItems = [
 function SettingsSection({ title, items }) {
   return (
     <div className="space-y-2">
-      <h2 className="text-[11px] font-bold text-gray-400 dark:text-[var(--muted)] uppercase tracking-wider px-1">{title}</h2>
+      <h2 className="text-[11px] font-semibold text-gray-400 dark:text-[var(--muted)] uppercase tracking-wider px-1">{title}</h2>
       <div className="bg-white dark:bg-[var(--surface)] rounded-lg border border-slate-200 dark:border-[var(--line)] shadow-xs overflow-hidden divide-y divide-slate-100 dark:divide-[var(--line)]">
         {items.map(({ to, onClick, label, icon, description }) => {
           const content = (
@@ -46,7 +46,7 @@ function SettingsSection({ title, items }) {
               <div className="flex items-center gap-3.5 min-w-0">
                 <span className="shrink-0">{icon}</span>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-gray-900">{label}</p>
+                  <p className="text-sm font-semibold text-gray-900">{label}</p>
                   <p className="text-xs text-gray-400 mt-0.5 truncate">{description}</p>
                 </div>
               </div>
@@ -90,7 +90,7 @@ function Settings() {
       <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
         {/* Desktop Title */}
         <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-black text-gray-900">Settings</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Settings</h1>
         </div>
 
         {/* Mobile Title */}
@@ -112,7 +112,7 @@ function Settings() {
           >
             <div className="flex items-center gap-3.5">
               <LogOutIcon className="w-5 h-5 text-red-500" />
-              <p className="text-sm font-bold text-red-600">Log Out</p>
+              <p className="text-sm font-semibold text-red-600">Log Out</p>
             </div>
             <span className="text-red-300 text-xl font-medium">›</span>
           </button>

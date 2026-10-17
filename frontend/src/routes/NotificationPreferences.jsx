@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
+import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import Toggle from '../components/ui/Toggle.jsx'
 import { useToast } from '../hooks/useToast.js'
 import { fetchMyPreferences, updateMyPreferences } from '../services/settings.js'
@@ -18,6 +19,7 @@ const REMINDER_PRESETS = [0, 15, 30, 60, 120, 1440]
 function NotificationPreferences() {
   const { showToast } = useToast()
   const [prefs, setPrefs] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [minutes, setMinutes] = useState('')
   const [loadError, setLoadError] = useState('')
   const [savingField, setSavingField] = useState('')
@@ -36,8 +38,13 @@ function NotificationPreferences() {
           prod: Boolean(data.cust_notif_prod ?? data.notif_prod ?? true),
         })
         setMinutes(String(stored ?? 60))
+        setLoading(false)
       })
-      .catch((err) => alive && setLoadError(err.message || 'Unable to load your preferences.'))
+      .catch((err) => {
+        if (!alive) return
+        setLoadError(err.message || 'Unable to load your preferences.')
+        setLoading(false)
+      })
     return () => {
       alive = false
     }
@@ -73,7 +80,7 @@ function NotificationPreferences() {
       <AccountLayout>
         <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
           <div className="hidden lg:block mb-8">
-            <h1 className="text-3xl font-black text-gray-900">Notification Preferences</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">Notification Preferences</h1>
           </div>
           <div className="lg:hidden -mx-4 -mt-4 mb-4">
             <PageHeader title="Notification Preferences" backTo="/settings" />
@@ -89,7 +96,7 @@ function NotificationPreferences() {
       <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
         {/* Desktop Title */}
         <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-black text-gray-900">Notification Preferences</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Notification Preferences</h1>
           <p className="text-sm text-gray-400 mt-1">Every change saves immediately.</p>
         </div>
 
@@ -98,18 +105,42 @@ function NotificationPreferences() {
           <PageHeader title="Notification Preferences" backTo="/settings" />
         </div>
 
-        {!prefs ? (
-          <div className="space-y-3">
-            {[0, 1].map((i) => (
-              <div key={i} className="h-24 bg-gray-100 rounded-2xl animate-pulse" />
-            ))}
+        {loading ? (
+          <div className="space-y-5" aria-busy={loading} aria-live="polite">
+            <span className="sr-only">Loading notification preferences</span>
+            <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm animate-pulse" aria-hidden="true">
+              <div className="border-b border-gray-50 px-5 pb-4 pt-5 space-y-2">
+                <SkeletonBlock className="h-4 w-44 rounded" />
+                <SkeletonBlock className="h-3 w-full rounded" />
+                <SkeletonBlock className="h-3 w-4/5 rounded" />
+                <SkeletonBlock className="mt-4 h-11 w-28 rounded-xl" />
+                <div className="mt-3 flex gap-2">
+                  {[0, 1, 2, 3].map((item) => <SkeletonBlock key={item} className="h-7 w-14 rounded-full" />)}
+                </div>
+              </div>
+              {[0, 1].map((item) => (
+                <div key={item} className="flex items-center justify-between gap-4 px-5 py-4">
+                  <div className="flex-1 space-y-2">
+                    <SkeletonBlock className="h-4 w-40 rounded" />
+                    <SkeletonBlock className="h-3 w-3/4 rounded" />
+                  </div>
+                  <SkeletonBlock className="h-6 w-11 shrink-0 rounded-full" />
+                </div>
+              ))}
+            </section>
+            <section className="rounded-2xl border border-gray-200 bg-white px-5 py-5 shadow-sm animate-pulse" aria-hidden="true">
+              <SkeletonBlock className="h-4 w-28 rounded" />
+              <SkeletonBlock className="mt-3 h-3 w-full rounded" />
+              <SkeletonBlock className="mt-2 h-3 w-4/5 rounded" />
+              <SkeletonBlock className="mt-4 h-4 w-44 rounded" />
+            </section>
           </div>
         ) : (
           <div className="space-y-5">
             {/* Appointment reminder - REQ-CUST_SET-01 (minutes) */}
             <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-5 pt-5 pb-4 border-b border-gray-50">
-                <h2 className="text-sm font-bold text-gray-900">Appointment reminder</h2>
+                <h2 className="text-sm font-semibold text-gray-900">Appointment reminder</h2>
                 <p className="text-xs text-gray-400 mt-1 leading-relaxed">
                   How many minutes before an appointment we should remind you. Type a value between
                   0 and 1440 (one day), or pick one below.
@@ -128,9 +159,9 @@ function NotificationPreferences() {
                       if (e.key === 'Enter') saveReminder(e.currentTarget.value)
                     }}
                     aria-label="Reminder minutes before the appointment"
-                    className="w-28 h-11 px-3 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all"
+                    className="w-28 h-11 px-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all"
                   />
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     minutes before
                   </span>
                   {savingField === 'remind' && (
@@ -144,7 +175,7 @@ function NotificationPreferences() {
                       key={preset}
                       type="button"
                       onClick={() => saveReminder(preset)}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
                         Number(minutes) === preset
                           ? 'bg-brand-orange border-brand-orange text-white'
                           : 'bg-white border-gray-200 text-gray-500 hover:border-brand-orange hover:text-brand-orange'
@@ -182,14 +213,14 @@ function NotificationPreferences() {
             </section>
 
             <section className="bg-white rounded-2xl border border-gray-200 shadow-sm px-5 py-5">
-              <h2 className="text-sm font-bold text-gray-900">Priority alerts</h2>
+              <h2 className="text-sm font-semibold text-gray-900">Priority alerts</h2>
               <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
                 Changes to your orders and appointments, and any follow-up on a notification you
                 have not read yet, are always delivered - they cannot be switched off.
               </p>
               <a
                 href="/notifications"
-                className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-brand-orange"
+                className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand-orange"
               >
                 Go to your notifications <span className="text-lg leading-none">›</span>
               </a>

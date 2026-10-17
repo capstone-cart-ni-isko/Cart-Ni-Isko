@@ -11,7 +11,7 @@ export default function ServerErrorNotice({
       role="alert"
       className={`flex flex-col items-center justify-center text-center gap-3 py-12 px-4 ${className}`}
     >
-      <p className="text-sm font-bold text-gray-900">We couldn't load the store</p>
+      <p className="text-sm font-semibold text-gray-900">We couldn't load the store</p>
       <p className="text-xs text-gray-500 max-w-xs">{message}</p>
       {onRetry && (
         <Button type="button" variant="primary" onClick={onRetry}>

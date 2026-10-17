@@ -167,8 +167,8 @@ export default function ProductReviews({ product }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h2 className="text-xl font-bold text-gray-900 tracking-tight">Customer Reviews</h2>
-            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-orange-100 text-brand-orange">
+            <h2 className="text-xl font-semibold text-gray-900 tracking-tight">Customer Reviews</h2>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-orange-100 text-brand-orange">
               {totalApproved} {totalApproved === 1 ? 'review' : 'reviews'}
             </span>
           </div>
@@ -180,7 +180,7 @@ export default function ProductReviews({ product }) {
         <button
           type="button"
           onClick={handleOpenWrite}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange-dark active:scale-98 transition-all shadow-xs cursor-pointer shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark active:scale-98 transition-all shadow-xs cursor-pointer shrink-0"
         >
           <span>★</span>
           <span>Write a Review</span>
@@ -196,9 +196,9 @@ export default function ProductReviews({ product }) {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
               </span>
-              <h4 className="text-xs font-bold text-amber-900">Your Review is Pending Staff Moderation</h4>
+              <h4 className="text-xs font-semibold text-amber-900">Your Review is Pending Staff Moderation</h4>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/60 text-amber-800 uppercase tracking-wide">
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200/60 text-amber-800 uppercase tracking-wide">
               Awaiting Approval
             </span>
           </div>
@@ -218,8 +218,8 @@ export default function ProductReviews({ product }) {
       {ownReview && (ownReview.status === 'rejected' || ownReview.status === 'censored') && (
         <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-1.5 animate-fade-in">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-bold text-rose-800">Your Review Was Moderated</h4>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-200/70 text-rose-800">
+            <h4 className="text-xs font-semibold text-rose-800">Your Review Was Moderated</h4>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-200/70 text-rose-800">
               Not Approved
             </span>
           </div>
@@ -235,7 +235,7 @@ export default function ProductReviews({ product }) {
           {/* LEFT: Rating Summary & Star Breakdown (4 cols on lg) */}
           <div className="lg:col-span-4 bg-gray-50/80 border border-gray-200/70 rounded-2xl p-5 space-y-5">
             <div className="text-center">
-              <div className="text-4xl font-black text-gray-900 tracking-tight">{avgRating}</div>
+              <div className="text-4xl font-semibold text-gray-900 tracking-tight">{avgRating}</div>
               <div className="flex items-center justify-center gap-1 my-1.5">
                 <StarRating rating={Math.round(Number(avgRating))} size="base" />
               </div>
@@ -257,10 +257,10 @@ export default function ProductReviews({ product }) {
                     type="button"
                     onClick={() => setStarFilter(isSelected ? 'all' : String(s))}
                     className={`w-full flex items-center gap-2.5 p-1 rounded-lg transition-colors text-left cursor-pointer group ${
-                      isSelected ? 'bg-orange-100/60 font-bold' : 'hover:bg-gray-100/80'
+                      isSelected ? 'bg-orange-100/60 font-semibold' : 'hover:bg-gray-100/80'
                     }`}
                   >
-                    <span className="w-6 font-bold text-gray-700 flex items-center gap-0.5">
+                    <span className="w-6 font-semibold text-gray-700 flex items-center gap-0.5">
                       {s}<span className="text-amber-400">★</span>
                     </span>
                     <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -279,7 +279,7 @@ export default function ProductReviews({ product }) {
 
             {/* Verified student purchases badge */}
             <div className="flex items-center gap-2 text-[11px] text-emerald-800 bg-emerald-50/90 border border-emerald-200/70 px-3 py-2 rounded-xl font-medium">
-              <span className="text-emerald-600 font-bold">✓</span>
+              <span className="text-emerald-600 font-semibold">✓</span>
               <span>100% Verified Campus Purchases</span>
             </div>
           </div>
@@ -341,18 +341,18 @@ export default function ProductReviews({ product }) {
                     >
                       <div className="flex items-start justify-between gap-3 mb-2.5">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-brand-orange/15 text-brand-orange font-bold text-xs flex items-center justify-center shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-brand-orange/15 text-brand-orange font-semibold text-xs flex items-center justify-center shrink-0">
                             {authorLetter}
                           </div>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="text-xs font-bold text-gray-900">{rev.author}</h4>
+                              <h4 className="text-xs font-semibold text-gray-900">{rev.author}</h4>
                               {isCurrentUsersReview && (
-                                <span className="text-[10px] font-bold text-brand-orange bg-orange-100 px-1.5 py-0.5 rounded">
+                                <span className="text-[10px] font-semibold text-brand-orange bg-orange-100 px-1.5 py-0.5 rounded">
                                   Your Review
                                 </span>
                               )}
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.2 rounded flex items-center gap-0.5">
                                 <span>✓</span> Verified Buyer
                               </span>
                             </div>
@@ -384,7 +384,7 @@ export default function ProductReviews({ product }) {
                 <button
                   type="button"
                   onClick={() => setStarFilter('all')}
-                  className="mt-2 text-xs font-bold text-brand-orange hover:underline cursor-pointer"
+                  className="mt-2 text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
                 >
                   Show all reviews
                 </button>
@@ -395,17 +395,17 @@ export default function ProductReviews({ product }) {
       ) : (
         /* Empty Reviews State */
         <div className="bg-gray-50/60 border border-dashed border-gray-200 rounded-3xl p-8 text-center max-w-lg mx-auto">
-          <div className="w-12 h-12 rounded-full bg-orange-100 text-brand-orange flex items-center justify-center mx-auto mb-3 text-lg font-bold">
+          <div className="w-12 h-12 rounded-full bg-orange-100 text-brand-orange flex items-center justify-center mx-auto mb-3 text-lg font-semibold">
             ★
           </div>
-          <h3 className="text-sm font-bold text-gray-900">No approved reviews yet</h3>
+          <h3 className="text-sm font-semibold text-gray-900">No approved reviews yet</h3>
           <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto leading-relaxed">
             Be the first to review this merchandise! Share your sizing, fabric, and fit thoughts with fellow Iskolars.
           </p>
           <button
             type="button"
             onClick={handleOpenWrite}
-            className="mt-4 h-8 px-4 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange-dark active:scale-95 transition-all cursor-pointer shadow-xs"
+            className="mt-4 h-8 px-4 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark active:scale-95 transition-all cursor-pointer shadow-xs"
           >
             Be the First to Review
           </button>
@@ -432,7 +432,7 @@ export default function ProductReviews({ product }) {
         >
           {/* Moderation Note */}
           <div className="p-3 bg-amber-50/70 border border-amber-200/70 rounded-md text-[11px] text-amber-900 space-y-1">
-            <div className="font-bold flex items-center gap-1.5 text-amber-800">
+            <div className="font-semibold flex items-center gap-1.5 text-amber-800">
               <span>🛡️</span>
               <span>Campus Moderation Notice</span>
             </div>
@@ -464,7 +464,7 @@ export default function ProductReviews({ product }) {
                     </span>
                   </button>
                 ))}
-                <span className="text-xs font-bold text-gray-600 ml-2">
+                <span className="text-xs font-semibold text-gray-600 ml-2">
                   {rating} of 5 Stars
                 </span>
               </div>

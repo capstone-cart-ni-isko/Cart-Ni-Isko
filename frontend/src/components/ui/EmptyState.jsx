@@ -16,7 +16,7 @@ export default function EmptyState({ title, hint, icon, action }) {
           {icon}
         </div>
       )}
-      <h3 className="font-extrabold text-gray-900 dark:text-[var(--ink)] text-lg">{title}</h3>
+      <h3 className="font-semibold text-gray-900 dark:text-[var(--ink)] text-lg">{title}</h3>
       {hint && (
         <p className="text-sm text-gray-500 dark:text-[var(--muted)] mt-2 max-w-[280px] mx-auto leading-relaxed">
           {hint}

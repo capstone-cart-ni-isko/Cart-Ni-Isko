@@ -12,7 +12,7 @@ function PasswordField({ label, name, value, onChange, placeholder }) {
   const [show, setShow] = useState(false)
   return (
     <div>
-      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">{label}</label>
+      <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{label}</label>
       <div className="relative">
         <input
           type={show ? 'text' : 'password'}
@@ -25,7 +25,7 @@ function PasswordField({ label, name, value, onChange, placeholder }) {
         <button
           type="button"
           onClick={() => setShow((s) => !s)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-450 hover:text-brand-orange transition-colors"
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-450 hover:text-brand-orange transition-colors"
         >
           {show ? 'Hide' : 'Show'}
         </button>
@@ -80,7 +80,7 @@ function ChangePassword() {
       <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
         {/* Desktop Title */}
         <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-black text-gray-900">Change Password</h1>
+          <h1 className="text-3xl font-semibold text-gray-900">Change Password</h1>
         </div>
 
         {/* Mobile Title */}
@@ -126,7 +126,7 @@ function ChangePassword() {
               <Button
                 type="submit"
                 disabled={!canSubmit || saving}
-                className="w-full h-12 rounded-full font-bold shadow-md"
+                className="w-full h-12 rounded-full font-semibold shadow-md"
               >
                 {saving ? 'Updating…' : 'Update Password'}
               </Button>

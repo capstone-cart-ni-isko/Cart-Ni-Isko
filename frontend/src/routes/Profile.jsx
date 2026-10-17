@@ -184,7 +184,7 @@ function Profile() {
             <Link to="/notifications" className="relative p-1.5 text-gray-700 hover:text-brand-orange" aria-label="Notifications">
               <img src={notificationIcon} alt="" className="w-6 h-6" />
               {unreadNotifications > 0 && (
-                <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-2xs font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white">
+                <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-2xs font-semibold min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white">
                   {unreadNotifications > 99 ? '99+' : unreadNotifications}
                 </span>
               )}
@@ -196,7 +196,7 @@ function Profile() {
           {/* Orange Banner - Mobile Redesign */}
           <div className="rounded-3xl p-5 text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] space-y-4">
             <div className="absolute inset-0 opacity-[0.05] select-none pointer-events-none flex items-center justify-center">
-              <span className="text-5xl font-black tracking-widest rotate-[12deg] whitespace-nowrap text-white">
+              <span className="text-5xl font-semibold tracking-widest rotate-[12deg] whitespace-nowrap text-white">
                 TINDAHAN NI ISKO
               </span>
             </div>
@@ -208,7 +208,7 @@ function Profile() {
                   <Avatar name={fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} />
                 </div>
                 <div className="min-w-0 text-white">
-                  <h1 className="text-lg font-black tracking-tight leading-tight truncate">{fullName}</h1>
+                  <h1 className="text-lg font-semibold tracking-tight leading-tight truncate">{fullName}</h1>
                   <p className="text-white/90 text-xs font-normal mt-0.5 truncate">{email}</p>
                   <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
                 </div>
@@ -228,7 +228,7 @@ function Profile() {
             <div className="relative z-10 pt-1">
               <Link
                 to="/account"
-                className="flex items-center justify-center gap-2 bg-white text-gray-800 font-bold text-xs py-2.5 px-4 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-98 transition-all w-full"
+                className="flex items-center justify-center gap-2 bg-white text-gray-800 font-semibold text-xs py-2.5 px-4 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-98 transition-all w-full"
               >
                 <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
                 <span>Edit Profile</span>
@@ -239,7 +239,7 @@ function Profile() {
           {/* 1. Quick Overview - 2x2 Responsive Grid */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-black text-gray-900">Quick Overview</h3>
+              <h3 className="text-base font-semibold text-gray-900">Quick Overview</h3>
             </div>
 
             <div className="grid grid-cols-2 gap-2.5">
@@ -249,7 +249,7 @@ function Profile() {
                   <OrdersNavIcon className="w-4.5 h-4.5" />
                 </div>
                 <div className="min-w-0">
-                  <span className="text-xl font-black text-gray-900 leading-none">{overview.totalOrders}</span>
+                  <span className="text-xl font-semibold text-gray-900 leading-none">{overview.totalOrders}</span>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Total Orders</p>
                 </div>
               </div>
@@ -262,7 +262,7 @@ function Profile() {
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <span className="text-xl font-black text-gray-900 leading-none">{overview.completedOrders}</span>
+                  <span className="text-xl font-semibold text-gray-900 leading-none">{overview.completedOrders}</span>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Completed</p>
                 </div>
               </div>
@@ -275,7 +275,7 @@ function Profile() {
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <span className="text-xl font-black text-gray-900 leading-none">{overview.savedItems}</span>
+                  <span className="text-xl font-semibold text-gray-900 leading-none">{overview.savedItems}</span>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Saved Items</p>
                 </div>
               </div>
@@ -286,7 +286,7 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-black text-gray-900">About Me</h2>
+                <h2 className="text-base font-semibold text-gray-900">About Me</h2>
               </div>
               <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
                 <PencilIcon className="w-3.5 h-3.5" />
@@ -296,19 +296,19 @@ function Profile() {
             <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">Year Level</p>
-                <p className="text-sm font-bold text-gray-900">{yearLevel}</p>
+                <p className="text-sm font-semibold text-gray-900">{yearLevel}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">Campus</p>
-                <p className="text-sm font-bold text-gray-900">{campus}</p>
+                <p className="text-sm font-semibold text-gray-900">{campus}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">Course</p>
-                <p className="text-sm font-bold text-gray-900 leading-snug">{course}</p>
+                <p className="text-sm font-semibold text-gray-900 leading-snug">{course}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-gray-500 mb-0.5">College</p>
-                <p className="text-sm font-bold text-gray-900 leading-snug">{college}</p>
+                <p className="text-sm font-semibold text-gray-900 leading-snug">{college}</p>
               </div>
             </div>
           </div>
@@ -317,7 +317,7 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-black text-gray-900">My Orders</h2>
+                <h2 className="text-base font-semibold text-gray-900">My Orders</h2>
               </div>
               <ViewAllLink to="/orders">View all</ViewAllLink>
             </div>
@@ -328,7 +328,7 @@ function Profile() {
                   <PipelineIcon id="in_progress" className="w-4 h-4 text-[#2563EB]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">{overview.inProgress}</p>
+                  <p className="text-lg font-semibold text-gray-900 leading-none">{overview.inProgress}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">In Progress</p>
                 </div>
               </Link>
@@ -338,7 +338,7 @@ function Profile() {
                   <PipelineIcon id="for_pickup" className="w-4 h-4 text-[#FF6A00]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">{overview.forPickup}</p>
+                  <p className="text-lg font-semibold text-gray-900 leading-none">{overview.forPickup}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">For Pickup</p>
                 </div>
               </Link>
@@ -348,7 +348,7 @@ function Profile() {
                   <PipelineIcon id="for_delivery" className="w-4 h-4 text-[#10B981]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">{overview.forDelivery}</p>
+                  <p className="text-lg font-semibold text-gray-900 leading-none">{overview.forDelivery}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">For Delivery</p>
                 </div>
               </Link>
@@ -358,7 +358,7 @@ function Profile() {
                   <PipelineIcon id="completed" className="w-4 h-4 text-[#8B5CF6]" />
                 </div>
                 <div>
-                  <p className="text-lg font-black text-gray-900 leading-none">{overview.completed}</p>
+                  <p className="text-lg font-semibold text-gray-900 leading-none">{overview.completed}</p>
                   <p className="text-xs text-gray-500 font-semibold mt-0.5">Completed</p>
                 </div>
               </Link>
@@ -369,7 +369,7 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-black text-gray-900">Contact Information</h3>
+                <h3 className="text-base font-semibold text-gray-900">Contact Information</h3>
               </div>
               <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
                 <PencilIcon className="w-3.5 h-3.5" />
@@ -398,7 +398,7 @@ function Profile() {
             <div className="pt-3 border-t border-gray-100">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-500">Delivery Addresses</p>
-                <Link to="/settings/address" className="text-xs font-bold text-brand-orange">
+                <Link to="/settings/address" className="text-xs font-semibold text-brand-orange">
                   Manage
                 </Link>
               </div>
@@ -422,7 +422,7 @@ function Profile() {
           {/* 6. Help Center */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-black text-gray-900">Need Help?</h3>
+              <h3 className="text-base font-semibold text-gray-900">Need Help?</h3>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">
               We're here to assist with your BU merch orders, campus pickups, and sizing queries.
@@ -431,7 +431,7 @@ function Profile() {
                 the same support address the desktop footer links to. */}
             <a
               href="mailto:support@tindahanniisko.com"
-              className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 text-[#FF6A00] font-bold text-xs flex items-center justify-center gap-2 hover:bg-orange-100 transition-colors"
+              className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 text-[#FF6A00] font-semibold text-xs flex items-center justify-center gap-2 hover:bg-orange-100 transition-colors"
             >
               Contact Support
             </a>
@@ -441,7 +441,7 @@ function Profile() {
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-black text-gray-900">Account Security</h3>
+                <h3 className="text-base font-semibold text-gray-900">Account Security</h3>
               </div>
               <Link to="/settings/change-password" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
                 <PencilIcon className="w-3.5 h-3.5" />
@@ -451,7 +451,7 @@ function Profile() {
             <div>
               <Link
                 to="/settings/change-password"
-                className="inline-block bg-[#EFF6FF] text-[#2563EB] hover:bg-blue-100 font-bold text-sm px-4 py-2.5 rounded-xl transition-colors"
+                className="inline-block bg-[#EFF6FF] text-[#2563EB] hover:bg-blue-100 font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors"
               >
                 Change Password
               </Link>
@@ -466,7 +466,7 @@ function Profile() {
           >
             <div className="flex items-center gap-3.5">
               <LogOutIcon className="w-5 h-5 text-red-500" />
-              <p className="text-sm font-bold text-red-600">Log Out</p>
+              <p className="text-sm font-semibold text-red-600">Log Out</p>
             </div>
             <span className="text-red-300 text-xl font-medium">›</span>
           </button>
@@ -478,7 +478,7 @@ function Profile() {
         {/* Top Banner - Sleek compact style */}
         <div className="rounded-2xl py-6 px-6 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
           <div className="absolute inset-0 opacity-[0.04] select-none pointer-events-none flex items-center justify-center">
-            <span className="text-[5rem] font-black tracking-widest rotate-[4deg] whitespace-nowrap text-white">
+            <span className="text-[5rem] font-semibold tracking-widest rotate-[4deg] whitespace-nowrap text-white">
               TINDAHAN NI ISKO
             </span>
           </div>
@@ -489,7 +489,7 @@ function Profile() {
               <Avatar name={fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} />
             </div>
             <div className="text-white">
-              <h1 className="text-xl md:text-2xl font-black tracking-tight leading-tight">{fullName}</h1>
+              <h1 className="text-xl md:text-2xl font-semibold tracking-tight leading-tight">{fullName}</h1>
               <p className="text-white/90 text-xs font-normal mt-0.5">{email}</p>
               <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
             </div>
@@ -499,7 +499,7 @@ function Profile() {
           <div className="flex items-center gap-2.5 relative z-10">
             <Link
               to="/account"
-              className="flex items-center gap-1.5 bg-white text-gray-800 font-bold text-xs px-4 py-2 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 bg-white text-gray-800 font-semibold text-xs px-4 py-2 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-95 transition-all"
             >
               <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
               <span>Edit Profile</span>
@@ -523,7 +523,7 @@ function Profile() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div>
-                    <h2 className="text-sm font-black text-gray-900">Quick Order Statuses</h2>
+                    <h2 className="text-sm font-semibold text-gray-900">Quick Order Statuses</h2>
                     <p className="text-[10px] text-gray-400 font-medium">Active and recent purchases</p>
                   </div>
                 </div>
@@ -536,8 +536,8 @@ function Profile() {
                     <PipelineIcon id="in_progress" className="w-4.5 h-4.5 text-[#2563EB]" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">{overview.inProgress}</p>
-                    <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">In Progress</p>
+                    <p className="text-lg font-semibold text-gray-900 leading-none">{overview.inProgress}</p>
+                    <p className="text-[11px] text-gray-500 font-semibold mt-0.5 truncate">In Progress</p>
                   </div>
                 </Link>
 
@@ -546,8 +546,8 @@ function Profile() {
                     <PipelineIcon id="for_pickup" className="w-4.5 h-4.5 text-brand-orange" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">{overview.forPickup}</p>
-                    <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">For Pickup</p>
+                    <p className="text-lg font-semibold text-gray-900 leading-none">{overview.forPickup}</p>
+                    <p className="text-[11px] text-gray-500 font-semibold mt-0.5 truncate">For Pickup</p>
                   </div>
                 </Link>
 
@@ -556,8 +556,8 @@ function Profile() {
                     <PipelineIcon id="for_delivery" className="w-4.5 h-4.5 text-emerald-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">{overview.forDelivery}</p>
-                    <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">For Delivery</p>
+                    <p className="text-lg font-semibold text-gray-900 leading-none">{overview.forDelivery}</p>
+                    <p className="text-[11px] text-gray-500 font-semibold mt-0.5 truncate">For Delivery</p>
                   </div>
                 </Link>
 
@@ -566,8 +566,8 @@ function Profile() {
                     <PipelineIcon id="completed" className="w-4.5 h-4.5 text-purple-600" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-lg font-black text-gray-900 leading-none">{overview.completed}</p>
-                    <p className="text-[11px] text-gray-500 font-bold mt-0.5 truncate">Completed</p>
+                    <p className="text-lg font-semibold text-gray-900 leading-none">{overview.completed}</p>
+                    <p className="text-[11px] text-gray-500 font-semibold mt-0.5 truncate">Completed</p>
                   </div>
                 </Link>
               </div>
@@ -578,7 +578,7 @@ function Profile() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div>
-                    <h2 className="text-sm font-black text-gray-900">About Me</h2>
+                    <h2 className="text-sm font-semibold text-gray-900">About Me</h2>
                     <p className="text-[10px] text-gray-400 font-medium">Academic profile &amp; department</p>
                   </div>
                 </div>
@@ -593,20 +593,20 @@ function Profile() {
 
               <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Year Level</p>
-                  <p className="font-bold text-gray-900 mt-0.5">{yearLevel}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Year Level</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{yearLevel}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Course</p>
-                  <p className="font-bold text-gray-900 mt-0.5 truncate">{course}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Course</p>
+                  <p className="font-semibold text-gray-900 mt-0.5 truncate">{course}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Campus</p>
-                  <p className="font-bold text-gray-900 mt-0.5">{campus}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Campus</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{campus}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">College</p>
-                  <p className="font-bold text-gray-900 mt-0.5 truncate">{college}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">College</p>
+                  <p className="font-semibold text-gray-900 mt-0.5 truncate">{college}</p>
                 </div>
               </div>
             </div>
@@ -615,7 +615,7 @@ function Profile() {
             <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-sm font-black text-gray-900">Contact Information</h2>
+                  <h2 className="text-sm font-semibold text-gray-900">Contact Information</h2>
                   <p className="text-[10px] text-gray-400 font-medium">
                     Phone, pronoun, birthday and delivery addresses
                   </p>
@@ -627,27 +627,27 @@ function Profile() {
 
               <div className="grid grid-cols-4 gap-3 text-xs">
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Email</p>
-                  <p className="font-bold text-gray-900 mt-0.5 break-all">{email || '—'}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Email</p>
+                  <p className="font-semibold text-gray-900 mt-0.5 break-all">{email || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Phone</p>
-                  <p className="font-bold text-gray-900 mt-0.5">{profilePhone || '—'}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Phone</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{profilePhone || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Pronoun</p>
-                  <p className="font-bold text-gray-900 mt-0.5">{pronoun || '—'}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Pronoun</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{pronoun || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Birthday</p>
-                  <p className="font-bold text-gray-900 mt-0.5">{formatBirthday(birthday) || '—'}</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Birthday</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{formatBirthday(birthday) || '—'}</p>
                 </div>
               </div>
 
               <div className="pt-3 border-t border-gray-100">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">Delivery Addresses</p>
-                  <Link to="/settings/address" className="text-[11px] font-bold text-brand-orange">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Delivery Addresses</p>
+                  <Link to="/settings/address" className="text-[11px] font-semibold text-brand-orange">
                     Manage
                   </Link>
                 </div>

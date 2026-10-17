@@ -25,9 +25,9 @@ function AddressCard({ address, defaultName, defaultPhone, onEdit, onDelete, onS
     <div className={`bg-white rounded-2xl border p-4 shadow-sm ${address.isDefault ? 'border-brand-orange/30' : 'border-gray-200'}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-extrabold text-gray-900">{recipientName}</p>
+          <p className="text-sm font-semibold text-gray-900">{recipientName}</p>
           {address.isDefault && (
-            <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-orange/10 text-brand-orange border border-brand-orange/20">
+            <span className="text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-orange/10 text-brand-orange border border-brand-orange/20">
               Default
             </span>
           )}
@@ -37,15 +37,15 @@ function AddressCard({ address, defaultName, defaultPhone, onEdit, onDelete, onS
             <button
               type="button"
               onClick={() => onSetDefault(address.id)}
-              className="text-[10px] font-bold text-gray-400 hover:text-brand-orange transition-colors cursor-pointer"
+              className="text-[10px] font-semibold text-gray-400 hover:text-brand-orange transition-colors cursor-pointer"
             >
               Set Default
             </button>
           )}
-          <button type="button" onClick={() => onEdit(address)} className="text-[10px] font-bold text-brand-orange hover:underline cursor-pointer">
+          <button type="button" onClick={() => onEdit(address)} className="text-[10px] font-semibold text-brand-orange hover:underline cursor-pointer">
             Edit
           </button>
-          <button type="button" onClick={() => onDelete(address.id)} className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer">
+          <button type="button" onClick={() => onDelete(address.id)} className="text-[10px] font-semibold text-red-500 hover:underline cursor-pointer">
             Delete
           </button>
         </div>
@@ -163,14 +163,14 @@ function MyAddress() {
         {/* Desktop Header */}
         <div className="hidden lg:flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-black text-gray-900">My Addresses</h1>
+            <h1 className="text-3xl font-semibold text-gray-900">My Addresses</h1>
             <p className="text-xs text-gray-500 font-medium mt-1">Manage your delivery and campus shipping destinations</p>
           </div>
           {!showForm && (
             <button
               type="button"
               onClick={handleAddNew}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-orange hover:bg-orange-600 text-white font-semibold text-xs shadow-sm transition-all cursor-pointer"
             >
               <span>+ Add New Address</span>
             </button>
@@ -188,7 +188,7 @@ function MyAddress() {
               <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-200 mb-2">
                 <MapPinIcon className="w-7 h-7 text-gray-400" />
               </div>
-              <p className="text-sm font-bold text-gray-500">No addresses saved yet.</p>
+              <p className="text-sm font-semibold text-gray-500">No addresses saved yet.</p>
             </div>
           )}
 
@@ -211,19 +211,19 @@ function MyAddress() {
           {showForm && (
             <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4 animate-fade-in">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-extrabold text-gray-900">
+                <h3 className="text-sm font-semibold text-gray-900">
                   {editingId ? 'Edit Address' : 'Add New Address'}
                 </h3>
-                <span className="text-[10px] font-bold text-gray-400">Recipient info synced from account</span>
+                <span className="text-[10px] font-semibold text-gray-400">Recipient info synced from account</span>
               </div>
 
               {/* Account Contact Display */}
               <div className="bg-orange-50/50 rounded-xl p-3 border border-orange-100/80 flex items-center justify-between text-xs">
                 <div>
-                  <p className="font-bold text-gray-900">{accountName}</p>
+                  <p className="font-semibold text-gray-900">{accountName}</p>
                   <p className="text-gray-500 mt-0.5">{accountPhone}</p>
                 </div>
-                <span className="text-[10px] font-bold text-brand-orange bg-white px-2.5 py-1 rounded-lg border border-orange-200/80 shadow-2xs">
+                <span className="text-[10px] font-semibold text-brand-orange bg-white px-2.5 py-1 rounded-lg border border-orange-200/80 shadow-2xs">
                   Account Contact
                 </span>
               </div>
@@ -249,10 +249,10 @@ function MyAddress() {
                 </label>
 
                 <div className="flex gap-3 pt-2">
-                  <Button type="button" variant="secondary" onClick={handleCancel} className="flex-1 h-11 rounded-xl font-bold">
+                  <Button type="button" variant="secondary" onClick={handleCancel} className="flex-1 h-11 rounded-xl font-semibold">
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={!isFormValid || saving} loading={saving} className="flex-1 h-11 rounded-xl font-bold shadow-md">
+                  <Button type="submit" disabled={!isFormValid || saving} loading={saving} className="flex-1 h-11 rounded-xl font-semibold shadow-md">
                     Save
                   </Button>
                 </div>
@@ -264,7 +264,7 @@ function MyAddress() {
             <button
               type="button"
               onClick={handleAddNew}
-              className="w-full h-12 border-2 border-dashed border-gray-200 rounded-2xl text-sm font-bold text-gray-400 hover:border-brand-orange hover:text-brand-orange hover:bg-white transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full h-12 border-2 border-dashed border-gray-200 rounded-2xl text-sm font-semibold text-gray-400 hover:border-brand-orange hover:text-brand-orange hover:bg-white transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <span className="text-lg">+</span> Add New Address
             </button>

@@ -26,8 +26,8 @@ function SideNav() {
       <div className="flex items-center gap-2.5 px-2 pb-4 mb-3 border-b border-slate-200">
         <img src={brandLogo} alt="Tindahan ni Isko" className="w-8 h-8 object-contain shrink-0" />
         <div className="min-w-0">
-          <p className="text-xs font-bold text-gray-900 truncate">Tindahan</p>
-          <p className="text-xs font-bold text-brand-orange truncate">ni Isko</p>
+          <p className="text-xs font-semibold text-gray-900 truncate">Tindahan</p>
+          <p className="text-xs font-semibold text-brand-orange truncate">ni Isko</p>
         </div>
       </div>
 
@@ -60,7 +60,7 @@ function SideNav() {
                   <span>{label}</span>
                 </div>
                 {isCart && cartCount > 0 && (
-                  <span className="bg-brand-orange text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md border border-white animate-scale-in">
+                  <span className="bg-brand-orange text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-md border border-white animate-scale-in">
                     {cartCount}
                   </span>
                 )}

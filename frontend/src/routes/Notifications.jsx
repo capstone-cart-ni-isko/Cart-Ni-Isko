@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useApiChange } from '../hooks/useApiChange.js'
 import AppShell from '../components/layout/AppShell.jsx'
-import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
+import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
 import { fetchNotifications, markRead, readNotificationsCache } from '../services/notifications.js'
 import BackButton from '../components/ui/BackButton.jsx'
@@ -278,9 +278,9 @@ export default function Notifications() {
   })
 
   // Mobile: show caught-up only when there are no notifications at all
-  const isMobileEmpty = filteredItems.length === 0
+  const isMobileEmpty = !loading && filteredItems.length === 0
   // Desktop: show caught-up card only when all notifications are read
-  const isDesktopCaughtUp = unreadTotal === 0
+  const isDesktopCaughtUp = !loading && unreadTotal === 0
 
   return (
     <AppShell>
@@ -290,7 +290,7 @@ export default function Notifications() {
         <div className="flex items-start gap-4 mb-8">
           <div className="flex-1">
             <BackButton to="/home" label="Back to Home" className="lg:hidden mb-4" />
-            <h1 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">Notifications</h1>
+            <h1 className="text-3xl lg:text-4xl font-semibold text-gray-900 tracking-tight">Notifications</h1>
             <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
               Stay updated with your orders, production, and important announcements.
             </p>
@@ -313,7 +313,7 @@ export default function Notifications() {
                   key={label}
                   type="button"
                   onClick={() => setActiveTab(label)}
-                  className={`px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                  className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                     active
                       ? 'bg-orange-50 border border-brand-orange text-brand-orange'
                       : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
@@ -321,7 +321,7 @@ export default function Notifications() {
                 >
                   <span>{label}</span>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                    className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                       active ? 'bg-brand-orange text-white' : 'bg-gray-100 text-gray-500'
                     }`}
                   >
@@ -342,7 +342,7 @@ export default function Notifications() {
               {/* Illustration + Text — no card, sits on page bg */}
               <div className="flex flex-col items-center justify-center text-center pt-10 pb-8 px-6">
                 <CaughtUpIllustration className="w-56 h-56 mb-5" />
-                <h3 className="text-2xl font-extrabold text-gray-900 tracking-tight">You're all caught up!</h3>
+                <h3 className="text-2xl font-semibold text-gray-900 tracking-tight">You're all caught up!</h3>
                 <p className="text-sm text-gray-400 font-medium mt-2 max-w-[260px] leading-relaxed">
                   No new notifications at the moment.
                 </p>
@@ -357,11 +357,11 @@ export default function Notifications() {
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-bold text-slate-900">Need help?</h4>
+                  <h4 className="text-sm font-semibold text-slate-900">Need help?</h4>
                   <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
                     Contact support for more information about your orders and fulfillment process.
                   </p>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-orange mt-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-orange mt-2">
                     <span>Contact Support</span>
                     <span>→</span>
                   </span>
@@ -371,7 +371,27 @@ export default function Notifications() {
 
             {/* Notification Cards List (When not mobile empty) */}
             <div className={`space-y-3 ${isMobileEmpty ? 'hidden md:block' : 'block'}`}>
-              {filteredItems.length === 0 ? (
+              {loading ? (
+                <div className="space-y-3" aria-busy={loading} aria-live="polite">
+                  <span className="sr-only">Loading notifications</span>
+                  {Array.from({ length: 4 }, (_, index) => (
+                    <article key={index} className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-5 animate-pulse" aria-hidden="true">
+                      <SkeletonBlock className="h-10 w-10 shrink-0 rounded-xl" />
+                      <div className="min-w-0 flex-1 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <SkeletonBlock className="h-4 w-2/5 rounded" />
+                          <SkeletonBlock className="h-3 w-16 rounded" />
+                        </div>
+                        <div className="space-y-2">
+                          <SkeletonBlock className="h-3 w-full rounded" />
+                          <SkeletonBlock className="h-3 w-3/4 rounded" />
+                        </div>
+                        <SkeletonBlock className="h-6 w-20 rounded-md" />
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : filteredItems.length === 0 ? (
                 <div className="hidden md:block text-center py-16 bg-white rounded-xl border border-slate-200 p-8 shadow-2xs">
                   <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-3 text-slate-400">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
@@ -379,16 +399,8 @@ export default function Notifications() {
                       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                     </svg>
                   </div>
-                  {loading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <LoadingSpinner size={24} className="mx-auto" />
-                    </div>
-                  ) : (
-                    <span>No notifications found in this category.</span>
-                  )}
-                  {!loading && (
-                    <p className="text-xs text-slate-400 mt-1">Updates regarding your orders, appointments, and campus store will appear here.</p>
-                  )}
+                  <span>No notifications found in this category.</span>
+                  <p className="text-xs text-slate-400 mt-1">Updates regarding your orders, appointments, and campus store will appear here.</p>
                 </div>
               ) : (
                 filteredItems.map((item) => (
@@ -410,11 +422,11 @@ export default function Notifications() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <h3 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                          <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate">
                             {item.title}
                           </h3>
                           {item.isExempt && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">
                                 QR Verification
                               </span>
                             )}
@@ -433,11 +445,11 @@ export default function Notifications() {
 
                       <div className="flex items-center justify-between mt-3">
                         <span
-                          className={`text-xs font-bold px-2.5 py-1 rounded-md capitalize ${item.tagColor}`}
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-md capitalize ${item.tagColor}`}
                         >
                           {item.tag}
                         </span>
-                        <div className="text-slate-400 group-hover:text-brand-orange transition-colors text-sm font-bold">
+                        <div className="text-slate-400 group-hover:text-brand-orange transition-colors text-sm font-semibold">
                           ›
                         </div>
                       </div>
@@ -460,7 +472,7 @@ export default function Notifications() {
             {isDesktopCaughtUp && (
               <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 text-center flex flex-col items-center shadow-2xs">
                 <CaughtUpIllustration className="w-48 h-48 mb-3" />
-                <h3 className="text-lg font-black text-slate-900 mt-1">You're all caught up!</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mt-1">You're all caught up!</h3>
                 <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1">
                   No new notifications at the moment.
                 </p>
@@ -470,15 +482,15 @@ export default function Notifications() {
             {/* Quick Link Card to Help Center */}
             <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between shadow-2xs">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center font-bold text-sm shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center font-semibold text-sm shrink-0">
                   <HelpIcon className="w-4 h-4 text-brand-orange" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900">Need order assistance?</h4>
+                  <h4 className="text-sm font-semibold text-slate-900">Need order assistance?</h4>
                   <p className="text-xs text-slate-400">Contact our student help desk</p>
                 </div>
               </div>
-              <span className="text-xs sm:text-sm font-bold text-brand-orange px-2 py-1 shrink-0">
+              <span className="text-xs sm:text-sm font-semibold text-brand-orange px-2 py-1 shrink-0">
                 Contact Support
               </span>
             </div>
