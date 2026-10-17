@@ -1951,6 +1951,7 @@ class OrdersAPI extends Controller
 
                 if (! $order) {
                     $order = Order::create([
+                        'ord_id'        => $this->nextId('orders', 'ord_id'),
                         'cust_id'       => $walkIn->cust_id,
                         'ord_amount'    => 0,
                         'ord_status'    => 'processing',
@@ -1981,6 +1982,7 @@ class OrdersAPI extends Controller
                     ]);
                 } else {
                     $bag = Bag::create([
+                        'bag_id'      => $this->nextId('bag', 'bag_id'),
                         'cust_id'     => $walkIn->cust_id,
                         'prodvar_id'  => $prodvar->prodvar_id,
                         'bag_qty'     => $qty,
@@ -1990,6 +1992,7 @@ class OrdersAPI extends Controller
                         'bag_deleted' => null,
                     ]);
                     Item::create([
+                        'item_id'      => $this->nextId('items', 'item_id'),
                         'ord_id'       => $order->ord_id,
                         'bag_id'       => $bag->bag_id,
                         'item_created' => now(),
@@ -2416,6 +2419,7 @@ class OrdersAPI extends Controller
         $walkIn = Customer::firstOrCreate(
             ['cust_phone' => self::walkInPhone],
             [
+                'cust_id'                  => $this->nextId('customer', 'cust_id'),
                 'cust_givname'             => 'Walk-in',
                 'cust_surname'             => '',
                 'cust_email'               => null,

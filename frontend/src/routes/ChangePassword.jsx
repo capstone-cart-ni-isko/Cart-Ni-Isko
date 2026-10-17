@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
 import { updateCredentials } from '../services/auth.js'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import Button from '../components/ui/Button.jsx'
 import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
 
@@ -76,18 +75,8 @@ function ChangePassword() {
   }
 
   return (
-    <AccountLayout>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
-        {/* Desktop Title */}
-        <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-semibold text-gray-900">Change Password</h1>
-        </div>
-
-        {/* Mobile Title */}
-        <div className="lg:hidden -mx-4 -mt-4 mb-4">
-          <PageHeader title="Change Password" backTo="/settings" />
-        </div>
-
+    <FocusedLayout title="Change Password" backTo="/settings" containerClassName="max-w-xl">
+      <div className="pb-16 animate-fade-in w-full">
         <div className="space-y-5">
           <p className="text-sm text-gray-500 font-medium leading-relaxed">
             Set a new strong password for your Tindahan ni Isko student account.
@@ -145,7 +134,7 @@ function ChangePassword() {
         onClose={() => setOtpOpen(false)}
         onVerified={savePassword}
       />
-    </AccountLayout>
+    </FocusedLayout>
   )
 }
 

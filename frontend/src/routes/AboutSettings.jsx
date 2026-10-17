@@ -1,5 +1,4 @@
-import AccountLayout from '../components/layout/AccountLayout.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import { StoreIcon, UsersGroupIcon, RefreshCwIcon } from '../components/ui/Icons.jsx'
 
 /*
@@ -62,20 +61,8 @@ function Card({ icon, title, children }) {
 
 function AboutSettings() {
   return (
-    <AccountLayout>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
-        {/* Desktop Title */}
-        <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-semibold text-gray-900">About</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            Store information, the people who built it, and what changed.
-          </p>
-        </div>
-
-        {/* Mobile Title */}
-        <div className="lg:hidden -mx-4 -mt-4 mb-4">
-          <PageHeader title="About" backTo="/settings" />
-        </div>
+    <FocusedLayout title="About" subtitle="Store information, developers, and version notes" backTo="/settings" containerClassName="max-w-2xl">
+      <div className="pb-16 animate-fade-in w-full">
 
         <div className="space-y-5">
           <Card icon={<StoreIcon className="w-4 h-4 text-brand-orange" />} title="Store information">
@@ -144,7 +131,7 @@ function AboutSettings() {
           </Card>
         </div>
       </div>
-    </AccountLayout>
+    </FocusedLayout>
   )
 }
 

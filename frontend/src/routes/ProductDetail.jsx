@@ -6,7 +6,7 @@ import { useWishlist } from '../hooks/useWishlist.js'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import { useToast } from '../hooks/useToast.js'
-import AppShell from '../components/layout/AppShell.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import ViewAllLink from '../components/ui/ViewAllLink.jsx'
 import PriceTag from '../components/ui/PriceTag.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
@@ -15,7 +15,6 @@ import SizeGuideModal from '../components/ui/SizeGuideModal.jsx'
 import ProductAccordion from '../components/ui/ProductAccordion.jsx'
 import ProductReviews from '../components/ui/ProductReviews.jsx'
 import { fetchCatalog, fetchProduct } from '../services/products.js'
-import backIcon from '../assets/icons/common/back.svg'
 import { ShirtIcon, CalendarIcon, StoreIcon, RefreshCwIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 
@@ -64,9 +63,28 @@ function ProductDetail() {
             .sort((a) => (a.category === item?.category ? -1 : 1))
             .slice(0, 4)
         )
-        const newColor = item?.colors?.[0] || null
+        let newColor = item?.colors?.[0] || null
+        let newSize = item?.sizes?.[0] || ''
+
+        const targetVarId = location.state?.variationId ?? location.state?.prodvarId
+        if (targetVarId && Array.isArray(item?.variations)) {
+          const matchedVar = item.variations.find((v) => Number(v.prodvar_id) === Number(targetVarId))
+          if (matchedVar) {
+            const varColorName = matchedVar.prodvar_options?.Color || matchedVar.prodvar_options?.color
+            if (varColorName && Array.isArray(item?.colors)) {
+              const foundColor = item.colors.find((c) => c.name.toLowerCase() === varColorName.toLowerCase())
+              if (foundColor) newColor = foundColor
+            }
+            const varSize = matchedVar.prodvar_options?.Size || matchedVar.prodvar_options?.size
+            if (varSize) newSize = varSize
+          }
+        } else if (location.state?.color && Array.isArray(item?.colors)) {
+          const foundColor = item.colors.find((c) => c.name.toLowerCase() === String(location.state.color).toLowerCase())
+          if (foundColor) newColor = foundColor
+        }
+
         setSelectedColor(newColor)
-        setSelectedSize(item?.sizes?.[0] || '')
+        setSelectedSize(newSize)
         setActiveImage(newColor?.image || item?.images?.[0] || '')
         setQty(1)
       })
@@ -91,17 +109,9 @@ function ProductDetail() {
 
   if (loading) {
     return (
-      <AppShell showNav={true}>
-        <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16" aria-busy={loading} aria-live="polite">
+      <FocusedLayout title="Product Details" backTo="/shop" containerClassName="max-w-7xl">
+        <div className="pb-16" aria-busy={loading} aria-live="polite">
           <span className="sr-only">Loading product details</span>
-          <div className="hidden md:block mb-5">
-            <SkeletonBlock className="h-7 w-48 rounded" />
-          </div>
-          <div className="lg:hidden -mx-4 -mt-4 mb-4">
-            <div className="h-14 border-b border-slate-200 bg-white px-4 flex items-center">
-              <SkeletonBlock className="h-5 w-32 rounded" />
-            </div>
-          </div>
           <div className="mb-4 hidden md:flex items-center gap-2">
             {Array.from({ length: 4 }, (_, index) => (
               <SkeletonBlock key={index} className="h-3 w-16 rounded" />
@@ -124,25 +134,25 @@ function ProductDetail() {
             </div>
           </div>
         </div>
-      </AppShell>
+      </FocusedLayout>
     )
   }
 
   if (loadError) {
     return (
-      <AppShell showNav={true}>
+      <FocusedLayout title="Product Details" backTo="/shop" containerClassName="max-w-7xl">
         <ServerErrorNotice
           message={loadError}
           onRetry={() => setReloadKey((k) => k + 1)}
           className="min-h-[50vh]"
         />
-      </AppShell>
+      </FocusedLayout>
     )
   }
 
   if (!product) {
     return (
-      <AppShell showNav={true}>
+      <FocusedLayout title="Product Details" backTo="/shop" containerClassName="max-w-7xl">
         <div className="flex flex-col items-center justify-center min-h-[50vh] p-6 text-center animate-fade-in">
           <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-7 h-7 text-gray-400">
@@ -156,7 +166,7 @@ function ProductDetail() {
             Browse Shop
           </button>
         </div>
-      </AppShell>
+      </FocusedLayout>
     )
   }
 
@@ -259,9 +269,37 @@ function ProductDetail() {
     : 'Add to Bag'
 
   return (
-    <AppShell showBottomNav={false}>
-      <div className="px-4 pb-32 md:px-0 md:pb-16 animate-fade-in max-w-7xl mx-auto">
-        {/* Breadcrumb Context / Back Action */}
+    <FocusedLayout
+      title={product.name}
+      subtitle={product.category}
+      backTo={returnTo || '/shop'}
+      containerClassName="max-w-7xl"
+      rightAction={
+        <button
+          type="button"
+          onClick={handleWishlistToggle}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] transition-colors shadow-2xs cursor-pointer"
+          title={isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+          aria-label={isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className={`w-4 h-4 transition-transform ${
+              isSaved ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'
+            }`}
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+          </svg>
+          <span className="hidden sm:inline">{isSaved ? 'Saved' : 'Wishlist'}</span>
+        </button>
+      }
+    >
+      <div className="pb-32 md:pb-16 animate-fade-in w-full">
+        {/* Breadcrumb Context / Category Link */}
         <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
           <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-medium text-gray-400 flex-wrap">
             {returnTo && returnTo.startsWith('/orders') ? (
@@ -319,43 +357,8 @@ function ProductDetail() {
           <div className="lg:sticky lg:top-6 flex flex-col gap-3">
             {/* Primary Image Viewport */}
             <div className="relative aspect-square w-full bg-gradient-to-br from-orange-50/70 via-gray-50 to-blue-50/50 rounded-3xl overflow-hidden border border-gray-100 flex items-center justify-center shadow-2xs group">
-              {/* Mobile Back button */}
-              <button
-                type="button"
-                onClick={() => (returnTo ? navigate(returnTo) : navigate(-1))}
-                className="md:hidden absolute top-4 left-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md active:scale-95 transition-transform"
-                aria-label="Go back"
-              >
-                <img src={backIcon} alt="Back" className="w-5 h-5" />
-              </button>
-
-              {/* Wishlist Heart Toggle */}
-              <button
-                type="button"
-                onClick={handleWishlistToggle}
-                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center shadow-md hover:bg-white active:scale-95 transition-all cursor-pointer group/wish"
-                title={isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
-                aria-label={isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className={`w-5 h-5 transition-transform group-hover/wish:scale-110 ${
-                    isSaved ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none group-hover/wish:text-red-400'
-                  }`}
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-                </svg>
-              </button>
-
-              {/* Status Badge Tag Over Main Image — offset past the mobile
-                  back button (top-4 left-4, ~2.5rem wide) so it never covers
-                  the back arrow; on desktop the back button is hidden and it
-                  returns to the left edge. */}
-              <div className="absolute top-4 left-16 md:left-6 z-10 flex flex-col gap-1.5">
+              {/* Status Badge Tag Over Main Image */}
+              <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5">
                 {product.preOrder ? (
                   <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
                     <CalendarIcon className="w-3.5 h-3.5 shrink-0" />
@@ -688,7 +691,11 @@ function ProductDetail() {
 
         {/* ── Customer Reviews Section ── */}
         <div className="mt-12 border-t border-gray-100 pt-8">
-          <ProductReviews product={product} />
+          <ProductReviews
+            product={product}
+            initialOpenWrite={Boolean(location.state?.writeReview)}
+            ordId={location.state?.ordId || location.state?.orderId || null}
+          />
         </div>
 
         {/* ── Related Products / "Complete the BU Look" ── */}
@@ -751,7 +758,7 @@ function ProductDetail() {
         onClose={() => setShowLoginModal(false)}
         message="Sign in to add items to your cart, save favorites, and checkout your Isko Drips."
       />
-    </AppShell>
+    </FocusedLayout>
   )
 }
 

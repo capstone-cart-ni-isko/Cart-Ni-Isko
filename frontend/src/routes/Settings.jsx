@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
+import { useTheme } from '../context/ThemeContext.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 
 import {
@@ -14,25 +14,27 @@ import {
   PackageIcon,
   HelpIcon,
   LogOutIcon,
+  MoonIcon,
+  SunIcon,
 } from '../components/ui/Icons.jsx'
 
 const settingsAccountItems = [
-  { to: '/account', label: 'Edit Profile', icon: <UserIcon className="w-5 h-5 text-gray-450" />, description: 'Update your name, photo and details' },
-  { to: '/settings/change-password', label: 'Change Password', icon: <KeyIcon className="w-5 h-5 text-gray-450" />, description: 'Update your login password' },
-  { to: '/settings/backup', label: 'Backup Contacts', icon: <HelpIcon className="w-5 h-5 text-gray-450" />, description: 'Alternate numbers and emails we can reach' },
+  { to: '/account', label: 'Edit Profile', icon: <UserIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'Update your name, photo and details' },
+  { to: '/settings/change-password', label: 'Change Password', icon: <KeyIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'Update your login password' },
+  { to: '/settings/backup', label: 'Backup Contacts', icon: <HelpIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'Alternate numbers and emails we can reach' },
 ]
 
 const settingsBillingItems = [
-  { to: '/settings/address', label: 'Addresses', icon: <MapPinIcon className="w-5 h-5 text-gray-450" />, description: 'Manage campus and home delivery addresses' },
+  { to: '/settings/address', label: 'Addresses', icon: <MapPinIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'Manage campus and home delivery addresses' },
 ]
 
-const settingsPrefsItems = [
-  { to: '/settings/notifications', label: 'Notification Preferences', icon: <BellIcon className="w-5 h-5 text-gray-450" />, description: 'Reminders, email and product alerts' },
-  { to: '/orders', label: 'Order History', icon: <PackageIcon className="w-5 h-5 text-gray-450" />, description: 'View past and active orders' },
+const baseSettingsPrefsItems = [
+  { to: '/settings/notifications', label: 'Notification Preferences', icon: <BellIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'Reminders, email and product alerts' },
+  { to: '/orders', label: 'Order History', icon: <PackageIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'View past and active orders' },
 ]
 
 const settingsSupportItems = [
-  { to: '/settings/about', label: 'About', icon: <HelpIcon className="w-5 h-5 text-gray-450" />, description: 'Store information, developers and versions' },
+  { to: '/settings/about', label: 'About', icon: <HelpIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'Store information, developers and versions' },
 ]
 
 function SettingsSection({ title, items }) {
@@ -46,11 +48,11 @@ function SettingsSection({ title, items }) {
               <div className="flex items-center gap-3.5 min-w-0">
                 <span className="shrink-0">{icon}</span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900">{label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">{description}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-[var(--ink)]">{label}</p>
+                  <p className="text-xs text-gray-400 dark:text-[var(--muted)] mt-0.5 truncate">{description}</p>
                 </div>
               </div>
-              <span className="text-gray-300 text-xl ml-3 shrink-0">›</span>
+              <span className="text-gray-300 dark:text-[var(--muted-2)] text-xl ml-3 shrink-0">›</span>
             </div>
           )
 
@@ -77,6 +79,7 @@ function Settings() {
   const navigate = useNavigate()
   const { logout } = useAuth()
   const { showToast } = useToast()
+  const { dark, toggle: toggleTheme } = useTheme()
   const [showLogoutModal, setShowLogoutModal] = useState(false)
 
   const handleLogout = () => {
@@ -85,36 +88,36 @@ function Settings() {
     navigate('/signin')
   }
 
+  const prefsItems = [
+    {
+      onClick: toggleTheme,
+      label: dark ? 'Appearance: Dark Mode' : 'Appearance: Light Mode',
+      icon: dark ? <SunIcon className="w-5 h-5 text-brand-orange" /> : <MoonIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />,
+      description: dark ? 'Currently using dark theme' : 'Currently using light theme',
+    },
+    ...baseSettingsPrefsItems,
+  ]
+
   return (
-    <AccountLayout>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
-        {/* Desktop Title */}
-        <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-semibold text-gray-900">Settings</h1>
-        </div>
-
-        {/* Mobile Title */}
-        <div className="lg:hidden -mx-4 -mt-4 mb-4">
-          <PageHeader title="Settings" backTo="/profile" />
-        </div>
-
+    <FocusedLayout title="Settings" backTo="/profile" containerClassName="max-w-2xl">
+      <div className="pb-16 animate-fade-in w-full">
         <div className="space-y-5">
           <SettingsSection title="Account" items={settingsAccountItems} />
           <SettingsSection title="Addresses" items={settingsBillingItems} />
-          <SettingsSection title="Preferences" items={settingsPrefsItems} />
+          <SettingsSection title="Preferences" items={prefsItems} />
           <SettingsSection title="Support" items={settingsSupportItems} />
 
           {/* Log Out */}
           <button
             type="button"
             onClick={() => setShowLogoutModal(true)}
-            className="w-full flex items-center justify-between px-5 py-4 bg-white rounded-2xl border border-gray-200 shadow-sm hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
+            className="w-full flex items-center justify-between px-5 py-4 bg-white dark:bg-[var(--surface)] rounded-2xl border border-gray-200 dark:border-[var(--line)] shadow-sm hover:bg-red-50 dark:hover:bg-red-950/20 active:bg-red-100 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-3.5">
               <LogOutIcon className="w-5 h-5 text-red-500" />
-              <p className="text-sm font-semibold text-red-600">Log Out</p>
+              <p className="text-sm font-semibold text-red-600 dark:text-red-400">Log Out</p>
             </div>
-            <span className="text-red-300 text-xl font-medium">›</span>
+            <span className="text-red-300 dark:text-red-400/50 text-xl font-medium">›</span>
           </button>
         </div>
       </div>
@@ -128,7 +131,7 @@ function Settings() {
         confirmText="Log Out"
         isDestructive={true}
       />
-    </AccountLayout>
+    </FocusedLayout>
   )
 }
 

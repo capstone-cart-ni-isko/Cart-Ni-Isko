@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react'
-import { Navigate } from 'react-router-dom'
-import AdminLayout from '../../components/admin/AdminLayout.jsx'
+import { useCallback, useEffect, useState } from 'react'
+import { Navigate, useNavigate } from 'react-router-dom'
 import QRScanner from '../../components/ui/QRScanner.jsx'
+import BackButton from '../../components/ui/BackButton.jsx'
 import { useToast } from '../../hooks/useToast.js'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { empIsStaff, empHomePath } from '../../components/admin/schema.js'
@@ -9,23 +9,32 @@ import { scanQr } from '../../services/tracking.js'
 
 /**
  * FLOW-EMP_HOME-07 — the "QR" icon in the navigation ribbon opens the
- * "QR scanner" page.
+ * "QR scanner" focused page.
  *
- * STAFF: this capability does not exist for a 'staff' employee anywhere in the
- * portal - the ribbon icon is not rendered for them (AdminTopBar) and the route
- * itself is role-gated in App.jsx, so the guard below is the last of the three
- * layers and lands a staff member on their own home page instead of a scanner.
- *
- * Every scan is handed to POST /tracking/scan (the same endpoint the pickup
- * and appointment claims use), so the result the employee sees is whatever
- * the backend decided - a claim, an appointment close, or a rejection - and
- * never a client-side guess.
+ * System Rule 65: The elements of another page (homepage ribbon, admin topbar, sidebar)
+ * must never show inside a focused page.
+ * System Rule 68/69: Working "back" button at the top left.
  */
 export default function AdminQr() {
   const { showToast } = useToast()
   const { currentAdminUser } = useAdmin()
+  const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [lastScan, setLastScan] = useState(null) // { ok, code, message }
+
+  /** Back button / Esc: return to where the employee came from, else home. */
+  const handleBack = useCallback(() => {
+    if (window.history.length > 1) navigate(-1)
+    else navigate(empHomePath(currentAdminUser), { replace: true })
+  }, [navigate, currentAdminUser])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') handleBack()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleBack])
 
   const handleScan = useCallback(
     async (code) => {
@@ -56,67 +65,72 @@ export default function AdminQr() {
   }
 
   return (
-    <AdminLayout>
-      <div className="max-w-2xl mx-auto space-y-5">
-        <div>
-          <h1 className="page-title text-slate-900">QR Scanner</h1>
-          <p className="text-sm text-slate-500 font-normal mt-1">
-            Point the camera at an appointment or pickup QR code to verify it.
-          </p>
-        </div>
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/90 backdrop-blur-xl animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-label="QR scanner"
+    >
+        {/* Centered Large-Medium Modal Container */}
+        <section className="relative w-full max-w-lg sm:max-w-xl max-h-[92vh] flex flex-col bg-white dark:bg-[var(--surface)] rounded-2xl border border-slate-200/90 dark:border-[var(--line)] shadow-2xl overflow-hidden animate-scale-in">
+          {/* Header Bar with Back Button */}
+          <div className="px-5 py-3.5 border-b border-slate-100 dark:border-[var(--line)] bg-slate-50/70 dark:bg-[var(--surface-2)] flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <BackButton
+                id="admin-qr-back"
+                onClick={handleBack}
+              />
 
-        <section className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                  <rect x="3" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="3" width="7" height="7" rx="1" />
-                  <rect x="3" y="14" width="7" height="7" rx="1" />
-                  <path d="M14 14h3v3h-3z" />
-                  <path d="M21 14v1" />
-                  <path d="M21 21v-4" />
-                  <path d="M14 21h1" />
-                  <path d="M18 18h3v3h-3z" />
-                </svg>
-              </span>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Scan a code</h2>
-                <p className="text-2xs text-slate-400">
-                  {busy ? 'Verifying…' : 'Waiting for a QR code'}
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-[var(--ink)] truncate">QR Code Scanner</h2>
+                <p className="text-[11px] text-slate-500 dark:text-[var(--muted)] truncate">
+                  {busy ? 'Verifying QR code…' : 'Center the QR code in the viewfinder'}
                 </p>
               </div>
             </div>
+
             <span
-              className={`text-2xs font-bold px-2 py-1 rounded-full border ${
+              className={`text-2xs font-bold px-2.5 py-1 rounded-full border shrink-0 transition-colors ${
                 lastScan?.ok
-                  ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                  ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
                   : lastScan
-                    ? 'bg-rose-50 text-rose-600 border-rose-200'
-                    : 'bg-slate-50 text-slate-500 border-slate-200'
+                    ? 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800'
+                    : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-[var(--surface-3)] dark:text-[var(--muted)] dark:border-[var(--line)]'
               }`}
             >
-              {lastScan ? (lastScan.ok ? 'Accepted' : 'Rejected') : 'Ready'}
+              {lastScan ? (lastScan.ok ? 'Verified' : 'Invalid Code') : 'Ready'}
             </span>
           </div>
 
-          <div className="p-4">
-            <QRScanner onScan={handleScan} className="w-full aspect-video" />
+          {/* Scanner Body: Large-Medium centered square camera viewfinder */}
+          <div className="p-4 sm:p-5 overflow-y-auto flex-1 flex flex-col items-center">
+            <div className="w-full max-w-md">
+              <QRScanner onScan={handleScan} className="aspect-square w-full shadow-inner" />
+            </div>
+
             {lastScan && (
               <div
-                className={`mt-3 rounded-lg border px-3 py-2.5 text-xs font-medium ${
+                className={`w-full max-w-md mt-3.5 rounded-xl border px-3.5 py-3 text-xs font-medium animate-fade-in ${
                   lastScan.ok
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                    : 'bg-rose-50 border-rose-200 text-rose-700'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                    : 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300'
                 }`}
               >
-                <p>{lastScan.message}</p>
-                <p className="mt-0.5 opacity-70 break-all">Scanned: {lastScan.code}</p>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-sm shrink-0">
+                    {lastScan.ok ? '✓' : '⚠'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{lastScan.message}</p>
+                    <p className="mt-1 text-[11px] opacity-80 break-all font-mono">
+                      {lastScan.code}
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </section>
-      </div>
-    </AdminLayout>
+    </div>
   )
 }

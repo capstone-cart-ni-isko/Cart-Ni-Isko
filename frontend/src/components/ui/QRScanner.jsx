@@ -12,8 +12,10 @@ import Button from './Button.jsx'
  *   className: string - Additional CSS classes
  *   style: React.CSSProperties - Inline styles
  */
-export default function QRScanner({ onScan, onError, className = '', style }) {
+export default function QRScanner({ onScan, onError, className = 'aspect-video', style }) {
   const scannerRef = useRef(null)
+  // html5-qrcode addresses its mount point by element id, not by DOM node.
+  const [elementId] = useState(() => `qr-reader-${Math.random().toString(36).slice(2, 9)}`)
   const [hasPermission, setHasPermission] = useState(null)
   const [isScanning, setIsScanning] = useState(false)
   const [cameraError, setCameraError] = useState('')
@@ -53,35 +55,48 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
   }, [])
 
   const startScanner = useCallback(async () => {
-    if (isScanning || !scannerRef.current) return
+    if (scannerInstance.current || !scannerRef.current) return
 
+    let instance = null
     try {
-      const { Html5QrcodeScanner } = await import('html5-qrcode')
-      
-      scannerInstance.current = new Html5QrcodeScanner(
-        scannerRef.current,
+      const { Html5Qrcode } = await import('html5-qrcode')
+      // Unmounted (or already started elsewhere) while the module loaded.
+      if (scannerInstance.current || !scannerRef.current) return
+
+      instance = new Html5Qrcode(elementId)
+      scannerInstance.current = instance
+
+      await instance.start(
+        { facingMode: 'environment' },
         {
           fps: 10,
-          qrbox: { width: 250, height: 250 },
+          qrbox: (width, height) => {
+            const edge = Math.floor(Math.min(width, height) * 0.7)
+            return { width: edge, height: edge }
+          },
           aspectRatio: 1.0,
-          disableFlip: false,
-          rememberLastUsedCamera: true,
         },
-        false
+        handleScanSuccess,
+        handleScanFailure
       )
 
-      await scannerInstance.current.render(handleScanSuccess, handleScanFailure)
+      // Stopped or unmounted while the camera was opening: release it now.
+      if (scannerInstance.current !== instance) {
+        try { await instance.stop() } catch { /* already stopped */ }
+        try { instance.clear() } catch { /* nothing to clear */ }
+        return
+      }
       setIsScanning(true)
       setHasPermission(true)
     } catch (err) {
-      const errorMsg = err?.message || 'Failed to start camera'
+      const errorMsg = (typeof err === 'string' ? err : err?.message) || 'Failed to start camera'
       console.error('QR Scanner error:', err)
       // A failed instance is never reused - Retry builds a fresh one in place.
-      scannerInstance.current = null
+      if (scannerInstance.current === instance) scannerInstance.current = null
       setCameraError(errorMsg)
       setManuallyStopped(true)
-      
-      if (err?.name === 'NotAllowedError' || errorMsg.includes('permission')) {
+
+      if (err?.name === 'NotAllowedError' || /permission|denied/i.test(errorMsg)) {
         setHasPermission(false)
         onError?.('Camera permission denied. Please allow camera access in your browser settings.')
       } else {
@@ -89,18 +104,25 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
       }
       setIsScanning(false)
     }
-  }, [isScanning, handleScanSuccess, handleScanFailure, onError])
+  }, [elementId, handleScanSuccess, handleScanFailure, onError])
 
   const stopScanner = useCallback(async () => {
-    if (!isScanning || !scannerInstance.current) return
-    
+    const instance = scannerInstance.current
+    if (!instance) return
+    scannerInstance.current = null
+
     try {
-      await scannerInstance.current.clear()
-      setIsScanning(false)
+      if (instance.isScanning) await instance.stop()
     } catch (err) {
       console.error('Error stopping scanner:', err)
     }
-  }, [isScanning])
+    try {
+      instance.clear()
+    } catch {
+      /* nothing to clear */
+    }
+    setIsScanning(false)
+  }, [])
 
   // The camera starts once on mount and stops on unmount ONLY.
   //
@@ -195,8 +217,9 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
   }
 
   return (
-    <div className={`relative w-full aspect-video bg-[var(--surface-4)] rounded-xl overflow-hidden ${className}`} style={style}>
-      <div ref={scannerRef} className="w-full h-full" />
+    <div className="w-full">
+    <div className={`relative w-full bg-[var(--surface-4)] rounded-xl overflow-hidden ${className}`} style={style}>
+      <div id={elementId} ref={scannerRef} className="w-full h-full [&_video]:w-full [&_video]:h-full [&_video]:object-cover" />
       
       {/* Scanning overlay */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -229,9 +252,11 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
         </div>
       )}
 
+    </div>
+
       {/* Start / Stop control plus the manual code fallback - a phone camera
           cannot always focus, so the code can be typed in instead. */}
-      <div className="absolute bottom-3 left-3 right-3 z-20 flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
         <button
           type="button"
           onClick={isScanning ? handleStop : handleStart}
@@ -257,7 +282,7 @@ export default function QRScanner({ onScan, onError, className = '', style }) {
       </div>
 
       {cameraError && hasPermission !== false && (
-        <p className="field-error absolute left-3 right-3 bottom-24 z-20 text-center" role="alert">
+        <p className="field-error mt-2 text-center" role="alert">
           {cameraError} Press Start Scanner to try again.
         </p>
       )}

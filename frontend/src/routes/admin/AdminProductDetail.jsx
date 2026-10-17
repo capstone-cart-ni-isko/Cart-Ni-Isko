@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import Button from '../../components/ui/Button.jsx'
+import BackButton from '../../components/ui/BackButton.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { apiGet } from '../../services/api.js'
 import { fetchProductSales, mapAdminProduct, optionLabel } from '../../services/adminProducts.js'
@@ -309,15 +310,10 @@ export default function AdminProductDetail() {
       <div className="space-y-4 animate-fade-in pb-10">
         {/* FLOW-NAV-01: a working back control, top-left, at the page level. */}
         <div className="flex items-center justify-between gap-3">
-          <Link
+          <BackButton
             to="/admin/inventory"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            Back to inventory
-          </Link>
+            label="Back to inventory"
+          />
           <div className="flex items-center gap-2">
             <button
               type="button"

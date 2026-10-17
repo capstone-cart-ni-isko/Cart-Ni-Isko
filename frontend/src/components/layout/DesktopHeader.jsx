@@ -34,7 +34,7 @@ const Painted = ({ src, alt, active }) => (
   <img
     src={src}
     alt={alt}
-    className="w-5 h-5 transition-all"
+    className="w-5 h-5 pointer-events-none select-none"
     style={{
       filter: active
         ? 'invert(55%) sepia(91%) saturate(1938%) hue-rotate(347deg) brightness(101%) contrast(96%)'
@@ -132,7 +132,7 @@ function DesktopHeader() {
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
         {/* Logo Left - shifted slightly left */}
         <Link to="/home" className="flex items-center shrink-0">
-          <img src={logo} alt="Tindahan ni Isko" className="h-9 md:h-10 object-contain hover:opacity-90 transition-opacity" />
+          <img src={logo} alt="Tindahan ni Isko" className="h-9 md:h-10 object-contain" />
         </Link>
 
         {/* Search Bar Center */}
@@ -147,17 +147,17 @@ function DesktopHeader() {
           />
         </form>
 
-        {/* Ribbon: every icon is the same 20px box with its own tooltip */}
+        {/* Ribbon: every icon is the same 20px box, no hover illumination */}
         <div className="flex items-center gap-1.5 lg:gap-2 text-gray-700 shrink-0">
           {ribbon.map(({ to, label, icon: Glyph, src, badge, active }) => {
             const on = isOn({ to, active })
             return (
-              <div key={to} className="relative group flex items-center justify-center">
+              <div key={to} className="relative flex items-center justify-center">
                 <Link
                   to={to}
                   onClick={to === '/home' ? undefined : guardGuest}
                   aria-label={label}
-                  className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[var(--surface-3)] transition-all relative flex items-center justify-center ${on ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
+                  className={`p-2 rounded-lg relative flex items-center justify-center transition-colors ${on ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
                 >
                   <Glyph active={on} src={src} alt={label} />
                   {badge > 0 && (
@@ -166,27 +166,21 @@ function DesktopHeader() {
                     </span>
                   )}
                 </Link>
-                <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
-                  {label}
-                </span>
               </div>
             )
           })}
 
           {/* Menu: opens the right-side drawer the mobile ribbon also opens */}
-          <div className="relative group flex items-center justify-center">
+          <div className="relative flex items-center justify-center">
             <button
               type="button"
               onClick={openMenu}
               aria-label="Menu"
               aria-expanded={isMenuOpen}
-              className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[var(--surface-3)] transition-all flex items-center justify-center cursor-pointer ${isMenuOpen ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
+              className={`p-2 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${isMenuOpen ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange' : 'text-[#757575] dark:text-[var(--muted)]'}`}
             >
               <MenuIcon />
             </button>
-            <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
-              Menu
-            </span>
           </div>
         </div>
       </div>

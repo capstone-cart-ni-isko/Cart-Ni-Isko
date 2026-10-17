@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import Toggle from '../components/ui/Toggle.jsx'
 import { useToast } from '../hooks/useToast.js'
@@ -77,33 +76,17 @@ function NotificationPreferences() {
 
   if (loadError) {
     return (
-      <AccountLayout>
-        <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
-          <div className="hidden lg:block mb-8">
-            <h1 className="text-3xl font-semibold text-gray-900">Notification Preferences</h1>
-          </div>
-          <div className="lg:hidden -mx-4 -mt-4 mb-4">
-            <PageHeader title="Notification Preferences" backTo="/settings" />
-          </div>
+      <FocusedLayout title="Notification Preferences" backTo="/settings" containerClassName="max-w-2xl">
+        <div className="pb-16 animate-fade-in w-full">
           <p className="text-sm text-red-500 font-semibold">{loadError}</p>
         </div>
-      </AccountLayout>
+      </FocusedLayout>
     )
   }
 
   return (
-    <AccountLayout>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
-        {/* Desktop Title */}
-        <div className="hidden lg:block mb-8">
-          <h1 className="text-3xl font-semibold text-gray-900">Notification Preferences</h1>
-          <p className="text-sm text-gray-400 mt-1">Every change saves immediately.</p>
-        </div>
-
-        {/* Mobile Title */}
-        <div className="lg:hidden -mx-4 -mt-4 mb-4">
-          <PageHeader title="Notification Preferences" backTo="/settings" />
-        </div>
+    <FocusedLayout title="Notification Preferences" subtitle="Every change saves immediately" backTo="/settings" containerClassName="max-w-2xl">
+      <div className="pb-16 animate-fade-in w-full">
 
         {loading ? (
           <div className="space-y-5" aria-busy={loading} aria-live="polite">
@@ -228,7 +211,7 @@ function NotificationPreferences() {
           </div>
         )}
       </div>
-    </AccountLayout>
+    </FocusedLayout>
   )
 }
 

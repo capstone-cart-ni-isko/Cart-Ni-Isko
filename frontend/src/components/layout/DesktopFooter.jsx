@@ -3,15 +3,15 @@ import { GlobeIcon, MailIcon } from '../ui/Icons.jsx'
 
 function DesktopFooter() {
   return (
-    <footer className="hidden md:block bg-white border-t border-gray-200 mt-auto">
+    <footer className="hidden md:block bg-white dark:bg-[var(--surface)] border-t border-gray-200 dark:border-[var(--line)] mt-auto">
       <div className="max-w-[1600px] mx-auto px-8 lg:px-12 py-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-3">
           {/* Logo & Description */}
           <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold text-gray-900 tracking-wide">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-[var(--ink)] tracking-wide">
               Tindahan <span className="text-brand-orange">ni Isko</span>
             </h3>
-            <p className="text-[11px] text-gray-500 leading-relaxed max-w-[280px]">
+            <p className="text-[11px] text-gray-500 dark:text-[var(--muted)] leading-relaxed max-w-[280px]">
               Your official source for Bicol University merchandise and apparel. Wear your pride.
             </p>
             <div className="flex gap-1.5 pt-0.5">
@@ -19,14 +19,16 @@ function DesktopFooter() {
                 href="https://facebook.com"
                 target="_blank"
                 rel="noreferrer"
-                className="w-6 h-6 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-600 hover:text-brand-orange hover:border-brand-orange transition-colors"
+                className="w-6 h-6 rounded-md border border-slate-200 dark:border-[var(--line)] bg-slate-50 dark:bg-[var(--surface-3)] flex items-center justify-center text-slate-600 dark:text-[var(--muted)] hover:text-brand-orange hover:border-brand-orange transition-colors"
                 title="Website"
               >
                 <GlobeIcon className="w-3 h-3" />
               </a>
               <a
                 href="mailto:support@tindahanniisko.com"
-                className="w-6 h-6 rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-600 hover:text-brand-orange hover:border-brand-orange transition-colors"
+                target="_blank"
+                rel="noreferrer"
+                className="w-6 h-6 rounded-md border border-slate-200 dark:border-[var(--line)] bg-slate-50 dark:bg-[var(--surface-3)] flex items-center justify-center text-slate-600 dark:text-[var(--muted)] hover:text-brand-orange hover:border-brand-orange transition-colors"
                 title="Email"
               >
                 <MailIcon className="w-3 h-3" />
@@ -36,41 +38,41 @@ function DesktopFooter() {
 
           {/* SUPPORT Column */}
           <div>
-            <h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-1.5">SUPPORT</h4>
+            <h4 className="text-[11px] font-semibold text-gray-900 dark:text-[var(--ink)] uppercase tracking-wider mb-1.5">SUPPORT</h4>
             <ul className="space-y-1">
               <li>
-                <span className="text-[11px] text-gray-500 font-medium">FAQ &amp; Size Guide</span>
+                <span className="text-[11px] text-gray-500 dark:text-[var(--muted)] font-medium">FAQ &amp; Size Guide</span>
               </li>
               <li>
-                <span className="text-[11px] text-gray-500 font-medium">Shipping, Pickups &amp; Returns</span>
+                <span className="text-[11px] text-gray-500 dark:text-[var(--muted)] font-medium">Shipping, Pickups &amp; Returns</span>
               </li>
               <li>
-                <span className="text-[11px] text-gray-500 font-medium">Contact Support</span>
+                <span className="text-[11px] text-gray-500 dark:text-[var(--muted)] font-medium">Contact Support</span>
               </li>
             </ul>
           </div>
 
           {/* INFORMATION Column */}
           <div>
-            <h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-1.5">INFORMATION</h4>
+            <h4 className="text-[11px] font-semibold text-gray-900 dark:text-[var(--ink)] uppercase tracking-wider mb-1.5">INFORMATION</h4>
             <ul className="space-y-1">
               <li>
-                <Link to="/orders" className="text-[11px] text-gray-500 hover:text-brand-orange transition-colors font-medium">
+                <Link to="/orders" className="text-[11px] text-gray-500 dark:text-[var(--muted)] hover:text-brand-orange transition-colors font-medium">
                   Order Tracking
                 </Link>
               </li>
               <li>
-                <span className="text-[11px] text-gray-500 font-medium">Terms &amp; Privacy</span>
+                <span className="text-[11px] text-gray-500 dark:text-[var(--muted)] font-medium">Terms &amp; Privacy</span>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="pt-2 border-t border-gray-150 text-center md:flex md:justify-between md:items-center">
-          <p className="text-[10px] text-gray-400 font-medium">
+        <div className="pt-2 border-t border-gray-150 dark:border-[var(--line)] text-center md:flex md:justify-between md:items-center">
+          <p className="text-[10px] text-gray-400 dark:text-[var(--muted-2)] font-medium">
             &copy; 2026 Tindahan ni Isko. All rights reserved.
           </p>
-          <p className="text-[10px] text-gray-400 font-medium mt-0.5 md:mt-0">
+          <p className="text-[10px] text-gray-400 dark:text-[var(--muted-2)] font-medium mt-0.5 md:mt-0">
             Proudly supporting the Iskolar ng Bayan.
           </p>
         </div>

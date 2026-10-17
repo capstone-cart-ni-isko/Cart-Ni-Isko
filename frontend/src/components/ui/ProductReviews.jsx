@@ -26,13 +26,24 @@ function StarRating({ rating = 0, size = 'sm' }) {
   )
 }
 
-export default function ProductReviews({ product }) {
+export default function ProductReviews({ product, initialOpenWrite = false, ordId = null }) {
   const { currentUser } = useAuth()
   const { showToast } = useToast()
 
   const [reviewsList, setReviewsList] = useState(product.reviews || [])
-  const [showWriteModal, setShowWriteModal] = useState(false)
+  const [showWriteModal, setShowWriteModal] = useState(initialOpenWrite)
   const [showLoginModal, setShowLoginModal] = useState(false)
+
+  // Auto-open write review modal if requested via prop
+  useEffect(() => {
+    if (initialOpenWrite) {
+      if (currentUser) {
+        setShowWriteModal(true)
+      } else {
+        setShowLoginModal(true)
+      }
+    }
+  }, [initialOpenWrite, currentUser])
 
   // Filters & Sorting
   const [starFilter, setStarFilter] = useState('all')
@@ -45,7 +56,7 @@ export default function ProductReviews({ product }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
-  const prodId = product.prodId ?? product.id ?? null
+  const prodId = product.prodId ?? (Number(product.id) || product.id) ?? null
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
   // Refresh reviews on mount or product change
@@ -131,11 +142,15 @@ export default function ProductReviews({ product }) {
 
     setSubmitting(true)
     try {
-      await createReview({
+      const payload = {
         prod_id: prodId,
         ord_rating: rating,
         ord_review: comment.trim(),
-      })
+      }
+      if (ordId) {
+        payload.ord_id = ordId
+      }
+      await createReview(payload)
 
       // Refresh from the server so moderation queue reflects the new review
       const res = await fetchProductReviews(prodId)

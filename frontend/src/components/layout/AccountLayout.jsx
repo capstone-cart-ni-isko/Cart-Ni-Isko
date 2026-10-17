@@ -25,12 +25,12 @@ function AccountLayout({ children, className = '' }) {
 
   return (
     <MenuProvider>
-      <div className="min-h-screen bg-[#F8F9FA] flex flex-col w-full customer-desktop-scale">
+      <div className="min-h-screen bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full customer-desktop-scale">
         <DesktopHeader />
 
         <main className="flex-1 flex flex-col w-full min-h-[calc(100vh-80px)]">
           <div
-            className={`app-container relative flex-1 w-full bg-[#F8F9FA] max-w-7xl mx-auto px-4 md:px-6 lg:px-8 md:py-6 lg:flex lg:items-start lg:gap-6 ${className}`}
+            className={`app-container relative flex-1 w-full bg-[#F8F9FA] dark:bg-[var(--surface)] max-w-7xl mx-auto px-4 md:px-6 lg:px-8 md:py-6 lg:flex lg:items-start lg:gap-6 ${className}`}
           >
             <div className="flex-1 min-w-0">
               {isOffline && (

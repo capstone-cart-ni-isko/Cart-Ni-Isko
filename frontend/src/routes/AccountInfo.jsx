@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import collegesData from '../data/colleges.json'
 import Avatar from '../components/ui/Avatar.jsx'
 import { useAuth } from '../hooks/useAuth.js'
@@ -196,12 +195,9 @@ function AccountInfo() {
   const selectClasses = 'w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer transition-all appearance-none'
 
   return (
-    <AccountLayout>
+    <FocusedLayout title="Edit Profile" subtitle="Keep your personal information up to date" backTo="/profile" containerClassName="max-w-4xl">
       {/* ── MOBILE LAYOUT ── */}
-      <div className="md:hidden px-4 pb-28 animate-fade-in">
-        <div className="-mx-4 -mt-0 mb-4">
-          <PageHeader title="Edit Profile" backTo="/profile" />
-        </div>
+      <div className="md:hidden pb-16 animate-fade-in">
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Avatar */}
@@ -493,7 +489,7 @@ function AccountInfo() {
             </div>
           </form>
         </div>
-    </AccountLayout>
+    </FocusedLayout>
   )
 }
 

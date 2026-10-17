@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
-import AppShell from '../components/layout/AppShell.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import AppointmentForm from '../components/appointment/AppointmentForm.jsx'
-import BackButton from '../components/ui/BackButton.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
 import { saveCheckoutSlot } from '../services/checkout.js'
 
@@ -51,8 +50,13 @@ function BookAppointment() {
 
   if (!currentUser) {
     return (
-      <AppShell showNav={false}>
-        <div className="min-h-dvh flex flex-col items-center justify-center p-6">
+      <FocusedLayout
+        title="Book an Appointment"
+        backTo={returnTo}
+        backLabel={pickupMode ? 'Back to Checkout' : 'Back to Appointments'}
+        containerClassName="max-w-md"
+      >
+        <div className="flex flex-col items-center justify-center p-6 text-center">
           <p className="text-sm font-semibold text-gray-500 mb-4">
             Sign in to book an appointment.
           </p>
@@ -69,39 +73,38 @@ function BookAppointment() {
           onClose={() => setShowLogin(false)}
           message="Sign in to book an appointment."
         />
-      </AppShell>
+      </FocusedLayout>
     )
   }
 
   return (
-    <AppShell>
-      <div className="max-w-2xl mx-auto w-full px-4 md:px-6 py-5 pb-28 space-y-4">
-        {/* Back button top-left (NAVIGATION RULE 68) */}
-        <div className="flex items-center justify-between">
-          <BackButton
-            to={returnTo}
-            label={pickupMode ? 'Back to Checkout' : 'Back to Appointments'}
-          />
-          {!pickupMode && (
-            <Link
-              to="/appointments"
-              className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
-            >
-              My Appointments
-            </Link>
-          )}
-        </div>
-
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
-            {pickupMode ? 'Choose Your Pickup Slot' : 'Book an Appointment'}
-          </h1>
-          <p className="text-xs text-slate-500 leading-relaxed mt-1">
-            {pickupMode
-              ? 'Pick the slot you will claim your order in. It is saved with your order at checkout - nothing is booked until the order is placed.'
-              : 'Choose a store visit or a pickup slot. Slots are 10 minutes long, open at least 30 minutes from now, and only where a staff member is scheduled.'}
-          </p>
-        </div>
+    <FocusedLayout
+      title={pickupMode ? 'Choose Your Pickup Slot' : 'Book an Appointment'}
+      subtitle={
+        pickupMode
+          ? 'Pick the slot you will claim your order in'
+          : 'Reserve a store visit or order pickup slot'
+      }
+      backTo={returnTo}
+      backLabel={pickupMode ? 'Back to Checkout' : 'Back to Appointments'}
+      containerClassName="max-w-2xl"
+      rightAction={
+        !pickupMode ? (
+          <Link
+            to="/appointments"
+            className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
+          >
+            My Appointments
+          </Link>
+        ) : null
+      }
+    >
+      <div className="w-full pb-20 space-y-4 animate-fade-in">
+        <p className="text-xs text-slate-500 leading-relaxed">
+          {pickupMode
+            ? 'Pick the slot you will claim your order in. It is saved with your order at checkout - nothing is booked until the order is placed.'
+            : 'Choose a store visit or a pickup slot. Slots are 10 minutes long, open at least 30 minutes from now, and only where a staff member is scheduled.'}
+        </p>
 
         <AppointmentForm
           key={pickupMode ? 'pickup' : 'standalone'}
@@ -118,7 +121,7 @@ function BookAppointment() {
           </p>
         )}
       </div>
-    </AppShell>
+    </FocusedLayout>
   )
 }
 

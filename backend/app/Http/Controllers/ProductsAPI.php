@@ -2192,13 +2192,15 @@ class ProductsAPI extends Controller
 
                     $orderProducts = $this->productIdsForOrder((int) $order->ord_id);
                     if ($prodId) {
-                        if (! in_array((int) $prodId, $orderProducts, true)) {
+                        $resolvedProd = is_numeric($prodId) ? Product::find($prodId) : Product::where('prod_tag', $prodId)->first();
+                        $resolvedProdId = $resolvedProd ? (int) $resolvedProd->prod_id : (int) $prodId;
+                        if (! in_array($resolvedProdId, $orderProducts, true)) {
                             return response()->json([
                                 'success' => false,
                                 'message' => 'The requested product is not part of this order',
                             ], 403);
                         }
-                        $prodId = (int) $prodId;
+                        $prodId = $resolvedProdId;
                     } else {
                         if ($orderProducts === []) {
                             return response()->json([
@@ -2209,10 +2211,11 @@ class ProductsAPI extends Controller
                         $prodId = $orderProducts[0];
                     }
                 } else {
-                    $product = Product::find($prodId);
+                    $product = is_numeric($prodId) ? Product::find($prodId) : Product::where('prod_tag', $prodId)->first();
                     if (! $product) {
                         return response()->json(['success' => false, 'message' => 'Product not found'], 404);
                     }
+                    $prodId = (int) $product->prod_id;
 
                     $placeholders = implode(',', array_fill(0, count(self::notPurchased), '?'));
                     $purchased = DB::table('orders')
@@ -2246,13 +2249,26 @@ class ProductsAPI extends Controller
                     ], 409);
                 }
 
-                $review = Review::create([
-                    'cust_id'     => $customer->getKey(),
-                    'prod_id'     => $prodId,
-                    'rev_msg'     => Review::compose($rating, $text),
-                    'rev_created' => now(),
-                    'rev_approved' => null,
-                ]);
+                $review = DB::transaction(function () use ($customer, $prodId, $rating, $text) {
+                    // reviews.rev_id carries no DB default/identity; allocate it here
+                    // (schema must stay untouched), serialised to avoid duplicate ids.
+                    if (DB::connection()->getDriverName() === 'pgsql') {
+                        DB::select('select pg_advisory_xact_lock(?)', [730013]);
+                    }
+                    $nextId = $this->nextId('reviews', 'rev_id');
+
+                    $row = new Review([
+                        'cust_id'      => $customer->getKey(),
+                        'prod_id'      => $prodId,
+                        'rev_msg'      => Review::compose($rating, $text),
+                        'rev_created'  => now(),
+                        'rev_approved' => null,
+                    ]);
+                    $row->rev_id = $nextId;
+                    $row->save();
+
+                    return $row;
+                });
 
                 $this->logCustomer((int) $customer->getKey(), 'edit',
                     'POST /api/reviews/create - review #' . $review->rev_id . ' (product #' . $prodId . ')');

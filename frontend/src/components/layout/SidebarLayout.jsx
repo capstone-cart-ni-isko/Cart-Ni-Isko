@@ -9,14 +9,14 @@ import React from 'react'
  */
 function SidebarLayout({ sidebar, bottomNav, children, className = '' }) {
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex flex-col w-full customer-desktop-scale">
+    <div className="min-h-screen bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full customer-desktop-scale">
       {/* Desktop Header - visible on md+ */}
       <DesktopHeader />
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col w-full min-h-[calc(100vh-80px)]">
         <div
-          className={`app-container relative flex-1 w-full bg-[#F8F9FA] max-w-7xl mx-auto px-4 md:px-8 lg:px-10 md:py-6 ${className}`}
+          className={`app-container relative flex-1 w-full bg-[#F8F9FA] dark:bg-[var(--surface)] max-w-7xl mx-auto px-4 md:px-8 lg:px-10 md:py-6 ${className}`}
         >
           <div className="mx-auto flex w-full max-w-6xl items-start gap-6">
             {sidebar && (

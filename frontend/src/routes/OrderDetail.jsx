@@ -4,9 +4,7 @@ import QRCode from 'qrcode'
 import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
 import { useApiChange } from '../hooks/useApiChange.js'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
-import PageTitle from '../components/ui/PageTitle.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
@@ -252,16 +250,9 @@ function OrderDetail() {
 
   if (loading) {
     return (
-      <AccountLayout>
-        <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in">
-          <div className="hidden md:block mb-5">
-            <PageTitle title="Order Details" />
-          </div>
-          <div className="lg:hidden -mx-4 -mt-4 mb-4">
-            <PageHeader title="Order Details" backTo="/orders" />
-          </div>
-          <div className="space-y-4" aria-busy={loading} aria-live="polite">
-            <span className="sr-only">Loading order details</span>
+      <FocusedLayout title="Order Details" backTo="/orders" containerClassName="max-w-3xl">
+        <div className="space-y-4 pb-16 animate-fade-in" aria-busy={loading} aria-live="polite">
+          <span className="sr-only">Loading order details</span>
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs animate-pulse">
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-2">
@@ -288,38 +279,29 @@ function OrderDetail() {
               <SkeletonBlock className="mb-4 h-4 w-28 rounded" />
               <SkeletonBlock className="h-4 w-full rounded" />
               <SkeletonBlock className="mt-2 h-4 w-3/4 rounded" />
-            </div>
           </div>
         </div>
-      </AccountLayout>
+      </FocusedLayout>
     )
   }
 
   if (!order) {
     return (
-      <AccountLayout>
-        <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in">
-          <div className="hidden md:block mb-5">
-            <PageTitle title="Order Details" />
+      <FocusedLayout title="Order Details" backTo="/orders" containerClassName="max-w-3xl">
+        <div className="flex flex-col items-center justify-center py-24 text-center px-6 animate-fade-in">
+          <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-200 mb-2">
+            <PackageIcon className="w-7 h-7 text-gray-400" />
           </div>
-          <div className="lg:hidden -mx-4 -mt-4 mb-4">
-            <PageHeader title="Order Details" backTo="/orders" />
-          </div>
-          <div className="flex flex-col items-center justify-center py-24 text-center px-6 animate-fade-in">
-            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-200 mb-2">
-              <PackageIcon className="w-7 h-7 text-gray-400" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">Order not found</h2>
-            <p className="text-sm text-gray-450 mt-2">This order doesn't exist or may have been removed.</p>
-            <button
-              onClick={() => navigate('/orders')}
-              className="mt-6 text-brand-orange font-semibold text-sm hover:underline cursor-pointer"
-            >
-              Back to Orders
-            </button>
-          </div>
+          <h2 className="text-lg font-semibold text-gray-900">Order not found</h2>
+          <p className="text-sm text-gray-450 mt-2">This order doesn't exist or may have been removed.</p>
+          <button
+            onClick={() => navigate('/orders')}
+            className="mt-6 text-brand-orange font-semibold text-sm hover:underline cursor-pointer"
+          >
+            Back to Orders
+          </button>
         </div>
-      </AccountLayout>
+      </FocusedLayout>
     )
   }
 
@@ -354,17 +336,8 @@ function OrderDetail() {
   const courierTrackUrl = courier?.share_url || order.raw?.deliver_share_link || null
 
   return (
-    <AccountLayout>
-      <div className="px-4 py-4 pb-8 md:px-0 md:py-0 animate-fade-in">
-        {/* Desktop Header */}
-        <div className="hidden md:block mb-5">
-          <PageTitle title="Order Details" />
-        </div>
-
-        {/* Mobile Title */}
-        <div className="lg:hidden -mx-4 -mt-4 mb-4">
-          <PageHeader title="Order Details" backTo="/orders" />
-        </div>
+    <FocusedLayout title={`Order #${order.id}`} subtitle={`Placed on ${order.date}`} backTo="/orders" containerClassName="max-w-3xl">
+      <div className="pb-16 animate-fade-in w-full">
 
         <div className="space-y-3.5">
           {/* Order Identity & Status Banner */}
@@ -708,11 +681,17 @@ function OrderDetail() {
                   </div>
                 )
 
+                const varId = prodvar?.prodvar_id || entry?.prodvar_id || null
+
                 return targetProdId != null ? (
                   <Link
                     key={itemKey}
                     to={`/product/${targetProdId}`}
-                    state={{ from: `/orders/${order.id}` }}
+                    state={{
+                      from: `/orders/${order.id}`,
+                      ordId: order.id,
+                      variationId: varId,
+                    }}
                     className="block focus:outline-none"
                     title={`View ${name}`}
                   >
@@ -897,7 +876,7 @@ function OrderDetail() {
           </div>
         </div>
       </div>
-    </AccountLayout>
+    </FocusedLayout>
   )
 }
 

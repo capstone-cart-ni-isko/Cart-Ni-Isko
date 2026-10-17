@@ -104,6 +104,7 @@ body {
 .app-container.home-page-canvas {
   isolation: isolate;
   background: transparent;
+  padding-top: 0 !important;
 }
 
 .app-container.home-page-canvas::before {
@@ -119,6 +120,13 @@ body {
   pointer-events: none;
 }
 
+html.dark .app-container.home-page-canvas::before {
+  background-color: var(--surface);
+  background-image:
+    radial-gradient(circle, rgb(255 255 255 / 0.05) 0px, transparent 1px),
+    linear-gradient(155deg, rgba(30, 58, 138, 0.22) 0%, transparent 42%, rgba(234, 88, 12, 0.12) 100%);
+}
+
 .home-purpose-section {
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 0.8);
@@ -126,6 +134,12 @@ body {
   background: rgb(255 255 255 / 0.78);
   box-shadow: 0 8px 24px rgb(15 23 42 / 0.05);
   backdrop-filter: blur(8px);
+}
+
+html.dark .home-purpose-section {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface-2) 85%, transparent);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
 }
 
 /* ── Page Title ── */

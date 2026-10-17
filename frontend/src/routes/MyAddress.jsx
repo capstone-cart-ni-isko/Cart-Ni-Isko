@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import Input from '../components/ui/Input.jsx'
 import Button from '../components/ui/Button.jsx'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
@@ -158,29 +157,24 @@ function MyAddress() {
   const isFormValid = form.addressLine?.trim() && form.city?.trim() && form.province?.trim()
 
   return (
-    <AccountLayout>
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 animate-fade-in w-full">
-        {/* Desktop Header */}
-        <div className="hidden lg:flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-semibold text-gray-900">My Addresses</h1>
-            <p className="text-xs text-gray-500 font-medium mt-1">Manage your delivery and campus shipping destinations</p>
-          </div>
-          {!showForm && (
-            <button
-              type="button"
-              onClick={handleAddNew}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-orange hover:bg-orange-600 text-white font-semibold text-xs shadow-sm transition-all cursor-pointer"
-            >
-              <span>+ Add New Address</span>
-            </button>
-          )}
-        </div>
-
-        {/* Mobile Title */}
-        <div className="lg:hidden -mx-4 -mt-4 mb-4">
-          <PageHeader title="My Addresses" backTo="/settings" />
-        </div>
+    <FocusedLayout
+      title="My Addresses"
+      subtitle="Manage your delivery and campus shipping destinations"
+      backTo="/settings"
+      containerClassName="max-w-4xl"
+      rightAction={
+        !showForm ? (
+          <button
+            type="button"
+            onClick={handleAddNew}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-orange hover:bg-orange-600 text-white font-semibold text-xs shadow-sm transition-all cursor-pointer"
+          >
+            <span>+ Add New Address</span>
+          </button>
+        ) : null
+      }
+    >
+      <div className="pb-16 animate-fade-in w-full">
 
         <div className="space-y-4">
           {addresses.length === 0 && !showForm && (
@@ -281,7 +275,7 @@ function MyAddress() {
         confirmText="Delete"
         isDestructive={true}
       />
-    </AccountLayout>
+    </FocusedLayout>
   )
 }
 
