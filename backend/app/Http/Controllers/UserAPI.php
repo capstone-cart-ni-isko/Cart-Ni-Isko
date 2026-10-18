@@ -1512,7 +1512,14 @@ class UserAPI extends Controller
             }
 
             try {
+                $phone = (string) $json->input('phone');
+                $cleanedPhone = preg_replace('/[^0-9]/', '', $phone);
+                if (str_starts_with($cleanedPhone, '63') && strlen($cleanedPhone) === 12) {
+                    $cleanedPhone = '0' . substr($cleanedPhone, 2);
+                }
+
                 $attributes = [
+                    'emp_id' => $this->nextId('employee', 'emp_id'),
                     'emp_created' => now(),
                     'emp_password' => EmployeePassword::makeTemporary($temporaryPassword),
                     'emp_surname' => $json->input('surname'),
@@ -1531,7 +1538,7 @@ class UserAPI extends Controller
                     'emp_province' => $json->input('province', ''),
                     'emp_country' => $json->input('country', 'PH'),
                     'emp_callcode' => $json->input('callcode', '+63'),
-                    'emp_phone' => $json->input('phone'),
+                    'emp_phone' => $cleanedPhone !== '' ? $cleanedPhone : $phone,
                     'emp_email' => $email,
                     'emp_categ' => $type,
                     'emp_type' => strtoupper($type),
@@ -1843,7 +1850,17 @@ class UserAPI extends Controller
             $passwordField = $user instanceof Customer ? 'cust_password' : 'emp_password';
             $changedField = $user instanceof Customer ? 'cust_cred_changed' : 'emp_cred_changed';
 
-            if (! Hash::check($json->input('current_password'), $user->{$passwordField})) {
+            $currentPasswordInput = (string) $json->input('current_password');
+            $currentPasswordValid = false;
+
+            if ($user instanceof Employee) {
+                $verification = EmployeePassword::verify($currentPasswordInput, (string) $user->{$passwordField});
+                $currentPasswordValid = (bool) ($verification['valid'] ?? false);
+            } else {
+                $currentPasswordValid = Hash::check($currentPasswordInput, (string) $user->{$passwordField});
+            }
+
+            if (! $currentPasswordValid) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Current password is incorrect.',
@@ -2479,8 +2496,8 @@ class UserAPI extends Controller
                 }
                 $user = Customer::findOrFail($userId);
             } else {
-                if (! $actor instanceof Employee || ((int) $actor->getKey() !== $userId && ! $this->isSuperAdmin($actor))) {
-                    return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
+                if (! $actor instanceof Employee || (int) $actor->getKey() !== $userId) {
+                    return response()->json(['success' => false, 'message' => 'Employees cannot edit another employee\'s personal details.'], 403);
                 }
                 $user = Employee::findOrFail($userId);
             }

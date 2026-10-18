@@ -8,6 +8,7 @@ import StatusPill from '../../components/admin/StatusPill.jsx'
 import StatusBadge from '../../components/admin/kit/StatusBadge.jsx'
 import {
   banAccount,
+  changeAccountType,
   deleteAccount,
   fetchAccounts,
   recoverAccount,
@@ -188,6 +189,11 @@ export default function AdminUsers() {
       showToast('Only the Super Admin may suspend accounts.', 'error')
       return
     }
+    // UAT-018: Super admin cannot deactivate/suspend their own account
+    if (String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)) {
+      showToast('You cannot suspend or deactivate your own account.', 'error')
+      return
+    }
     // POST /accounts/disable with a reason (ban flow).
     try {
       await banAccount('employee', emp.emp_id, 'Suspended from the staff directory')
@@ -211,6 +217,35 @@ export default function AdminUsers() {
       setReloadKey((k) => k + 1)
     } catch {
       showToast('Failed to recover the account.', 'error')
+    }
+  }
+
+  const [updatingCategoryEmpId, setUpdatingCategoryEmpId] = useState(null)
+
+  const handleCategoryChange = async (emp, newCategory) => {
+    if (!isSuperAdmin) {
+      showToast('Only Super Admin may change employee category.', 'error')
+      return
+    }
+    if (emp.category === newCategory) return
+
+    // UAT-018: The only superadmin account is protected (block demoting your own account)
+    if (String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)) {
+      showToast('You cannot demote or change the role of your own account.', 'error')
+      return
+    }
+
+    setUpdatingCategoryEmpId(emp.emp_id)
+    try {
+      await changeAccountType('employee', emp.emp_id, newCategory)
+      recordLog('CHANGE ROLE', `Changed category of ${emp.name} to ${CATEGORY_LABEL[newCategory] || newCategory}`)
+      showToast(`${emp.name}'s category updated to ${CATEGORY_LABEL[newCategory] || newCategory}.`, 'success')
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      const msg = err?.payload?.message || err?.message || 'Failed to update employee category.'
+      showToast(msg, 'error')
+    } finally {
+      setUpdatingCategoryEmpId(null)
     }
   }
 
@@ -471,16 +506,40 @@ export default function AdminUsers() {
                           />
                         </td>
                         <td className="py-4 px-4">
-                          <StatusBadge
-                            tone={
-                              emp.category === 'super admin'
-                                ? 'urgent'
-                                : emp.category === 'admin'
-                                  ? 'active'
-                                  : 'neutral'
-                            }
-                            label={CATEGORY_LABEL[emp.category] || emp.category}
-                          />
+                          {isSuperAdmin && !emp.deleted ? (
+                            <div className="relative inline-block">
+                              <select
+                                value={emp.category}
+                                disabled={updatingCategoryEmpId === emp.emp_id || String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)}
+                                onChange={(e) => handleCategoryChange(emp, e.target.value)}
+                                className={`text-2xs font-semibold px-2.5 py-1 rounded-full border cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60 disabled:cursor-not-allowed ${
+                                  emp.category === 'super admin'
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                                    : emp.category === 'admin'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                }`}
+                                title={String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id) ? 'You cannot change your own category' : 'Change employee category'}
+                              >
+                                {CATEGORIES.map((c) => (
+                                  <option key={c} value={c}>
+                                    {CATEGORY_LABEL[c] || c}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <StatusBadge
+                              tone={
+                                emp.category === 'super admin'
+                                  ? 'urgent'
+                                  : emp.category === 'admin'
+                                    ? 'active'
+                                    : 'neutral'
+                              }
+                              label={CATEGORY_LABEL[emp.category] || emp.category}
+                            />
+                          )}
                         </td>
                         <td className="py-4 px-4">
                           <StatusBadge
@@ -498,18 +557,17 @@ export default function AdminUsers() {
                         <td className="py-4 px-5 text-right whitespace-nowrap">
                           {!emp.deleted && (
                             <>
-                              {/* FLOW-EMP_LIST-06 - open this employee's profile */}
-                              <Link
-                                to={`/admin/account?emp=${emp.emp_id}`}
-                                className="text-2xs font-semibold text-slate-500 hover:text-slate-900 mr-3"
-                              >
-                                View
-                              </Link>
                               {emp.status === 'active' ? (
                                 <button
                                   type="button"
                                   onClick={() => handleSuspend(emp)}
-                                  className="text-2xs font-semibold text-amber-600 hover:text-amber-800 mr-3 cursor-pointer"
+                                  disabled={String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)}
+                                  title={
+                                    String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)
+                                      ? 'You cannot suspend your own account.'
+                                      : 'Suspend this employee account'
+                                  }
+                                  className="text-2xs font-semibold text-amber-600 hover:text-amber-800 mr-3 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                   Suspend
                                 </button>

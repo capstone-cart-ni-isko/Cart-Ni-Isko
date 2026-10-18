@@ -178,6 +178,22 @@ export default function AdminAccount({ embedded = false }) {
   const isRegularStaff = empCateg(record || currentAdminUser || {}) === 'staff'
   const isEmailEditable = !isRegularStaff
 
+  // DOMAIN 2 / REQ-EMP_ENROLL-03: Super admin password standard (min 16 chars, upper, lower, digit, symbol)
+  const isSuperAdminUser = isSuperAdmin || ['super admin', 'superadmin', 'super_admin'].includes(String(empCateg(record || currentAdminUser || {})).toLowerCase())
+
+  const validateNewPassword = (pwd) => {
+    if (!pwd) return 'Enter a new password.'
+    if (pwd.length < 8) return 'The new password must be at least 8 characters.'
+    if (isSuperAdminUser) {
+      if (pwd.length < 16) return 'Super admin passwords must be at least 16 characters.'
+      if (!/[A-Z]/.test(pwd)) return 'Must include at least one uppercase letter.'
+      if (!/[a-z]/.test(pwd)) return 'Must include at least one lowercase letter.'
+      if (!/[0-9]/.test(pwd)) return 'Must include at least one number.'
+      if (!/[^A-Za-z0-9]/.test(pwd)) return 'Must include at least one special symbol.'
+    }
+    return ''
+  }
+
   /* Rule 66 — the verdict for every field, recomputed from the live values. */
   const profileErrors = {
     givenName: givenName.trim() ? '' : 'Provide a given name.',
@@ -187,8 +203,7 @@ export default function AdminAccount({ embedded = false }) {
   }
   const passwordErrors = {
     currentPassword: currentPassword ? '' : 'Enter your current password.',
-    newPassword:
-      newPassword.length >= 8 ? '' : 'The new password must be at least 8 characters.',
+    newPassword: validateNewPassword(newPassword),
     confirmPassword: !confirmPassword
       ? 'Re-enter the new password.'
       : confirmPassword === newPassword
@@ -371,6 +386,7 @@ export default function AdminAccount({ embedded = false }) {
       // alias so either spelling is accepted server-side.
       new_password: newPassword,
       password: newPassword,
+      new_password_confirmation: confirmPassword,
     })
     setIsUpdatingPassword(false)
 
@@ -496,6 +512,25 @@ export default function AdminAccount({ embedded = false }) {
               <span className="spinner-circle !w-3.5 !h-3.5" />
               Loading profile…
             </span>
+          </div>
+        ) : viewingOther ? (
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-8 text-center space-y-3">
+            <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+            <p className="text-sm font-bold text-slate-900">Personal Details Restricted</p>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              In accordance with privacy and security policies, employees' personal details cannot be viewed or edited by administrators.
+            </p>
+            <Link
+              to="/admin/staff"
+              className="inline-block text-xs font-semibold text-brand-orange hover:underline pt-2"
+            >
+              Back to staff directory
+            </Link>
           </div>
         ) : recordNotFound ? (
           /* FLOW-EMP_LIST-06 - an unknown `?emp=` id is reported, never
@@ -880,7 +915,7 @@ export default function AdminAccount({ embedded = false }) {
                 id="emp-new-password"
                 type="password"
                 required
-                minLength={8}
+                minLength={isSuperAdminUser ? 16 : 8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 onBlur={() => touch('newPassword')}
@@ -888,6 +923,11 @@ export default function AdminAccount({ embedded = false }) {
                 className="field-input"
               />
               <FieldError message={liveError(passwordErrors, 'newPassword', newPassword)} />
+              {isSuperAdminUser && (
+                <p className="text-2xs text-slate-400 mt-1">
+                  At least 16 characters with uppercase, lowercase, number, and symbol.
+                </p>
+              )}
             </div>
             <div>
               <label className="field-label" htmlFor="emp-confirm-password">
