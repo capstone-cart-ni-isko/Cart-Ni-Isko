@@ -136,7 +136,7 @@ function DesktopHeader() {
         </Link>
 
         {/* Search Bar Center */}
-        <form onSubmit={handleSearchSubmit} className="flex-1 max-w-lg relative">
+        <form onSubmit={handleSearchSubmit} className="relative min-w-0 flex-1 max-w-lg">
           <img src={searchIcon} alt="" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
           <input
             type="search"
@@ -185,13 +185,19 @@ function DesktopHeader() {
             </div>
           </div>
         ) : (
-          <div className="flex items-center text-gray-700 shrink-0 w-[184px] lg:w-[196px]">
+          <div className="flex w-[220px] shrink-0 items-center gap-2 text-gray-700 lg:w-[240px]">
             <Link
               to="/signin"
               id="customer-ribbon-login-btn"
-              className="w-full h-9 rounded-lg bg-brand-orange hover:bg-brand-orange/90 active:scale-[0.98] text-white text-xs font-semibold flex items-center justify-center tracking-tight transition-all shadow-2xs hover:shadow-xs cursor-pointer select-none"
+              className="flex h-9 flex-1 items-center justify-center rounded-lg bg-brand-orange text-xs font-semibold tracking-tight text-white shadow-2xs transition-all hover:bg-brand-orange/90 hover:shadow-xs active:scale-[0.98] cursor-pointer select-none"
             >
               Log in
+            </Link>
+            <Link
+              to="/signup"
+              className="flex h-9 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-semibold tracking-tight text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] cursor-pointer select-none dark:border-[var(--line)] dark:bg-[var(--surface)] dark:text-[var(--ink)] dark:hover:bg-[var(--surface-2)]"
+            >
+              Sign up
             </Link>
           </div>
         )}
