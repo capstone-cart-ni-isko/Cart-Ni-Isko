@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { fetchNotifications, unreadCount } from '../../services/notifications.js'
@@ -61,10 +61,18 @@ function RibbonIcon({ label, onClick, active, badge, children }) {
 export default function AdminTopBar({ onToggleMobileMenu }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { currentAdminUser } = useAdmin()
   const { dark, set: setTheme } = useTheme()
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
+
+  useEffect(() => {
+    const q = searchParams.get('search')
+    if (q !== null && q !== undefined) {
+      setSearchQuery(q)
+    }
+  }, [searchParams])
 
   const empId = currentAdminUser?.id ?? null
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
@@ -229,11 +229,19 @@ function Home() {
   const navigate = useNavigate()
   const { currentUser, logout } = useAuth()
 
+  const [searchParams] = useSearchParams()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [searchVal, setSearchVal] = useState('')
+  const [searchVal, setSearchVal] = useState(searchParams.get('search') || '')
   const [slideIndex, setSlideIndex] = useState(0)
   const categoryMobileRef = useRef(null)
   const categoryDesktopRef = useRef(null)
+
+  useEffect(() => {
+    const q = searchParams.get('search')
+    if (q !== null && q !== undefined) {
+      setSearchVal(q)
+    }
+  }, [searchParams])
 
   // Auto rotate banner carousel
   useEffect(() => {

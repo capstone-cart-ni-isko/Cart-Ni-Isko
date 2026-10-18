@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -75,10 +75,18 @@ function sortClientSide(rows, sortValue) {
 
 export default function AdminOrders() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { orders: rawOrders = [], refreshOrders, updateOrderStatus, products = [] } = useAdmin()
   const { showToast } = useToast()
 
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
+
+  useEffect(() => {
+    const q = searchParams.get('search')
+    if (q !== null && q !== undefined) {
+      setSearchQuery(q)
+    }
+  }, [searchParams])
   const [sortValue, setSortValue] = useState('date:desc')
   const [filterType, setFilterType] = useState('All')
   const [filterFulfillment, setFilterFulfillment] = useState('All')

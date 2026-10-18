@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useState, useMemo, useEffect } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { empCateg, empIsStaff } from './schema.js'
 import ClockInOut from './ClockInOut.jsx'
@@ -216,7 +216,16 @@ export default function AdminSidebar({ onCloseMobile }) {
   /* Rule 74 keeps the search bar at the centre of the ribbon, but below `sm`
      the ribbon has no room for it, so the same search is surfaced in this
      phone drawer instead of disappearing entirely. */
-  const [mobileSearch, setMobileSearch] = useState('')
+  const [searchParams] = useSearchParams()
+  const [mobileSearch, setMobileSearch] = useState(searchParams.get('search') || '')
+
+  useEffect(() => {
+    const q = searchParams.get('search')
+    if (q !== null && q !== undefined) {
+      setMobileSearch(q)
+    }
+  }, [searchParams])
+
   const submitMobileSearch = (e) => {
     e.preventDefault()
     const q = mobileSearch.trim()
