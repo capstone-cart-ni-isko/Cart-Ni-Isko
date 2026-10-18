@@ -410,9 +410,7 @@ export default function ProductReviews({ product, initialOpenWrite = false, ordI
       ) : (
         /* Empty Reviews State */
         <div className="bg-gray-50/60 border border-dashed border-gray-200 rounded-3xl p-8 text-center max-w-lg mx-auto">
-          <div className="w-12 h-12 rounded-full bg-orange-100 text-brand-orange flex items-center justify-center mx-auto mb-3 text-lg font-semibold">
-            ★
-          </div>
+
           <h3 className="text-sm font-semibold text-gray-900">No approved reviews yet</h3>
           <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto leading-relaxed">
             Be the first to review this merchandise! Share your sizing, fabric, and fit thoughts with fellow Iskolars.

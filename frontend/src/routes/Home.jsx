@@ -24,6 +24,7 @@ import lanyardCategoryImg from '../assets/Images/lanyard.png'
 import pinCategoryImg from '../assets/Images/unnamed (9).png'
 import stickerCategoryImg from '../assets/Images/unnamed (10).png'
 import totebagCategoryImg from '../assets/Images/totebag.png'
+import keychainCategoryImg from '../assets/Images/keychain.png'
 
 import {
   UserIcon,
@@ -77,6 +78,7 @@ const categoryImages = {
   Stickers: stickerCategoryImg,
   Pins: pinCategoryImg,
   Totebags: totebagCategoryImg,
+  Keychains: keychainCategoryImg,
 }
 const shopCategories = PRODUCT_CATEGORIES.map((name) => ({
   name,
@@ -183,46 +185,6 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
         isDestructive={true}
       />
     </>
-  )
-}
-
-function MissionVisionSection({ className = '' }) {
-  return (
-    <section className={`home-purpose-section ${className}`} aria-labelledby="home-purpose-title">
-      <div className="px-5 py-6 sm:px-7 sm:py-8">
-        <div className="mb-5">
-          <span className="text-[11px] font-semibold uppercase text-brand-orange">Our purpose</span>
-          <h2 id="home-purpose-title" className="mt-1 text-xl font-semibold text-slate-900 dark:text-[var(--ink)] sm:text-2xl">
-            Mission &amp; Vision
-          </h2>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-2 md:gap-8">
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-[var(--ink)]">Mission</h3>
-            <p className="text-sm leading-relaxed text-slate-600 dark:text-[var(--muted)]">
-              To provide accessible, high-quality official merchandise that strengthens university pride while supporting sustainable student initiatives.
-            </p>
-          </div>
-          <div>
-            <h3 className="mb-1 text-sm font-semibold text-slate-900 dark:text-[var(--ink)]">Vision</h3>
-            <p className="text-sm leading-relaxed text-slate-600 dark:text-[var(--muted)]">
-              To be the recognized student-led merchandise brand that represents the identity, values, and unity of every Iskolar ng Bayan.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 border-t border-slate-200/80 dark:border-[var(--line)] pt-4">
-          <p className="text-sm font-semibold text-slate-900 dark:text-[var(--ink)]">By the Students, For the Students</p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-[var(--muted)] sm:text-sm">
-            Tindahan ni Isko operates under the official authority of the Bicol University – University Student Council and the Office of the BU USC Business Manager.
-          </p>
-          <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-[var(--muted)] sm:text-sm">
-            We are committed to the highest standards of financial accountability and transparency. Our operations strictly follow university policies on student enterprises, ensuring that our growth as a brand always translates into better service for the student body.
-          </p>
-        </div>
-      </div>
-    </section>
   )
 }
 
@@ -669,8 +631,6 @@ function Home() {
           </div>
         </div>
 
-        <MissionVisionSection className="mx-4 mt-6" />
-
         {/* 5. Noticeable but Compact About Us Section (Mobile) - rounder corners */}
         <div className="px-4 pt-6">
           <div className="rounded-xl bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-slate-900 dark:text-[var(--ink)] p-5 space-y-2.5">
@@ -878,10 +838,8 @@ function Home() {
   </div>
 </section>
 
-  <MissionVisionSection className="mb-8" />
-
         {/* 5. Noticeable but Compact About Us Section (Desktop) - rounder corners */}
-        <section className="mb-8 rounded-xl bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-slate-900 dark:text-[var(--ink)] p-6 lg:p-8 relative overflow-hidden">
+        <section className="mt-8 mb-8 rounded-xl bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-slate-900 dark:text-[var(--ink)] p-6 lg:p-8 relative overflow-hidden">
           <div className="relative z-10 max-w-2xl space-y-3">
             <span className="inline-block text-xs font-semibold uppercase text-brand-orange tracking-wider">About Us</span>
             <h2 className="text-2xl lg:text-3xl font-semibold leading-tight tracking-tight">

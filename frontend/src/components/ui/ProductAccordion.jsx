@@ -19,48 +19,21 @@ export default function ProductAccordion({ details = {}, preOrder = false }) {
     {
       key: 'material',
       title: 'Material & Fabric',
-      icon: (
-        <svg viewBox="0 0 24 24" className="w-4 h-4 text-brand-orange" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" />
-        </svg>
-      ),
       content: details.material || 'Premium heavyweight campus merchandise crafted for comfort and longevity.',
     },
     {
       key: 'sizeFit',
       title: 'Size & Fit',
-      icon: (
-        <svg viewBox="0 0 24 24" className="w-4 h-4 text-brand-orange" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="6" cy="6" r="3" />
-          <circle cx="6" cy="18" r="3" />
-          <line x1="20" y1="4" x2="8.12" y2="15.88" />
-          <line x1="14.47" y1="14.48" x2="20" y2="20" />
-          <line x1="8.12" y1="8.12" x2="12" y2="12" />
-        </svg>
-      ),
       content: details.sizeFit || 'Standard unisex sizing. Refer to the size guide beside the selector for precise chest and length measurements.',
     },
     {
       key: 'care',
       title: 'Care Instructions',
-      icon: (
-        <svg viewBox="0 0 24 24" className="w-4 h-4 text-brand-orange" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-        </svg>
-      ),
       content: details.care || 'Wash cold inside out with similar colors. Avoid harsh bleach. Air dry or low tumble dry.',
     },
     {
       key: 'shippingReturns',
       title: 'Shipping & Returns',
-      icon: (
-        <svg viewBox="0 0 24 24" className="w-4 h-4 text-brand-orange" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="1" y="3" width="15" height="13" />
-          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-          <circle cx="5.5" cy="18.5" r="2.5" />
-          <circle cx="18.5" cy="18.5" r="2.5" />
-        </svg>
-      ),
       content:
         details.shippingReturns ||
         (preOrder
@@ -86,10 +59,7 @@ export default function ProductAccordion({ details = {}, preOrder = false }) {
               className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50/70 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-2.5">
-                <span className="w-6 h-6 rounded-md bg-orange-50 flex items-center justify-center">
-                  {icon}
-                </span>
-                <span className="text-sm font-semibold text-gray-800">{title}</span>
+                <span className="text-sm font-regular text-gray-800">{title}</span>
               </div>
               <svg
                 viewBox="0 0 24 24"

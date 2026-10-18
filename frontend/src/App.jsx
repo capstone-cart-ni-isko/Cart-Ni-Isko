@@ -35,6 +35,7 @@ import Notifications from './routes/Notifications.jsx'
 import NotificationPreferences from './routes/NotificationPreferences.jsx'
 import BackupContacts from './routes/BackupContacts.jsx'
 import AboutSettings from './routes/AboutSettings.jsx'
+import AboutUs from './routes/AboutUs.jsx'
 import CheckoutPlaceholder from './routes/CheckoutPlaceholder.jsx'
 import Appointments from './routes/Appointments.jsx'
 import BookAppointment from './routes/BookAppointment.jsx'
@@ -132,7 +133,7 @@ function App() {
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/search" element={<Search />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
-                <Route path="/about" element={<AboutSettings backTo="/home" />} />
+                <Route path="/about" element={<AboutUs />} />
                 {/* New-schema catalog URL: /catalog/[prod_categ]/[prod_tag] */}
                 <Route path="/catalog/:categ/:tag" element={<ProductDetail />} />
 

@@ -484,7 +484,7 @@ function ProductDetail() {
                   </button>
                 ) : (
                   <span className="text-xs text-gray-400">
-                    ★ No reviews yet · Be the first to review
+                    No reviews yet
                   </span>
                 )}
               </div>
@@ -511,7 +511,7 @@ function ProductDetail() {
                   </span>
                 ) : (
                   <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-                    ✓ In Stock ({availableStock} available)
+                    In Stock ({availableStock})
                   </span>
                 )}
               </div>
