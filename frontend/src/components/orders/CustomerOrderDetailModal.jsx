@@ -19,6 +19,7 @@ import { parseDate, paymentSummary } from '../../services/dashboard.js'
 import { QrScanModal } from '../ui/QRScanner.jsx'
 import DigitalReceipt from '../ui/DigitalReceipt.jsx'
 import LoadingSpinner from '../ui/LoadingSpinner.jsx'
+import AppointmentForm from '../appointment/AppointmentForm.jsx'
 import { useToast } from '../../hooks/useToast.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useApiChange } from '../../hooks/useApiChange.js'
@@ -97,6 +98,7 @@ export default function CustomerOrderDetailModal({
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [scanMode, setScanMode] = useState(null)
+  const [isRescheduling, setIsRescheduling] = useState(false)
 
   const orderId = initialOrder?.id ?? initialOrder?.ord_id
 
@@ -253,7 +255,8 @@ export default function CustomerOrderDetailModal({
     recipient: effectiveRaw?.deliver_recipient || null,
   }
   const courier = isDelivery ? effectiveRaw?.courier || null : null
-  const courierTrackUrl = courier?.share_url || effectiveRaw?.deliver_share_link || null
+  const appointId = effectiveRaw?.appoint_id || effectiveRaw?.appointment?.appoint_id || null
+  const canReschedulePickup = !isDelivery && Boolean(appointId) && !['CLAIMED', 'RECEIVED', 'CANCELLED', 'RETURNED'].includes(status)
 
   if (!isOpen || !order) return null
 
@@ -266,19 +269,10 @@ export default function CustomerOrderDetailModal({
       size="xl"
       sheet={true}
       footer={
-        <div className="flex items-center justify-between w-full gap-2">
-          <Button variant="secondary" onClick={onClose} className="flex-1">
+        <div className="flex items-center justify-end w-full gap-2">
+          <Button variant="secondary" onClick={onClose} className="w-full sm:w-auto px-6">
             Close
           </Button>
-          {order.productId != null && (
-            <Link
-              to={`/product/${order.productId}`}
-              onClick={onClose}
-              className="flex-1 h-9 rounded-xl bg-brand-orange text-white font-semibold text-xs flex items-center justify-center hover:bg-brand-orange-dark transition-colors shadow-xs"
-            >
-              View Product Page
-            </Link>
-          )}
         </div>
       }
     >
@@ -321,28 +315,28 @@ export default function CustomerOrderDetailModal({
 
         {/* QR & Tracking (visible only while TO CLAIM / TO RECEIVE) */}
         {(showQr || timeline.length > 0) && (
-          <div className="p-4.5 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs space-y-3.5">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--line)] space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
               <h3 className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
                 {isDelivery ? 'Delivery Tracking' : 'Pickup Claim Pass'}
               </h3>
-              <StatusBadge status={status} className="px-2.5 py-0.5 text-xs" />
+              <StatusBadge status={status} className="self-start px-2.5 py-0.5 text-xs" />
             </div>
 
             {showQr && qrPayload && (
-              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-[var(--surface)] border border-[var(--line)] rounded-xl">
+              <div className="flex flex-col items-center gap-3.5 p-4 bg-[var(--surface)] border border-[var(--line)] rounded-xl text-center">
                 {qrDataUrl ? (
                   <img
                     src={qrDataUrl}
                     alt="Order verification QR code"
-                    className="w-40 h-40 rounded-xl bg-white p-2.5 border border-[var(--line)] shrink-0 shadow-2xs"
+                    className="w-44 h-44 rounded-xl bg-white p-2.5 border border-[var(--line)] shadow-sm"
                   />
                 ) : (
-                  <div className="w-40 h-40 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] flex items-center justify-center text-xs text-[var(--muted)] shrink-0">
+                  <div className="w-44 h-44 rounded-xl bg-[var(--surface)] border border-[var(--line)] flex items-center justify-center text-xs text-[var(--muted)]">
                     Generating QR…
                   </div>
                 )}
-                <div className="text-xs text-[var(--ink-2)] space-y-2 text-center sm:text-left flex-1 min-w-0">
+                <div className="text-xs text-[var(--ink-2)] space-y-2 max-w-md">
                   <p className="font-bold text-[var(--ink)] text-base">
                     {isDelivery ? 'Courier verification code' : 'Show this QR at the pickup counter'}
                   </p>
@@ -351,11 +345,11 @@ export default function CustomerOrderDetailModal({
                       ? 'The courier scans this code when your order is handed over.'
                       : 'Present this code together with your student ID to claim your order at Tindahan ni Isko, BU Student Center Ground Floor.'}
                   </p>
-                  <p className="font-mono text-xs text-[var(--muted)] break-all bg-[var(--surface-2)] px-2.5 py-1.5 rounded-lg border border-[var(--line)]">
+                  <p className="font-mono text-xs text-[var(--ink-2)] break-all bg-[var(--surface)] px-2.5 py-1.5 rounded-lg border border-[var(--line)] inline-block">
                     {String(qrPayload)}
                   </p>
                   {isDelivery && status === 'TO RECEIVE' && (
-                    <div className="flex flex-wrap gap-2 pt-1.5">
+                    <div className="flex flex-col sm:flex-row justify-center gap-2 pt-1.5 w-full">
                       <button
                         type="button"
                         onClick={() => setScanMode('delivery')}
@@ -367,20 +361,22 @@ export default function CustomerOrderDetailModal({
                         type="button"
                         onClick={handleConfirmReceipt}
                         disabled={busy}
-                        className="px-3.5 py-2 rounded-lg bg-[var(--surface-3)] text-[var(--ink)] text-xs font-semibold hover:bg-[var(--line)] transition-colors disabled:opacity-50 cursor-pointer"
+                        className="px-3.5 py-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] text-xs font-semibold hover:bg-orange-500/5 transition-colors disabled:opacity-50 cursor-pointer"
                       >
                         {busy ? 'Confirming…' : 'I received this order (manual)'}
                       </button>
                     </div>
                   )}
                   {canClaimPickup && (
-                    <button
-                      type="button"
-                      onClick={() => setScanMode('pickup')}
-                      className="mt-1 px-3.5 py-2 rounded-lg bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors cursor-pointer"
-                    >
-                      Scan to claim
-                    </button>
+                    <div className="pt-1 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setScanMode('pickup')}
+                        className="w-full sm:w-auto px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors cursor-pointer"
+                      >
+                        Scan to claim
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -441,22 +437,22 @@ export default function CustomerOrderDetailModal({
           </div>
         )}
 
-        {/* 2-Column Grid: Fulfillment + Payment Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Fulfillment Card */}
-          <div className="p-4.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] shadow-2xs space-y-3.5">
-            <div className="flex items-center justify-between">
+        {/* Vertically Stacked Fulfillment & Financial Sections (No 2-column horizontal grid, clean surfaces) */}
+        <div className="space-y-3.5">
+          {/* Fulfillment Section */}
+          <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
               <span className="font-bold text-[var(--ink)] text-sm">Fulfillment Method</span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold uppercase tracking-wider">
+              <span className="self-start inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold uppercase tracking-wider">
                 Paid at checkout
               </span>
             </div>
 
-            <div className="p-3.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] flex items-start gap-3">
-              <span className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] text-brand-orange shrink-0 mt-0.5">
+            <div className="p-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] flex flex-col sm:flex-row items-start gap-3">
+              <span className="p-2 rounded-lg bg-orange-500/10 border border-orange-500/20 text-brand-orange shrink-0">
                 {isDelivery ? <TruckIcon className="w-4.5 h-4.5" /> : <MapPinIcon className="w-4.5 h-4.5" />}
               </span>
-              <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex-1 min-w-0 space-y-0.5">
                 <strong className="text-[var(--ink)] font-semibold block text-sm">
                   {order.fulfillment?.method || 'Store Pickup'}
                 </strong>
@@ -466,7 +462,7 @@ export default function CustomerOrderDetailModal({
               </div>
             </div>
 
-            <div className="space-y-2 text-xs">
+            <div className="space-y-2 text-xs divide-y divide-[var(--line)]">
               {[
                 isDelivery
                   ? { label: 'Expected delivery', value: delivery.expect }
@@ -479,15 +475,35 @@ export default function CustomerOrderDetailModal({
               ]
                 .filter((r) => r && r.value)
                 .map((r) => (
-                  <div key={r.label} className="flex items-start justify-between gap-2.5">
+                  <div key={r.label} className="pt-2 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
                     <span className="text-[var(--muted)]">{r.label}</span>
-                    <span className="font-semibold text-[var(--ink-2)] text-right">{r.value}</span>
+                    <span className="font-semibold text-[var(--ink-2)]">{r.value}</span>
                   </div>
                 ))}
             </div>
 
+            {/* FLOW-MANAGE_BOOKED-04: Allow customer to reschedule claiming of pickup orders */}
+            {canReschedulePickup && (
+              <div className="pt-2 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <span className="text-xs text-[var(--muted)]">Need a different pickup time?</span>
+                <button
+                  type="button"
+                  onClick={() => setIsRescheduling(true)}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-orange/40 bg-brand-orange/10 text-brand-orange hover:bg-brand-orange/20 font-semibold text-xs transition-colors cursor-pointer w-full sm:w-auto"
+                >
+                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  <span>Reschedule Pickup</span>
+                </button>
+              </div>
+            )}
+
             {courier && (courierTrackUrl || courier.order_id || courier.status) && (
-              <div className="p-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] flex items-center justify-between gap-3">
+              <div className="p-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
                     Courier
@@ -506,7 +522,7 @@ export default function CustomerOrderDetailModal({
                     href={courierTrackUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="shrink-0 px-3 py-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] text-xs font-bold text-brand-orange hover:bg-orange-500/10 transition-colors"
+                    className="inline-block text-center px-3 py-1.5 rounded-lg border border-brand-orange/30 bg-brand-orange/10 text-xs font-bold text-brand-orange hover:bg-brand-orange/20 transition-colors"
                   >
                     Track parcel
                   </a>
@@ -515,11 +531,11 @@ export default function CustomerOrderDetailModal({
             )}
           </div>
 
-          {/* Payment & Financial Summary Card */}
-          <div className="p-4.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] shadow-2xs space-y-3.5">
-            <div className="flex items-center justify-between">
+          {/* Payment Summary Section (Stacked vertically) */}
+          <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
               <span className="font-bold text-[var(--ink)] text-sm">Payment Information</span>
-              <span className="text-xs font-semibold text-[var(--ink)] px-2.5 py-0.5 rounded-md bg-[var(--surface-3)]">
+              <span className="self-start text-xs font-semibold text-[var(--ink)] px-2.5 py-0.5 rounded-md border border-[var(--line)] bg-[var(--surface)]">
                 {pay.method}
               </span>
             </div>
@@ -557,9 +573,9 @@ export default function CustomerOrderDetailModal({
                   {pay.change != null ? formatPrice(pay.change) : '—'}
                 </span>
               </div>
-              <div className="flex items-start justify-between gap-2.5 pt-1.5 border-t border-[var(--line)]">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 pt-1.5 border-t border-[var(--line)]">
                 <span className="text-[var(--muted)] shrink-0">Reference</span>
-                <span className="font-mono text-xs text-[var(--ink-2)] break-all text-right">
+                <span className="font-mono text-xs text-[var(--ink-2)] break-all">
                   {pay.ref || '—'}
                 </span>
               </div>
@@ -572,7 +588,7 @@ export default function CustomerOrderDetailModal({
           <h4 className="font-bold text-[var(--ink)] text-sm">
             Items Ordered ({orderItems.length || 1})
           </h4>
-          <div className="divide-y divide-[var(--line)] rounded-2xl border border-[var(--line)] overflow-hidden bg-[var(--surface)] shadow-2xs">
+          <div className="divide-y divide-[var(--line)] rounded-xl border border-[var(--line)] overflow-hidden bg-[var(--surface)]">
             {(orderItems.length ? orderItems : [null]).map((entry, idx) => {
               const product = entry?.product || {}
               const prodvar = entry?.prodvar || null
@@ -595,8 +611,8 @@ export default function CustomerOrderDetailModal({
               const targetProdId = entry?.prod_id || product?.prod_tag || product?.prod_id || order.productId
 
               const rowContent = (
-                <div className="flex gap-4 items-center p-3.5 hover:bg-[var(--surface-2)] transition-colors group">
-                  <div className="w-14 h-14 rounded-xl bg-[var(--surface-2)] flex items-center justify-center shrink-0 overflow-hidden border border-[var(--line)] p-1 group-hover:scale-105 transition-transform">
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center p-3.5 hover:bg-orange-500/5 transition-colors group">
+                  <div className="w-14 h-14 rounded-lg bg-[var(--surface)] flex items-center justify-center shrink-0 overflow-hidden border border-[var(--line)] p-1 group-hover:scale-105 transition-transform">
                     {productImage ? (
                       <img
                         src={getImageUrl(productImage)}
@@ -612,7 +628,7 @@ export default function CustomerOrderDetailModal({
                       <ShirtIcon className="w-7 h-7 text-brand-orange opacity-40" />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center justify-between gap-2">
                       <h5 className="font-bold text-[var(--ink)] text-sm truncate group-hover:text-brand-orange transition-colors">
                         {name}
@@ -624,7 +640,7 @@ export default function CustomerOrderDetailModal({
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-[var(--muted)] flex-wrap">
+                    <div className="flex items-center gap-2 text-xs text-[var(--muted)] flex-wrap">
                       {size && (
                         <span>
                           Size: <strong className="text-[var(--ink-2)]">{size}</strong>
@@ -646,7 +662,7 @@ export default function CustomerOrderDetailModal({
                         Qty: <strong className="text-[var(--ink-2)]">{qty}</strong>
                       </span>
                     </div>
-                    <p className="text-xs font-bold text-brand-orange mt-1">
+                    <p className="text-xs font-bold text-brand-orange">
                       {formatPrice(price)} each
                     </p>
                   </div>
@@ -678,8 +694,8 @@ export default function CustomerOrderDetailModal({
         </div>
 
         {/* Claimant / Student Recipient Info */}
-        <div className="p-4.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] shadow-2xs space-y-1.5 text-xs">
-          <h3 className="font-bold text-[var(--muted)] uppercase tracking-wider text-xs mb-1.5">
+        <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-1.5 text-xs">
+          <h3 className="font-bold text-[var(--muted)] uppercase tracking-wider text-xs mb-1">
             Claimant / Student Information
           </h3>
           <p className="text-sm font-bold text-[var(--ink)]">
@@ -694,7 +710,7 @@ export default function CustomerOrderDetailModal({
 
         {/* Cancel Action (TO PROCESS) */}
         {CAN_CANCEL.includes(status) && (
-          <div className="p-4.5 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs space-y-2.5">
+          <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--line)] space-y-2.5">
             <h3 className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
               Need help with this order?
             </h3>
@@ -703,7 +719,7 @@ export default function CustomerOrderDetailModal({
                 type="button"
                 disabled={busy}
                 onClick={handleCancel}
-                className="px-4 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition-colors cursor-pointer disabled:opacity-60"
+                className="w-full sm:w-auto px-4 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition-colors cursor-pointer disabled:opacity-60"
               >
                 {busy ? <><LoadingSpinner size={13} /> Sending…</> : 'Cancel Order'}
               </button>
@@ -716,7 +732,7 @@ export default function CustomerOrderDetailModal({
 
         {/* Refund / Return Request Action */}
         {CAN_REFUND.includes(status) && (
-          <div className="p-4.5 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs space-y-2.5">
+          <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--line)] space-y-2.5">
             <h3 className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
               Returns & Refunds
             </h3>
@@ -725,7 +741,7 @@ export default function CustomerOrderDetailModal({
                 type="button"
                 disabled={busy}
                 onClick={handleRequestRefund}
-                className="px-4 py-2 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-500/20 transition-colors cursor-pointer disabled:opacity-60"
+                className="w-full sm:w-auto px-4 py-2 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-500/20 transition-colors cursor-pointer disabled:opacity-60"
               >
                 {busy ? <><LoadingSpinner size={13} /> Sending…</> : 'Request for Refund'}
               </button>
@@ -756,6 +772,37 @@ export default function CustomerOrderDetailModal({
           />
         </div>
       </div>
+
+      {/* Reschedule Pickup Modal (FLOW-MANAGE_BOOKED-04) */}
+      {isRescheduling && (
+        <Modal
+          isOpen={isRescheduling}
+          onClose={() => setIsRescheduling(false)}
+          title={`Reschedule Pickup · Order #${orderId}`}
+          subtitle="Select a new available pickup slot for your order"
+          size="wide"
+        >
+          <div className="p-1">
+            <AppointmentForm
+              type="PICKUP"
+              custId={currentUser?.cust_id ?? currentUser?.id}
+              reschedule={{
+                id: appointId,
+                type: 'PICKUP',
+                dateISO: effectiveRaw?.appoint_start ? String(effectiveRaw.appoint_start).slice(0, 10) : '',
+              }}
+              title="Pick a new claim slot"
+              onSuccess={() => {
+                setIsRescheduling(false)
+                showToast('Pickup appointment rescheduled successfully.', 'success')
+                loadDetails()
+                onOrderUpdated?.()
+              }}
+              onCancel={() => setIsRescheduling(false)}
+            />
+          </div>
+        </Modal>
+      )}
     </Modal>
   )
 }

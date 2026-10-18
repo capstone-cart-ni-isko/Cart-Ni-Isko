@@ -20,6 +20,7 @@ import ForgotPassword from './routes/ForgotPassword.jsx'
 import ResetPassword from './routes/ResetPassword.jsx'
 import Home from './routes/Home.jsx'
 import Shop from './routes/Shop.jsx'
+import Search from './routes/Search.jsx'
 import ProductDetail from './routes/ProductDetail.jsx'
 import Wishlist from './routes/Wishlist.jsx'
 import Cart from './routes/Cart.jsx'
@@ -58,6 +59,7 @@ import AdminEnroll from './routes/admin/AdminEnroll.jsx'
 import AdminAppointments from './routes/admin/AdminAppointments.jsx'
 import AdminAccount from './routes/admin/AdminAccount.jsx'
 import AdminSettings from './routes/admin/AdminSettings.jsx'
+import AdminSearch from './routes/admin/AdminSearch.jsx'
 import AdminQr from './routes/admin/AdminQr.jsx'
 import AdminNotifications from './routes/admin/AdminNotifications.jsx'
 import SetupWizard from './routes/admin/SetupWizard.jsx'
@@ -128,6 +130,7 @@ function App() {
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/shop" element={<Shop />} />
+                <Route path="/search" element={<Search />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
                 {/* New-schema catalog URL: /catalog/[prod_categ]/[prod_tag] */}
                 <Route path="/catalog/:categ/:tag" element={<ProductDetail />} />
@@ -243,6 +246,7 @@ function App() {
                     <Route path="/admin/qr" element={<AdminQr />} />
                   </Route>
                   <Route path="/admin/notifications" element={<AdminNotifications />} />
+                  <Route path="/admin/search" element={<AdminSearch />} />
 
                   {/* DOMAIN 15 - FLOW-EMP_SET-01: every employee opens the
                       settings screen through the ribbon's "settings" icon.

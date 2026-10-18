@@ -229,7 +229,7 @@ export default function AdminSidebar({ onCloseMobile }) {
   const submitMobileSearch = (e) => {
     e.preventDefault()
     const q = mobileSearch.trim()
-    if (q) navigate(`/admin/orders?search=${encodeURIComponent(q)}`)
+    if (q) navigate(`/admin/search?q=${encodeURIComponent(q)}`)
     onCloseMobile?.()
   }
 
@@ -285,13 +285,33 @@ export default function AdminSidebar({ onCloseMobile }) {
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
-              type="search"
+              type="text"
               value={mobileSearch}
+              onFocus={() => {
+                if (location.pathname !== '/admin/search') {
+                  const target = mobileSearch.trim() ? `/admin/search?q=${encodeURIComponent(mobileSearch.trim())}` : '/admin/search'
+                  navigate(target)
+                  onCloseMobile?.()
+                }
+              }}
               onChange={(e) => setMobileSearch(e.target.value)}
               placeholder="Search orders, products, customers..."
               aria-label="Search"
-              className="field-input w-full pl-9"
+              className="field-input w-full pl-9 pr-8"
             />
+            {mobileSearch && (
+              <button
+                type="button"
+                onClick={() => setMobileSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                aria-label="Clear search"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            )}
           </div>
         </form>
 

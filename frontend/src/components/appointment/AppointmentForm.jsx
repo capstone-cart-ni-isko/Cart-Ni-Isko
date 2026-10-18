@@ -172,15 +172,52 @@ export default function AppointmentForm({
   // Slots arrive as "YYYY-MM-DD HH:MM"; a bare "HH:MM" gets the picked date.
   const slotStamp = stampOf(date, slot)
 
-  // Only slots at least 30 minutes from now may be selected.
-  const selectableSlots = useMemo(
-    () =>
-      slots.filter((s) => {
-        const time = slotStart(s)
-        return Boolean(time) && isSelectable(stampOf(date, time))
-      }),
-    [slots, date]
-  )
+  // Only slots for the selected appointment type and at least 30 minutes from now may be selected.
+  // Deduplicate and aggregate multiple slot records for the same start time.
+  const selectableSlots = useMemo(() => {
+    const byTime = new Map()
+
+    for (const s of slots) {
+      if (!s) continue
+      // Align appointment types (CLAIM / PICKUP vs VISIT)
+      if (s.type && kindOf(s.type) !== kindOf(appointType)) {
+        continue
+      }
+
+      const time = slotStart(s)
+      if (!time) continue
+
+      const stamp = stampOf(date, time)
+      if (!isSelectable(stamp)) continue
+
+      const normTime = time.includes(' ') ? time.split(' ')[1] : time
+
+      if (!byTime.has(normTime)) {
+        byTime.set(normTime, { ...s, time: normTime })
+      } else {
+        const existing = byTime.get(normTime)
+        // Combine availability: open if either is open, mine if either is customer's booking
+        const isMine = existing.mine === true || s.mine === true
+        const isOpen = (!isMine && (slotOpen(existing) || slotOpen(s)))
+        byTime.set(normTime, {
+          ...existing,
+          ...s,
+          time: normTime,
+          mine: isMine,
+          available: isOpen,
+          booked: Math.max(Number(existing.booked || 0), Number(s.booked || 0)),
+          capacity: Math.max(Number(existing.capacity || 0), Number(s.capacity || 0)),
+          reason: isOpen ? null : (s.reason || existing.reason || 'Fully booked'),
+        })
+      }
+    }
+
+    return Array.from(byTime.values()).sort((a, b) => {
+      const timeA = slotStart(a)
+      const timeB = slotStart(b)
+      return timeA.localeCompare(timeB)
+    })
+  }, [slots, date, appointType])
 
   const handleBook = async () => {
     if (booking) return
@@ -333,38 +370,43 @@ export default function AppointmentForm({
       )}
 
       {selectableSlots.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {selectableSlots.map((s, index) => {
-            const time = slotStart(s)
-            const mine = s.mine === true
-            const open = !mine && (!s.type || kindOf(s.type) === kindOf(appointType)) && slotOpen(s)
-            const active = open && slot === time
-            return (
-              <button
-                key={time || `slot-${index}`}
-                type="button"
-                disabled={!open}
-                title={mine ? 'Your booking' : open ? formatClock(time) : slotReason(s)}
-                onClick={() => open && setSlot(time)}
-                className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                  active
-                    ? 'bg-brand-orange text-white border-brand-orange'
-                    : mine
-                      ? 'bg-orange-50 text-brand-orange border-orange-200 cursor-not-allowed'
-                      : open
-                        ? 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange cursor-pointer'
-                        : 'bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed line-through'
-                }`}
-              >
-                {formatClock(time) || `Slot ${index + 1}`}
-                {mine ? (
-                  <span className="block text-[10px] font-normal no-underline">Your booking</span>
-                ) : !open ? (
-                  <span className="block text-[10px] font-normal no-underline">{slotReason(s)}</span>
-                ) : null}
-              </button>
-            )
-          })}
+        <div className="space-y-1.5">
+          <span className="text-xs font-semibold text-slate-600 block">Available Time Slots</span>
+          <div className="max-h-60 overflow-y-auto pr-1 -mr-1 overscroll-contain rounded-lg">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {selectableSlots.map((s, index) => {
+                const time = slotStart(s)
+                const mine = s.mine === true
+                const open = !mine && (!s.type || kindOf(s.type) === kindOf(appointType)) && slotOpen(s)
+                const active = open && slot === time
+                return (
+                  <button
+                    key={time || `slot-${index}`}
+                    type="button"
+                    disabled={!open}
+                    title={mine ? 'Your booking' : open ? formatClock(time) : slotReason(s)}
+                    onClick={() => open && setSlot(time)}
+                    className={`py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                      active
+                        ? 'bg-brand-orange text-white border-brand-orange shadow-sm'
+                        : mine
+                          ? 'bg-orange-50 text-brand-orange border-orange-200 cursor-not-allowed'
+                          : open
+                            ? 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange cursor-pointer'
+                            : 'bg-slate-100 text-slate-400 border-slate-100 cursor-not-allowed line-through'
+                    }`}
+                  >
+                    {formatClock(time) || `Slot ${index + 1}`}
+                    {mine ? (
+                      <span className="block text-[10px] font-normal no-underline">Your booking</span>
+                    ) : !open ? (
+                      <span className="block text-[10px] font-normal no-underline">{slotReason(s)}</span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
       )}
 

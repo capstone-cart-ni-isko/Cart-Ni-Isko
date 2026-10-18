@@ -715,15 +715,15 @@ export default function AdminOrders() {
               const isLocked = currentStatusNormalized === 'claimed' || currentStatusNormalized === 'received'
 
               return (
-                <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs space-y-3">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--line)] space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${isLocked ? 'bg-emerald-500' : 'bg-brand-orange animate-pulse'}`} />
                       <span className="font-semibold text-[var(--muted)] uppercase text-2xs tracking-wider">
                         {isLocked ? 'Order Status (Completed)' : 'Update Order Status'}
                       </span>
                     </div>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-bold uppercase tracking-wider ${
+                    <span className={`self-start inline-flex items-center px-2.5 py-0.5 rounded-full text-2xs font-bold uppercase tracking-wider ${
                       isLocked
                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                         : 'bg-brand-orange/10 text-brand-orange border border-brand-orange/20'
@@ -733,7 +733,7 @@ export default function AdminOrders() {
                   </div>
 
                   {isLocked ? (
-                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300">
+                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                         <path d="m9 12 2 2 4-4" />
@@ -753,7 +753,7 @@ export default function AdminOrders() {
                             setConfirmStatusModal({ order: activeOrderDetail, nextStatus: next })
                           }
                         }}
-                        className="field-input w-full font-semibold text-sm py-2 px-3"
+                        className="field-input w-full font-semibold text-sm py-2 px-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)]"
                       >
                         {(() => {
                           const fulfillment = String(activeOrderDetail.fulfillment || '')
@@ -787,7 +787,7 @@ export default function AdminOrders() {
                       </select>
 
                       {pendingAction && (
-                        <div className="flex items-center gap-2 pt-1">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
                           <button
                             type="button"
                             disabled={actionBusy}
@@ -817,7 +817,7 @@ export default function AdminOrders() {
                         </div>
                       )}
 
-                      <p className="text-xs text-[var(--muted-2)]">
+                      <p className="text-2xs text-[var(--muted-2)]">
                         Status changes are confirmed, recorded on the server, and sync in realtime.
                       </p>
                     </>
@@ -826,55 +826,54 @@ export default function AdminOrders() {
               )
             })()}
 
-            {/* 2-Column Grid: Customer & Fulfillment + Payment */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Customer & Fulfillment Card */}
-              <div className="p-4.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] shadow-2xs flex flex-col justify-between space-y-3.5">
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-[var(--ink)] text-sm">Customer Details</span>
-                    <span className="text-xs px-2.5 py-0.5 rounded-md bg-[var(--surface-3)] text-[var(--muted)] font-medium">
-                      {activeOrderDetail.type}
-                    </span>
-                  </div>
-                  <div className="space-y-1.5 text-xs text-[var(--muted)]">
-                    <p><strong className="text-[var(--ink-2)]">Name:</strong> {activeOrderDetail.customer}</p>
-                    {activeOrderDetail.custPhone && (
-                      <p><strong className="text-[var(--ink-2)]">Contact:</strong> {activeOrderDetail.custPhone}</p>
-                    )}
-                    {activeOrderDetail.batch && (
-                      <p><strong className="text-[var(--ink-2)]">Batch:</strong> {activeOrderDetail.batch}</p>
-                    )}
-                  </div>
+            {/* Vertically Stacked Customer Details, Fulfillment & Payment Sections (No horizontal 2-column grid, no gray surfaces) */}
+            <div className="space-y-3.5">
+              {/* Customer Details Card */}
+              <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                  <span className="font-bold text-[var(--ink)] text-sm">Customer Details</span>
+                  <span className="self-start text-xs px-2.5 py-0.5 rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] font-medium">
+                    {activeOrderDetail.type}
+                  </span>
                 </div>
-
-                <div className="pt-3 border-t border-[var(--line)] space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-[var(--ink-2)] text-xs">Fulfillment</span>
-                    {activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
-                    activeOrderDetail.fulfillment?.toLowerCase().includes('delivery') ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
-                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                        </svg>
-                        <span>Delivery Locked</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
-                        Store Pickup
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[var(--ink)] font-semibold text-xs sm:text-sm">{activeOrderDetail.fulfillment}</p>
+                <div className="space-y-1.5 text-xs text-[var(--muted)] divide-y divide-[var(--line)]">
+                  <p className="pt-1"><strong className="text-[var(--ink-2)]">Name:</strong> {activeOrderDetail.customer}</p>
+                  {activeOrderDetail.custPhone && (
+                    <p className="pt-1.5"><strong className="text-[var(--ink-2)]">Contact:</strong> {activeOrderDetail.custPhone}</p>
+                  )}
+                  {activeOrderDetail.batch && (
+                    <p className="pt-1.5"><strong className="text-[var(--ink-2)]">Batch:</strong> {activeOrderDetail.batch}</p>
+                  )}
                 </div>
               </div>
 
+              {/* Fulfillment Card */}
+              <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+                  <span className="font-bold text-[var(--ink)] text-sm">Fulfillment</span>
+                  {activeOrderDetail.fulfillment?.toLowerCase().includes('courier') ||
+                  activeOrderDetail.fulfillment?.toLowerCase().includes('delivery') ? (
+                    <span className="self-start inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      <span>Delivery Locked</span>
+                    </span>
+                  ) : (
+                    <span className="self-start inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+                      Store Pickup
+                    </span>
+                  )}
+                </div>
+                <p className="text-[var(--ink)] font-semibold text-xs sm:text-sm">{activeOrderDetail.fulfillment}</p>
+              </div>
+
               {/* Payment Summary Card */}
-              <div className="p-4.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
+              <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
                   <span className="font-bold text-[var(--ink)] text-sm">Payment Information</span>
-                  <span className="text-xs font-semibold text-[var(--ink)] px-2.5 py-0.5 rounded-md bg-[var(--surface-3)]">
+                  <span className="self-start text-xs font-semibold text-[var(--ink)] px-2.5 py-0.5 rounded-md border border-[var(--line)] bg-[var(--surface)]">
                     {activeOrderDetail.paymentMethod}
                   </span>
                 </div>
@@ -901,9 +900,9 @@ export default function AdminOrders() {
                         : '—'}
                     </span>
                   </div>
-                  <div className="pt-2.5 border-t border-[var(--line)] flex items-start justify-between gap-2">
+                  <div className="pt-2 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
                     <span className="text-[var(--muted)] shrink-0">Reference</span>
-                    <span className="font-mono text-xs text-[var(--ink-2)] break-all text-right">
+                    <span className="font-mono text-xs text-[var(--ink-2)] break-all">
                       {activeOrderDetail.payRef || '—'}
                     </span>
                   </div>

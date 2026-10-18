@@ -9,6 +9,7 @@ use App\Models\Prodvar;
 use App\Models\Review;
 use App\Support\SystemSettings;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -1042,6 +1043,103 @@ class ProductsAPI extends Controller
                     'message' => 'Search failed',
                     'error'   => $e->getMessage(),
                 ], 500);
+            }
+        }
+
+        public function saveSearchHistory(Request $json)
+        {
+            try {
+                $user = $json->user('api');
+                $q = trim((string) $json->input('query', ''));
+                if ($q === '') {
+                    return response()->json(['success' => false, 'message' => 'Query cannot be empty'], 422);
+                }
+
+                if ($this->isEmployee($user)) {
+                    $empId = $user->emp_id ?? $user->id;
+                    DB::table('empsearch')->insert([
+                        'emp_id' => $empId,
+                        'empsearch_created' => Carbon::now(),
+                        'empsearch_query' => $q,
+                    ]);
+                    return response()->json(['success' => true, 'message' => 'Employee search recorded']);
+                }
+
+                $custId = $user->cust_id ?? $user->id;
+                if ($custId) {
+                    DB::table('custsearch')->insert([
+                        'cust_id' => $custId,
+                        'custsearch_created' => Carbon::now(),
+                        'custsearch_query' => $q,
+                    ]);
+                    return response()->json(['success' => true, 'message' => 'Customer search recorded']);
+                }
+
+                return response()->json(['success' => false, 'message' => 'Unauthenticated user'], 401);
+            } catch (\Exception $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            }
+        }
+
+        public function getSearchHistory(Request $json)
+        {
+            try {
+                $user = $json->user('api');
+                if ($this->isEmployee($user)) {
+                    $empId = $user->emp_id ?? $user->id;
+                    $history = DB::table('empsearch')
+                        ->where('emp_id', $empId)
+                        ->orderByDesc('empsearch_created')
+                        ->limit(20)
+                        ->get(['empsearch_id as id', 'empsearch_query as query', 'empsearch_created as created_at']);
+                    return response()->json(['success' => true, 'data' => $history]);
+                }
+
+                $custId = $user->cust_id ?? $user->id;
+                if ($custId) {
+                    $history = DB::table('custsearch')
+                        ->where('cust_id', $custId)
+                        ->orderByDesc('custsearch_created')
+                        ->limit(20)
+                        ->get(['custsearch_id as id', 'custsearch_query as query', 'custsearch_created as created_at']);
+                    return response()->json(['success' => true, 'data' => $history]);
+                }
+
+                return response()->json(['success' => true, 'data' => []]);
+            } catch (\Exception $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            }
+        }
+
+        public function clearSearchHistory(Request $json)
+        {
+            try {
+                $user = $json->user('api');
+                $id = $json->input('id');
+
+                if ($this->isEmployee($user)) {
+                    $empId = $user->emp_id ?? $user->id;
+                    $query = DB::table('empsearch')->where('emp_id', $empId);
+                    if ($id) {
+                        $query->where('empsearch_id', $id);
+                    }
+                    $query->delete();
+                    return response()->json(['success' => true, 'message' => 'Search history cleared']);
+                }
+
+                $custId = $user->cust_id ?? $user->id;
+                if ($custId) {
+                    $query = DB::table('custsearch')->where('cust_id', $custId);
+                    if ($id) {
+                        $query->where('custsearch_id', $id);
+                    }
+                    $query->delete();
+                    return response()->json(['success' => true, 'message' => 'Search history cleared']);
+                }
+
+                return response()->json(['success' => false, 'message' => 'Unauthenticated user'], 401);
+            } catch (\Exception $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
             }
         }
 

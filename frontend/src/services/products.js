@@ -1,4 +1,4 @@
-import { apiGet, cacheRead, cacheWrite } from './api.js'
+import { apiGet, apiPost, apiDelete, cacheRead, cacheWrite } from './api.js'
 import { normalizeProductCategory } from '../data/productCategories.js'
 
 /* The catalog is public and only changes when an admin edits it, so the last
@@ -276,4 +276,36 @@ export async function fetchProduct(id) {
   const isNumeric = /^\d+$/.test(String(id))
   const data = await apiGet('/products/view', isNumeric ? { prod_id: id } : { prod_tag: id })
   return mapProduct(data.data)
+}
+
+export async function searchProducts(q) {
+  const data = await apiGet('/products/search', { q })
+  const rows = Array.isArray(data.data) ? data.data.map(mapProduct) : []
+  return rows
+}
+
+export async function fetchSearchHistory() {
+  try {
+    const res = await apiGet('/search/history')
+    return Array.isArray(res?.data) ? res.data : []
+  } catch {
+    return []
+  }
+}
+
+export async function recordSearchQuery(query) {
+  if (!query || !query.trim()) return
+  try {
+    await apiPost('/search/history', { query: query.trim() })
+  } catch {
+    // best-effort
+  }
+}
+
+export async function clearSearchHistory(id = null) {
+  try {
+    await apiDelete('/search/history', id ? { id } : {})
+  } catch {
+    // best-effort
+  }
 }

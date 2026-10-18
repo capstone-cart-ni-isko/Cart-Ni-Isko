@@ -228,4 +228,9 @@ Route::middleware('auth:api')->group(function () {
     // every other field admin/super-admin only (rule 38).
     Route::put('/shifts/{shiftId}', [SystemAPI::class, 'updateShift'])->middleware('role:staff');
     Route::delete('/shifts/{shiftId}', [SystemAPI::class, 'cancelShift'])->middleware('role:admin');
+
+    // Search History API Routes (empsearch & custsearch)
+    Route::get('/search/history', [ProductsAPI::class, 'getSearchHistory']);
+    Route::post('/search/history', [ProductsAPI::class, 'saveSearchHistory']);
+    Route::delete('/search/history', [ProductsAPI::class, 'clearSearchHistory']);
 });

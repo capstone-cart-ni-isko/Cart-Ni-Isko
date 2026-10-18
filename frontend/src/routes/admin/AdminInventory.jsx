@@ -1451,10 +1451,10 @@ export default function AdminInventory() {
             <form
               id="add-product-form"
               onSubmit={handleCreateProduct}
-              className="space-y-3 text-xs"
+              className="space-y-3.5 text-xs"
             >
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Product Name</label>
+                <label className="field-label">Product Name</label>
                 <input
                   type="text"
                   required
@@ -1466,31 +1466,36 @@ export default function AdminInventory() {
                   }}
                   onBlur={() => setCreateTouched((t) => ({ ...t, name: true }))}
                   aria-invalid={createNameError ? 'true' : undefined}
-                  className={`w-full h-8 px-2.5 rounded-md border text-xs focus:ring-1 focus:ring-brand-orange ${createNameError ? 'field-input--error border-[var(--tint-danger-solid)]' : 'border-slate-200'}`}
+                  className={`field-input ${createNameError ? 'field-input--error' : ''}`}
                 />
                 {createNameError && (
                   <p className="field-error" role="alert">{createNameError}</p>
                 )}
               </div>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Description</label>
+                <label className="field-label">Description</label>
                 <textarea
                   required
                   rows={3}
                   placeholder="Material, fit, care instructions..."
                   value={newProdDesc}
                   onChange={(e) => setNewProdDesc(e.target.value)}
-                  className="w-full px-2.5 py-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange resize-none"
+                  className="field-input resize-none h-auto py-2"
                 />
               </div>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Product Photo</label>
+                <label className="field-label">Product Photo</label>
                 <button
                   type="button"
                   onClick={() => addPhotoRef.current?.click()}
-                  className="w-full h-10 flex items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 text-xs font-semibold text-slate-600 hover:border-brand-orange hover:text-brand-orange bg-slate-50 cursor-pointer"
+                  className="w-full h-11 flex items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--line-2)] text-xs font-semibold text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange bg-[var(--surface)] hover:bg-orange-500/5 transition-colors cursor-pointer"
                 >
-                  {isUploadingPhoto ? 'Uploading…' : newProdPhoto ? 'Replace Photo' : 'Upload Photo'}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                  </svg>
+                  <span>{isUploadingPhoto ? 'Uploading…' : newProdPhoto ? 'Replace Photo' : 'Upload Photo'}</span>
                 </button>
                 <input
                   ref={addPhotoRef}
@@ -1500,23 +1505,33 @@ export default function AdminInventory() {
                   onChange={handleAddPhotoChange}
                 />
                 {newProdPhoto && (
-                  <img
-                    src={getImageUrl(newProdPhoto)}
-                    alt="Product preview"
-                    className="mt-2 h-20 w-20 rounded-md border border-slate-200 object-contain"
-                  />
+                  <div className="mt-2.5 flex items-center gap-3 p-2 rounded-lg border border-[var(--line)] bg-[var(--surface)]">
+                    <img
+                      src={getImageUrl(newProdPhoto)}
+                      alt="Product preview"
+                      className="h-16 w-16 rounded-md border border-[var(--line)] object-contain bg-white"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-[var(--ink)] truncate">Photo selected</p>
+                      <button
+                        type="button"
+                        onClick={() => setNewProdPhoto('')}
+                        className="text-xs text-rose-600 hover:underline mt-0.5 cursor-pointer"
+                      >
+                        Remove photo
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
-              {/* Base price and category sit side by side: the panel is wide
-                  enough now, and a single column of full-width selects made the
-                  form look empty. */}
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Category</label>
+                  <label className="field-label">Category</label>
                   <select
                     value={newProdCategory}
                     onChange={(e) => setNewProdCategory(e.target.value)}
-                    className="w-full h-8 px-2 rounded-md border border-slate-200 text-xs bg-white focus:ring-1 focus:ring-brand-orange"
+                    className="field-input cursor-pointer"
                   >
                     {PRODUCT_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -1524,7 +1539,7 @@ export default function AdminInventory() {
                   </select>
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Base Price (₱)</label>
+                  <label className="field-label">Base Price (₱)</label>
                   <input
                     type="number"
                     required
@@ -1538,7 +1553,7 @@ export default function AdminInventory() {
                     }}
                     onBlur={() => setCreateTouched((t) => ({ ...t, price: true }))}
                     aria-invalid={createPriceError ? 'true' : undefined}
-                    className={`w-full h-8 px-2.5 rounded-md border text-xs focus:ring-1 focus:ring-brand-orange ${createPriceError ? 'field-input--error border-[var(--tint-danger-solid)]' : 'border-slate-200'}`}
+                    className={`field-input ${createPriceError ? 'field-input--error' : ''}`}
                   />
                   {createPriceError && (
                     <p className="field-error" role="alert">{createPriceError}</p>
@@ -1546,19 +1561,21 @@ export default function AdminInventory() {
                 </div>
               </div>
 
-              {/* FLOW-ADD_PROD-02/03: at least one variation, each with its own
-                  name, stock quantity, optional markup and optional image. */}
-              <div className="rounded-md border border-slate-200 bg-slate-50/60 p-2.5 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="font-semibold text-slate-700">Variations</label>
-                  <div className="flex items-center gap-1">
+              {/* FLOW-ADD_PROD-02/03: variations section */}
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <label className="field-label mb-0">Variations</label>
+                    <p className="text-2xs text-[var(--muted)]">At least one variation with stock quantity</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto">
                     {variationMode === 'list' && (
                       <button
                         type="button"
                         onClick={() =>
                           setNewProdVariations((rows) => [...rows, { ...BLANK_VARIATION }])
                         }
-                        className="h-6 px-2 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                        className="btn btn--secondary h-7 px-2.5 text-2xs font-semibold"
                       >
                         + Add variation
                       </button>
@@ -1579,7 +1596,7 @@ export default function AdminInventory() {
                         }
                         setVariationMode('matrix')
                       }}
-                      className="h-6 px-2 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                      className="btn btn--secondary h-7 px-2.5 text-2xs font-semibold"
                     >
                       {variationMode === 'matrix' ? 'Type them out' : 'Use axes'}
                     </button>
@@ -1587,15 +1604,15 @@ export default function AdminInventory() {
                 </div>
 
                 {variationMode === 'matrix' && (
-                  <div className="rounded-md border border-slate-200 bg-white p-2 space-y-2">
-                    <p className="text-2xs text-slate-500">
+                  <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-2.5 space-y-2.5">
+                    <p className="text-2xs text-[var(--muted)]">
                       List the ways this product can vary and the values each one
                       takes. Every combination becomes its own variation with its
                       own stock — color&nbsp;×&nbsp;size, or color&nbsp;×&nbsp;material.
                     </p>
                     {axes.map((entry, index) => (
-                      <div key={`axis-${index}`} className="space-y-1">
-                        <div className="flex items-center gap-2">
+                      <div key={`axis-${index}`} className="space-y-1.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <input
                             type="text"
                             placeholder={index === 0 ? 'Color' : index === 1 ? 'Size' : 'Axis name'}
@@ -1605,15 +1622,12 @@ export default function AdminInventory() {
                                 rows.map((r, i) => (i === index ? { ...r, axis: e.target.value } : r))
                               )
                             }
-                            className="w-28 h-7 px-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                            className="field-input sm:w-32 h-8"
                           />
-                          <div className="flex-1">
-                            <label className="text-2xs text-slate-500 block mb-0.5">
-                              Values (comma-separated)
-                            </label>
+                          <div className="flex-1 min-w-0">
                             <input
                               type="text"
-                              placeholder="Cream, Black"
+                              placeholder="e.g. Cream, Black, Navy"
                               value={(entry.values || []).join(', ')}
                               onChange={(e) =>
                                 setAxes((rows) =>
@@ -1630,7 +1644,7 @@ export default function AdminInventory() {
                                   )
                                 )
                               }
-                              className="w-full h-7 px-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
+                              className="field-input h-8"
                             />
                           </div>
                           {axes.length > 1 && (
@@ -1638,18 +1652,18 @@ export default function AdminInventory() {
                               type="button"
                               aria-label={`Remove axis ${index + 1}`}
                               onClick={() => setAxes((rows) => rows.filter((_, i) => i !== index))}
-                              className="h-7 w-7 shrink-0 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 cursor-pointer"
+                              className="btn btn--ghost h-8 w-8 p-0 text-base"
                             >
                               ×
                             </button>
                           )}
                         </div>
                         {(entry.values || []).length > 0 && (
-                          <div className="flex flex-wrap gap-1 pl-28">
+                          <div className="flex flex-wrap gap-1">
                             {(entry.values || []).map((value) => (
                               <span
                                 key={`${entry.axis}-${value}`}
-                                className="px-1.5 py-0.5 rounded bg-slate-100 text-2xs font-semibold text-slate-600"
+                                className="px-2 py-0.5 rounded-md border border-[var(--line)] bg-[var(--surface)] text-2xs font-semibold text-[var(--ink-2)]"
                               >
                                 {value}
                               </span>
@@ -1662,7 +1676,7 @@ export default function AdminInventory() {
                       <button
                         type="button"
                         onClick={() => setAxes((rows) => [...rows, { axis: '', values: [] }])}
-                        className="h-6 px-2 rounded-md border border-dashed border-slate-300 bg-white text-2xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                        className="btn btn--ghost border border-dashed border-[var(--line-2)] h-7 px-2.5 text-2xs text-[var(--muted)] hover:text-brand-orange"
                       >
                         + Add another way to vary
                       </button>
@@ -1670,110 +1684,112 @@ export default function AdminInventory() {
                   </div>
                 )}
 
-                {newProdVariations.map((row, index) => (
-                  <div key={`variation-${row.optionsKey || index}`} className="rounded-md border border-slate-200 bg-white p-2 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder={
-                          row.options
-                            ? `${combinationLabel(row.options)} (leave blank to use this)`
-                            : 'Variation name (e.g. Medium)'
-                        }
-                        value={row.name}
-                        onChange={(e) =>
-                          setNewProdVariations((rows) =>
-                            rows.map((r, i) => (i === index ? { ...r, name: e.target.value } : r))
-                          )
-                        }
-                        className="flex-1 h-7 px-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
-                      />
-                      {row.options && (
-                        <span className="hidden sm:inline text-2xs font-semibold text-slate-400 shrink-0">
-                          {combinationLabel(row.options)}
-                        </span>
-                      )}
-                      {variationMode === 'list' && newProdVariations.length > 1 && (
-                        <button
-                          type="button"
-                          aria-label={`Remove variation ${index + 1}`}
-                          onClick={() =>
-                            setNewProdVariations((rows) => rows.filter((_, i) => i !== index))
-                          }
-                          className="h-7 w-7 shrink-0 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 cursor-pointer"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-2xs text-slate-500 block mb-0.5">Stock</label>
-                        <input
-                          type="number"
-                          min="0"
-                          placeholder="0"
-                          value={row.stock}
-                          onChange={(e) =>
-                            setNewProdVariations((rows) =>
-                              rows.map((r, i) => (i === index ? { ...r, stock: e.target.value } : r))
-                            )
-                          }
-                          className="w-full h-7 px-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-2xs text-slate-500 block mb-0.5">Markup (₱)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0"
-                          value={row.markup}
-                          onChange={(e) =>
-                            setNewProdVariations((rows) =>
-                              rows.map((r, i) => (i === index ? { ...r, markup: e.target.value } : r))
-                            )
-                          }
-                          className="w-full h-7 px-2 rounded-md border border-slate-200 text-xs focus:ring-1 focus:ring-brand-orange"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-2xs text-slate-500 block mb-0.5">Image (optional)</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddVariationPhotoIndex(index)
-                            addVariationPhotoRef.current?.click()
-                          }}
-                          className="w-full h-7 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:border-brand-orange hover:text-brand-orange cursor-pointer"
-                        >
-                          {row.pic ? 'Replace' : 'Upload'}
-                        </button>
-                      </div>
-                    </div>
-                    {row.pic && (
+                <div className="space-y-2">
+                  {newProdVariations.map((row, index) => (
+                    <div key={`variation-${row.optionsKey || index}`} className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-2.5 space-y-2">
                       <div className="flex items-center gap-2">
-                        <img
-                          src={getImageUrl(row.pic)}
-                          alt={`Variation ${index + 1} preview`}
-                          className="h-10 w-10 rounded-md border border-slate-200 object-contain"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
+                        <input
+                          type="text"
+                          placeholder={
+                            row.options
+                              ? `${combinationLabel(row.options)} (leave blank to use this)`
+                              : 'Variation name (e.g. Medium)'
+                          }
+                          value={row.name}
+                          onChange={(e) =>
                             setNewProdVariations((rows) =>
-                              rows.map((r, i) => (i === index ? { ...r, pic: '' } : r))
+                              rows.map((r, i) => (i === index ? { ...r, name: e.target.value } : r))
                             )
                           }
-                          className="text-2xs font-semibold text-slate-500 hover:text-rose-600 cursor-pointer"
-                        >
-                          Remove image
-                        </button>
+                          className="field-input flex-1 h-8"
+                        />
+                        {row.options && (
+                          <span className="hidden sm:inline text-2xs font-semibold text-[var(--muted)] shrink-0">
+                            {combinationLabel(row.options)}
+                          </span>
+                        )}
+                        {variationMode === 'list' && newProdVariations.length > 1 && (
+                          <button
+                            type="button"
+                            aria-label={`Remove variation ${index + 1}`}
+                            onClick={() =>
+                              setNewProdVariations((rows) => rows.filter((_, i) => i !== index))
+                            }
+                            className="btn btn--ghost h-8 w-8 p-0 text-base"
+                          >
+                            ×
+                          </button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Stock</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={row.stock}
+                            onChange={(e) =>
+                              setNewProdVariations((rows) =>
+                                rows.map((r, i) => (i === index ? { ...r, stock: e.target.value } : r))
+                              )
+                            }
+                            className="field-input h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Markup (₱)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0"
+                            value={row.markup}
+                            onChange={(e) =>
+                              setNewProdVariations((rows) =>
+                                rows.map((r, i) => (i === index ? { ...r, markup: e.target.value } : r))
+                              )
+                            }
+                            className="field-input h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Image (optional)</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddVariationPhotoIndex(index)
+                              addVariationPhotoRef.current?.click()
+                            }}
+                            className="btn btn--secondary w-full h-8 text-2xs font-semibold"
+                          >
+                            {row.pic ? 'Replace' : 'Upload'}
+                          </button>
+                        </div>
+                      </div>
+                      {row.pic && (
+                        <div className="flex items-center gap-2 pt-1 border-t border-[var(--line)]">
+                          <img
+                            src={getImageUrl(row.pic)}
+                            alt={`Variation ${index + 1} preview`}
+                            className="h-10 w-10 rounded-md border border-[var(--line)] object-contain bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewProdVariations((rows) =>
+                                rows.map((r, i) => (i === index ? { ...r, pic: '' } : r))
+                              )
+                            }
+                            className="text-2xs font-semibold text-rose-600 hover:underline cursor-pointer"
+                          >
+                            Remove image
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
                 <input
                   ref={addVariationPhotoRef}
                   type="file"

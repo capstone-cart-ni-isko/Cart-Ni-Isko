@@ -9,6 +9,7 @@ import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import Avatar from '../components/ui/Avatar.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
 import { PRODUCT_CATEGORIES } from '../data/productCategories.js'
+import { fetchSearchHistory, recordSearchQuery, clearSearchHistory } from '../services/products.js'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import searchIcon from '../assets/icons/common/search.svg'
 import notificationIcon from '../assets/icons/common/notification.svg'
@@ -251,10 +252,68 @@ function Home() {
     return () => clearInterval(timer)
   }, [])
 
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [history, setHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const mobileSearchContainerRef = useRef(null)
+
+  const loadSearchHistory = async () => {
+    setLoadingHistory(true)
+    try {
+      const rows = await fetchSearchHistory()
+      setHistory(rows)
+    } catch {
+      // fallback
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!searchFocused) return undefined
+    const handleClickOutside = (e) => {
+      if (mobileSearchContainerRef.current && !mobileSearchContainerRef.current.contains(e.target)) {
+        setSearchFocused(false)
+      }
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setSearchFocused(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [searchFocused])
+
+  const handleFocusSearch = () => {
+    setSearchFocused(true)
+    loadSearchHistory()
+  }
+
+  const handleSelectHistoryItem = (queryText) => {
+    setSearchVal(queryText)
+    setSearchFocused(false)
+    navigate(`/search?q=${encodeURIComponent(queryText.trim())}`)
+  }
+
+  const handleDeleteHistoryItem = async (e, id) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await clearSearchHistory(id)
+    setHistory((prev) => prev.filter((item) => item.id !== id))
+  }
+
   const handleSearchSubmit = (e) => {
     e.preventDefault()
-    if (searchVal.trim()) {
-      navigate(`/shop?search=${encodeURIComponent(searchVal.trim())}`)
+    const q = searchVal.trim()
+    setSearchFocused(false)
+    if (q) {
+      recordSearchQuery(q).catch(() => {})
+      navigate(`/search?q=${encodeURIComponent(q)}`)
+    } else {
+      navigate('/search')
     }
   }
 
@@ -277,45 +336,166 @@ function Home() {
         {/* Sidebar menu drawer */}
         <ProfileMenu open={menuOpen} onClose={() => setMenuOpen(false)} user={currentUser} onLogout={logout} />
 
-        {/* Top ribbon bar */}
-        <header className="bg-white/85 dark:bg-[var(--surface)]/90 backdrop-blur-sm border-b border-gray-50 dark:border-[var(--line)] px-5 py-4 flex items-center justify-between sticky top-0 z-30">
-          {/* Hamburger left */}
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            aria-label="Open navigation menu"
-            className="w-10 h-10 rounded-full bg-gray-50 dark:bg-[var(--surface-3)] flex items-center justify-center active:scale-95 transition-transform"
-          >
-            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-gray-800 dark:text-[var(--ink)]" stroke="currentColor" strokeWidth="2.5">
-              <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
-            </svg>
-          </button>
+        {/* Top ribbon bar & expandable search container */}
+        <div ref={mobileSearchContainerRef} className="sticky top-0 z-30 select-none">
+          <header className="bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-sm border-b border-gray-100 dark:border-[var(--line)] px-4 py-3 flex items-center justify-between gap-3 relative z-40 transition-all">
+            {/* Hamburger left — hidden when search is focused */}
+            {!searchFocused && (
+              <button
+                type="button"
+                onClick={() => setMenuOpen(true)}
+                aria-label="Open navigation menu"
+                className="w-10 h-10 rounded-full bg-gray-50 dark:bg-[var(--surface-3)] flex items-center justify-center active:scale-95 transition-transform shrink-0"
+              >
+                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-gray-800 dark:text-[var(--ink)]" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
 
-          {/* Logo centered */}
-          <img src={logo} alt="Tindahan ni Isko" className="h-7 object-contain" />
+            {/* Logo centered or hidden when search focused */}
+            {!searchFocused && (
+              <img src={logo} alt="Tindahan ni Isko" className="h-7 object-contain mx-auto" />
+            )}
 
-          {/* Bell right */}
-          <Link
-            to="/notifications"
-            aria-label="Notifications"
-            className="w-10 h-10 rounded-full bg-gray-50 dark:bg-[var(--surface-3)] flex items-center justify-center relative active:scale-95 transition-transform"
-          >
-            <img src={notificationIcon} alt="" className="w-5 h-5 dark:brightness-125" />
-          </Link>
-        </header>
+            {/* When focused, the search bar fills the ribbon */}
+            {searchFocused && (
+              <form onSubmit={handleSearchSubmit} className="flex-1 relative min-w-0">
+                <img src={searchIcon} alt="" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40 dark:opacity-60 pointer-events-none" />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="What are you looking for?"
+                  value={searchVal}
+                  onChange={(e) => setSearchVal(e.target.value)}
+                  className="w-full h-10 pl-10 pr-9 rounded-xl bg-slate-50 dark:bg-[var(--surface-2)] border border-slate-200 dark:border-[var(--line)] text-xs text-slate-900 dark:text-[var(--ink)] placeholder-slate-400 dark:placeholder-[var(--muted-2)] focus:outline-none focus:border-brand-orange transition-all shadow-2xs"
+                />
+                {searchVal && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchVal('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    aria-label="Clear search"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+              </form>
+            )}
 
-        {/* Floating search container inside main stream */}
-        <div className="p-4 bg-white/35 dark:bg-[var(--surface-2)]/50">
-          <form onSubmit={handleSearchSubmit} className="relative">
-            <img src={searchIcon} alt="" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 opacity-40 dark:opacity-60" />
-            <input
-              type="search"
-              placeholder="What are you looking for?"
-              value={searchVal}
-              onChange={(e) => setSearchVal(e.target.value)}
-              className="w-full h-8 pl-9 pr-3 rounded-md bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-xs text-slate-900 dark:text-[var(--ink)] placeholder-slate-400 dark:placeholder-[var(--muted-2)] focus:outline-none focus:ring-1 focus:ring-brand-orange focus:border-brand-orange transition-colors"
-            />
-          </form>
+            {/* Bell right — hidden when search is focused */}
+            {!searchFocused && (
+              <Link
+                to="/notifications"
+                aria-label="Notifications"
+                className="w-10 h-10 rounded-full bg-gray-50 dark:bg-[var(--surface-3)] flex items-center justify-center relative active:scale-95 transition-transform shrink-0"
+              >
+                <img src={notificationIcon} alt="" className="w-5 h-5 dark:brightness-125" />
+              </Link>
+            )}
+          </header>
+
+          {/* Regular stream search input (when not focused) */}
+          {!searchFocused && (
+            <div className="p-4 bg-white/35 dark:bg-[var(--surface-2)]/50">
+              <div
+                onClick={handleFocusSearch}
+                className="relative cursor-pointer"
+              >
+                <img src={searchIcon} alt="" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 opacity-40 dark:opacity-60 pointer-events-none" />
+                <input
+                  type="text"
+                  readOnly
+                  placeholder="What are you looking for?"
+                  value={searchVal}
+                  className="w-full h-8 pl-9 pr-3 rounded-md bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] text-xs text-slate-900 dark:text-[var(--ink)] placeholder-slate-400 dark:placeholder-[var(--muted-2)] cursor-pointer"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ── FULL SCREEN BELOW RIBBON: List of previous searches (latest to oldest) ──
+              Requirement: White background, rows not placed in any card or element */}
+          {searchFocused && (
+            <div className="fixed inset-x-0 bottom-0 top-14 z-30 bg-white dark:bg-[var(--surface)] overflow-y-auto animate-fade-in select-none">
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-[var(--line)]">
+                  <div className="flex items-center gap-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-[var(--muted)]">
+                      Previous Searches
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSearchFocused(false)}
+                    className="text-xs font-semibold text-slate-400 hover:text-brand-orange transition-colors cursor-pointer"
+                  >
+                    Close (Esc)
+                  </button>
+                </div>
+
+                {loadingHistory ? (
+                  <div className="space-y-3 py-4">
+                    <div className="h-10 rounded-lg bg-slate-50 dark:bg-[var(--surface-2)] animate-pulse" />
+                    <div className="h-10 rounded-lg bg-slate-50 dark:bg-[var(--surface-2)] animate-pulse" />
+                  </div>
+                ) : history.length === 0 ? (
+                  <div className="py-16 text-center space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-[var(--surface-2)] flex items-center justify-center mx-auto text-slate-400">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-[var(--ink)]">No previous searches</p>
+                    <p className="text-xs text-slate-400 dark:text-[var(--muted)]">Type your search query above.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-[var(--line)]">
+                    {history.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => handleSelectHistoryItem(item.query)}
+                        className="flex items-center justify-between py-3.5 px-2 hover:bg-slate-50/80 dark:hover:bg-[var(--surface-2)] rounded-lg transition-colors cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-400 dark:text-[var(--muted)] group-hover:text-brand-orange shrink-0 transition-colors">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          <span className="text-sm font-medium text-slate-800 dark:text-[var(--ink)] truncate group-hover:text-brand-orange transition-colors">
+                            {item.query}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteHistoryItem(e, item.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                            title="Delete past search"
+                            aria-label="Delete past search"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 1. Hero banner carousel - taller, heavy border-radius (24px) */}
