@@ -132,6 +132,7 @@ function App() {
                 <Route path="/shop" element={<Shop />} />
                 <Route path="/search" element={<Search />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
+                <Route path="/about" element={<AboutSettings backTo="/home" />} />
                 {/* New-schema catalog URL: /catalog/[prod_categ]/[prod_tag] */}
                 <Route path="/catalog/:categ/:tag" element={<ProductDetail />} />
 

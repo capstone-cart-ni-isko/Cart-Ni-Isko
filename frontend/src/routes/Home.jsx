@@ -121,7 +121,7 @@ function ProfileMenu({ open, onClose, user, onLogout }) {
               </svg>
               <span>Home</span>
             </Link>
-            <Link to="/settings/about" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
+            <Link to="/about" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="16" x2="12" y2="12" />
@@ -668,7 +668,7 @@ function Home() {
             </p>
             <div className="pt-1">
               <Link
-                to="/settings/about"
+                to="/about"
                 className="inline-flex items-center justify-center h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold rounded-md transition-colors"
               >
                 Learn More About Us
@@ -877,7 +877,7 @@ function Home() {
             </p>
             <div className="pt-1">
               <Link
-                to="/settings/about"
+                to="/about"
                 className="inline-flex items-center justify-center h-8 px-4 bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold rounded-md transition-colors"
               >
                 <span>Learn More About Us</span>

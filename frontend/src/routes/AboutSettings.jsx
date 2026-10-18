@@ -59,9 +59,9 @@ function Card({ icon, title, children }) {
   )
 }
 
-function AboutSettings() {
+function AboutSettings({ backTo = '/settings' }) {
   return (
-    <FocusedLayout title="About" subtitle="Store information, developers, and version notes" backTo="/settings" containerClassName="max-w-2xl">
+    <FocusedLayout title="About" subtitle="Store information, developers, and version notes" backTo={backTo} containerClassName="max-w-2xl">
       <div className="pb-16 animate-fade-in w-full">
 
         <div className="space-y-5">
