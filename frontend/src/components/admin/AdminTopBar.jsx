@@ -250,12 +250,11 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
     }
   }
 
+  // Only the search bar reacts to hover so the other ribbon icons stay visible and clickable.
   return (
     <header
       className="shrink-0 z-30 select-none relative"
       ref={searchContainerRef}
-      onMouseEnter={handleMouseEnterSearch}
-      onMouseLeave={handleMouseLeaveSearch}
     >
       {/* ── Ribbon (DOMAIN 3) ── */}
       {/* Full page width: the ribbon is the top row of the portal (rule 72).

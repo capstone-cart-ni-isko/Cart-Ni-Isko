@@ -226,12 +226,11 @@ function DesktopHeader() {
     }
   }
 
+  // Only the search bar reacts to hover so the other ribbon icons stay visible and clickable.
   return (
     <header
       className="hidden md:block w-full bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] sticky top-0 z-50 select-none relative"
       ref={searchContainerRef}
-      onMouseEnter={handleMouseEnterSearch}
-      onMouseLeave={handleMouseLeaveSearch}
     >
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4 relative z-40">
         {/* Back button: appears when search is hovered, clicked, or search is sent */}
