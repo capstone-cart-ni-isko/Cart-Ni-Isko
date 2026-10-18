@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -7,10 +7,15 @@ import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import Button from '../../components/ui/Button.jsx'
 import BackButton from '../../components/ui/BackButton.jsx'
+import PriceTag from '../../components/ui/PriceTag.jsx'
+import ProductAccordion from '../../components/ui/ProductAccordion.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { apiGet } from '../../services/api.js'
 import { fetchProductSales, mapAdminProduct, optionLabel } from '../../services/adminProducts.js'
 import { uploadImage } from '../../services/upload.js'
+import { empIsStaff } from '../../components/admin/schema.js'
+import { PRODUCT_CATEGORIES } from '../../data/productCategories.js'
+import { CalendarIcon, ShirtIcon } from '../../components/ui/Icons.jsx'
 
 /**
  * FLOW-MANAGE_INV-05 / FLOW-MANAGE_INV-08 / REQ-MANAGE_INV-06 / REQ-MANAGE_INV-07
@@ -63,21 +68,79 @@ function money(value) {
   return `₱${(Number(value) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/** Rule 67 - the message for a field sits directly beneath that field. */
+function FieldError({ message }) {
+  if (!message) return null
+  return (
+    <p className="text-2xs font-medium text-rose-600 mt-1" role="alert">
+      {message}
+    </p>
+  )
+}
+
 export default function AdminProductDetail() {
   const { prodId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { showToast } = useToast()
-  const { unlistProduct, sellProduct, deleteProduct, refreshProducts, addVariant, updateVariant, removeVariant } = useAdmin()
+  const {
+    updateProduct,
+    unlistProduct,
+    sellProduct,
+    deleteProduct,
+    refreshProducts,
+    addVariant,
+    updateVariant,
+    removeVariant,
+    currentAdminUser,
+  } = useAdmin()
+
+  const isStaff = empIsStaff(currentAdminUser)
 
   const [row, setRow] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+
+  // View mode active gallery image
+  const [activeImage, setActiveImage] = useState('')
+
+  // Editing mode state (toggled via query param ?edit=1 or page edit button)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [editCategory, setEditCategory] = useState('Shirts')
+  const [editPrice, setEditPrice] = useState('')
+  const [editPhoto, setEditPhoto] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [editTouched, setEditTouched] = useState({ name: false, price: false })
+  const [editFormError, setEditFormError] = useState('')
+  const editPhotoRef = useRef(null)
+  const [isUploadingEditPhoto, setIsUploadingEditPhoto] = useState(false)
 
   // Sales history (FLOW-MANAGE_INV-08): a window plus a live date range.
   const [range, setRange] = useState('30')
   const [dateFrom, setDateFrom] = useState(() => daysAgoISO(30))
   const [dateTo, setDateTo] = useState(() => todayISO())
   const [sales, setSales] = useState(null)
+
+  // Sync editing mode with ?edit=1 query parameter
+  useEffect(() => {
+    if (searchParams.get('edit') === '1') {
+      setIsEditing(true)
+    }
+  }, [searchParams])
+
+  // Reset/populate edit form values whenever row changes
+  const populateEditForm = useCallback((productRow) => {
+    if (!productRow) return
+    setEditName(productRow.name || '')
+    setEditDesc(productRow.description || '')
+    setEditCategory(productRow.categoryName || 'Shirts')
+    setEditPrice(String(productRow.price ?? ''))
+    setEditPhoto(productRow.image || '')
+    setEditTouched({ name: false, price: false })
+    setEditFormError('')
+  }, [])
 
   // FLOW-MANAGE_INV-01: one combination at a time. `editing` holds the row the
   // drawer points at (null = adding a new one) and `draft` its fields.
@@ -101,18 +164,30 @@ export default function AdminProductDetail() {
     setLoadError('')
     try {
       const data = await apiGet('/products/view', { prod_id: prodId })
-      setRow(mapAdminProduct(data?.data))
+      const mapped = mapAdminProduct(data?.data)
+      setRow(mapped)
+      if (mapped) {
+        populateEditForm(mapped)
+        setActiveImage(mapped.image || '')
+      }
     } catch (err) {
       setRow(null)
       setLoadError(err?.message || 'Unable to load this product.')
     } finally {
       setIsLoading(false)
     }
-  }, [prodId])
+  }, [prodId, populateEditForm])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // Keep activeImage in sync when row loads
+  useEffect(() => {
+    if (row?.image && !activeImage) {
+      setActiveImage(row.image)
+    }
+  }, [row, activeImage])
 
   // FLOW-MANAGE_INV-08: the history is fetched per window, so a date change
   // re-queries instead of slicing a fixed payload in the browser.
@@ -305,6 +380,110 @@ export default function AdminProductDetail() {
     if (result.success) load()
   }
 
+  // ==========================================
+  // EDIT PRODUCT (FLOW-MANAGE_INV-05 / REQ-IM-01)
+  // ==========================================
+
+  const handleEditPhotoChange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!ACCEPTED_IMAGE_MIME.includes(file.type)) {
+      showToast('Product images must be PNG or JPEG files.', 'error')
+      return
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      showToast('Product images must be 2 MB or smaller.', 'error')
+      return
+    }
+    setIsUploadingEditPhoto(true)
+    try {
+      const url = await uploadImage(file, 'product')
+      if (url) {
+        setEditPhoto(url)
+        setActiveImage(url)
+      }
+    } catch {
+      showToast('Unable to upload the image.', 'error')
+    } finally {
+      setIsUploadingEditPhoto(false)
+    }
+  }
+
+  const nameError = editTouched.name && !editName.trim() ? 'Product name is required.' : ''
+  const parsedPrice = parseFloat(editPrice)
+  const priceError = editTouched.price && !(parsedPrice > 0) ? 'Product price must be greater than zero.' : ''
+
+  const handleSaveProduct = async (e) => {
+    if (e) e.preventDefault()
+    if (!row) return
+    setEditTouched({ name: true, price: true })
+    if (!editName.trim() || !(parsedPrice > 0)) return
+
+    setIsSaving(true)
+    setEditFormError('')
+    try {
+      const targetId = row.prodId ?? prodId
+      const result = await updateProduct(targetId, {
+        prod_name: editName.trim(),
+        prod_desc: editDesc,
+        prod_categ: editCategory,
+        prod_price: parsedPrice,
+        ...(editPhoto ? { prod_images: [editPhoto] } : {}),
+      })
+      if (result.success) {
+        showToast('Product updated successfully.', 'success')
+        setIsEditing(false)
+        if (searchParams.get('edit')) {
+          const nextParams = new URLSearchParams(searchParams)
+          nextParams.delete('edit')
+          setSearchParams(nextParams, { replace: true })
+        }
+        await load()
+        refreshProducts()
+      } else {
+        const msg = result.error || 'Failed to save product changes.'
+        setEditFormError(msg)
+        showToast(msg, 'error')
+      }
+    } catch (err) {
+      const msg = err?.message || 'Failed to save product changes.'
+      setEditFormError(msg)
+      showToast(msg, 'error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    populateEditForm(row)
+    if (searchParams.get('edit')) {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('edit')
+      setSearchParams(nextParams, { replace: true })
+    }
+  }
+
+  const editCategoryOptions = useMemo(() => {
+    if (!editCategory || PRODUCT_CATEGORIES.includes(editCategory)) {
+      return PRODUCT_CATEGORIES
+    }
+    return [...PRODUCT_CATEGORIES, editCategory]
+  }, [editCategory])
+
+  // Images for customer-style gallery
+  const galleryImages = useMemo(() => {
+    const list = []
+    if (row?.image) list.push(row.image)
+    if (Array.isArray(row?.variants)) {
+      row.variants.forEach((v) => {
+        if (v.pic && !list.includes(v.pic)) list.push(v.pic)
+      })
+    }
+    return list
+  }, [row])
+
   return (
     <AdminLayout>
       <div className="space-y-4 animate-fade-in pb-10">
@@ -314,22 +493,58 @@ export default function AdminProductDetail() {
             to="/admin/inventory"
           />
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleToggleListing}
-              disabled={!row}
-              className="h-8 px-3 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
-            >
-              {row?.disabled ? 'Relist product' : 'Unlist product'}
-            </button>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={!row}
-              className="h-8 px-3 rounded-md border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer disabled:opacity-50"
-            >
-              Remove
-            </button>
+            {!isStaff && (
+              <>
+                {isEditing ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="h-8 px-3.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors shadow-2xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveProduct}
+                      disabled={isSaving}
+                      className="h-8 px-4 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                    >
+                      {isSaving ? 'Saving…' : 'Save Changes'}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    disabled={!row}
+                    className="h-8 px-3.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors shadow-2xs disabled:opacity-50 inline-flex items-center gap-1.5"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    <span>Edit Product</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleToggleListing}
+                  disabled={!row}
+                  className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-50 transition-colors shadow-2xs"
+                >
+                  {row?.disabled ? 'Relist product' : 'Unlist product'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={!row}
+                  className="h-8 px-3 rounded-lg border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer disabled:opacity-50 transition-colors shadow-2xs"
+                >
+                  Remove
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -350,55 +565,333 @@ export default function AdminProductDetail() {
           </div>
         ) : !row ? (
           <p className="text-xs text-slate-400 font-medium py-10">Product not found.</p>
-        ) : (
-          <>
-            {/* FLOW-MANAGE_INV-05: the product header with its metrics */}
-            <div className="bg-white border border-slate-200 rounded-lg p-4 flex items-start gap-4">
-              <img
-                src={getImageUrl(row.image)}
-                alt={row.name}
-                className="w-20 h-20 rounded-md border border-slate-200 object-contain bg-slate-50 shrink-0"
+        ) : isEditing ? (
+          /* ============================================================ */
+          /* EDITABLE FIELDS SECTION (Styled identically to AdminAccount) */
+          /* ============================================================ */
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 animate-fade-in">
+            {/* Product Photo Upload Card */}
+            <section className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 flex flex-col items-center text-center space-y-3">
+              <div className="w-32 h-32 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center p-2 overflow-hidden relative group">
+                {editPhoto ? (
+                  <img
+                    src={getImageUrl(editPhoto)}
+                    alt={editName || 'Product'}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <ShirtIcon className="w-16 h-16 text-slate-300" />
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{editName || 'Product'}</p>
+                <p className="text-2xs text-slate-400 mt-0.5">SKU: {row.sku}</p>
+              </div>
+              <button
+                type="button"
+                disabled={isUploadingEditPhoto}
+                onClick={() => editPhotoRef.current?.click()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-2xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                <span>{isUploadingEditPhoto ? 'Uploading…' : 'Change photo'}</span>
+              </button>
+              <input
+                ref={editPhotoRef}
+                type="file"
+                accept={ACCEPTED_IMAGE_TYPES}
+                onChange={handleEditPhotoChange}
+                className="hidden"
               />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h1 className="text-base font-bold text-slate-900 truncate">{row.name}</h1>
-                    <p className="text-2xs text-slate-400 mt-0.5">
-                      {row.sku} • {row.categoryName}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 inline-block px-2.5 py-1 rounded-md text-2xs font-semibold ${
-                      row.disabled
-                        ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                        : row.availability === 'Pre-order'
-                        ? 'bg-orange-50 text-brand-orange border border-orange-200/60'
-                        : 'bg-blue-50 text-blue-700 border border-blue-200/60'
-                    }`}
+              <p className="text-2xs text-slate-400">JPG or PNG · max 2 MB</p>
+
+              {editPhoto && (
+                <button
+                  type="button"
+                  onClick={() => setEditPhoto('')}
+                  className="text-2xs font-semibold text-rose-600 hover:underline cursor-pointer pt-1"
+                >
+                  Remove photo
+                </button>
+              )}
+            </section>
+
+            {/* Editable Fields Form */}
+            <section className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Edit product details</h2>
+                  <p className="text-2xs text-slate-400 mt-0.5">
+                    Update base information, category, and pricing.
+                  </p>
+                </div>
+                <span className="text-2xs font-mono font-medium bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md">
+                  {row.sku}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
+                    Product name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => {
+                      setEditName(e.target.value)
+                      setEditTouched((t) => ({ ...t, name: true }))
+                    }}
+                    onBlur={() => setEditTouched((t) => ({ ...t, name: true }))}
+                    aria-invalid={!!nameError}
+                    placeholder="e.g. BU Pride Classic Hoodie"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                  />
+                  <FieldError message={nameError} />
+                </div>
+
+                <div>
+                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
+                    Category <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all cursor-pointer"
                   >
-                    {row.disabled ? 'Unlisted' : row.status}
-                  </span>
+                    {editCategoryOptions.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Base price</p>
-                    <p className="text-sm font-bold text-slate-900 mt-0.5">{money(row.price)}</p>
+
+                <div>
+                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
+                    Base price (₱) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0.01"
+                    step="0.01"
+                    value={editPrice}
+                    onChange={(e) => {
+                      setEditPrice(e.target.value)
+                      setEditTouched((t) => ({ ...t, price: true }))
+                    }}
+                    onBlur={() => setEditTouched((t) => ({ ...t, price: true }))}
+                    aria-invalid={!!priceError}
+                    placeholder="e.g. 750.00"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                  />
+                  <FieldError message={priceError} />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
+                    placeholder="Provide detailed description of materials, sizing, and features..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                  />
+                </div>
+              </div>
+
+              {editFormError && (
+                <p className="text-2xs font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-3" role="alert">
+                  {editFormError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="h-9 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveProduct}
+                  disabled={isSaving}
+                  className="h-9 px-4 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                >
+                  {isSaving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : (
+          /* ============================================================ */
+          /* COMPLETE PRODUCT DETAILS VIEW (Customer-side like aesthetic) */
+          /* ============================================================ */
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
+              {/* Left Column: Rich Product Image Gallery */}
+              <div className="lg:sticky lg:top-6 flex flex-col gap-3">
+                <div className="relative aspect-square w-full bg-gradient-to-br from-orange-50/70 via-gray-50 to-blue-50/50 rounded-3xl overflow-hidden border border-gray-100 flex items-center justify-center shadow-2xs group">
+                  {/* Status Badge Tag Over Main Image */}
+                  <div className="absolute top-4 left-4 z-10 flex flex-col gap-1.5">
+                    {row.disabled ? (
+                      <span className="inline-flex items-center gap-1 bg-slate-700 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                        Unlisted
+                      </span>
+                    ) : row.availability === 'Pre-order' ? (
+                      <span className="inline-flex items-center gap-1.5 bg-blue-600 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                        <CalendarIcon className="w-3.5 h-3.5 shrink-0" />
+                        <span>For Pre-order</span>
+                      </span>
+                    ) : row.totalStock === 0 ? (
+                      <span className="inline-flex items-center gap-1 bg-red-600 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                        Out of Stock
+                      </span>
+                    ) : row.lowStock ? (
+                      <span className="inline-flex items-center gap-1 bg-amber-500 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                        Low Stock ({row.totalStock} left)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-emerald-600 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-md uppercase tracking-wider">
+                        Active Catalog
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Total stock</p>
-                    <p className="text-sm font-bold text-slate-900 mt-0.5">{row.totalStock}</p>
+
+                  {/* Main Image */}
+                  {activeImage ? (
+                    <img
+                      key={activeImage}
+                      src={getImageUrl(activeImage)}
+                      alt={row.name}
+                      className="w-full h-full object-contain p-4 md:p-8 transition-transform duration-300 group-hover:scale-105"
+                    />
+                  ) : (
+                    <ShirtIcon className="w-28 h-28 md:w-36 md:h-36 text-brand-orange opacity-40 filter drop-shadow-md" />
+                  )}
+                </div>
+
+                {/* Thumbnail Strip Gallery */}
+                {galleryImages.length > 1 && (
+                  <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
+                    {galleryImages.map((imgSrc, idx) => {
+                      const isActive = activeImage === imgSrc
+                      return (
+                        <button
+                          key={imgSrc + idx}
+                          type="button"
+                          onClick={() => setActiveImage(imgSrc)}
+                          className={`relative w-20 h-20 rounded-2xl overflow-hidden border-2 bg-white shrink-0 transition-all cursor-pointer p-1.5 ${
+                            isActive
+                              ? 'border-[#FF6A00] shadow-sm'
+                              : 'border-gray-200 hover:border-gray-300 opacity-70 hover:opacity-100'
+                          }`}
+                        >
+                          <img
+                            src={getImageUrl(imgSrc)}
+                            alt={`Preview ${idx + 1}`}
+                            className="w-full h-full object-contain"
+                          />
+                        </button>
+                      )
+                    })}
                   </div>
-                  <div>
-                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Units sold</p>
-                    <p className="text-sm font-bold text-slate-900 mt-0.5">{row.orders}</p>
+                )}
+              </div>
+
+              {/* Right Column: Complete Product Details */}
+              <div className="flex flex-col gap-5">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-brand-orange uppercase tracking-widest">
+                      {row.categoryName}
+                    </span>
+                    <span className="text-2xs font-mono font-medium text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-md">
+                      SKU: {row.sku}
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Rating</p>
-                    <p className="text-sm font-bold text-slate-900 mt-0.5">
-                      {row.rating ? `${row.rating} ★ (${row.reviewCount})` : '—'}
-                    </p>
+                  <h1 className="text-xl md:text-2xl font-bold text-gray-900 mt-1 leading-tight">
+                    {row.name}
+                  </h1>
+
+                  {/* Rating Badge */}
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="flex text-amber-400 text-sm">★</span>
+                    <span className="text-xs font-bold text-gray-800">
+                      {row.rating ? row.rating.toFixed(1) : 'No reviews'}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      ({row.reviewCount} customer reviews)
+                    </span>
+                  </div>
+
+                  {/* Price Tag & Stock Summary */}
+                  <div className="mt-4 flex items-center justify-between flex-wrap gap-2 p-4 bg-orange-50/50 rounded-2xl border border-orange-100">
+                    <div>
+                      <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Base Price</p>
+                      <PriceTag
+                        amount={row.price}
+                        className="text-2xl font-extrabold text-brand-orange"
+                      />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Total Stock</p>
+                      <p className="text-base font-bold text-slate-900 mt-0.5">
+                        {row.totalStock} units
+                      </p>
+                    </div>
                   </div>
                 </div>
+
+                {/* Metrics 4-Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+                  <div>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Availability</p>
+                    <p className="text-xs font-bold text-slate-800 mt-0.5">{row.availability}</p>
+                  </div>
+                  <div>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Units Sold</p>
+                    <p className="text-xs font-bold text-slate-800 mt-0.5">{row.orders}</p>
+                  </div>
+                  <div>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Variations</p>
+                    <p className="text-xs font-bold text-slate-800 mt-0.5">{row.variants.length} combinations</p>
+                  </div>
+                  <div>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Threshold</p>
+                    <p className="text-xs font-bold text-slate-800 mt-0.5">≤ {row.lowStockThreshold} units</p>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Description</h3>
+                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
+                    {row.description || 'No description provided for this product.'}
+                  </p>
+                </div>
+
+                {/* Product Accordion for Specs (Customer-Side feature) */}
+                <ProductAccordion
+                  details={{
+                    material: row.description || 'Official Tindahan ni Isko merchandise.',
+                    sizeFit: ['Hoodies', 'Jackets', 'Shirts'].includes(row.categoryName)
+                      ? 'True to size collegiate unisex fit.'
+                      : 'Standard one size specification.',
+                    care: 'Wash cold inside out with similar colors. Avoid harsh bleach.',
+                    shippingReturns: 'Store pickup at BU Student Center or courier delivery across Albay & nationwide.',
+                  }}
+                  preOrder={row.availability === 'Pre-order'}
+                />
               </div>
             </div>
 

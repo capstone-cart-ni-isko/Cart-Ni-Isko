@@ -184,7 +184,7 @@ export default function CustomerSearch() {
       {/* ── Focused Header Bar (Rule 65 / Rule 68 / Rule 69 / Rule 72): Search bar stays in the ribbon, Back button at top-left ── */}
       <header className="sticky top-0 z-40 select-none bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 h-14 flex items-center gap-3 shadow-2xs">
         {/* Working Back button at top-left (Rule 68, 69) */}
-        <BackButton onClick={handleBack} label="Back" />
+        <BackButton onClick={handleBack} />
 
         {/* Search bar stays in the ribbon */}
         <form onSubmit={handleSearchSubmit} className="flex-1 relative min-w-0" ref={searchInputRef}>

@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Link } from 'react-router-dom'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -92,6 +91,7 @@ export default function AdminInventory() {
   // The management buttons are hidden for staff (read-only mode).
   const isStaff = empIsStaff(currentAdminUser)
 
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
   // Product data state - synced directly from backend (refetched on every change)
@@ -842,17 +842,6 @@ export default function AdminInventory() {
               {showMoreFilters && (
               <>
               <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
-              >
-                <option value="All">Category ▾</option>
-                {inventoryFilterCategories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-
-              <select
                 value={filterAvailability}
                 onChange={(e) => setFilterAvailability(e.target.value)}
                 className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
@@ -928,6 +917,28 @@ export default function AdminInventory() {
               </button>
             </div>
           )}
+        {/* Category Chip Filters (similar to customer-side catalog) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none select-none">
+          {['All', ...inventoryFilterCategories].map((cat) => {
+            const isActive = filterCategory === cat
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => {
+                  setFilterCategory(cat)
+                  setPage(1)
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all border cursor-pointer ${
+                  isActive
+                    ? 'bg-brand-orange border-brand-orange text-white shadow-2xs'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {cat}
+              </button>
+            )
+          })}
         </div>
 
         {/* Table Container */}
@@ -954,7 +965,6 @@ export default function AdminInventory() {
                     />
                   </th>
                   <th className="p-4">PRODUCT</th>
-                  <th className="p-4">CATEGORY</th>
                   <th className="p-4">AVAILABILITY</th>
                   <th className="p-4">STOCK (TOTAL UNITS)</th>
                   <th className="p-4">PRICE</th>
@@ -970,9 +980,12 @@ export default function AdminInventory() {
 
                   return (
                     <React.Fragment key={prod.id}>
-                      {/* Product Main Row */}
-                      <tr className="hover:bg-gray-50/70 transition-colors group">
-                        <td className="p-4">
+                      {/* Product Main Row — clickable to open complete product details page */}
+                      <tr
+                        onClick={() => navigate(`/admin/inventory/${prod.prodId ?? prod.id}`)}
+                        className="hover:bg-gray-50/70 transition-colors group cursor-pointer"
+                      >
+                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={selectedProductIds.includes(prod.id)}
@@ -999,7 +1012,7 @@ export default function AdminInventory() {
 
                             {/* Info */}
                             <div>
-                              <h4 className="font-extrabold text-gray-900 text-xs leading-tight">
+                              <h4 className="font-extrabold text-gray-900 text-xs leading-tight group-hover:text-brand-orange transition-colors">
                                 {prod.name}
                               </h4>
                               <p className="text-2xs text-gray-400 font-semibold mt-0.5">
@@ -1007,22 +1020,6 @@ export default function AdminInventory() {
                               </p>
                             </div>
                           </div>
-                        </td>
-
-                        {/* Category Column */}
-                        <td className="p-4">
-                          <p className="font-bold text-gray-900 text-xs">
-                            {/* FLOW-MANAGE_INV-05: clicking a product opens its
-                                detail page with every variation, price, stock
-                                level and metric. */}
-                            <Link
-                              to={`/admin/inventory/${prod.prodId ?? prod.id}`}
-                              className="hover:text-brand-orange hover:underline"
-                            >
-                              {prod.categoryName}
-                            </Link>
-                          </p>
-                          <p className="text-2xs text-gray-400">{prod.sku}</p>
                         </td>
 
                         {/* Availability Column - Rectangular Badge */}
@@ -1129,7 +1126,11 @@ export default function AdminInventory() {
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => (prod.disabled ? sellProduct(prod.id) : unlistProduct(prod.id))}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (prod.disabled) sellProduct(prod.id)
+                                    else unlistProduct(prod.id)
+                                  }}
                                   title={prod.disabled ? 'Sell (relist in catalog)' : 'Unlist from customer catalog'}
                                   className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
                                 >
@@ -1137,14 +1138,20 @@ export default function AdminInventory() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => openEditModal(prod)}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    navigate(`/admin/inventory/${prod.prodId ?? prod.id}?edit=1`)
+                                  }}
                                   className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
                                 >
                                   Edit
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setDeleteTarget(prod)}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setDeleteTarget(prod)
+                                  }}
                                   title="Delete product"
                                   className="p-1 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
                                 >
@@ -1159,7 +1166,7 @@ export default function AdminInventory() {
                       {/* Nested Variants drawer */}
                       {isExpanded && hasVariants && (
                         <tr className="bg-gray-50/40">
-                          <td colSpan={9} className="p-0 border-b border-gray-200">
+                          <td colSpan={8} className="p-0 border-b border-gray-200">
                             <div className="my-3 ml-10 mr-4 pl-4 border-l-2 border-orange-400 space-y-3">
                               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                                 <table className="w-full text-left text-xs">
@@ -2110,6 +2117,7 @@ export default function AdminInventory() {
               </div>
         </Modal>
       )}
+      </div>
     </AdminLayout>
   )
 }

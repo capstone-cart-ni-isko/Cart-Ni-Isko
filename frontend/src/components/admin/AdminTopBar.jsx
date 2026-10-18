@@ -207,6 +207,11 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
     navigate(`/admin/search?q=${encodeURIComponent(queryText.trim())}`)
   }
 
+  const handleClearAllHistory = async () => {
+    await clearSearchHistory()
+    setHistory([])
+  }
+
   const handleDeleteHistoryItem = async (e, id) => {
     e.preventDefault()
     e.stopPropagation()
@@ -246,7 +251,12 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
   }
 
   return (
-    <header className="shrink-0 z-30 select-none relative" ref={searchContainerRef}>
+    <header
+      className="shrink-0 z-30 select-none relative"
+      ref={searchContainerRef}
+      onMouseEnter={handleMouseEnterSearch}
+      onMouseLeave={handleMouseLeaveSearch}
+    >
       {/* ── Ribbon (DOMAIN 3) ── */}
       {/* Full page width: the ribbon is the top row of the portal (rule 72).
           When search bar is hovered OR clicked (active) OR search is sent:
@@ -259,7 +269,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
             isSearchActiveOrSent ? 'max-w-[48px] opacity-100 scale-100' : 'max-w-0 opacity-0 scale-90 pointer-events-none'
           }`}
         >
-          <BackButton onClick={handleBack} label="Back" />
+          <BackButton onClick={handleBack} />
         </div>
 
         {/* Small-screen menu opener: hidden when search is active or sent */}
@@ -437,13 +447,27 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
                   Previous Searches
                 </h2>
               </div>
-              <button
-                type="button"
-                onClick={() => setSearchFocused(false)}
-                className="text-xs font-semibold text-slate-400 hover:text-brand-orange transition-colors cursor-pointer"
-              >
-                Close (Esc)
-              </button>
+              <div className="flex items-center gap-3">
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllHistory}
+                    className="text-xs font-semibold text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                  >
+                    Clear History
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchFocused(false)
+                    setSearchHovered(false)
+                  }}
+                  className="text-xs font-semibold text-slate-400 hover:text-brand-orange transition-colors cursor-pointer"
+                >
+                  Close (Esc)
+                </button>
+              </div>
             </div>
 
             {loadingHistory ? (

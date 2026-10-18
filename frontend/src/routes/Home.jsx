@@ -298,6 +298,11 @@ function Home() {
     navigate(`/search?q=${encodeURIComponent(queryText.trim())}`)
   }
 
+  const handleClearAllHistory = async () => {
+    await clearSearchHistory()
+    setHistory([])
+  }
+
   const handleDeleteHistoryItem = async (e, id) => {
     e.preventDefault()
     e.stopPropagation()
@@ -432,13 +437,24 @@ function Home() {
                       Previous Searches
                     </h2>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSearchFocused(false)}
-                    className="text-xs font-semibold text-slate-400 hover:text-brand-orange transition-colors cursor-pointer"
-                  >
-                    Close (Esc)
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {history.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearAllHistory}
+                        className="text-xs font-semibold text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                      >
+                        Clear History
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setSearchFocused(false)}
+                      className="text-xs font-semibold text-slate-400 hover:text-brand-orange transition-colors cursor-pointer"
+                    >
+                      Close (Esc)
+                    </button>
+                  </div>
                 </div>
 
                 {loadingHistory ? (
