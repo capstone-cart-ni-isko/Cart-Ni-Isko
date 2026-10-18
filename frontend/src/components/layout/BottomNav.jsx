@@ -88,7 +88,7 @@ function BottomNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-[110000] safe-bottom md:bottom-4 lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-[110000] safe-bottom md:hidden">
       <div className="mx-auto max-w-lg md:max-w-xl px-4">
         <div className="flex items-center justify-around bg-white dark:bg-[var(--surface)] rounded-lg px-2 py-1.5 border border-slate-200 dark:border-[var(--line)]">
           {currentUser ? (

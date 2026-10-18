@@ -117,7 +117,7 @@ function Shop() {
     <AppShell>
       <div className="pb-28">
         {/* Sticky search header - hidden on desktop */}
-        <header className="bg-white border-b border-gray-50 px-4 py-3.5 flex items-center gap-3 sticky top-0 z-30 lg:hidden">
+        <header className="bg-white border-b border-gray-50 px-4 py-3.5 flex items-center gap-3 sticky top-0 z-30 md:hidden">
           <button
             type="button"
             onClick={() => navigate('/home')}
@@ -171,7 +171,7 @@ function Shop() {
         </header>
 
         {/* Desktop-specific shop toolbar */}
-        <div className="hidden lg:flex items-center justify-between border-b border-gray-200 pb-5 mb-6">
+        <div className="hidden md:flex items-center justify-between border-b border-gray-200 pb-5 mb-6">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Shop Merchandise</h1>
             {query.trim() && (
@@ -217,7 +217,7 @@ function Shop() {
         </div>
 
         {/* Horizontally scrollable Category pills - wraps on desktop */}
-        <div className="flex gap-2 overflow-x-auto px-4 py-3 bg-gray-50/50 scrollbar-none select-none lg:bg-transparent lg:px-0 lg:py-0 lg:flex-wrap lg:mb-8">
+        <div className="flex gap-2 overflow-x-auto px-4 py-3 bg-gray-50/50 scrollbar-none select-none md:bg-transparent md:px-0 md:py-0 md:flex-wrap md:mb-8">
           {categories.map((cat) => {
             const isActive = activeFilters.category === cat
             return (
