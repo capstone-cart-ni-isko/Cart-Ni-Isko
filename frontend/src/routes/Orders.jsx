@@ -13,6 +13,9 @@ import { getImageUrl } from '../utils/imageUtils.js'
 import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon } from '../components/ui/Icons.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
+import Modal from '../components/ui/Modal.jsx'
+import Button from '../components/ui/Button.jsx'
+import QRCode from 'qrcode'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import CustomerOrderDetailModal from '../components/orders/CustomerOrderDetailModal.jsx'
 import { fetchOrders, requestCancel, orderFilterBucket } from '../services/orders.js'
@@ -209,8 +212,39 @@ function Orders() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
   const [claimTarget, setClaimTarget] = useState(null)
+  const [pickupQrTarget, setPickupQrTarget] = useState(null)
+  const [pickupQrDataUrl, setPickupQrDataUrl] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
   const firstLoad = useRef(true)
+
+  // Generate QR code Data URL whenever pickupQrTarget changes
+  useEffect(() => {
+    let alive = true
+    const code = pickupQrTarget?.qr || pickupQrTarget?.pickupQr || null
+    if (!pickupQrTarget || !code) {
+      setPickupQrDataUrl('')
+      return () => {
+        alive = false
+      }
+    }
+
+    QRCode.toDataURL(String(code), {
+      margin: 1,
+      width: 256,
+      color: { dark: '#111827', light: '#ffffff' },
+    })
+      .then((url) => {
+        if (alive) setPickupQrDataUrl(url)
+      })
+      .catch((err) => {
+        console.warn('Pickup QR generation failed:', err?.message)
+        if (alive) setPickupQrDataUrl('')
+      })
+
+    return () => {
+      alive = false
+    }
+  }, [pickupQrTarget])
 
   const load = useCallback(
     async ({ silent = false } = {}) => {
@@ -448,8 +482,10 @@ function Orders() {
             const method = order.fulfillment?.method || 'Store Pickup'
             const isDelivery = method === 'Courier Delivery'
             const orderTotal = order.total
+            const pickupQrCode = order.pickupQr || order.raw?.appoint_qr || null
+            const hasPickupQr = !isDelivery && Boolean(pickupQrCode)
             const claimable =
-              !isDelivery && order.status === 'TO CLAIM' && Boolean(order.pickupQr)
+              !isDelivery && order.status === 'TO CLAIM' && Boolean(pickupQrCode)
             // FLOW-ORD_CLAIM-07: a delivery order in "to receive" can be
             // confirmed from this list by scanning the parcel's deliver_qr.
             const deliverable =
@@ -533,11 +569,38 @@ function Orders() {
                     </span>
                   </div>
 
-                  {RECEIVING.includes(order.status) && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                      {order.status === 'TO CLAIM' ? 'Claim QR ready' : 'Tracking active'}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {hasPickupQr && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPickupQrTarget({
+                            orderId: order.id,
+                            qr: pickupQrCode,
+                            title: `Pickup Claim Pass · Order #${order.id}`,
+                            status: order.status,
+                            date: order.date,
+                            fulfillment: order.fulfillment,
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs hover:shadow-xs active:scale-98 transition-all cursor-pointer"
+                        title="Show scannable Claim QR code for counter staff"
+                      >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="7" height="7" />
+                          <rect x="14" y="3" width="7" height="7" />
+                          <rect x="14" y="14" width="7" height="7" />
+                          <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        <span>Show Pickup QR</span>
+                      </button>
+                    )}
+                    {RECEIVING.includes(order.status) && !hasPickupQr && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                        {order.status === 'TO CLAIM' ? 'Claim QR ready' : 'Tracking active'}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* ── Level 4: Product & Variant Information ── */}
@@ -602,17 +665,44 @@ function Orders() {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    {/* Prominent Pickup QR code presentation button (easily accessible on order card) */}
+                    {hasPickupQr && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPickupQrTarget({
+                            orderId: order.id,
+                            qr: pickupQrCode,
+                            title: `Pickup Claim Pass · Order #${order.id}`,
+                            status: order.status,
+                            date: order.date,
+                            fulfillment: order.fulfillment,
+                          })
+                        }
+                        className="px-3.5 py-2 rounded-xl border border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-xs font-bold transition-all shadow-2xs hover:shadow-xs active:scale-98 flex items-center gap-1.5 cursor-pointer"
+                        title="Show scannable Claim QR code for pickup counter"
+                      >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-emerald-700" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="7" height="7" />
+                          <rect x="14" y="3" width="7" height="7" />
+                          <rect x="14" y="14" width="7" height="7" />
+                          <rect x="3" y="14" width="7" height="7" />
+                        </svg>
+                        <span>Show Pickup QR</span>
+                      </button>
+                    )}
+
                     {/* FLOW-ORD_CLAIM-01: the customer scans the pickup QR here. */}
                     {claimable && (
                       <button
                         type="button"
                         onClick={() =>
                           setClaimTarget({
-                            code: order.pickupQr,
+                            code: pickupQrCode,
                             title: `Scan to claim · Order #${order.id}`,
                           })
                         }
-                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
+                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-white text-emerald-700 text-xs font-semibold hover:bg-emerald-50 transition-colors cursor-pointer"
                       >
                         Scan to claim
                       </button>
@@ -692,6 +782,69 @@ function Orders() {
           onOrderUpdated={() => load({ silent: true })}
         />
       )}
+
+      {/* Pickup Claim QR Code Display Modal (FLOW-ORD_CLAIM-01 / FLOW-MANAGE_BOOKED-03) */}
+      <Modal
+        isOpen={Boolean(pickupQrTarget)}
+        onClose={() => setPickupQrTarget(null)}
+        title={pickupQrTarget?.title || 'Pickup Claim Pass'}
+        subtitle="Present this QR code together with your student ID at the pickup counter."
+        size="sm"
+        footer={
+          <div className="flex items-center justify-between w-full gap-2">
+            <span className="text-[11px] text-gray-500 font-mono truncate">
+              {pickupQrTarget?.qr || ''}
+            </span>
+            <Button variant="secondary" onClick={() => setPickupQrTarget(null)}>
+              Close
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col items-center text-center space-y-4 py-2">
+          {/* Large Scannable QR Code */}
+          <div className="w-56 h-56 p-3 bg-white border-2 border-slate-200 rounded-2xl shadow-xs flex items-center justify-center">
+            {pickupQrDataUrl ? (
+              <img
+                src={pickupQrDataUrl}
+                alt={`Claim QR code for Order #${pickupQrTarget?.orderId}`}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 text-xs text-gray-400">
+                <LoadingSpinner size={24} />
+                <span>Generating scannable QR…</span>
+              </div>
+            )}
+          </div>
+
+          {/* Reference code and pickup location */}
+          <div className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs space-y-1.5 text-left">
+            <div className="flex items-center justify-between text-gray-600">
+              <span className="text-gray-400 font-medium">Pickup Location:</span>
+              <span className="font-semibold text-gray-900 text-right">
+                {pickupQrTarget?.fulfillment?.location || 'Tindahan ni Isko · BU Student Center'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-gray-600">
+              <span className="text-gray-400 font-medium">Order Reference:</span>
+              <span className="font-mono font-bold text-gray-900">
+                #{pickupQrTarget?.orderId}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-gray-600">
+              <span className="text-gray-400 font-medium">Verification Code:</span>
+              <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-2xs truncate max-w-[170px]">
+                {pickupQrTarget?.qr}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-gray-500 leading-relaxed px-1">
+            Store counter staff will scan this code to verify and release your items. You can also take a screenshot or view full details in your order view.
+          </p>
+        </div>
+      </Modal>
 
       {/* FLOW-ORD_CLAIM-01/07: camera scan of appoint_qr (pickup) or deliver_qr (delivery). */}
       <QrScanModal
