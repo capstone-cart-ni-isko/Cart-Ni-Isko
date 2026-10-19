@@ -197,7 +197,6 @@ export default function ProductReviews({ product, initialOpenWrite = false, ordI
           onClick={handleOpenWrite}
           className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark active:scale-98 transition-all shadow-xs cursor-pointer shrink-0"
         >
-          <span>★</span>
           <span>Write a Review</span>
         </button>
       </div>
@@ -292,11 +291,7 @@ export default function ProductReviews({ product, initialOpenWrite = false, ordI
               })}
             </div>
 
-            {/* Verified student purchases badge */}
-            <div className="flex items-center gap-2 text-[11px] text-emerald-800 bg-emerald-50/90 border border-emerald-200/70 px-3 py-2 rounded-xl font-medium">
-              <span className="text-emerald-600 font-semibold">✓</span>
-              <span>100% Verified Campus Purchases</span>
-            </div>
+
           </div>
 
           {/* RIGHT: Filter bar & Reviews List (8 cols on lg) */}

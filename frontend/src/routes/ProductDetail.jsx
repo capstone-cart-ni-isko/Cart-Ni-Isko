@@ -458,7 +458,7 @@ function ProductDetail() {
           <div className="flex flex-col gap-4">
             {/* Header: Category, Title, Rating, Price */}
             <div>
-              <span className="text-xs font-semibold text-brand-orange uppercase tracking-widest">
+              <span className="text-xs font-semibold uppercase tracking-widest">
                 {product.category}
               </span>
               <h1 className="text-xl md:text-2xl font-semibold text-gray-900 mt-1 leading-tight">
@@ -493,13 +493,13 @@ function ProductDetail() {
               <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
                 <PriceTag
                   amount={product.price}
-                  className="text-xl md:text-2xl font-semibold text-brand-orange"
+                  className="text-xl md:text-2xl font-bold text-brand-black"
                 />
 
                 {/* Contextual Stock Badge */}
                 {product.preOrder ? (
                   <span className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
-                    Pre-order · Made to order
+                    Pre-order
                   </span>
                 ) : isOutOfStock ? (
                   <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-3 py-1 rounded-full">
