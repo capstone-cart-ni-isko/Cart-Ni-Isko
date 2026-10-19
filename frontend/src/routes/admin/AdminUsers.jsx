@@ -229,15 +229,11 @@ export default function AdminUsers() {
     }
     if (emp.category === newCategory) return
 
-<<<<<<< Updated upstream
     // UAT-018: The only superadmin account is protected (block demoting your own account)
     if (String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)) {
       showToast('You cannot demote or change the role of your own account.', 'error')
       return
     }
-
-=======
->>>>>>> Stashed changes
     setUpdatingCategoryEmpId(emp.emp_id)
     try {
       await changeAccountType('employee', emp.emp_id, newCategory)
@@ -513,26 +509,16 @@ export default function AdminUsers() {
                             <div className="relative inline-block">
                               <select
                                 value={emp.category}
-<<<<<<< Updated upstream
                                 disabled={updatingCategoryEmpId === emp.emp_id || String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)}
                                 onChange={(e) => handleCategoryChange(emp, e.target.value)}
                                 className={`text-2xs font-semibold px-2.5 py-1 rounded-full border cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60 disabled:cursor-not-allowed ${
-=======
-                                disabled={updatingCategoryEmpId === emp.emp_id}
-                                onChange={(e) => handleCategoryChange(emp, e.target.value)}
-                                className={`text-2xs font-semibold px-2.5 py-1 rounded-full border cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange ${
->>>>>>> Stashed changes
                                   emp.category === 'super admin'
                                     ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                                     : emp.category === 'admin'
                                       ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
                                       : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                                 }`}
-<<<<<<< Updated upstream
                                 title={String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id) ? 'You cannot change your own category' : 'Change employee category'}
-=======
-                                title="Change employee category"
->>>>>>> Stashed changes
                               >
                                 {CATEGORIES.map((c) => (
                                   <option key={c} value={c}>
