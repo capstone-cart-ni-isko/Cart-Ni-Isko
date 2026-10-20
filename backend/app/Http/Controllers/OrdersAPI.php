@@ -844,7 +844,8 @@ class OrdersAPI extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Payment already confirmed',
-                'data'    => $state + ['booked' => null],
+                // The saved order backs the "order placed" view on the PWA.
+                'data'    => $state + ['booked' => null, 'order' => self::orderPayload($order)],
             ], 200);
         }
 
@@ -858,31 +859,34 @@ class OrdersAPI extends Controller
             ], 200);
         }
 
-        $session  = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
-        $sessionStatus = strtolower((string) ($session['attributes']['status'] ?? ''));
-
-        $settled = $session !== [] && (
-            str_contains($sessionStatus, 'paid')
-            || str_contains($sessionStatus, 'succeed')
-            || str_contains($sessionStatus, 'complete')
-            || (($session['attributes']['payments'] ?? []) !== [])
-        );
+        $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
+        $settled = PayMongoService::sessionIsPaid($session);
 
         if ($settled) {
+            // The webhook may have settled it while PayMongo was being asked.
+            $alreadyPaid = (float) $order->fresh()->pay_received > 0;
+
             $payment = $this->markOrderPaid($order, [
                 'amount' => (int) round((float) $order->ord_amount * 100),
             ]);
 
-            $this->announce((int) $order->cust_id,
-                '[PRIORITY] Payment confirmed for order #' . $order->ord_id
-                    . '. Your order is being processed.');
-            $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
+            $booking = null;
+            if (! $alreadyPaid) {
+                $this->logCustomer((int) $order->cust_id, 'edit',
+                    'POST /api/checkout/payment/status - order #' . $order->ord_id . ' paid');
 
-            $booking = $this->bookDeliveryCourier($order);
+                $this->announce((int) $order->cust_id,
+                    '[PRIORITY] Payment confirmed for order #' . $order->ord_id
+                        . '. Your order is being processed.');
+                $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
+
+                $booking = $this->bookDeliveryCourier($order);
+            }
 
             $state['paid']   = true;
             $state['pay_ref'] = $payment->pay_ref;
             $state['booked']  = $booking;
+            $state['order']   = self::orderPayload($order->fresh());
         }
 
         return response()->json([
@@ -3493,14 +3497,19 @@ class OrdersAPI extends Controller
 
         $ownsOrder = $user instanceof Customer && (int) $order->cust_id === (int) $user->cust_id;
 
-        if (! $ownsOrder && ! $isEmployee) {
-            $this->notifyAllEmployees('[PRIORITY] Failed QR scan' . $byLabel
-                . ': pickup code for order #' . $order->ord_id . ' was scanned by a non-owner.');
-            $this->logScanAttempt($user, (string) $json->input('code'), false, 'pickup code without owner match');
+        // A pickup is claimed at the counter: the customer only presents the
+        // QR, and store staff scan it. Nobody claims their own order.
+        if (! $isEmployee) {
+            if (! $ownsOrder) {
+                $this->notifyAllEmployees('[PRIORITY] Failed QR scan' . $byLabel
+                    . ': pickup code for order #' . $order->ord_id . ' was scanned by a non-owner.');
+            }
+            $this->logScanAttempt($user, (string) $json->input('code'), false,
+                $ownsOrder ? 'pickup self-claim refused' : 'pickup code without owner match');
 
             return response()->json([
                 'success' => false,
-                'message' => 'Only store employees or the owning customer can verify pickup QR codes',
+                'message' => 'Pickup QR codes are scanned by store staff at the counter. Please present your QR code there.',
             ], 403);
         }
 

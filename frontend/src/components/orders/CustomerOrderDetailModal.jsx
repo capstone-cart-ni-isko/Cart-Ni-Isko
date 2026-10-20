@@ -24,6 +24,7 @@ import { useToast } from '../../hooks/useToast.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useApiChange } from '../../hooks/useApiChange.js'
 import { STATUS_CONTEXT } from '../../routes/Orders.jsx'
+import { canReviewOrder } from '../../services/reviews.js'
 
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
 const CAN_CANCEL = ['TO PROCESS']
@@ -87,6 +88,7 @@ export default function CustomerOrderDetailModal({
   isOpen,
   onClose,
   onOrderUpdated,
+  onReview,
 }) {
   const { showToast } = useToast()
   const { currentUser } = useAuth()
@@ -231,7 +233,6 @@ export default function CustomerOrderDetailModal({
     }
   }
 
-  const canClaimPickup = !isDelivery && status === 'TO CLAIM' && Boolean(effectiveRaw?.appoint_qr || order?.pickupQr)
   const orderItems = effectiveRaw?.items || []
   const subtotal = order?.subtotal ?? (orderItems.reduce((sum, i) => sum + (Number(i.amount || 0) * Number(i.qty || i.item_qty || 1)), 0))
   const deliveryFee = isDelivery
@@ -255,6 +256,7 @@ export default function CustomerOrderDetailModal({
     recipient: effectiveRaw?.deliver_recipient || null,
   }
   const courier = isDelivery ? effectiveRaw?.courier || null : null
+  const courierTrackUrl = courier?.share_url || effectiveRaw?.deliver_share_link || null
   const appointId = effectiveRaw?.appoint_id || effectiveRaw?.appointment?.appoint_id || null
   const canReschedulePickup = !isDelivery && Boolean(appointId) && !['CLAIMED', 'RECEIVED', 'CANCELLED', 'RETURNED'].includes(status)
 
@@ -367,17 +369,6 @@ export default function CustomerOrderDetailModal({
                       </button>
                     </div>
                   )}
-                  {canClaimPickup && (
-                    <div className="pt-1 flex justify-center">
-                      <button
-                        type="button"
-                        onClick={() => setScanMode('pickup')}
-                        className="w-full sm:w-auto px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors cursor-pointer"
-                      >
-                        Scan to claim
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -387,18 +378,6 @@ export default function CustomerOrderDetailModal({
               title="Scan Parcel QR Code"
               subtitle="Point the camera at the QR code on your parcel."
               fallbackCode={isDelivery ? qrPayload : null}
-              fallbackLabel="Use this order's code"
-              onClose={() => setScanMode(null)}
-              onSuccess={() => {
-                loadDetails()
-                onOrderUpdated?.()
-              }}
-            />
-            <QrScanModal
-              open={scanMode === 'pickup'}
-              title={`Scan to claim · Order #${orderId}`}
-              subtitle="Point the camera at the claim QR code for this pickup order."
-              fallbackCode={effectiveRaw?.appoint_qr || qrPayload}
               fallbackLabel="Use this order's code"
               onClose={() => setScanMode(null)}
               onSuccess={() => {
@@ -726,6 +705,28 @@ export default function CustomerOrderDetailModal({
             </div>
             <p className="text-xs text-[var(--muted)]">
               Cancellation is a request: the store reviews it and you will get an update once approved.
+            </p>
+          </div>
+        )}
+
+        {/* Rate & review the items once the order is claimed / received */}
+        {onReview && canReviewOrder(status) && (
+          <div className="p-4 bg-[var(--surface)] rounded-xl border border-[var(--line)] space-y-2.5">
+            <h3 className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
+              How were your items?
+            </h3>
+            <div>
+              <button
+                type="button"
+                onClick={() => onReview({ ...order, raw: effectiveRaw || order?.raw })}
+                className="w-full sm:w-auto px-4 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-amber-500" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                Rate &amp; Review items
+              </button>
+            </div>
+            <p className="text-xs text-[var(--muted)]">
+              Rate each product in this order and share how it turned out.
             </p>
           </div>
         )}

@@ -39,6 +39,20 @@ function optionsMap(raw) {
 }
 
 /**
+ * One option value read case-insensitively. Variation rows store their axes as
+ * {"Color": "White", "Size": "One Size"} (capitalised), so a literal
+ * `options.color` silently misses them.
+ */
+export function optionValue(options, ...names) {
+  const keys = Object.keys(options || {})
+  for (const name of names) {
+    const key = keys.find((candidate) => candidate.toLowerCase() === name)
+    if (key && options[key]) return options[key]
+  }
+  return ''
+}
+
+/**
  * Normalize the canonical `variations` array (prodvar rows:
  * prodvar_id, prodvar_name, prodvar_pic, prodvar_stock,
  * prodvar_main, prodvar_markup, prodvar_options, prodvar_preorder).
@@ -105,7 +119,7 @@ export function variationSizes(variations, secondAxis = null) {
     const options = variant.prodvar_options || {}
     const axisKey = secondAxis
       && Object.keys(options).find((key) => key.toLowerCase() === String(secondAxis).toLowerCase())
-    const candidate = (axisKey && options[axisKey]) || options.size || options.sizes || variant.prodvar_name
+    const candidate = (axisKey && options[axisKey]) || optionValue(options, 'size', 'sizes') || variant.prodvar_name
     if (candidate && !sizes.includes(candidate)) sizes.push(candidate)
   })
   return sizes
@@ -120,7 +134,7 @@ export function variationColors(variations, fallbackImage) {
   const colors = []
   variations.forEach((variant) => {
     const options = variant.prodvar_options || {}
-    const name = options.color || options.colour || variant.prodvar_name
+    const name = optionValue(options, 'color', 'colour') || variant.prodvar_name
     if (!name || colors.some((entry) => entry.name === name)) return
     const image = variant.prodvar_pic || fallbackImage
     colors.push({ name, value: image, image, gallery: image ? [image] : [] })
@@ -138,10 +152,12 @@ export function variationStockMatrix(variations, secondAxis = null) {
   const matrix = {}
   variations.forEach((variant) => {
     const options = variant.prodvar_options || {}
-    const color = options.color || options.colour || 'Standard'
+    // Same key rules as variationColors() / variationSizes(): the matrix is
+    // looked up with the labels those lists produce, so they must agree.
+    const color = optionValue(options, 'color', 'colour') || variant.prodvar_name
     const axisKey = secondAxis
       && Object.keys(options).find((key) => key.toLowerCase() === String(secondAxis).toLowerCase())
-    const size = (axisKey && options[axisKey]) || options.size || variant.prodvar_name
+    const size = (axisKey && options[axisKey]) || optionValue(options, 'size', 'sizes') || variant.prodvar_name
     if (!matrix[color]) matrix[color] = {}
     matrix[color][size] = (matrix[color][size] || 0) + (Number(variant.prodvar_stock) || 0)
   })

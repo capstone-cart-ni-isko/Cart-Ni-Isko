@@ -134,9 +134,11 @@ class PayMongoService
         }
 
         try {
+            // Sessions are created on v2 but only retrievable on v1 - the v2
+            // GET route does not exist and answers 404.
             $response = Http::withBasicAuth($this->secretKey, '')
                 ->timeout(10)
-                ->get($this->checkoutUrl . '/checkout_sessions/' . rawurlencode($sessionId));
+                ->get($this->baseUrl . '/checkout_sessions/' . rawurlencode($sessionId));
         } catch (\Throwable $e) {
             Log::warning('PayMongo retrieveCheckoutSession failed', ['error' => $e->getMessage()]);
 
@@ -148,6 +150,23 @@ class PayMongoService
         }
 
         return $response->json()['data'] ?? [];
+    }
+
+    /**
+     * Has a retrieved session actually collected money? A session stays
+     * `active` after payment, so the payments list / intent status decide.
+     */
+    public static function sessionIsPaid(array $session): bool
+    {
+        $attributes = $session['attributes'] ?? [];
+
+        foreach ($attributes['payments'] ?? [] as $payment) {
+            if (strtolower((string) ($payment['attributes']['status'] ?? '')) === 'paid') {
+                return true;
+            }
+        }
+
+        return strtolower((string) ($attributes['payment_intent']['attributes']['status'] ?? '')) === 'succeeded';
     }
 
     /** The methods this account is allowed to charge. */

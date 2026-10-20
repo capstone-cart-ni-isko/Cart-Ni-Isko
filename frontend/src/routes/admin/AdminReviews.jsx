@@ -597,7 +597,7 @@ export default function AdminReviews() {
                           : 'bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer'
                       }`}
                     >
-                      {isModerating ? 'Saving…' : 'Approve'}
+                      {isModerating ? 'Saving…' : selected.status === 'approved' ? 'Approved' : 'Approve'}
                     </button>
                     <button
                       type="button"

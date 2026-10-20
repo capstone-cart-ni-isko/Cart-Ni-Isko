@@ -9,7 +9,7 @@ import AppointmentDetailsModal from '../components/appointment/AppointmentDetail
 import PageHeader from '../components/ui/PageHeader.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
-import { QrScanModal } from '../components/ui/QRScanner.jsx'
+import ClaimQrModal from '../components/appointment/ClaimQrModal.jsx'
 import {
   APPOINT_TYPE,
   fetchAppointments,
@@ -187,8 +187,8 @@ function Appointments() {
   const [viewing, setViewing] = useState(null)
   // FLOW-MANAGE_BOOKED-05/06: cancelling is confirmed through the shared dialog.
   const [cancelTarget, setCancelTarget] = useState(null)
-  // FLOW-ORD_CLAIM-01: the appointment whose appoint_qr is being scanned
-  const [claimTarget, setClaimTarget] = useState(null)
+  // FLOW-ORD_CLAIM-01: the appointment whose appoint_qr is shown for staff to scan
+  const [qrTarget, setQrTarget] = useState(null)
   const alive = useRef(true)
   const firstRun = useRef(true)
 
@@ -381,28 +381,14 @@ function Appointments() {
         ) : (
           <div className="space-y-3">
             {cards.map((appt) => (
-              <div key={appt.id} className="space-y-2">
-                <AppointmentCard
-                  appointment={appt}
-                  onView={() => setViewing(appt)}
-                  onEdit={() => startEdit(appt)}
-                  onCancel={handleCancel}
-                />
-
-                {/* FLOW-ORD_CLAIM-01: scan the pickup order's appoint_qr
-                    straight from the /appointments tab. */}
-                {appt.qr && appt.ordStatus === 'to claim' && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setClaimTarget({ code: appt.qr, orderId: appt.orderId, id: appt.id })
-                    }
-                    className="w-full h-9 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
-                  >
-                    Scan to claim{appt.orderId ? ` · Order #${appt.orderId}` : ''}
-                  </button>
-                )}
-              </div>
+              <AppointmentCard
+                key={appt.id}
+                appointment={appt}
+                onView={() => setViewing(appt)}
+                onEdit={() => startEdit(appt)}
+                onCancel={handleCancel}
+                onShowQr={setQrTarget}
+              />
             ))}
 
             {switching && (
@@ -444,19 +430,13 @@ function Appointments() {
         isDestructive
       />
 
-      {/* Camera scan of the pickup QR: POST /tracking/scan {scanned_by:'customer'} */}
-      <QrScanModal
-        open={Boolean(claimTarget)}
-        title={
-          claimTarget?.orderId
-            ? `Scan to claim · Order #${claimTarget.orderId}`
-            : 'Scan to claim'
-        }
-        subtitle="Point the camera at the claim QR code for this pickup order."
-        fallbackCode={claimTarget?.code || null}
-        fallbackLabel="Use this appointment's code"
-        onClose={() => setClaimTarget(null)}
-        onSuccess={() => refresh()}
+      {/* The claim pass: staff scan it at the counter (POST /tracking/scan
+          is employee-only for pickups), the customer only presents it. */}
+      <ClaimQrModal
+        code={qrTarget?.qr || null}
+        orderId={qrTarget?.orderId}
+        appointmentId={qrTarget?.id}
+        onClose={() => setQrTarget(null)}
       />
     </AppShell>
   )

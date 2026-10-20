@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useApiChange } from '../hooks/useApiChange.js'
-import AppShell from '../components/layout/AppShell.jsx'
+import AccountLayout from '../components/layout/AccountLayout.jsx'
+import PageTitle from '../components/ui/PageTitle.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
 import { fetchNotifications, markRead, readNotificationsCache } from '../services/notifications.js'
-import BackButton from '../components/ui/BackButton.jsx'
 
 /** REQ-OT-01: "to claim"/"to receive" notifications are handled by QR scanning, not regular notifications. */
 function isExemptNotification(message) {
@@ -133,28 +133,32 @@ const CATEGORY_STYLES = {
     icon: 'box',
     iconBg: 'bg-orange-50 text-brand-orange',
     tag: 'Orders',
-    tagColor: 'bg-orange-50 text-brand-orange',
+    tagText: 'text-brand-orange',
+    dot: 'bg-brand-orange',
     title: 'Order Update',
   },
   production: {
     icon: 'megaphone',
     iconBg: 'bg-blue-50 text-blue-600',
     tag: 'Production',
-    tagColor: 'bg-blue-50 text-blue-600',
+    tagText: 'text-blue-600',
+    dot: 'bg-blue-500',
     title: 'Production Update',
   },
   system: {
     icon: 'bell',
     iconBg: 'bg-slate-50 text-slate-600',
     tag: 'System',
-    tagColor: 'bg-slate-100 text-slate-600',
+    tagText: 'text-slate-500',
+    dot: 'bg-slate-400',
     title: 'Announcement',
   },
   promotions: {
     icon: 'bag',
     iconBg: 'bg-emerald-50 text-emerald-600',
     tag: 'Promotions',
-    tagColor: 'bg-emerald-50 text-emerald-600',
+    tagText: 'text-emerald-600',
+    dot: 'bg-emerald-500',
     title: 'Promo',
   },
 }
@@ -192,9 +196,11 @@ function mapNotification(row, index) {
     icon: style.icon,
     iconBg: style.iconBg,
     tag: priority ? 'Priority' : style.tag,
-    tagColor: priority ? 'bg-amber-100 text-amber-700' : style.tagColor,
+    tagText: priority ? 'text-amber-700' : style.tagText,
+    dot: priority ? 'bg-amber-500' : style.dot,
     title: style.title,
-    message,
+    // The Priority tag already says so: drop the redundant "[PRIORITY]" prefix.
+    message: String(message).replace(/^\s*\[priority\]\s*/i, ''),
     time: created ? timeAgo(new Date(created)) : 'Just now',
     unread: !(row.custnotif_read || row.empnotif_read),
     targetUrl: row.notif_link || calendarTarget(message),
@@ -277,52 +283,67 @@ export default function Notifications() {
     return true
   })
 
-  // Mobile: show caught-up only when there are no notifications at all
-  const isMobileEmpty = !loading && filteredItems.length === 0
-  // Desktop: show caught-up card only when all notifications are read
-  const isDesktopCaughtUp = !loading && unreadTotal === 0
+  const tabs = [
+    { label: 'All', count: countAll },
+    { label: 'Orders', count: countOrders },
+    { label: 'Production', count: countProduction },
+    { label: 'System', count: countSystem },
+    { label: 'Promotions', count: countPromotions },
+  ]
 
   return (
-    <AppShell>
-      <div className="px-4 py-6 pb-32 lg:px-6 lg:py-6 lg:pb-16 max-w-5xl mx-auto animate-fade-in">
-
-        {/* Header (Matching Photo 5 on desktop & Photo 2 on mobile) */}
-        <div className="flex items-start gap-4 mb-8">
-          <div className="flex-1">
-            <BackButton to="/home" className="lg:hidden mb-4" />
-            <h1 className="text-3xl lg:text-4xl font-semibold text-gray-900 tracking-tight">Notifications</h1>
-            <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
-              Stay updated with your orders, production, and important announcements.
-            </p>
-          </div>
+    <AccountLayout>
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          onClick={() => navigate('/home')}
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-gray-700 transition-colors hover:border-brand-orange hover:text-brand-orange"
+          aria-label="Back to home"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+        <div className="min-w-0 flex-1">
+          <PageTitle
+            title="Notifications"
+            subtitle="Stay updated with your orders, production, and important announcements."
+          />
         </div>
+      </div>
 
-        {/* Filter Pills */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 mb-7 pb-2 border-b border-slate-200">
-          <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none">
-            {[
-              { label: 'All', count: countAll },
-              { label: 'Orders', count: countOrders },
-              { label: 'Production', count: countProduction },
-              { label: 'System', count: countSystem },
-              { label: 'Promotions', count: countPromotions },
-            ].map(({ label, count }) => {
+      {/* Single vertical column - same width and rhythm as My Orders */}
+      <div className="px-4 pb-32 animate-fade-in max-w-3xl mx-auto space-y-4">
+        {/* Category tabs: plain underline tabs on the page itself. The strip
+            blends into the page background so it can stay pinned while the
+            list scrolls underneath without drawing a box. */}
+        <nav
+          aria-label="Notification categories"
+          className="sticky top-14 md:top-0 z-20 -mx-4 px-4 pt-3 bg-[#F8F9FA]/90 dark:bg-[var(--surface)]/90 backdrop-blur-sm"
+        >
+          <div
+            role="tablist"
+            className="flex flex-nowrap gap-6 overflow-x-auto scrollbar-none select-none border-b border-slate-200"
+          >
+            {tabs.map(({ label, count }) => {
               const active = activeTab === label
               return (
                 <button
                   key={label}
                   type="button"
+                  role="tab"
+                  aria-selected={active}
                   onClick={() => setActiveTab(label)}
-                  className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                  className={`relative -mb-px shrink-0 pb-3 pt-1 text-sm font-semibold transition-colors cursor-pointer border-b-2 flex items-baseline gap-1.5 ${
                     active
-                      ? 'bg-orange-50 border border-brand-orange text-brand-orange'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+                      ? 'border-brand-orange text-gray-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-800'
                   }`}
                 >
                   <span>{label}</span>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      active ? 'bg-brand-orange text-white' : 'bg-gray-100 text-gray-500'
+                    className={`text-xs font-semibold tabular-nums ${
+                      active ? 'text-brand-orange' : 'text-gray-400'
                     }`}
                   >
                     {count}
@@ -331,172 +352,162 @@ export default function Notifications() {
               )
             })}
           </div>
-        </div>
+        </nav>
 
-        {/* Main Grid: Left Notification List + Right Caught-Up Card (Desktop) */}
-        <div className="lg:grid lg:grid-cols-12 lg:gap-8 items-start">
-          {/* Notifications Feed (or Mobile Empty State) */}
-          <div className="lg:col-span-8 space-y-3.5">
-            {/* Mobile Empty / Caught Up State */}
-            <div className={`md:hidden ${isMobileEmpty ? 'block' : 'hidden'}`}>
-              {/* Illustration + Text — no card, sits on page bg */}
-              <div className="flex flex-col items-center justify-center text-center pt-10 pb-8 px-6">
-                <CaughtUpIllustration className="w-56 h-56 mb-5" />
-                <h3 className="text-2xl font-semibold text-gray-900 tracking-tight">You're all caught up!</h3>
-                <p className="text-sm text-gray-400 font-medium mt-2 max-w-[260px] leading-relaxed">
-                  No new notifications at the moment.
+        {loading ? (
+          <div className="space-y-4" aria-busy={loading} aria-live="polite">
+            <span className="sr-only">Loading notifications</span>
+            {Array.from({ length: 4 }, (_, index) => (
+              <article
+                key={index}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs animate-pulse"
+                aria-hidden="true"
+              >
+                <div className="flex items-start gap-3.5 p-4 sm:p-5">
+                  <SkeletonBlock className="h-11 w-11 shrink-0 rounded-xl" />
+                  <div className="min-w-0 flex-1 space-y-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <SkeletonBlock className="h-4 w-2/5 rounded" />
+                      <SkeletonBlock className="h-3 w-12 rounded" />
+                    </div>
+                    <SkeletonBlock className="h-3 w-full rounded" />
+                    <SkeletonBlock className="h-3 w-3/4 rounded" />
+                    <SkeletonBlock className="h-3 w-24 rounded" />
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center bg-white rounded-2xl border border-slate-200 px-6 py-12 shadow-2xs">
+            <CaughtUpIllustration className="w-40 h-40 mb-2" />
+            <h3 className="text-base font-semibold text-gray-900">You're all caught up!</h3>
+            <p className="text-sm text-gray-500 mt-1">No new notifications at the moment.</p>
+          </div>
+        ) : (
+          <>
+            {unreadTotal === 0 && (
+              <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-emerald-900">You're all caught up!</p>
+                  <p className="text-xs text-emerald-700">No unread notifications.</p>
+                </div>
+              </div>
+            )}
+
+            {filteredItems.length === 0 ? (
+              <div className="text-center bg-white rounded-2xl border border-slate-200 px-6 py-12 shadow-2xs">
+                <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-3 text-slate-400">
+                  <NotifTypeIcon icon="bell" className="w-6 h-6" />
+                </div>
+                <p className="text-sm font-semibold text-gray-900">
+                  No notifications in this category
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Updates about your orders, appointments and the campus store will appear here.
                 </p>
               </div>
-
-              {/* Need help card — separate white card below */}
-              <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-start gap-3.5 shadow-2xs">
-                <div className="w-8 h-8 rounded-lg bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M9 18h6M10 22h4" />
-                    <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-slate-900">Need help?</h4>
-                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                    Contact support for more information about your orders and fulfillment process.
-                  </p>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-orange mt-2">
-                    <span>Contact Support</span>
-                    <span>→</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Notification Cards List (When not mobile empty) */}
-            <div className={`space-y-3 ${isMobileEmpty ? 'hidden md:block' : 'block'}`}>
-              {loading ? (
-                <div className="space-y-3" aria-busy={loading} aria-live="polite">
-                  <span className="sr-only">Loading notifications</span>
-                  {Array.from({ length: 4 }, (_, index) => (
-                    <article key={index} className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs sm:p-5 animate-pulse" aria-hidden="true">
-                      <SkeletonBlock className="h-10 w-10 shrink-0 rounded-xl" />
-                      <div className="min-w-0 flex-1 space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <SkeletonBlock className="h-4 w-2/5 rounded" />
-                          <SkeletonBlock className="h-3 w-16 rounded" />
-                        </div>
-                        <div className="space-y-2">
-                          <SkeletonBlock className="h-3 w-full rounded" />
-                          <SkeletonBlock className="h-3 w-3/4 rounded" />
-                        </div>
-                        <SkeletonBlock className="h-6 w-20 rounded-md" />
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : filteredItems.length === 0 ? (
-                <div className="hidden md:block text-center py-16 bg-white rounded-xl border border-slate-200 p-8 shadow-2xs">
-                  <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-3 text-slate-400">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
-                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                    </svg>
-                  </div>
-                  <span>No notifications found in this category.</span>
-                  <p className="text-xs text-slate-400 mt-1">Updates regarding your orders, appointments, and campus store will appear here.</p>
-                </div>
-              ) : (
-                filteredItems.map((item) => (
-                  <article
-                    key={item.id}
-                    onClick={() => markReadAndGo(item.id, item.targetUrl)}
-                    className={`relative bg-white rounded-xl border transition-colors p-4 sm:p-5 flex items-start gap-4 cursor-pointer group shadow-2xs ${
-                      item.unread ? 'border-orange-200 bg-orange-50/15' : 'border-slate-200'
-                    }`}
-                  >
-                    {/* Left Icon */}
+            ) : (
+              filteredItems.map((item) => (
+                <article
+                  key={item.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => markReadAndGo(item.id, item.targetUrl)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      markReadAndGo(item.id, item.targetUrl)
+                    }
+                  }}
+                  className={`bg-white rounded-2xl border transition-shadow shadow-2xs hover:shadow-xs cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-orange ${
+                    item.unread ? 'border-orange-200' : 'border-slate-200'
+                  }`}
+                >
+                  <div className="p-4 sm:p-5 flex items-start gap-3.5">
                     <div
-                      className={`w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center shrink-0 ${item.iconBg}`}
+                      className={`w-11 h-11 rounded-xl border border-slate-200 flex items-center justify-center shrink-0 ${item.iconBg}`}
                     >
                       <NotifTypeIcon icon={item.icon} className="w-5 h-5" />
                     </div>
 
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <h3 className="text-sm sm:text-base font-semibold text-slate-900 truncate">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm sm:text-base font-semibold text-gray-900 tracking-tight">
                             {item.title}
                           </h3>
                           {item.isExempt && (
-                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700">
-                                QR Verification
-                              </span>
-                            )}
-                            {item.unread && (
-                            <span className="w-2.5 h-2.5 rounded-full bg-brand-orange shrink-0 animate-pulse" />
+                            <span className="text-[11px] font-semibold text-purple-700">
+                              · QR verification
+                            </span>
+                          )}
+                          {item.unread && (
+                            <span
+                              className="w-2 h-2 rounded-full bg-brand-orange shrink-0"
+                              aria-label="Unread"
+                            />
                           )}
                         </div>
-                        <span className="text-xs font-medium text-slate-400 shrink-0">
+                        <span className="text-xs text-gray-400 font-medium shrink-0 pt-0.5">
                           {item.time}
                         </span>
                       </div>
 
-                      <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed line-clamp-2">
+                      <p className="text-sm text-gray-600 mt-1 leading-relaxed break-words line-clamp-3">
                         {item.message}
                       </p>
 
-                      <div className="flex items-center justify-between mt-3">
-                        <span
-                          className={`text-xs font-semibold px-2.5 py-1 rounded-md capitalize ${item.tagColor}`}
-                        >
-                          {item.tag}
+                      <div className="mt-2.5 flex items-center justify-between gap-3 text-xs">
+                        <span className="flex items-center gap-1.5 min-w-0 font-semibold">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.dot}`} />
+                          <span className={item.tagText}>{item.tag}</span>
+                          <span className="text-gray-300 font-normal">•</span>
+                          <span
+                            className={`font-medium ${item.unread ? 'text-brand-orange' : 'text-gray-400'}`}
+                          >
+                            {item.unread ? 'New' : 'Read'}
+                          </span>
                         </span>
-                        <div className="text-slate-400 group-hover:text-brand-orange transition-colors text-sm font-semibold">
-                          ›
-                        </div>
+                        {item.targetUrl && (
+                          <span className="font-semibold text-brand-orange shrink-0">
+                            View details →
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </article>
-                ))
-              )}
-
-              {/* Showing count footer */}
-              {filteredItems.length > 0 && (
-                <div className="text-xs text-slate-400 font-medium pt-2 text-center sm:text-left">
-                  Showing 1–{filteredItems.length} of {countAll} notifications
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Desktop Right Column: Caught Up Card (Photo 5) */}
-          <div className="hidden lg:block lg:col-span-4 sticky top-28 space-y-4">
-            {isDesktopCaughtUp && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-8 text-center flex flex-col items-center shadow-2xs">
-                <CaughtUpIllustration className="w-48 h-48 mb-3" />
-                <h3 className="text-lg font-semibold text-slate-900 mt-1">You're all caught up!</h3>
-                <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1">
-                  No new notifications at the moment.
-                </p>
-              </div>
+                  </div>
+                </article>
+              ))
             )}
 
-            {/* Quick Link Card to Help Center */}
-            <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center font-semibold text-sm shrink-0">
-                  <HelpIcon className="w-4 h-4 text-brand-orange" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900">Need order assistance?</h4>
-                  <p className="text-xs text-slate-400">Contact our student help desk</p>
-                </div>
-              </div>
-              <span className="text-xs sm:text-sm font-semibold text-brand-orange px-2 py-1 shrink-0">
-                Contact Support
-              </span>
-            </div>
+            {filteredItems.length > 0 && (
+              <p className="text-xs text-gray-400 font-medium text-center">
+                Showing {filteredItems.length} of {countAll} notifications
+              </p>
+            )}
+          </>
+        )}
+
+        {/* Help card */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 flex flex-wrap items-center gap-x-3.5 gap-y-3 shadow-2xs">
+          <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0">
+            <HelpIcon className="w-5 h-5 text-brand-orange" />
           </div>
+          <div className="flex-1 min-w-[12rem]">
+            <h4 className="text-sm sm:text-base font-semibold text-gray-900 tracking-tight">
+              Need order assistance?
+            </h4>
+            <p className="text-sm text-gray-500 mt-0.5">Contact our student help desk.</p>
+          </div>
+          <span className="text-xs font-semibold text-brand-orange shrink-0">Contact Support</span>
         </div>
       </div>
-    </AppShell>
+    </AccountLayout>
   )
 }

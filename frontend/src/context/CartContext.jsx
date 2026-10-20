@@ -8,7 +8,7 @@ import {
   removeFromCart as removeBagRow,
   updateBagQuantity,
 } from '../services/cart.js'
-import { mapProduct } from '../services/products.js'
+import { mapProduct, optionValue } from '../services/products.js'
 import { onApiChange } from '../services/realtime.js'
 
 export const CartContext = createContext(null)
@@ -77,6 +77,19 @@ function mapServerItem(row) {
   const amount = Number(row.amount ?? row.bag_amount ?? product.price ?? 0)
   const bagId = row.bag_id ?? row.bag_id_display?.replace?.(/^bag-/, '')
 
+  // The server labels a line with the variation NAME for both size and colour
+  // ("White / One Size" twice). Prefer the variation's own axes, and carry the
+  // variation's real stock so the bag never has to guess it.
+  const variation = (product.variations || []).find(
+    (entry) => Number(entry.prodvar_id) === Number(row.prodvar_id)
+  )
+  const opts = variation?.prodvar_options || row.prodvar?.prodvar_options || {}
+  const colorLabel = optionValue(opts, 'color', 'colour')
+  const sizeLabel = optionValue(opts, 'size', 'sizes')
+  const color = toColor(row.color)
+  const stockRaw = row.prodvar_stock ?? variation?.prodvar_stock
+  const stock = stockRaw === undefined || stockRaw === null ? null : Number(stockRaw)
+
   return {
     cartItemId: row.bag_id_display || (row.bag_id != null ? `bag-${row.bag_id}` : row.id),
     bagId: bagId != null ? Number(bagId) : null,
@@ -86,8 +99,10 @@ function mapServerItem(row) {
     qty,
     amount,
     lineTotal: Number(row.line_total ?? qty * amount),
-    size: row.size ?? null,
-    color: toColor(row.color),
+    size: sizeLabel || row.size || null,
+    color: color && colorLabel ? { ...color, name: colorLabel } : color,
+    // Units left of THIS variation (null when the server did not say).
+    stock: Number.isFinite(stock) ? stock : null,
     available: row.available !== false,
   }
 }
@@ -103,7 +118,11 @@ function amountOf(item) {
 
 /** REQ-CW-02 / FLOW-WISHLIST-07: only offered lines may be checked out. */
 function isItemAvailable(item) {
-  return Boolean(item?.product) && item.available !== false
+  if (!item?.product || item.available === false) return false
+  // A variation with fewer units than the line asks for cannot be checked out
+  // (pre-orders are not stock-bound).
+  if (!item.product.preOrder && Number.isFinite(item.stock) && item.qty > item.stock) return false
+  return true
 }
 
 /** The line payload POST /cart/add expects (item_amount is the UNIT price). */

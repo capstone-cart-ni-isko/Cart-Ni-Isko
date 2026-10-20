@@ -18,6 +18,8 @@ import Button from '../components/ui/Button.jsx'
 import QRCode from 'qrcode'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import CustomerOrderDetailModal from '../components/orders/CustomerOrderDetailModal.jsx'
+import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
+import { canReviewOrder } from '../services/reviews.js'
 import { fetchOrders, requestCancel, orderFilterBucket } from '../services/orders.js'
 import { parseDate } from '../services/dashboard.js'
 
@@ -215,6 +217,8 @@ function Orders() {
   const [pickupQrTarget, setPickupQrTarget] = useState(null)
   const [pickupQrDataUrl, setPickupQrDataUrl] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
+  // Claimed / received orders can have each of their items rated and reviewed.
+  const [reviewTarget, setReviewTarget] = useState(null)
   const firstLoad = useRef(true)
 
   // Generate QR code Data URL whenever pickupQrTarget changes
@@ -692,22 +696,6 @@ function Orders() {
                       </button>
                     )}
 
-                    {/* FLOW-ORD_CLAIM-01: the customer scans the pickup QR here. */}
-                    {claimable && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setClaimTarget({
-                            code: pickupQrCode,
-                            title: `Scan to claim · Order #${order.id}`,
-                          })
-                        }
-                        className="px-3.5 py-2 rounded-xl border border-emerald-200 bg-white text-emerald-700 text-xs font-semibold hover:bg-emerald-50 transition-colors cursor-pointer"
-                      >
-                        Scan to claim
-                      </button>
-                    )}
-
                     {/* FLOW-ORD_CLAIM-07: scan the parcel's deliver_qr to confirm receipt. */}
                     {deliverable && (
                       <button
@@ -746,6 +734,17 @@ function Orders() {
                       </button>
                     )}
 
+                    {canReviewOrder(order.status) && (
+                      <button
+                        type="button"
+                        onClick={() => setReviewTarget(order)}
+                        className="px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-amber-500" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                        <span>Rate &amp; Review</span>
+                      </button>
+                    )}
+
                     {['CLAIMED', 'RECEIVED', 'COMPLETED'].includes(order.status) &&
                       order.productId != null && (
                         <Link
@@ -780,6 +779,19 @@ function Orders() {
           isOpen={Boolean(selectedOrder)}
           onClose={() => setSelectedOrder(null)}
           onOrderUpdated={() => load({ silent: true })}
+          onReview={(target) => {
+            setSelectedOrder(null)
+            setReviewTarget(target)
+          }}
+        />
+      )}
+
+      {/* Rate & review each item of a claimed / received order */}
+      {reviewTarget && (
+        <OrderReviewModal
+          isOpen={Boolean(reviewTarget)}
+          order={reviewTarget}
+          onClose={() => setReviewTarget(null)}
         />
       )}
 
@@ -846,7 +858,8 @@ function Orders() {
         </div>
       </Modal>
 
-      {/* FLOW-ORD_CLAIM-01/07: camera scan of appoint_qr (pickup) or deliver_qr (delivery). */}
+      {/* FLOW-ORD_CLAIM-07: camera scan of the parcel's deliver_qr. Pickup
+          codes are only shown (Show Pickup QR) - staff scan them. */}
       <QrScanModal
         open={Boolean(claimTarget)}
         title={claimTarget?.title || 'Scan to claim'}

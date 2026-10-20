@@ -38,7 +38,7 @@ function endIsFuture(end) {
  * views it) and the View / Cancel actions. "Cancel" is only offered
  * while appoint_end is still in the future (FLOW-MANAGE_BOOKED-05).
  */
-export default function AppointmentCard({ appointment, onView, onCancel }) {
+export default function AppointmentCard({ appointment, onView, onCancel, onShowQr }) {
   const { status, items } = appointment
   const canCancel = status === 'upcoming' && endIsFuture(appointment.endISO)
 
@@ -100,17 +100,42 @@ export default function AppointmentCard({ appointment, onView, onCancel }) {
 
       {/* QR code: the customer views it, staff scan it at the counter */}
       {appointment.qr && (
-        <div className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             QR
           </span>
           <code className="text-xs font-mono font-semibold text-slate-700 break-all">
             {appointment.qr}
           </code>
-          <span className="ml-auto text-[10px] text-slate-400 font-medium">
-            Staff scans this at the counter
+          <span className="ml-auto flex items-center gap-2">
+            <span className="hidden sm:inline text-[10px] text-slate-400 font-medium">
+              Staff scans this at the counter
+            </span>
+            <button
+              type="button"
+              onClick={() => onShowQr?.(appointment)}
+              className="h-7 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Show QR
+            </button>
           </span>
         </div>
+      )}
+
+      {/* The store marked the order ready: the customer presents the QR. */}
+      {appointment.qr && appointment.ordStatus === 'to claim' && (
+        <button
+          type="button"
+          onClick={() => onShowQr?.(appointment)}
+          className="w-full text-left rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 hover:bg-emerald-100 transition-colors cursor-pointer"
+        >
+          <span className="block text-xs font-semibold text-emerald-800">
+            Ready to claim{appointment.orderId ? ` · Order #${appointment.orderId}` : ''}
+          </span>
+          <span className="block text-[11px] text-emerald-700">
+            Show your QR code at the counter and the staff will scan it. Tap to open it.
+          </span>
+        </button>
       )}
 
       <TrackTimeline status={status} type={appointment.type} />

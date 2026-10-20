@@ -2034,6 +2034,21 @@ class ProductsAPI extends Controller
 
         protected const notPurchased = ['processing', 'to cancel', 'cancelled'];
 
+        /** rev_msg is a 255-char column that also carries "<rating>|" and the moderation markers. */
+        public const reviewMaxLength = 200;
+
+        protected function reviewTextTooLong(string $text): ?\Illuminate\Http\JsonResponse
+        {
+            if (mb_strlen($text) <= self::reviewMaxLength) {
+                return null;
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Reviews can be at most ' . self::reviewMaxLength . ' characters long.',
+            ], 400);
+        }
+
         protected function countsAsPurchase($status): bool
         {
             return ! in_array($this->purchaseStatusKey($status), self::notPurchased, true);
@@ -2260,6 +2275,8 @@ class ProductsAPI extends Controller
                 ?? $json->input('ord_review')
                 ?? '');
 
+            if ($tooLong = $this->reviewTextTooLong($text)) return $tooLong;
+
             $ordId = $json->input('ord_id');
             $prodId = $json->input('prod_id');
 
@@ -2285,6 +2302,15 @@ class ProductsAPI extends Controller
                         return response()->json([
                             'success' => false,
                             'message' => 'You may only review products you have already purchased',
+                        ], 403);
+                    }
+
+                    // An order can be rated once the customer actually has the
+                    // goods: claimed at the counter or received from the courier.
+                    if (! in_array($this->purchaseStatusKey($order->ord_status), ['claimed', 'received'], true)) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'You can review the items once this order has been claimed or received.',
                         ], 403);
                     }
 
@@ -2527,6 +2553,57 @@ class ProductsAPI extends Controller
             }
         }
 
+        /**
+         * GET /reviews/mine?ord_id= - the signed-in customer's own reviews of
+         * the products in one of their orders, in every moderation state
+         * (pending / approved / rejected). /reviews/display only ever shows the
+         * public, approved ones, so without this the order screen could not tell
+         * which items are already rated or let the customer edit a pending one.
+         */
+        public function myReviews(Request $json)
+        {
+            $customer = $this->requireCustomer($json);
+            if ($customer instanceof \Illuminate\Http\JsonResponse) return $customer;
+
+            $ordId = $json->input('ord_id');
+            if (! $ordId || ! is_numeric($ordId)) {
+                return response()->json(['success' => false, 'message' => 'Order ID is required.'], 400);
+            }
+
+            $order = Order::find((int) $ordId);
+            if (! $order || (int) $order->cust_id !== (int) $customer->getKey()) {
+                return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+            }
+
+            try {
+                $prodIds = $this->productIdsForOrder((int) $order->ord_id);
+
+                $rows = $prodIds === [] ? collect() : Review::with(['product', 'customer'])
+                    ->where('cust_id', $customer->getKey())
+                    ->whereIn('prod_id', $prodIds)
+                    ->whereRaw("rev_msg NOT LIKE '[DELETED]%'")
+                    ->orderByDesc('rev_created')
+                    ->get()
+                    ->unique('prod_id')
+                    ->values();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Your reviews retrieved successfully',
+                    'data'    => $rows
+                        ->map(fn (Review $review) => $this->reviewsPresent($review, (int) $order->ord_id))
+                        ->values(),
+                ], 200);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to load your reviews',
+                    'error'   => $e->getMessage(),
+                ], 500);
+            }
+        }
+
         public function moderateReview(Request $json)
         {
             $validator = (new DatabaseAPI())->moderateReview($json);
@@ -2698,6 +2775,8 @@ class ProductsAPI extends Controller
                 } elseif ($json->has('ord_review')) {
                     $text = (string) $json->input('ord_review');
                 }
+
+                if ($tooLong = $this->reviewTextTooLong((string) $text)) return $tooLong;
 
                 $review->rev_msg = Review::compose((int) $rating, (string) $text);
                 $review->rev_approved = null;

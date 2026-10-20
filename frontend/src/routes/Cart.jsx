@@ -99,8 +99,13 @@ function Cart() {
     // REQ-CW-02: Verify all selected items are available
     const unavailableItems = selectedItems.filter((i) => !canCheckoutItem(i))
     if (unavailableItems.length > 0) {
+      const tooMany = unavailableItems.every(
+        (i) => Number.isFinite(i.stock) && i.stock > 0 && i.qty > i.stock
+      )
       showToast(
-        'Some items are out of stock and cannot be checked out. Please remove them.',
+        tooMany
+          ? 'Some items are in your bag in a larger quantity than is in stock. Please lower the quantity.'
+          : 'Some items are out of stock and cannot be checked out. Please remove them.',
         'error'
       )
       return
@@ -110,6 +115,8 @@ function Cart() {
 
   // Helper to determine max stock per variant (Requirement 12)
   const getItemMaxStock = (item) => {
+    // The bag line carries its own variation's real stock: trust it first.
+    if (!item.product.preOrder && Number.isFinite(item.stock)) return Math.max(0, item.stock)
     if (item.product.stockMatrix && item.color?.name) {
       const colorStock = item.product.stockMatrix[item.color.name]
       if (colorStock && item.size && colorStock[item.size] !== undefined) {
@@ -239,7 +246,12 @@ function Cart() {
                 {cartItems.map((item) => {
                   const isChecked = selectedItemIds.includes(item.cartItemId)
                   const maxStock = getItemMaxStock(item)
-                  const isMaxStockReached = item.qty >= maxStock && !item.product.preOrder
+                  const stockKnown = !item.product.preOrder && Number.isFinite(item.stock)
+                  const isOutOfStock = stockKnown && item.stock <= 0
+                  const isOverStock = stockKnown && item.stock > 0 && item.qty > item.stock
+                  const isLowStock = stockKnown && item.stock > 0 && item.stock <= 3
+                  const isMaxStockReached =
+                    !isOutOfStock && !isOverStock && item.qty >= maxStock && !item.product.preOrder
 
                   // Resolve actual variant image (Requirement 11)
                   const resolvedVariantImg =
@@ -300,6 +312,14 @@ function Cart() {
                                 {item.product.preOrder ? (
                                   <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
                                     Pre-order
+                                  </span>
+                                ) : isOutOfStock ? (
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/60">
+                                    Out of Stock
+                                  </span>
+                                ) : isLowStock || isOverStock ? (
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
+                                    Only {item.stock} Left
                                   </span>
                                 ) : (
                                   <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
@@ -363,8 +383,18 @@ function Cart() {
                               value={item.qty}
                               onChange={(v) => updateQuantity(item.cartItemId, v)}
                               min={1}
-                              max={maxStock}
+                              max={Math.max(1, maxStock)}
                             />
+                            {isOutOfStock && (
+                              <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded">
+                                Currently unavailable - remove from bag
+                              </span>
+                            )}
+                            {isOverStock && (
+                              <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                                Only {item.stock} in stock - lower the quantity
+                              </span>
+                            )}
                             {isMaxStockReached && (
                               <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
                                 Max stock ({maxStock})

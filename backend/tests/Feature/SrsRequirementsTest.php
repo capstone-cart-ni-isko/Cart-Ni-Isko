@@ -886,10 +886,14 @@ class SrsRequirementsTest extends TestCase
             ->assertStatus(409)
             ->assertJson(['message' => 'Order cannot be scanned while its status is processing']);
 
-        // REQ-ORD_CLAIM-02: the pickup code belongs to employees or the owner
-        $this->json('POST', '/api/tracking/scan', ['code' => 'APPT-SCAN01'], $this->headers($stranger))
-            ->assertStatus(403)
-            ->assertJson(['message' => 'Only store employees or the owning customer can verify pickup QR codes']);
+        // REQ-ORD_CLAIM-02: only store staff scan a pickup code - the owner
+        // presents it at the counter but can never claim it themselves
+        foreach ([$stranger, $owner] as $customer) {
+            $this->json('POST', '/api/tracking/scan', ['code' => 'APPT-SCAN01'], $this->headers($customer))
+                ->assertStatus(403)
+                ->assertJson(['message' => 'Pickup QR codes are scanned by store staff at the counter. Please present your QR code there.']);
+        }
+        $this->assertSame('to claim', $pickupOrder->fresh()->ord_status);
 
         // An employee scan moves to claim -> claimed and notifies both sides
         $claim = $this->json('POST', '/api/tracking/scan', ['code' => 'APPT-SCAN01'], $this->headers($employee))
@@ -1162,6 +1166,55 @@ class SrsRequirementsTest extends TestCase
         $this->json('GET', '/api/reviews/display', ['status' => 'pending'], $this->headers($employee))
             ->assertStatus(200)
             ->assertJsonCount(0, 'data');
+    }
+
+    public function test_order_reviews_need_a_claimed_order_and_are_listed_to_their_owner()
+    {
+        $customer = $this->makeCustomer();
+        $stranger = $this->makeCustomer();
+        $product  = $this->makeProduct(['prod_qty' => 5]);
+
+        // Ready for pickup is not yet in the customer's hands: no review yet
+        $readyOrder = $this->makePurchasedOrder($customer, $product);
+        $readyOrder->update(['ord_status' => 'to claim']);
+        $this->json('POST', '/api/reviews/create', [
+            'ord_id'  => $readyOrder->ord_id,
+            'prod_id' => $product->prod_id,
+            'rating'  => 5,
+        ], $this->headers($customer))
+            ->assertStatus(403)
+            ->assertJson(['message' => 'You can review the items once this order has been claimed or received.']);
+
+        // Once claimed (or received) the same call goes through
+        $readyOrder->update(['ord_status' => 'claimed']);
+        $this->json('POST', '/api/reviews/create', [
+            'ord_id'  => $readyOrder->ord_id,
+            'prod_id' => $product->prod_id,
+            'rating'  => 4,
+            'message' => 'Solid quality',
+        ], $this->headers($customer))->assertStatus(201);
+
+        // rev_msg is a 255-char column: longer text is refused, not a 500
+        $this->json('PUT', '/api/reviews/update', [
+            'ord_id'  => $readyOrder->ord_id,
+            'prod_id' => $product->prod_id,
+            'message' => str_repeat('x', 201),
+        ], $this->headers($customer))
+            ->assertStatus(400)
+            ->assertJson(['message' => 'Reviews can be at most 200 characters long.']);
+
+        // The owner sees their own PENDING review on the order (the public
+        // display endpoint hides it until approval); nobody else can ask
+        $mine = $this->json('GET', '/api/reviews/mine', ['ord_id' => $readyOrder->ord_id], $this->headers($customer))
+            ->assertStatus(200)
+            ->json('data');
+        $this->assertCount(1, $mine);
+        $this->assertSame('pending', $mine[0]['status']);
+        $this->assertSame(4, $mine[0]['rating']);
+        $this->assertSame('Solid quality', $mine[0]['message']);
+
+        $this->json('GET', '/api/reviews/mine', ['ord_id' => $readyOrder->ord_id], $this->headers($stranger))
+            ->assertStatus(404);
     }
 
     public function test_profile_order_and_appointment_scope_contracts()

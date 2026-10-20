@@ -105,6 +105,35 @@ export async function fetchAllReviews(status = 'all') {
   }
 }
 
+/** Only an order the customer actually has in hand can be rated. */
+export function canReviewOrder(status) {
+  return ['CLAIMED', 'RECEIVED'].includes(String(status || '').trim().toUpperCase())
+}
+
+/** Longest review text the server accepts (rev_msg is a 255-char column). */
+export const REVIEW_MAX_LENGTH = 200
+
+/**
+ * GET /reviews/mine - the signed-in customer's own reviews of the products in
+ * one order, in every moderation state ('pending' | 'approved' | 'rejected').
+ * Resolves to a map keyed by prod_id so the order screen can match each item.
+ */
+export async function fetchMyOrderReviews(ordId) {
+  const data = await apiGet('/reviews/mine', { ord_id: ordId })
+  const rows = Array.isArray(data?.data) ? data.data : []
+  const byProduct = {}
+  rows.forEach((row) => {
+    byProduct[String(row.prod_id)] = {
+      revId: row.rev_id,
+      prodId: row.prod_id,
+      rating: Number(row.rating) || 0,
+      message: row.message || '',
+      status: String(row.status || 'pending').toLowerCase(),
+    }
+  })
+  return byProduct
+}
+
 /** POST /reviews/create - rate/review a product the customer ordered. */
 export function createReview(payload) {
   return apiPost('/reviews/create', payload)

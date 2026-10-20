@@ -60,12 +60,17 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | will be used by the PHP date and date-time functions.
+    |
+    | This MUST match the Postgres session time zone (the database is set to
+    | Asia/Manila - see `timezone` in config/database.php). Laravel writes
+    | `now()` as a zone-less wall-clock string and Postgres reads it in its own
+    | session zone, so a UTC app against a Manila database stored every
+    | server-made timestamp (orders, payments, notifications...) 8 hours early.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Asia/Manila'),
 
     /*
     |--------------------------------------------------------------------------

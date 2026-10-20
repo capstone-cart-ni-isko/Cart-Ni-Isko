@@ -200,6 +200,7 @@ Route::middleware('auth:api')->group(function () {
 
     // Reviews API Routes (creation/moderation require a token)
     Route::post('/reviews/create', [ProductsAPI::class, 'createReview']);
+    Route::get('/reviews/mine', [ProductsAPI::class, 'myReviews']);
     // Rule 45 / REQ-MANAGE_REV-01: only admins and super admins delete reviews
     // (the customer wall never offers a delete action).
     Route::delete('/reviews/delete', [ProductsAPI::class, 'deleteReview'])->middleware('role:admin');

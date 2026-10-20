@@ -26,6 +26,8 @@ import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
+import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
+import { canReviewOrder } from '../services/reviews.js'
 
 const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
 const CAN_CANCEL = ['TO PROCESS']
@@ -99,6 +101,7 @@ function OrderDetail() {
   const [busy, setBusy] = useState(false)
   // null | 'delivery' (FLOW-ORD_CLAIM-07) | 'pickup' (FLOW-ORD_CLAIM-01)
   const [scanMode, setScanMode] = useState(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -243,10 +246,6 @@ function OrderDetail() {
       setBusy(false)
     }
   }
-
-  /** FLOW-ORD_CLAIM-01: the customer scans their own pickup `appoint_qr`. */
-  const canClaimPickup =
-    !isDelivery && order?.status === 'TO CLAIM' && Boolean(order?.raw?.appoint_qr)
 
   if (loading) {
     return (
@@ -432,37 +431,18 @@ function OrderDetail() {
                         </button>
                       </>
                     )}
-                    {/* FLOW-ORD_CLAIM-01: the customer scans their own pickup code */}
-                    {canClaimPickup && (
-                      <button
-                        type="button"
-                        onClick={() => setScanMode('pickup')}
-                        className="mt-1 px-4 py-2 rounded-lg bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50 cursor-pointer"
-                      >
-                        Scan to claim
-                      </button>
-                    )}
                   </div>
                 </div>
               )}
 
-              {/* Camera scanner: delivery receipt (FLOW-ORD_CLAIM-07) or
-                  pickup claim (FLOW-ORD_CLAIM-01) - both post the scanned
-                  text to POST /tracking/scan as { scanned_by: 'customer' }. */}
+              {/* Camera scanner for the delivery receipt (FLOW-ORD_CLAIM-07),
+                  posted to POST /tracking/scan as { scanned_by: 'customer' }.
+                  Pickup codes are never self-scanned: staff scan them. */}
               <QrScanModal
                 open={scanMode === 'delivery'}
                 title="Scan Parcel QR Code"
                 subtitle="Point the camera at the QR code on your parcel."
                 fallbackCode={isDelivery ? qrPayload : null}
-                fallbackLabel="Use this order's code"
-                onClose={() => setScanMode(null)}
-                onSuccess={() => load()}
-              />
-              <QrScanModal
-                open={scanMode === 'pickup'}
-                title={`Scan to claim · Order #${order.id}`}
-                subtitle="Point the camera at the claim QR code for this pickup order."
-                fallbackCode={order.raw?.appoint_qr || qrPayload}
                 fallbackLabel="Use this order's code"
                 onClose={() => setScanMode(null)}
                 onSuccess={() => load()}
@@ -817,6 +797,28 @@ function OrderDetail() {
             </div>
           )}
 
+          {/* Rate & review each item once the order is claimed / received */}
+          {canReviewOrder(order.status) && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-2 shadow-2xs">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Rate &amp; Review
+              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setReviewOpen(true)}
+                  className="px-4 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-amber-500" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                  Rate &amp; Review items
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                Rate each product in this order and share how it turned out.
+              </p>
+            </div>
+          )}
+
           {/* Refund / Return Request (FLOW-ORD_LIST-04 / C11: customer requests return & refund after claiming) */}
           {CAN_REFUND.includes(order.status) && (
             <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-2 shadow-2xs">
@@ -876,6 +878,11 @@ function OrderDetail() {
           </div>
         </div>
       </div>
+      <OrderReviewModal
+        isOpen={reviewOpen}
+        order={order}
+        onClose={() => setReviewOpen(false)}
+      />
     </FocusedLayout>
   )
 }
