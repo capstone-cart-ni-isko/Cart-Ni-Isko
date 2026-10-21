@@ -31,6 +31,7 @@ const FILTER_STATUS_OPTIONS = [
   'Processing',
   'To Process',
   'To Claim',
+  'To Deliver',
   'To Receive',
   'In Transit',
   'Claimed',
@@ -48,6 +49,7 @@ const FILTER_STATUS_OPTIONS = [
 // spelling so a staff filter and a customer status line agree.
 const STATUS_FILTER_ALIASES = {
   Processing: ['To Process'],
+  'To Deliver': ['To Deliver'],
   'In Transit': ['In Transit', 'Delivering', 'To Receive'],
 }
 
@@ -355,15 +357,36 @@ export default function AdminOrders() {
     {
       header: 'ACTION',
       key: 'actions',
-      render: (row) => (
-        <button
-          type="button"
-          onClick={() => setActiveOrderDetail(row)}
-          className="h-7 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer whitespace-nowrap"
-        >
-          View details
-        </button>
-      ),
+      render: (row) => {
+        const isCourier =
+          row.fulfillment?.toLowerCase().includes('courier') ||
+          row.fulfillment?.toLowerCase().includes('delivery')
+        const raw = String(row.rawStatus || row.status || '').toUpperCase()
+        const isProcessing = raw === 'PROCESSING' || raw === 'TO PROCESS'
+
+        return (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {isCourier && isProcessing && (
+              <button
+                type="button"
+                disabled={actionBusy}
+                onClick={() => applyStatus(row, 'to deliver')}
+                className="h-7 px-2.5 rounded-md bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
+                title="Request customer to complete delivery details and fee"
+              >
+                Request delivery details
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setActiveOrderDetail(row)}
+              className="h-7 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer whitespace-nowrap"
+            >
+              View details
+            </button>
+          </div>
+        )
+      },
     },
   ]
 
@@ -763,6 +786,7 @@ export default function AdminOrders() {
                           const allowedChoices = isDelivery
                             ? [
                                 { label: 'Processing', value: 'To Process' },
+                                { label: 'To Deliver', value: 'To Deliver' },
                                 { label: 'In Transit', value: 'Delivering' },
                               ]
                             : [

@@ -20,7 +20,7 @@ import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import CustomerOrderDetailModal from '../components/orders/CustomerOrderDetailModal.jsx'
 import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
 import { canReviewOrder } from '../services/reviews.js'
-import { fetchOrders, requestCancel, orderFilterBucket } from '../services/orders.js'
+import { fetchOrders, requestCancel, orderFilterBucket, confirmDeliveryFeePayment } from '../services/orders.js'
 import { parseDate } from '../services/dashboard.js'
 
 /**
@@ -47,6 +47,7 @@ const SERVER_TABS = ['processing', 'to-claim', 'claimed', 'unclaimed', 'cancelle
 export const STATUS_CONTEXT = {
   'TO PROCESS': 'Your order is being prepared by the store.',
   'TO CLAIM': 'Ready for pickup — show your claim QR at the counter.',
+  'TO DELIVER': 'Items ready! Please complete delivery details and fee to dispatch your order.',
   'TO RECEIVE': 'Out for courier delivery to your address.',
   CLAIMED: 'Picked up and claimed. Thank you!',
   RECEIVED: 'Delivered and received. Thank you!',
@@ -57,7 +58,7 @@ export const STATUS_CONTEXT = {
   'CANCEL REQUESTED': 'Cancellation requested — waiting for staff approval.',
 }
 
-const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
+const RECEIVING = ['TO CLAIM', 'TO DELIVER', 'TO RECEIVE']
 
 /**
  * The API now stores lowercase statuses (`processing`, `to claim`, …). Normalize
@@ -69,6 +70,7 @@ const STATUS_DISPLAY_MAP = {
   processing: 'TO PROCESS',
   'to cancel': 'CANCEL REQUESTED',
   'to claim': 'TO CLAIM',
+  'to deliver': 'TO DELIVER',
   delivering: 'TO RECEIVE',
   'to receive': 'TO RECEIVE',
   claimed: 'CLAIMED',
@@ -193,6 +195,8 @@ function Orders() {
     for_pickup: 'to-claim',
     for_delivery: 'to-claim',
     to_claim: 'to-claim',
+    to_deliver: 'to-claim',
+    'to deliver': 'to-claim',
     claimed: 'claimed',
     received: 'claimed',
     completed: 'claimed',
@@ -289,6 +293,28 @@ function Orders() {
     },
     [custId, activeTab, showToast]
   )
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const statusParam = params.get('status')
+    const orderParam = params.get('order')
+
+    if (statusParam === 'delivery_fee_paid' && orderParam) {
+      window.history.replaceState({}, document.title, window.location.pathname)
+      confirmDeliveryFeePayment(Number(orderParam))
+        .then((res) => {
+          showToast(res?.message || 'Delivery fee confirmed! Order is out for delivery.', 'success')
+          load({ silent: true })
+        })
+        .catch(() => {
+          showToast('Payment verified. Updating order status…', 'info')
+          load({ silent: true })
+        })
+    } else if (statusParam === 'delivery_fee_cancelled') {
+      window.history.replaceState({}, document.title, window.location.pathname)
+      showToast('Delivery fee payment was cancelled.', 'info')
+    }
+  }, [showToast, load])
 
   /* REQ-ORD_LIST-02: refresh the list every ~10s while the tab is visible.
      The interval stops while the document is hidden and is re-armed (with an
@@ -599,7 +625,18 @@ function Orders() {
                         <span>Show Pickup QR</span>
                       </button>
                     )}
-                    {RECEIVING.includes(order.status) && !hasPickupQr && (
+                    {order.status === 'TO DELIVER' && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOrder(order)}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-brand-orange text-white hover:bg-brand-orange-dark shadow-2xs hover:shadow-xs active:scale-98 transition-all cursor-pointer"
+                        title="Complete delivery details and pay delivery fee"
+                      >
+                        <TruckIcon className="w-3.5 h-3.5" />
+                        <span>Pay Courier Fee</span>
+                      </button>
+                    )}
+                    {RECEIVING.includes(order.status) && !hasPickupQr && order.status !== 'TO DELIVER' && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
                         {order.status === 'TO CLAIM' ? 'Claim QR ready' : 'Tracking active'}
                       </span>

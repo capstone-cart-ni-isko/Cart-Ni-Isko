@@ -187,6 +187,7 @@ export function mapOrderRow(row) {
     processing: 'TO PROCESS',
     'to cancel': 'CANCEL REQUESTED',
     'to claim': 'TO CLAIM',
+    'to deliver': 'TO DELIVER',
     delivering: 'TO RECEIVE',
     'to receive': 'TO RECEIVE',
     claimed: 'CLAIMED',

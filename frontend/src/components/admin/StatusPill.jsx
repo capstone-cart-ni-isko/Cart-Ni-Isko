@@ -26,7 +26,7 @@ function toneFor(norm) {
   if (has(norm, ['unclaimed', 'requested', 'pending', 'awaiting', 'warning', 'low stock', 'up next', 'understaffed', 'short'])) return 'urgent'
   if (has(norm, ['cancelled', 'returned', 'refunded', 'failed', 'delayed', 'rejected', 'conflict', 'alert', 'danger', 'no-show', 'no show', 'out of stock'])) return 'lost'
   if (has(norm, ['completed', 'claimed', 'ready', 'published', 'approved', 'available', 'covered', 'received', 'delivered']) || norm === 'on duty') return 'done'
-  if (has(norm, ['to process', 'to claim', 'to receive', 'in production', 'preparing', 'in transit', 'pre-order', 'desk duty', 'online', 'pickup', 'assigned', 'dispatch', 'scheduled', 'on-call', 'active'])) return 'active'
+  if (has(norm, ['to process', 'to claim', 'to deliver', 'to receive', 'in production', 'preparing', 'in transit', 'pre-order', 'desk duty', 'online', 'pickup', 'assigned', 'dispatch', 'scheduled', 'on-call', 'active'])) return 'active'
   return 'neutral'
 }
 

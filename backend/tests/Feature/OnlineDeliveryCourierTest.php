@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\Order;
 use App\Models\Parcel;
 use App\Models\Payment;
+use App\Models\Pickup;
 use App\Models\Prodvar;
 use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -336,48 +337,151 @@ class OnlineDeliveryCourierTest extends TestCase
     // DELIVERY FEE (rule 55: paid online, with the goods)
     // ==========================================
 
-    public function test_a_delivery_without_a_courier_still_charges_the_store_fee()
+    public function test_a_delivery_defers_fee_at_checkout_until_order_is_ready()
     {
         $customer = $this->makeCustomer();
         $product  = $this->makeProduct();
         $this->fakePayMongo();
-        $this->unconfigureCourier();   // LalaMove keys off, PayMongo on
+        $this->unconfigureCourier();
 
         [$order, $checkout] = $this->checkoutDelivery($customer, $product);
 
         $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
-        $this->assertSame('STANDARD', $delivery->deliver_service);
         $this->assertSame('sandbox', $delivery->deliver_env ?? 'sandbox');
-        // 2 x 250 goods + 50 standard tier = 550
-        $this->assertEquals(550.0, (float) $order->ord_amount);
-        $this->assertEquals(50.0, (float) $delivery->deliver_fee_charged);
+        // Goods only at checkout: 2 x 250 = 500
+        $this->assertEquals(500.0, (float) $order->ord_amount);
+        $this->assertNull($delivery->deliver_fee_charged);
 
-        // The customer is told the courier is not booked yet, and the fee is
-        // exposed on the payload so the PWA and the admin both see one number.
-        $this->assertEquals(50.0, (float) $checkout->json('data.order.deliver_fee_charged'));
-        $this->assertSame('at_checkout', $checkout->json('data.order.ord_ship_policy'));
-        $this->assertFalse($checkout->json('data.order.courier.booked'));
-
-        // The recipient / coordinates the courier will need are already stored.
-        $this->assertSame('13.1391', (string) $delivery->deliver_lat);
-        $this->assertSame('123.7438', (string) $delivery->deliver_lng);
-        $this->assertNotEmpty($delivery->deliver_recipient);
-        $this->assertSame('Leave at the gate.', $delivery->deliver_notes);
+        // Checkout response indicates deferred fee
+        $this->assertTrue((bool) $checkout->json('data.order.fee_pending'));
+        $this->assertFalse((bool) $checkout->json('data.order.courier.booked'));
     }
 
-    public function test_a_live_courier_quote_replaces_the_store_fee()
+    public function test_customer_can_submit_delivery_details_and_complete_delivery_fee()
     {
         $customer = $this->makeCustomer();
+        $admin    = $this->makeEmployee(['emp_type' => 'ADMIN']);
         $product  = $this->makeProduct();
-        $this->fakePayMongo();
-        $this->fakeLalamove(12000);   // PHP 120.00 quoted
+        $secret   = $this->fakePayMongo();
+        $this->fakeLalamove(12000); // 120 PHP quote
 
         [$order] = $this->checkoutDelivery($customer, $product);
+        $this->assertEquals('processing', $order->fresh()->ord_status);
 
+        // Settle initial products payment
+        $initialPayRaw = json_encode([
+            'data' => [
+                'id'         => 'evt_initial_paid',
+                'type'       => 'checkout_session.payment.paid',
+                'attributes' => ['reference_number' => 'order:' . $order->ord_id, 'status' => 'paid'],
+            ],
+        ], JSON_UNESCAPED_SLASHES);
+        $this->withHeaders([
+            'Content-Type'       => 'application/json',
+            'Paymongo-Signature' => $this->payMongoSignature($initialPayRaw, $secret),
+        ])->postJson('/api/checkout/payment/webhook', json_decode($initialPayRaw, true))->assertStatus(200);
+
+        $this->assertEquals(500.0, (float) $order->fresh()->pay_received);
+
+        // Staff/Admin requests delivery details (moves order to 'to deliver')
+        $this->json('PUT', '/api/orders/update', [
+            'ord_id'     => $order->ord_id,
+            'ord_status' => 'to deliver',
+        ], $this->headers($admin))->assertStatus(200);
+
+        $this->assertEquals('to deliver', $order->fresh()->ord_status);
+
+        // Customer submits delivery details
+        $res = $this->json('POST', '/api/orders/delivery-details', [
+            'ord_id'           => $order->ord_id,
+            'deliver_address'  => 'Bagumbayan, Legazpi City, Albay',
+            'deliver_recipient'=> 'Maria Santos',
+            'deliver_phone'    => '09123456789',
+            'deliver_notes'    => 'Leave at door',
+            'speed'            => 'standard',
+        ], $this->headers($customer))->assertStatus(200);
+
+        $this->assertTrue($res->json('success'));
+        $this->assertNotNull($res->json('data.checkout_url'));
+
+        // Customer completes delivery fee via webhook or confirmation endpoint
+        $raw = json_encode([
+            'data' => [
+                'id'         => 'evt_delivery_fee_paid',
+                'type'       => 'checkout_session.payment.paid',
+                'attributes' => [
+                    'reference_number' => 'delivery_fee:' . $order->ord_id,
+                    'status'           => 'paid',
+                ],
+            ],
+        ], JSON_UNESCAPED_SLASHES);
+
+        $this->withHeaders([
+            'Content-Type'       => 'application/json',
+            'Paymongo-Signature' => $this->payMongoSignature($raw, $secret),
+        ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))->assertStatus(200);
+
+        $order->refresh();
         $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
-        // 2 x 250 goods + 120 quoted = 620 - the courier price, not the table.
-        $this->assertEquals(620.0, (float) $order->ord_amount);
+
+        // Status moved to 'to receive' and courier booked
+        $this->assertEquals('to receive', $order->ord_status);
+        $this->assertEquals(620.0, (float) $order->ord_amount); // 500 + 120
+        $this->assertEquals(620.0, (float) $order->pay_received);
         $this->assertEquals(120.0, (float) $delivery->deliver_fee_charged);
+        $this->assertTrue($delivery->isBooked());
+    }
+
+    public function test_customer_can_switch_claiming_method_while_order_is_processing()
+    {
+        $customer = $this->makeCustomer();
+        $admin    = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        $product  = $this->makeProduct();
+        $this->fakePayMongo();
+        $this->fakeLalamove();
+
+        // 1. Initial checkout as delivery
+        [$order] = $this->checkoutDelivery($customer, $product);
+        $this->assertEquals('processing', $order->fresh()->ord_status);
+        $this->assertNotNull(Delivery::where('ord_id', $order->ord_id)->first());
+
+        // 2. Customer switches from delivery to pickup
+        $futureSlot = now()->addDays(2)->format('Y-m-d') . ' 10:00';
+        $resPickup = $this->json('POST', '/api/orders/switch-claiming', [
+            'ord_id'        => $order->ord_id,
+            'claiming'      => 'pickup',
+            'appoint_start' => $futureSlot,
+        ], $this->headers($customer))->assertStatus(200);
+
+        $this->assertTrue($resPickup->json('success'));
+        $order->refresh();
+        $this->assertEquals('pickup', $order->ord_claiming);
+        $this->assertNull(Delivery::where('ord_id', $order->ord_id)->first());
+        $this->assertNotNull($order->pickup);
+
+        // 3. Customer switches back from pickup to delivery
+        $resDelivery = $this->json('POST', '/api/orders/switch-claiming', [
+            'ord_id'   => $order->ord_id,
+            'claiming' => 'deliver',
+        ], $this->headers($customer))->assertStatus(200);
+
+        $this->assertTrue($resDelivery->json('success'));
+        $order->refresh();
+        $this->assertEquals('deliver', $order->ord_claiming);
+        $this->assertNotNull(Delivery::where('ord_id', $order->ord_id)->first());
+        $this->assertNull(Pickup::where('ord_id', $order->ord_id)->first());
+
+        // 4. Switching is rejected once order moves away from processing
+        $this->json('PUT', '/api/orders/update', [
+            'ord_id'     => $order->ord_id,
+            'ord_status' => 'to deliver',
+        ], $this->headers($admin))->assertStatus(200);
+
+        $this->json('POST', '/api/orders/switch-claiming', [
+            'ord_id'        => $order->ord_id,
+            'claiming'      => 'pickup',
+            'appoint_start' => $futureSlot,
+        ], $this->headers($customer))->assertStatus(422);
     }
 
     // ==========================================

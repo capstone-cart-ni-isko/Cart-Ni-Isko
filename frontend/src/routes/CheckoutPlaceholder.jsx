@@ -179,10 +179,10 @@ function CheckoutPlaceholder() {
     : addressText(chosenAddress)
 
   const tierInfo = DELIVERY_TIERS.find((t) => t.key === tier) || DELIVERY_TIERS[1]
-  const clientFee = dispatchType === 'delivery' ? tierInfo.fee : 0
+  const clientFee = 0
   const serverDue =
     serverPreview?.total_due ?? serverPreview?.total ?? null
-  const totalDue = serverDue != null ? Number(serverDue) : orderSubtotal + clientFee
+  const totalDue = serverDue != null ? Number(serverDue) : orderSubtotal
 
   /* The server's quote outranks the local tier table: a live courier quote
      (dispatch_fee_source 'lalamove') can differ from the store's rows and it
@@ -200,9 +200,7 @@ function CheckoutPlaceholder() {
   const feeRowLabel =
     dispatchType === 'pickup'
       ? 'Fulfillment Fee'
-      : feeSource === 'lalamove'
-      ? 'Delivery Fee (live courier quote)'
-      : `Delivery Fee (${tierInfo.label})`
+      : 'Delivery Fee (Calculated when ready)'
 
   const touch = (key) => setTouched((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
 
@@ -210,10 +208,6 @@ function CheckoutPlaceholder() {
   const errors = {}
   if (dispatchType === 'pickup') {
     if (!slot?.appoint_start) errors.slot = 'Book a pickup slot to continue.'
-  } else {
-    if (!deliveryAddress.trim()) errors.address = 'Delivery address is required.'
-    else if (deliveryAddress.trim().length < 8)
-      errors.address = 'Please enter a complete delivery address.'
   }
 
   const showError = (key) => (submitted || touched[key] ? errors[key] : undefined)
@@ -659,103 +653,30 @@ function CheckoutPlaceholder() {
                 </div>
               )}
 
-              {/* FLOW-CHECKOUT-07: delivery expands with address AND date. */}
+              {/* FLOW-CHECKOUT-07: delivery details and fee are deferred until items are ready */}
               {dispatchType === 'delivery' && (
-                <div className="space-y-3 text-sm">
-                  <p className="font-semibold text-gray-900">Delivery Address</p>
-                  {sortedAddresses.length > 0 && (
-                    <div className="space-y-1.5">
-                      {sortedAddresses.map((addr, idx) => (
-                        <button
-                          key={addr.id ?? idx}
-                          type="button"
-                          onClick={() => {
-                            setAddressIdx(idx)
-                            setUseCustomAddress(false)
-                            touch('address')
-                          }}
-                          className={`w-full text-left p-3 rounded-lg border transition-colors cursor-pointer ${
-                            !useCustomAddress && addressIdx === idx
-                              ? 'border-brand-orange bg-orange-50/60'
-                              : 'border-slate-100 bg-white hover:bg-gray-50'
-                          }`}
-                        >
-                          <span className="font-semibold text-gray-800">
-                            {addr.recipient || `Address ${idx + 1}`}
-                          </span>
-                          {addr.isDefault && (
-                            <span className="ml-1.5 text-[10px] font-semibold text-brand-orange bg-orange-50 px-1.5 py-0.5 rounded uppercase">
-                              Default
-                            </span>
-                          )}
-                          <p className="text-gray-500 text-xs truncate mt-0.5">
-                            {addressText(addr)}
-                          </p>
-                        </button>
-                      ))}
+                <div className="space-y-3 text-sm p-4 rounded-xl border border-blue-200 bg-blue-50/60">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-blue-100 text-blue-700 shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                        <rect x="1" y="3" width="15" height="13" />
+                        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                        <circle cx="5.5" cy="18.5" r="2.5" />
+                        <circle cx="18.5" cy="18.5" r="2.5" />
+                      </svg>
                     </div>
-                  )}
-
-                  <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useCustomAddress}
-                      onChange={(e) => {
-                        setUseCustomAddress(e.target.checked)
-                        touch('address')
-                      }}
-                      className="mt-0.5 accent-[var(--color-brand-orange,#f97316)]"
-                    />
-                    Ship to a different address
-                  </label>
-                  {useCustomAddress && (
-                    <textarea
-                      value={customAddress}
-                      onChange={(e) => {
-                        setCustomAddress(e.target.value)
-                        touch('address')
-                      }}
-                      rows={2}
-                      placeholder="House/Unit no., street, barangay, city"
-                      className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2 focus:border-brand-orange focus:ring-brand-orange/30"
-                    />
-                  )}
-                  {showError('address') && (
-                    <p className="text-xs font-semibold text-red-500 -mt-1">{errors.address}</p>
-                  )}
-
-                  {/* FLOW-CHECKOUT-07: the form still shows the delivery date, but the
-                      customer is not asked to pick one - it follows from the
-                      delivery speed chosen below and is confirmed by the server. */}
-                  <div className="flex items-start justify-between gap-3 p-3 rounded-lg border border-slate-100 bg-slate-50">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-gray-900">Estimated Delivery</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">{etaNote(feeSource, serverEta)}</p>
+                    <div className="space-y-1">
+                      <p className="font-bold text-blue-950 text-sm">
+                        Delivery Details &amp; Fee Deferred
+                      </p>
+                      <p className="text-xs text-blue-900 leading-relaxed">
+                        To protect you from premature or inaccurate courier charges while items are prepared,
+                        <strong> you pay only for your products now.</strong>
+                      </p>
+                      <p className="text-xs text-blue-800 leading-relaxed pt-1">
+                        When all your items are ready for dispatch, you will be notified to confirm your delivery address, choose your delivery speed, and complete the exact courier fee.
+                      </p>
                     </div>
-                    <p className="text-sm font-semibold text-gray-900 text-right shrink-0">
-                      {estimatedDeliveryLabel(serverEta, tierInfo.eta)}
-                    </p>
-                  </div>
-
-                  <p className="font-semibold text-gray-900">Delivery Speed</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {DELIVERY_TIERS.map((t) => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        onClick={() => setTier(t.key)}
-                        className={`py-2 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
-                          tier === t.key
-                            ? 'bg-brand-orange text-white border-brand-orange'
-                            : 'bg-white text-gray-700 border-slate-200 hover:border-brand-orange'
-                        }`}
-                      >
-                        {t.label}
-                        <span className="block text-[10px] font-normal opacity-80">
-                          ₱{t.fee} · {t.eta}
-                        </span>
-                      </button>
-                    ))}
                   </div>
                 </div>
               )}
@@ -820,19 +741,11 @@ function CheckoutPlaceholder() {
                 <div className="flex justify-between text-gray-600 font-medium">
                   <span>{feeRowLabel}</span>
                   <span>
-                    {serverPreview?.dispatch_fee != null
-                      ? `₱${Number(serverPreview.dispatch_fee).toFixed(2)}`
-                      : clientFee > 0
-                      ? `₱${clientFee.toFixed(2)}`
+                    {dispatchType === 'delivery'
+                      ? 'To be calculated when ready'
                       : 'FREE (Pickup)'}
                   </span>
                 </div>
-                {feeSource === 'lalamove' && (
-                  <p className="text-[11px] text-gray-400">
-                    Live courier quote — this is the delivery fee charged with your order, not the
-                    store's tier price.
-                  </p>
-                )}
                 <div className="flex justify-between items-baseline text-sm font-semibold text-gray-900 pt-2 border-t border-orange-200/60">
                   <span>Total Due</span>
                   <span className="text-lg font-semibold text-brand-orange">

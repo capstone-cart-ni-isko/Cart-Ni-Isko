@@ -11,7 +11,7 @@ const ACTIVE = ['TO PROCESS', 'TO CLAIM', 'TO RECEIVE', 'CLAIMED', 'UNCLAIMED', 
  */
 export const ORDER_FILTER_BUCKETS = {
   processing: ['processing', 'to cancel', 'to process', 'cancel requested', 'cancelling', 'return requested'],
-  'to-claim': ['to claim', 'to receive', 'delivering', 'transit'],
+  'to-claim': ['to claim', 'to deliver', 'to receive', 'delivering', 'transit'],
   claimed: ['claimed', 'received', 'delivered', 'completed'],
   unclaimed: ['unclaimed'],
   cancelled: ['cancelled', 'cancel', 'canceled', 'returned', 'refunded'],
@@ -87,6 +87,21 @@ export function updateOrder(ordId, changes) {
 /** DELETE /orders/remove - remove one product from an order. */
 export function removeProductFromOrder(ordId, prodId) {
   return apiDelete('/orders/remove', { ord_id: ordId, prod_id: prodId })
+}
+
+/** POST /orders/delivery-details - submit delivery details and initiate fee payment. */
+export function submitDeliveryDetails(payload) {
+  return apiPost('/orders/delivery-details', payload)
+}
+
+/** POST /orders/delivery-fee - confirm settled delivery fee payment. */
+export function confirmDeliveryFeePayment(ordId) {
+  return apiPost('/orders/delivery-fee', { ord_id: ordId })
+}
+
+/** POST /orders/switch-claiming - switch fulfillment between pickup and delivery while processing. */
+export function switchClaimingMethod(payload) {
+  return apiPost('/orders/switch-claiming', payload)
 }
 
 /**

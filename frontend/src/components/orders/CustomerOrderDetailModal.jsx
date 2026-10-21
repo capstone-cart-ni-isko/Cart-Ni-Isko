@@ -13,7 +13,7 @@ import {
   MapPinIcon,
   MessageSquareIcon,
 } from '../ui/Icons.jsx'
-import { fetchOrder, requestCancel, updateOrder } from '../../services/orders.js'
+import { fetchOrder, requestCancel, updateOrder, submitDeliveryDetails, confirmDeliveryFeePayment, switchClaimingMethod } from '../../services/orders.js'
 import { getTrack, scanQr } from '../../services/tracking.js'
 import { parseDate, paymentSummary } from '../../services/dashboard.js'
 import { QrScanModal } from '../ui/QRScanner.jsx'
@@ -101,6 +101,8 @@ export default function CustomerOrderDetailModal({
   const [busy, setBusy] = useState(false)
   const [scanMode, setScanMode] = useState(null)
   const [isRescheduling, setIsRescheduling] = useState(false)
+  const [isSwitchingToPickup, setIsSwitchingToPickup] = useState(false)
+  const [switchingClaiming, setSwitchingClaiming] = useState(false)
 
   const orderId = initialOrder?.id ?? initialOrder?.ord_id
 
@@ -218,6 +220,105 @@ export default function CustomerOrderDetailModal({
     }
   }
 
+  const [showDeliveryForm, setShowDeliveryForm] = useState(false)
+  const [deliveryAddrInput, setDeliveryAddrInput] = useState('')
+  const [deliveryRecipientInput, setDeliveryRecipientInput] = useState('')
+  const [deliveryPhoneInput, setDeliveryPhoneInput] = useState('')
+  const [deliveryNotesInput, setDeliveryNotesInput] = useState('')
+  const [deliverySpeedInput, setDeliverySpeedInput] = useState('standard')
+
+  useEffect(() => {
+    if (effectiveRaw?.deliver_address) {
+      setDeliveryAddrInput(effectiveRaw.deliver_address)
+    } else if (currentUser?.address) {
+      setDeliveryAddrInput(currentUser.address)
+    }
+    if (effectiveRaw?.deliver_recipient) {
+      setDeliveryRecipientInput(effectiveRaw.deliver_recipient)
+    } else if (currentUser?.fullName) {
+      setDeliveryRecipientInput(currentUser.fullName)
+    }
+    if (effectiveRaw?.deliver_phone) {
+      setDeliveryPhoneInput(effectiveRaw.deliver_phone)
+    } else if (currentUser?.phone) {
+      setDeliveryPhoneInput(currentUser.phone)
+    }
+  }, [effectiveRaw, currentUser])
+
+  const handleSubmitDeliveryDetails = async (e) => {
+    e?.preventDefault?.()
+    if (!deliveryAddrInput.trim()) {
+      showToast('Please enter your delivery address.', 'error')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await submitDeliveryDetails({
+        ord_id: orderId,
+        deliver_address: deliveryAddrInput.trim(),
+        deliver_recipient: deliveryRecipientInput.trim(),
+        deliver_phone: deliveryPhoneInput.trim(),
+        deliver_notes: deliveryNotesInput.trim(),
+        speed: deliverySpeedInput,
+      })
+
+      if (res?.data?.checkout_url) {
+        showToast('Redirecting to PayMongo to complete delivery fee payment…', 'success')
+        window.location.href = res.data.checkout_url
+        return
+      }
+
+      showToast(res?.message || 'Delivery details updated successfully.', 'success')
+      setShowDeliveryForm(false)
+      loadDetails()
+      onOrderUpdated?.()
+    } catch (err) {
+      showToast(err?.message || 'Failed to submit delivery details.', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleSwitchToDelivery = async () => {
+    if (switchingClaiming || !orderId) return
+    if (!window.confirm('Switch this order fulfillment from Store Pickup to Courier Delivery?')) return
+    setSwitchingClaiming(true)
+    try {
+      const res = await switchClaimingMethod({
+        ord_id: orderId,
+        claiming: 'deliver',
+      })
+      showToast(res?.message || 'Fulfillment switched to Courier Delivery.', 'success')
+      await loadDetails()
+      onOrderUpdated?.()
+    } catch (err) {
+      showToast(err?.message || 'Failed to switch fulfillment method.', 'error')
+    } finally {
+      setSwitchingClaiming(false)
+    }
+  }
+
+  const handlePickupSlotSelected = async (saved) => {
+    if (!orderId) return
+    setSwitchingClaiming(true)
+    try {
+      const res = await switchClaimingMethod({
+        ord_id: orderId,
+        claiming: 'pickup',
+        appoint_start: saved?.appoint_start || saved?.start,
+        appoint_id: saved?.appoint_id || saved?.id,
+      })
+      showToast(res?.message || 'Fulfillment switched to Store Pickup.', 'success')
+      setIsSwitchingToPickup(false)
+      await loadDetails()
+      onOrderUpdated?.()
+    } catch (err) {
+      showToast(err?.message || 'Failed to switch fulfillment method.', 'error')
+    } finally {
+      setSwitchingClaiming(false)
+    }
+  }
+
   const handleConfirmReceipt = async () => {
     if (busy || !qrPayload) return
     setBusy(true)
@@ -259,6 +360,7 @@ export default function CustomerOrderDetailModal({
   const courierTrackUrl = courier?.share_url || effectiveRaw?.deliver_share_link || null
   const appointId = effectiveRaw?.appoint_id || effectiveRaw?.appointment?.appoint_id || null
   const canReschedulePickup = !isDelivery && Boolean(appointId) && !['CLAIMED', 'RECEIVED', 'CANCELLED', 'RETURNED'].includes(status)
+  const canSwitchClaiming = status === 'TO PROCESS' || String(effectiveRaw?.ord_status || '').toLowerCase() === 'processing'
 
   if (!isOpen || !order) return null
 
@@ -314,6 +416,135 @@ export default function CustomerOrderDetailModal({
             </div>
           )}
         </div>
+
+        {/* Complete Delivery Details & Fee Banner (TO DELIVER) */}
+        {isDelivery && status === 'TO DELIVER' && (
+          <div className="p-4 sm:p-5 bg-gradient-to-br from-blue-500/10 via-brand-orange/10 to-transparent rounded-2xl border-2 border-brand-orange/40 space-y-3.5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-orange text-white text-[10px] font-bold uppercase tracking-wider">
+                  Action Required
+                </span>
+                <h3 className="text-base font-bold text-[var(--ink)]">
+                  Complete Delivery Details &amp; Fee
+                </h3>
+                <p className="text-xs text-[var(--muted)] leading-relaxed">
+                  Your ordered items are ready for dispatch! Please provide your delivery address and settle the courier fee so we can send out your parcel.
+                </p>
+              </div>
+            </div>
+
+            {!showDeliveryForm ? (
+              <button
+                type="button"
+                onClick={() => setShowDeliveryForm(true)}
+                className="w-full py-2.5 px-4 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-bold transition-all shadow-2xs hover:shadow-xs active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <TruckIcon className="w-4 h-4" />
+                <span>Enter Delivery Address &amp; Pay Courier Fee</span>
+              </button>
+            ) : (
+              <form onSubmit={handleSubmitDeliveryDetails} className="space-y-3 pt-2 border-t border-[var(--line)]">
+                <div className="space-y-1">
+                  <label className="text-2xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                    Recipient Name
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryRecipientInput}
+                    onChange={(e) => setDeliveryRecipientInput(e.target.value)}
+                    placeholder="Recipient Full Name"
+                    className="field-input w-full py-2 px-3 text-xs rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-2xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryPhoneInput}
+                    onChange={(e) => setDeliveryPhoneInput(e.target.value)}
+                    placeholder="e.g. 09123456789"
+                    className="field-input w-full py-2 px-3 text-xs rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-2xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                    Complete Delivery Address *
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={deliveryAddrInput}
+                    onChange={(e) => setDeliveryAddrInput(e.target.value)}
+                    placeholder="House/Unit no., Street, Barangay, City, Province"
+                    required
+                    className="field-input w-full py-2 px-3 text-xs rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-2xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                    Delivery Speed
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { key: 'priority', label: 'Priority', fee: '₱100', eta: 'Next day' },
+                      { key: 'standard', label: 'Standard', fee: '₱50', eta: '2-3 days' },
+                      { key: 'saver', label: 'Saver', fee: '₱30', eta: '4-5 days' },
+                    ].map((tier) => (
+                      <button
+                        key={tier.key}
+                        type="button"
+                        onClick={() => setDeliverySpeedInput(tier.key)}
+                        className={`py-2 px-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${
+                          deliverySpeedInput === tier.key
+                            ? 'bg-brand-orange text-white border-brand-orange'
+                            : 'bg-[var(--surface)] text-[var(--ink)] border-[var(--line)]'
+                        }`}
+                      >
+                        <div>{tier.label}</div>
+                        <div className="text-[10px] opacity-80">{tier.fee} · {tier.eta}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-2xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                    Delivery Notes (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={deliveryNotesInput}
+                    onChange={(e) => setDeliveryNotesInput(e.target.value)}
+                    placeholder="e.g. Leave at guardhouse or gate"
+                    className="field-input w-full py-2 px-3 text-xs rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="btn btn--primary flex-1 py-2 text-xs font-bold flex items-center justify-center gap-2"
+                  >
+                    {busy ? <><LoadingSpinner size={13} /> Processing…</> : 'Proceed to Pay Courier Fee →'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeliveryForm(false)}
+                    className="btn btn--secondary py-2 px-3 text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
 
         {/* QR & Tracking (visible only while TO CLAIM / TO RECEIVE) */}
         {(showQr || timeline.length > 0) && (
@@ -460,6 +691,36 @@ export default function CustomerOrderDetailModal({
                   </div>
                 ))}
             </div>
+
+            {/* Customer can switch claiming method between pickup and delivery while status is Processing */}
+            {canSwitchClaiming && (
+              <div className="pt-2 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <span className="text-xs text-[var(--muted)]">
+                  {isDelivery ? 'Prefer to pick up at the store instead?' : 'Need this order delivered to your address instead?'}
+                </span>
+                <button
+                  type="button"
+                  disabled={switchingClaiming}
+                  onClick={() => {
+                    if (isDelivery) {
+                      setIsSwitchingToPickup(true)
+                    } else {
+                      handleSwitchToDelivery()
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-orange/40 bg-brand-orange/10 text-brand-orange hover:bg-brand-orange/20 font-semibold text-xs transition-colors cursor-pointer w-full sm:w-auto disabled:opacity-50"
+                >
+                  {isDelivery ? <MapPinIcon className="w-3.5 h-3.5" /> : <TruckIcon className="w-3.5 h-3.5" />}
+                  <span>
+                    {switchingClaiming
+                      ? 'Switching…'
+                      : isDelivery
+                      ? 'Switch to Store Pickup'
+                      : 'Switch to Courier Delivery'}
+                  </span>
+                </button>
+              </div>
+            )}
 
             {/* FLOW-MANAGE_BOOKED-04: Allow customer to reschedule claiming of pickup orders */}
             {canReschedulePickup && (
@@ -800,6 +1061,28 @@ export default function CustomerOrderDetailModal({
                 onOrderUpdated?.()
               }}
               onCancel={() => setIsRescheduling(false)}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {/* Switch to Pickup Slot Selection Modal */}
+      {isSwitchingToPickup && (
+        <Modal
+          isOpen={isSwitchingToPickup}
+          onClose={() => setIsSwitchingToPickup(false)}
+          title={`Select Pickup Slot · Order #${orderId}`}
+          subtitle="Choose an available slot to claim your order at the store"
+          size="wide"
+        >
+          <div className="p-1">
+            <AppointmentForm
+              type="PICKUP"
+              custId={currentUser?.cust_id ?? currentUser?.id}
+              collectOnly={true}
+              title="Pick a claim slot"
+              onSuccess={handlePickupSlotSelected}
+              onCancel={() => setIsSwitchingToPickup(false)}
             />
           </div>
         </Modal>

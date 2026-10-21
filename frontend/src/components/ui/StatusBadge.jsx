@@ -19,6 +19,7 @@ function StatusBadge({ status, className = '' }) {
     tone = 'badge--warn'
   } else if (
     normalized === 'TO CLAIM' ||
+    normalized === 'TO DELIVER' ||
     normalized === 'TO RECEIVE' ||
     normalized === 'READY FOR PICK-UP' ||
     normalized === 'PICK-UP' ||

@@ -1470,6 +1470,42 @@ class DatabaseAPI extends Controller
         ]);
     }
 
+    public function submitDeliveryDetails(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'          => 'required|integer',
+            'deliver_address' => 'required|string|max:500',
+            'deliver_recipient' => 'nullable|string|max:255',
+            'deliver_phone'   => 'nullable|string|max:50',
+            'deliver_notes'   => 'nullable|string|max:1000',
+            'speed'           => 'nullable|in:priority,standard,saver',
+            'deliver_lat'     => 'nullable|numeric',
+            'deliver_lng'     => 'nullable|numeric',
+        ], [
+            'ord_id.required'          => 'Order ID is required.',
+            'ord_id.integer'           => 'Order ID must be an integer.',
+            'deliver_address.required' => 'Delivery address is required.',
+            'deliver_address.string'   => 'Delivery address must be text.',
+            'deliver_address.max'      => 'Delivery address is too long.',
+            'speed.in'                 => 'Delivery speed must be priority, standard, or saver.',
+        ]);
+    }
+
+    public function switchClaimingMethod(Request $json)
+    {
+        return $this->validateFields($json, [
+            'ord_id'        => 'required|integer',
+            'claiming'      => 'required|in:pickup,deliver,delivery',
+            'appoint_start' => 'nullable|string',
+            'appoint_id'    => 'nullable|integer',
+        ], [
+            'ord_id.required'   => 'Order ID is required.',
+            'ord_id.integer'    => 'Order ID must be an integer.',
+            'claiming.required' => 'Claiming method is required.',
+            'claiming.in'       => 'Claiming method must be pickup or deliver.',
+        ]);
+    }
+
     protected function validateFields(Request $json, array $rules, array $messages = [])
     {
         $validator = Validator::make($json->all(), $rules, $messages);
@@ -1481,3 +1517,4 @@ class DatabaseAPI extends Controller
         return null;
     }
 }
+

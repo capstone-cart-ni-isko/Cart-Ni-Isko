@@ -58,6 +58,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/orders/add', [UserAPI::class, 'updateBagLine']);
     Route::put('/orders/update', [OrdersAPI::class, 'updateOrderDetails']);
     Route::delete('/orders/remove', [UserAPI::class, 'removeOrder']);
+    Route::post('/orders/delivery-details', [OrdersAPI::class, 'submitDeliveryDetails']);
+    Route::post('/orders/delivery-fee', [OrdersAPI::class, 'confirmDeliveryFeePayment']);
+    Route::post('/orders/switch-claiming', [OrdersAPI::class, 'switchClaimingMethod']);
 
     Route::post('/pos/add', [OrdersAPI::class, 'addProductToOrder'])->middleware('role:admin');
     Route::post('/pos/checkout', [OrdersAPI::class, 'checkoutOrder'])->middleware('role:admin');

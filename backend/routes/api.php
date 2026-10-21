@@ -111,6 +111,11 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/delivery/book', [OrdersAPI::class, 'bookLalamoveDelivery'])->middleware('role:staff');
     Route::post('/delivery/cancel', [OrdersAPI::class, 'cancelLalamoveDelivery'])->middleware('role:staff');
 
+    // Customer delivery completion (deferred fee and delivery details)
+    Route::post('/orders/delivery-details', [OrdersAPI::class, 'submitDeliveryDetails']);
+    Route::post('/orders/delivery-fee', [OrdersAPI::class, 'confirmDeliveryFeePayment']);
+    Route::post('/orders/switch-claiming', [OrdersAPI::class, 'switchClaimingMethod']);
+
     // Reports API Routes
     Route::middleware('role:staff')->group(function () {
         Route::get('/reports', [SystemAPI::class, 'index']);

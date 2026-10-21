@@ -124,8 +124,9 @@ function SignIn() {
 
     if (result.error || !result.user) {
       // REQ-CUST_LOGIN-02: the form is neither refreshed nor emptied.
-      setServerError(result.error || 'Unable to connect to server')
-      showToast('Unable to connect to server.', 'error')
+      const errorText = result.error || 'Cannot reach the server. Please check your connection.'
+      setServerError(errorText)
+      showToast(errorText, 'error')
       return
     }
 

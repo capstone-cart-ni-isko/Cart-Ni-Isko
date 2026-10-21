@@ -194,7 +194,7 @@ class OrdersAPI extends Controller
             }
         }
 
-        if ($priorStatus === 'processing' && in_array($status, ['to claim', 'delivering'], true)) {
+        if ($priorStatus === 'processing' && in_array($status, ['to claim', 'to deliver', 'delivering'], true)) {
             $shortages = $this->stockShortages($order);
             if ($shortages !== []) {
                 return response()->json([
@@ -263,10 +263,14 @@ class OrdersAPI extends Controller
         if ($custId <= 0) return;
 
         try {
-            $this->notifyCustomer(
-                $custId,
-                'Order #' . $order->ord_id . ' status changed to ' . $status . '.'
-            );
+            $message = 'Order #' . $order->ord_id . ' status changed to ' . $status . '.';
+            if ($status === 'to deliver') {
+                $message = 'Order #' . $order->ord_id . ' items are ready! Please complete your delivery details and delivery fee.';
+            } elseif ($status === 'to claim') {
+                $message = 'Order #' . $order->ord_id . ' items are ready! You may now claim your order.';
+            }
+
+            $this->notifyCustomer($custId, $message);
         } catch (\Throwable $e) {
             Log::warning('Orders customer notification failed', ['error' => $e->getMessage()]);
         }
@@ -415,6 +419,7 @@ class OrdersAPI extends Controller
                 'booked'   => $delivery->isBooked(),
             ];
 
+            $payload['fee_pending'] = $delivery->deliver_fee_charged === null;
             $payload['ord_ship_policy'] = 'at_checkout';
         }
 
@@ -441,6 +446,7 @@ class OrdersAPI extends Controller
             'cancel requested' => 'to cancel',
             'return requested' => 'to cancel',
             'to claim'         => 'to claim',
+            'to deliver'       => 'to deliver',
             'delivering'       => 'delivering',
             'to receive'       => 'to receive',
             'claimed'          => 'claimed',
@@ -497,8 +503,13 @@ class OrdersAPI extends Controller
             $bags        = $scope['bags'];
             $subtotal    = $this->bagSubtotal($bags);
             $quote       = $this->quoteDispatch($json, $dispatchType, $speed);
-            $dispatchFee = $quote['fee'];
-            $totalDue    = round($subtotal + $dispatchFee, 2);
+            if ($dispatchType === 'delivery') {
+                $dispatchFee = 0.0;
+                $totalDue    = $subtotal;
+            } else {
+                $dispatchFee = $quote['fee'];
+                $totalDue    = round($subtotal + $dispatchFee, 2);
+            }
 
             if ($dispatchType === 'pickup') {
                 $slotStart = $this->slotStartFrom($json);
@@ -554,7 +565,8 @@ class OrdersAPI extends Controller
                     'deliver_expect'     => $expect,
                     'estimated_delivery' => $expect->toDateTimeString(),
                     'courier'            => $quote['courier'],
-                    'fee_source'         => $quote['source'],
+                    'fee_source'         => 'pending',
+                    'fee_pending'        => true,
                 ];
             }
 
@@ -755,6 +767,36 @@ class OrdersAPI extends Controller
                 ], true)
                 || in_array($status, ['succeeded', 'paid'], true)
             );
+
+            if (str_starts_with($reference, 'delivery_fee:')) {
+                $ordId = (int) substr($reference, 13);
+                $order = Order::with('delivery')->find($ordId);
+                if ($order && $paid && ! $failed) {
+                    $delivery = $order->delivery;
+                    $fee = $delivery ? (float) ($delivery->deliver_fee_charged ?? 0) : 0;
+                    if (strtolower((string) $order->ord_status) !== 'to receive') {
+                        DB::transaction(function () use ($order, $delivery, $fee) {
+                            $order->update([
+                                'ord_status'   => 'to receive',
+                                'ord_amount'   => round((float) $order->ord_amount + $fee, 2),
+                                'pay_received' => round((float) $order->pay_received + $fee, 2),
+                            ]);
+                            if ($fee > 0) {
+                                Payment::create([
+                                    'pay_created' => now(),
+                                    'pay_ref'     => $delivery ? ($delivery->delivery_ref ?: ('PM-DEL-' . strtoupper(Str::random(12)))) : ('PM-DEL-' . strtoupper(Str::random(12))),
+                                    'pay_given'   => $fee,
+                                    'pay_due'     => $fee,
+                                    'pay_change'  => 0,
+                                ]);
+                            }
+                        });
+                        $this->bookDeliveryCourier($order);
+                        $this->announce((int) $order->cust_id, 'Delivery fee confirmed for order #' . $order->ord_id . '. Your parcel is now out for delivery!');
+                    }
+                }
+                return $this->webhookAck('Delivery fee event processed');
+            }
 
             if (! str_starts_with($reference, 'order:')) {
                 return $this->webhookAck('Event acknowledged');
@@ -1293,7 +1335,7 @@ class OrdersAPI extends Controller
             }
 
             $subtotal    = round($subtotal, 2);
-            $dispatchFee = round((float) ($quote['fee'] ?? 0), 2);
+            $dispatchFee = $dispatchType === 'delivery' ? 0.0 : round((float) ($quote['fee'] ?? 0), 2);
             $totalDue    = round($subtotal + $dispatchFee, 2);
 
             $order = Order::create([
@@ -1391,7 +1433,7 @@ class OrdersAPI extends Controller
                     'deliver_lng'         => is_numeric($lng) ? (float) $lng : null,
                     'deliver_service'     => strtoupper($speed),
                     'deliver_env'         => LalamoveService::isConfigured() ? LalamoveService::environment() : null,
-                    'deliver_fee_charged' => $dispatchFee,
+                    'deliver_fee_charged' => null,
                 ]);
 
                 $parcel = Parcel::create([
@@ -4202,9 +4244,10 @@ class OrdersAPI extends Controller
     public function transitions(): array
     {
         return [
-            'processing' => ['to claim', 'delivering', 'to cancel', 'cancelled'],
+            'processing' => ['to claim', 'to deliver', 'delivering', 'to cancel', 'cancelled'],
             'to cancel'  => ['cancelled', 'processing', 'returned', 'refunded'],
             'to claim'   => ['claimed', 'unclaimed', 'cancelled', 'processing'],
+            'to deliver' => ['to receive', 'delivering', 'processing', 'to cancel', 'cancelled'],
             'delivering' => ['to receive', 'received', 'cancelled', 'processing'],
             'to receive' => ['received', 'claimed', 'cancelled', 'processing', 'delivering'],
             'claimed'    => ['cancelled', 'received', 'returned', 'refunded'],
@@ -4229,7 +4272,7 @@ class OrdersAPI extends Controller
             || Delivery::where('ord_id', $order->ord_id)->exists();
 
         return $isDelivery
-            ? array_merge(['processing', 'delivering'], $outcomes)
+            ? array_merge(['processing', 'to deliver', 'delivering'], $outcomes)
             : array_merge(['processing', 'to claim'], $outcomes);
     }
 
@@ -4248,6 +4291,7 @@ class OrdersAPI extends Controller
         return [
             'processing' => 'To Process',
             'to claim'   => 'To Claim',
+            'to deliver' => 'To Deliver',
             'delivering' => 'In Transit',
             'cancelled'  => 'Cancelled',
             'returned'   => 'Returned',
@@ -4281,6 +4325,8 @@ class OrdersAPI extends Controller
             'CANCEL REQUESTED' => 'to cancel',
             'CANCELLING'       => 'to cancel',
             'TO CLAIM'         => 'to claim',
+            'TO DELIVER'       => 'to deliver',
+            'REQUEST DELIVERY DETAILS' => 'to deliver',
             'DELIVERING'       => 'delivering',
             'TRANSIT'          => 'delivering',
             'TO RECEIVE'       => 'to receive',
@@ -4301,7 +4347,7 @@ class OrdersAPI extends Controller
             return $map[$key];
         }
 
-        $vocabulary = ['processing', 'to cancel', 'to claim', 'delivering', 'to receive', 'claimed', 'received', 'unclaimed', 'cancelled'];
+        $vocabulary = ['processing', 'to cancel', 'to claim', 'to deliver', 'delivering', 'to receive', 'claimed', 'received', 'unclaimed', 'cancelled'];
 
         return in_array(strtolower($trimmed), $vocabulary, true) ? strtolower($trimmed) : null;
     }
@@ -4541,4 +4587,363 @@ class OrdersAPI extends Controller
 
         return $payload;
     }
+
+    public function submitDeliveryDetails(Request $json)
+    {
+        $validator = (new DatabaseAPI())->submitDeliveryDetails($json);
+        if ($validator) return $validator;
+
+        $custId = $this->customerId($json);
+        if ($custId === null) {
+            return response()->json(['success' => false, 'message' => 'Customer authentication is required.'], 403);
+        }
+
+        $ordId = (int) $json->input('ord_id');
+        $order = Order::with('delivery')->find($ordId);
+
+        if (! $order || (int) $order->cust_id !== (int) $custId) {
+            return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
+        }
+
+        $currentStatus = strtolower(trim((string) $order->ord_status));
+        if (! in_array($currentStatus, ['to deliver', 'processing'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Delivery details cannot be updated for this order status.',
+            ], 422);
+        }
+
+        $speed   = strtolower((string) $json->input('speed', 'standard'));
+        $address = trim((string) $json->input('deliver_address'));
+        $recipient = trim((string) $json->input('deliver_recipient', ''));
+        $phone   = trim((string) $json->input('deliver_phone', ''));
+        $notes   = trim((string) $json->input('deliver_notes', ''));
+        $lat     = $json->input('deliver_lat');
+        $lng     = $json->input('deliver_lng');
+
+        $quote = $this->quoteDispatch($json, 'delivery', $speed);
+        $deliveryFee = round((float) ($quote['fee'] ?? 50.0), 2);
+
+        $delivery = $order->delivery;
+        if (! $delivery) {
+            $delivery = Delivery::create([
+                'deliver_id'      => $this->nextId('delivery', 'deliver_id'),
+                'ord_id'          => $order->ord_id,
+                'cust_id'         => $custId,
+                'deliver_created' => now(),
+                'deliver_qr'      => 'QR-DEL-' . strtoupper(Str::random(10)),
+            ]);
+        }
+
+        $customer = Customer::find($custId);
+        $finalRecipient = $recipient !== '' ? $recipient : $this->customerFullName($customer);
+        $finalPhone = $phone !== '' ? $phone : (string) ($customer->cust_phone ?? '');
+
+        $delivery->update([
+            'deliver_address'     => $address,
+            'deliver_recipient'   => $finalRecipient,
+            'deliver_phone'       => $finalPhone,
+            'deliver_notes'       => $notes !== '' ? $notes : null,
+            'deliver_lat'         => is_numeric($lat) ? (float) $lat : null,
+            'deliver_lng'         => is_numeric($lng) ? (float) $lng : null,
+            'deliver_service'     => strtoupper($speed),
+            'deliver_fee_charged' => $deliveryFee,
+            'deliver_env'         => LalamoveService::isConfigured() ? LalamoveService::environment() : null,
+        ]);
+
+        if (! PayMongoService::isConfigured()) {
+            $delivery->update(['deliver_fee_actual' => $deliveryFee]);
+            $order->update([
+                'ord_status'   => 'to receive',
+                'ord_amount'   => round((float) $order->ord_amount + $deliveryFee, 2),
+                'pay_received' => round((float) $order->pay_received + $deliveryFee, 2),
+            ]);
+            $this->bookDeliveryCourier($order);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Delivery details confirmed and courier assigned.',
+                'data'    => [
+                    'ord_id'       => $order->ord_id,
+                    'delivery_fee' => $deliveryFee,
+                    'checkout_url' => null,
+                    'paid'         => true,
+                    'order'        => self::orderPayload($order->fresh()),
+                ],
+            ], 200);
+        }
+
+        $returnBase = rtrim((string) config('services.frontend_url', 'http://localhost:5173'), '/');
+        $paymongo   = new PayMongoService();
+
+        $session = $paymongo->createCheckoutSession(
+            [[
+                'name'     => 'Delivery Fee - Order #' . $order->ord_id,
+                'amount'   => $deliveryFee,
+                'quantity' => 1,
+            ]],
+            'delivery_fee:' . $order->ord_id,
+            $returnBase . '/orders?status=delivery_fee_paid&order=' . $order->ord_id,
+            $returnBase . '/orders?status=delivery_fee_cancelled&order=' . $order->ord_id
+        );
+
+        $delivery->forceFill([
+            'delivery_ref' => $session['id'],
+        ])->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Delivery checkout session created.',
+            'data'    => [
+                'ord_id'       => $order->ord_id,
+                'delivery_fee' => $deliveryFee,
+                'checkout_url' => $session['checkout_url'] ?? null,
+                'checkout_session_id' => $session['id'] ?? null,
+                'paid'         => false,
+            ],
+        ], 200);
+    }
+
+    public function confirmDeliveryFeePayment(Request $json)
+    {
+        $custId = $this->customerId($json);
+        if ($custId === null) {
+            return response()->json(['success' => false, 'message' => 'Customer authentication is required.'], 403);
+        }
+
+        $ordId = (int) $json->input('ord_id');
+        $order = Order::with('delivery')->find($ordId);
+
+        if (! $order || (int) $order->cust_id !== (int) $custId) {
+            return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
+        }
+
+        $delivery = $order->delivery;
+        if (! $delivery) {
+            return response()->json(['success' => false, 'message' => 'No delivery record found.'], 404);
+        }
+
+        $fee = (float) ($delivery->deliver_fee_charged ?? 0);
+
+        if (strtolower((string) $order->ord_status) === 'to receive') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Delivery fee already paid and order is out to receive.',
+                'data'    => [
+                    'ord_id' => $order->ord_id,
+                    'paid'   => true,
+                    'order'  => self::orderPayload($order->fresh()),
+                ],
+            ], 200);
+        }
+
+        $settled = false;
+        if (! PayMongoService::isConfigured()) {
+            $settled = true;
+        } else {
+            $ref = $delivery->delivery_ref;
+            if ($ref) {
+                try {
+                    $session = (new PayMongoService())->retrieveCheckoutSession((string) $ref);
+                    $settled = PayMongoService::sessionIsPaid($session);
+                } catch (\Throwable $e) {
+                    Log::warning('PayMongo delivery fee check failed', ['error' => $e->getMessage()]);
+                }
+            } else {
+                $settled = true;
+            }
+        }
+
+        if ($settled) {
+            DB::transaction(function () use ($order, $delivery, $fee) {
+                $order->update([
+                    'ord_status'   => 'to receive',
+                    'ord_amount'   => round((float) $order->ord_amount + $fee, 2),
+                    'pay_received' => round((float) $order->pay_received + $fee, 2),
+                ]);
+
+                Payment::create([
+                    'pay_created' => now(),
+                    'pay_ref'     => $delivery->delivery_ref ?: ('PM-DEL-' . strtoupper(Str::random(12))),
+                    'pay_given'   => $fee,
+                    'pay_due'     => $fee,
+                    'pay_change'  => 0,
+                ]);
+            });
+
+            $this->bookDeliveryCourier($order);
+
+            $this->logCustomer($custId, 'edit', 'orders/delivery-fee paid - order #' . $order->ord_id);
+            $this->announce($custId, 'Delivery fee confirmed for order #' . $order->ord_id . '. Your parcel is now out for delivery!');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Delivery fee confirmed. Order moved to To Receive.',
+                'data'    => [
+                    'ord_id' => $order->ord_id,
+                    'paid'   => true,
+                    'order'  => self::orderPayload($order->fresh()),
+                ],
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Payment for delivery fee is still pending.',
+            'data'    => [
+                'ord_id' => $order->ord_id,
+                'paid'   => false,
+            ],
+        ], 200);
+    }
+
+    public function switchClaimingMethod(Request $json)
+    {
+        $validator = (new DatabaseAPI())->switchClaimingMethod($json);
+        if ($validator) return $validator;
+
+        $custId = $this->customerId($json);
+        if ($custId === null) {
+            return response()->json(['success' => false, 'message' => 'Customer authentication is required.'], 403);
+        }
+
+        $ordId = (int) $json->input('ord_id');
+        $order = Order::with(['pickup.appointment', 'delivery', 'parcel'])->find($ordId);
+
+        if (! $order || (int) $order->cust_id !== (int) $custId) {
+            return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
+        }
+
+        $currentStatus = strtolower(trim((string) $order->ord_status));
+        if ($currentStatus !== 'processing') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Claiming method can only be switched while the order status is Processing.',
+            ], 422);
+        }
+
+        $targetMethod = strtolower(trim((string) $json->input('claiming')));
+        $targetMethod = ($targetMethod === 'deliver' || $targetMethod === 'delivery') ? 'deliver' : 'pickup';
+
+        $currentMethod = ($order->ord_claiming === 'deliver' || $order->delivery !== null) ? 'deliver' : 'pickup';
+        if ($targetMethod === $currentMethod) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Order is already set to ' . ($targetMethod === 'deliver' ? 'Courier Delivery' : 'Store Pickup') . '.',
+                'data'    => ['order' => self::orderPayload($order->fresh())],
+            ], 200);
+        }
+
+        if ($targetMethod === 'pickup') {
+            $appointment = $this->bookingAppointment($json, $custId);
+
+            DB::transaction(function () use ($order, $appointment) {
+                if ($order->parcel) {
+                    $order->parcel->delete();
+                }
+                if ($order->delivery) {
+                    $order->delivery->delete();
+                }
+
+                $pickup = $order->pickup;
+                if (! $pickup) {
+                    Pickup::create([
+                        'pickup_id'       => $this->nextId('pickup', 'pickup_id'),
+                        'appoint_id'     => $appointment->appoint_id,
+                        'ord_id'         => $order->ord_id,
+                        'pickup_created' => now(),
+                    ]);
+                } else {
+                    $pickup->update(['appoint_id' => $appointment->appoint_id]);
+                }
+
+                $order->update([
+                    'ord_claiming' => 'pickup',
+                ]);
+            });
+
+            $this->logCustomer($custId, 'edit', 'orders/switch-claiming pickup - order #' . $order->ord_id);
+            $this->announce($custId, 'Fulfillment for order #' . $order->ord_id . ' switched to Store Pickup.');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Fulfillment method successfully switched to Store Pickup.',
+                'data'    => ['order' => self::orderPayload($order->fresh())],
+            ], 200);
+        }
+
+        // Switching to delivery
+        $customer = Customer::find($custId);
+        $speed = strtolower((string) $json->input('speed', 'standard'));
+        $expect = $this->deliveryExpectation($json, $speed);
+        $address = trim((string) $json->input('deliver_address', $customer->cust_address ?? ''));
+
+        DB::transaction(function () use ($order, $custId, $customer, $speed, $expect, $address) {
+            if ($order->pickup) {
+                if ($order->pickup->appointment) {
+                    $order->pickup->appointment->update(['appoint_status' => 'cancelled']);
+                }
+                $order->pickup->delete();
+            }
+
+            $delivery = $order->delivery;
+            if (! $delivery) {
+                $delivery = Delivery::create([
+                    'deliver_id'          => $this->nextId('delivery', 'deliver_id'),
+                    'ord_id'              => $order->ord_id,
+                    'cust_id'             => $custId,
+                    'deliver_address'     => $address,
+                    'deliver_phone'       => (string) ($customer->cust_phone ?? ''),
+                    'deliver_qr'          => 'QR-DEL-' . strtoupper(Str::random(10)),
+                    'deliver_expect'      => $expect,
+                    'deliver_created'     => now(),
+                    'deliver_recipient'   => $this->customerFullName($customer),
+                    'deliver_service'     => strtoupper($speed),
+                    'deliver_env'         => LalamoveService::isConfigured() ? LalamoveService::environment() : null,
+                    'deliver_fee_charged' => null,
+                ]);
+            }
+
+            $parcel = $order->parcel;
+            if (! $parcel) {
+                $payId = $order->pickup?->pay_id;
+                if (! $payId) {
+                    $existingPayment = Payment::where('pay_ref', $order->pay_reference)->first();
+                    $payId = $existingPayment ? $existingPayment->pay_id : null;
+                }
+                if (! $payId) {
+                    $payment = Payment::create([
+                        'pay_created' => now(),
+                        'pay_ref'     => $order->pay_reference ?: ('ORD-' . $order->ord_id),
+                        'pay_given'   => (float) $order->pay_received,
+                        'pay_due'     => (float) $order->ord_amount,
+                        'pay_change'  => 0,
+                    ]);
+                    $payId = $payment->pay_id;
+                }
+
+                Parcel::create([
+                    'ord_id'         => $order->ord_id,
+                    'deliver_id'     => $delivery->deliver_id,
+                    'pay_id'         => $payId,
+                    'parcel_created' => now(),
+                ]);
+            }
+
+            $order->update([
+                'ord_claiming' => 'deliver',
+            ]);
+        });
+
+        $this->logCustomer($custId, 'edit', 'orders/switch-claiming delivery - order #' . $order->ord_id);
+        $this->announce($custId, 'Fulfillment for order #' . $order->ord_id . ' switched to Courier Delivery.');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fulfillment method successfully switched to Courier Delivery.',
+            'data'    => ['order' => self::orderPayload($order->fresh())],
+        ], 200);
+    }
 }
+
+

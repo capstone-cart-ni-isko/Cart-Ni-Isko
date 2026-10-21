@@ -847,7 +847,7 @@ class UserAPI extends Controller
     {
         $buckets = [
             'processing'      => ['processing', 'to cancel', 'to process', 'cancel requested', 'cancelling', 'return requested'],
-            'to-claim'        => ['to claim', 'to receive', 'delivering', 'transit'],
+            'to-claim'        => ['to claim', 'to deliver', 'to receive', 'delivering', 'transit'],
             'claimed'         => ['claimed', 'received', 'delivered', 'completed'],
             'unclaimed'       => ['unclaimed'],
             'cancelled'       => ['cancelled', 'cancel', 'canceled', 'returned', 'refunded'],
@@ -2496,7 +2496,10 @@ class UserAPI extends Controller
                 }
                 $user = Customer::findOrFail($userId);
             } else {
-                if (! $actor instanceof Employee || (int) $actor->getKey() !== $userId) {
+                $isSelf = (int) $actor->getKey() === $userId;
+                $isSuperAdmin = $actor instanceof Employee && $actor->isSuperAdmin();
+
+                if (! $actor instanceof Employee || (! $isSelf && ! $isSuperAdmin)) {
                     return response()->json(['success' => false, 'message' => 'Employees cannot edit another employee\'s personal details.'], 403);
                 }
                 $user = Employee::findOrFail($userId);
