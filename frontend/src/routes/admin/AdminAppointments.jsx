@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
@@ -76,6 +76,7 @@ const errMsg = (err, fallback) => err?.message || fallback
 
 export default function AdminAppointments() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { currentAdminUser } = useAdmin() || {}
   const { showToast } = useToast()
 
@@ -332,13 +333,27 @@ export default function AdminAppointments() {
       <div className="space-y-4 animate-fade-in">
         {/* Compacted Top Greeting Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div>
-            <h1 className="page-title text-slate-900 dark:text-[var(--ink)] flex items-center gap-2">
-              <span>{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, {staffName}!</span>
-            </h1>
-            <p className="text-xs text-slate-500 font-normal mt-0.5">
-              Here's your assigned shift and today's schedule at a glance.
-            </p>
+          <div className="flex items-center gap-3">
+            {searchParams.get('from') === 'notifications' && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/notifications')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-slate-500">
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                <span>Back to Notifications</span>
+              </button>
+            )}
+            <div>
+              <h1 className="page-title text-slate-900 dark:text-[var(--ink)] flex items-center gap-2">
+                <span>{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, {staffName}!</span>
+              </h1>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">
+                Here's your assigned shift and today's schedule at a glance.
+              </p>
+            </div>
           </div>
 
           {/* Date Selector Badge */}

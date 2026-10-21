@@ -23,6 +23,17 @@ function calendarTarget(message) {
     : null
 }
 
+/** Extract concerned order URL if notification relates to an order. */
+function extractOrderTarget(message, row) {
+  if (row?.ord_id) return `/orders/${row.ord_id}`
+  const text = String(message || '')
+  const match = text.match(/order\s*(?:#|no\.?|id:?\s*)?(\d+)/i)
+  if (match?.[1]) {
+    return `/orders/${match[1]}`
+  }
+  return null
+}
+
 // SVG Icons tailored for notification types
 function NotifTypeIcon({ icon, className = 'w-5 h-5' }) {
   switch (icon) {
@@ -200,11 +211,11 @@ function mapNotification(row, index) {
     tagText: priority ? 'text-amber-700' : style.tagText,
     dot: priority ? 'bg-amber-500' : style.dot,
     title: style.title,
-    // The Priority tag already says so: drop the redundant "[PRIORITY]" prefix.
-    message: String(message).replace(/^\s*\[priority\]\s*/i, ''),
+    // The Priority chip already says so: remove all [priority] tags from the message text.
+    message: String(message).replace(/\[\s*priority\s*\]/gi, '').trim(),
     time: created ? timeAgo(new Date(created)) : 'Just now',
     unread: !(row.custnotif_read || row.empnotif_read),
-    targetUrl: row.notif_link || calendarTarget(message),
+    targetUrl: row.notif_link || extractOrderTarget(message, row) || calendarTarget(message),
     isExempt: isExemptNotification(message),
   }
 }

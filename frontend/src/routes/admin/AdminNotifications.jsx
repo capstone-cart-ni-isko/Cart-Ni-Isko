@@ -50,6 +50,27 @@ function mapAccount(row) {
   return null
 }
 
+/** Extract concerned order or appointment target for admin notification. */
+function extractAdminTarget(message, row) {
+  if (row?.notif_link) return row.notif_link
+  const text = String(message || '')
+  if (/order/i.test(text)) {
+    const match = text.match(/(?:order|ord)[^\d]*#?(\d+)/i)
+    const orderId = match ? match[1] : (row?.order_id || row?.ord_id || null)
+    if (orderId) {
+      return `/admin/orders?orderId=${encodeURIComponent(orderId)}&search=${encodeURIComponent(orderId)}&from=notifications`
+    }
+    return '/admin/orders?from=notifications'
+  }
+  if (/appointment/i.test(text)) {
+    return '/admin/appointments?from=notifications'
+  }
+  if (/inventory|stock/i.test(text)) {
+    return '/admin/inventory?from=notifications'
+  }
+  return null
+}
+
 /** empnotif_* row -> the card shape this page renders. */
 function mapNotification(row, index) {
   const message = String(row.empnotif_msg ?? row.message ?? '')
@@ -60,12 +81,13 @@ function mapNotification(row, index) {
 
   return {
     id: row.empnotif_id ?? row.id ?? `notif-${index}`,
-    message,
+    // The Priority chip already says so: remove all [priority] tags from the message text.
+    message: message.replace(/\[\s*priority\s*\]/gi, '').trim(),
     priority,
     time: created ? timeAgo(new Date(created)) : 'Just now',
     // FLOW-NOTIF-05 - unread rows carry no *_read stamp.
     read: Boolean(row.empnotif_read ?? row.read),
-    targetUrl: row.notif_link || null,
+    targetUrl: extractAdminTarget(message, row),
   }
 }
 

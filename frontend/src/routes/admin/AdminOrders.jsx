@@ -143,6 +143,27 @@ export default function AdminOrders() {
     }
   }, [searchQuery])
 
+  // Close order detail handler: if user came from notifications, closing redirects back to notifications
+  const handleCloseOrderDetail = useCallback(() => {
+    setActiveOrderDetail(null)
+    if (searchParams.get('from') === 'notifications') {
+      navigate('/admin/notifications')
+    }
+  }, [searchParams, navigate])
+
+  // Automatically open order detail if orderId query param is provided (e.g. from notification click)
+  useEffect(() => {
+    const targetOrderId = searchParams.get('orderId')
+    if (targetOrderId && orders.length > 0 && !activeOrderDetail) {
+      const match = orders.find(
+        (o) => String(o.id) === String(targetOrderId) || String(o.ordId) === String(targetOrderId)
+      )
+      if (match) {
+        setActiveOrderDetail(match)
+      }
+    }
+  }, [searchParams, orders, activeOrderDetail])
+
   // Server-side sort (skipped while a search result set is on screen - those
   // rows are sorted locally with the same criteria). The default-sort reset is
   // done in the select's onChange handler, not here.
@@ -399,11 +420,25 @@ export default function AdminOrders() {
       <div className="space-y-4">
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div>
-            <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">Orders</h1>
-            <p className="text-xs font-normal text-slate-500 mt-0.5">
-              Manage and track all online and in-store sales.
-            </p>
+          <div className="flex items-center gap-3">
+            {searchParams.get('from') === 'notifications' && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin/notifications')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 text-slate-500">
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                <span>Back to Notifications</span>
+              </button>
+            )}
+            <div>
+              <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">Orders</h1>
+              <p className="text-xs font-normal text-slate-500 mt-0.5">
+                Manage and track all online and in-store sales.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -691,14 +726,14 @@ export default function AdminOrders() {
       {/* Order details popup form */}
       <DrawerPanel
         isOpen={!!activeOrderDetail}
-        onClose={() => setActiveOrderDetail(null)}
+        onClose={handleCloseOrderDetail}
         title={activeOrderDetail ? `Order ${activeOrderDetail.id}` : ''}
         subtitle={activeOrderDetail ? `Placed: ${activeOrderDetail.date}` : ''}
         width="max-w-xl"
         footer={
           <button
             type="button"
-            onClick={() => setActiveOrderDetail(null)}
+            onClick={handleCloseOrderDetail}
             className="btn btn--secondary w-full sm:w-auto"
           >
             Close
