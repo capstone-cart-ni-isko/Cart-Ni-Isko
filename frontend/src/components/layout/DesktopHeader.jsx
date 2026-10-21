@@ -70,7 +70,8 @@ function DesktopHeader() {
     setShowLogin(false)
   }, [location.pathname])
 
-  const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0)
+  // One per distinct item in the bag, not the summed quantity.
+  const cartCount = cartItems.length
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
   const refreshUnread = useCallback(async () => {

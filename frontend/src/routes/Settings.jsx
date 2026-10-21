@@ -16,7 +16,9 @@ import {
   LogOutIcon,
   MoonIcon,
   SunIcon,
+  DownloadCloudIcon,
 } from '../components/ui/Icons.jsx'
+import { triggerPwaInstall } from '../utils/pwa.js'
 
 const settingsAccountItems = [
   { to: '/account', label: 'Edit Profile', icon: <UserIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'Update your name, photo and details' },
@@ -36,6 +38,10 @@ const baseSettingsPrefsItems = [
 const settingsSupportItems = [
   { to: '/settings/about', label: 'About', icon: <HelpIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />, description: 'Store information, developers and versions' },
 ]
+
+function isStandaloneApp() {
+  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+}
 
 function SettingsSection({ title, items }) {
   return (
@@ -96,6 +102,15 @@ function Settings() {
       description: dark ? 'Currently using dark theme' : 'Currently using light theme',
     },
     ...baseSettingsPrefsItems,
+    // Hidden once the app already runs installed (home-screen / standalone).
+    ...(isStandaloneApp()
+      ? []
+      : [{
+          onClick: triggerPwaInstall,
+          label: 'Install App',
+          icon: <DownloadCloudIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />,
+          description: 'Add Tindahan ni Isko to your home screen',
+        }]),
   ]
 
   return (

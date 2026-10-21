@@ -406,7 +406,7 @@ function SignIn() {
       </div>
 
       {/* Standardized Centered Login Card - Identical structure & styling as AdminLogin */}
-      <div className="w-full max-w-md mx-auto bg-white dark:bg-[var(--surface)] rounded-3xl border border-slate-200/90 dark:border-[var(--line)] shadow-lg p-6 sm:p-7 space-y-3.5 relative z-10 animate-fade-in">
+      <div className="w-full max-w-md mx-auto bg-white dark:bg-[var(--surface)] rounded-3xl shadow-lg p-6 sm:p-7 space-y-3.5 relative z-10 animate-fade-in">
         <div className="space-y-1.5 text-center">
           <div className="inline-flex p-2.5 rounded-2xl bg-gradient-to-b from-orange-50 to-transparent border border-orange-100/60 shadow-2xs mx-auto">
             <img
@@ -416,7 +416,7 @@ function SignIn() {
             />
           </div>
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[var(--surface-2)] border border-slate-200 dark:border-[var(--line)] text-slate-700 dark:text-[var(--ink)] text-[10px] font-bold uppercase tracking-wider mb-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[var(--surface-2)] text-slate-700 dark:text-[var(--ink)] text-[10px] font-bold uppercase tracking-wider mb-1">
               <span className="w-1.5 h-1.5 rounded-full bg-brand-orange animate-pulse" />
               <span>Student &amp; Customer Portal</span>
             </div>
@@ -464,7 +464,7 @@ function SignIn() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-gray-500 dark:text-[var(--muted)] font-medium pt-2 border-t border-slate-100 dark:border-[var(--line)]">
+        <p className="text-center text-xs text-gray-500 dark:text-[var(--muted)] font-medium pt-2">
           Don&apos;t have an account?{' '}
           <Link to="/signup/role" className="text-brand-orange font-bold hover:underline">
             Sign Up

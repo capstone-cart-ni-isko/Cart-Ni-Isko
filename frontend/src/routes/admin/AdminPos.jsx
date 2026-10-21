@@ -179,18 +179,29 @@ export default function AdminPos() {
 
     const picked = chosenVariant?.options || {}
 
+    // Clicking a value must land on the combination that keeps every OTHER
+    // axis as picked (Cream + the size already chosen), not on whichever row
+    // first carried that value - that snapped the other axis back. When no
+    // such combination is in stock, the in-stock row sharing the most picks
+    // is used, so a colour that only comes in other sizes is still reachable.
+    const sharedPicks = (options, axis) =>
+      Object.entries(picked).filter(([a, value]) => a !== axis && options[a] === value).length
+
     return axes.map((entry) => ({
       axis: entry.axis,
       values: entry.values.map((option) => {
-        const compatible = modalVariants.some((variant) => {
-          const options = variant.options || {}
-          if (options[entry.axis] !== option.value) return false
-          if (Number(variant.stock ?? 0) <= 0) return false
-          return Object.entries(picked).every(
-            ([axis, value]) => axis === entry.axis || options[axis] === value
-          )
-        })
-        return { ...option, variant: compatible ? option.variant : null }
+        const candidates = modalVariants.filter(
+          (variant) =>
+            (variant.options || {})[entry.axis] === option.value && Number(variant.stock ?? 0) > 0
+        )
+        const best = candidates.reduce(
+          (top, variant) =>
+            !top || sharedPicks(variant.options || {}, entry.axis) > sharedPicks(top.options || {}, entry.axis)
+              ? variant
+              : top,
+          null
+        )
+        return { ...option, variant: best, stock: Number(best?.stock ?? 0) }
       }),
     }))
   }, [variantModalProduct, modalVariants, chosenVariant])
@@ -1310,7 +1321,7 @@ export default function AdminPos() {
                           title={
                             variant
                               ? `${value} — ${stock} in stock`
-                              : `${value} — not available with the other picks`
+                              : `${value} — out of stock`
                           }
                           className={`px-3 py-1.5 rounded-xl border font-bold transition-all ${
                             chosenVariant?.options?.[group.axis] === value

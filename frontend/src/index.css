@@ -578,11 +578,14 @@ html.dark {
    surface too — v4 inlines those, so no variable reaches them. An exact
    token match is used for the solid form so a `hover:bg-white` variant is
    never mistaken for a base background, and `:not(:hover)` keeps every
-   hover state working while the base state is re-pointed. */
-html.dark [class~="bg-white"]:not(:hover) {
+   hover state working while the base state is re-pointed. An element with
+   no hover background of its own (the header, a static card) keeps its
+   surface on hover too, so it never lights up as if it were clickable. */
+html.dark [class~="bg-white"]:not(:hover),
+html.dark [class~="bg-white"]:not([class*="hover:bg-"]) {
   background-color: var(--surface);
 }
-html.dark [class~="bg-white"]:hover {
+html.dark [class~="hover:bg-white"]:hover {
   background-color: var(--surface-4);
 }
 html.dark [class*="bg-white/"]:not(:hover) {
@@ -940,12 +943,16 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
 .switch--lg::after { width: 1.5rem; height: 1.5rem; }
 .switch--lg[aria-checked="true"]::after { transform: translateX(1.25rem); }
 .switch:disabled { opacity: 0.55; cursor: not-allowed; }
-.switch-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.625rem 0;
+/* Layered so a caller's padding utility (`px-5 py-4` inside a card) wins over
+   this default instead of being silently dropped. */
+@layer components {
+  .switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.625rem 0;
+  }
 }
 .switch-row__label { font-size: 0.875rem; font-weight: 500; color: var(--ink); }
 .switch-row__hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.125rem; }

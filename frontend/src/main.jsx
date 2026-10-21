@@ -38,6 +38,18 @@ if (import.meta.env.PROD) {
   }
 }
 
+// Capture the PWA install prompt globally so it is never missed: the browser
+// fires it once, often before the Settings page (and its Install button) mounts.
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  window.__pwaDeferredPrompt = e
+  window.dispatchEvent(new CustomEvent('pwa-prompt-available'))
+})
+
+window.addEventListener('appinstalled', () => {
+  window.__pwaDeferredPrompt = null
+})
+
 // The boundary sits OUTSIDE the router and every provider on purpose: it is the
 // only guard that also catches a crash inside ToastProvider/AuthProvider/AdminProvider
 // and the router itself. The one inside <App/> cannot see those, which is how a

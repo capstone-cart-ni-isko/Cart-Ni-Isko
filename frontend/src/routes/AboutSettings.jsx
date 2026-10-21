@@ -10,10 +10,9 @@ import { StoreIcon, UsersGroupIcon, RefreshCwIcon } from '../components/ui/Icons
 const STORE = {
   name: 'Tindahan ni Isko',
   tagline: 'The campus sari-sari store, online.',
-  address: 'Nueva Ecija State University, Cabanatuan City, Nueva Ecija',
+  address: 'Bicol University, Legazpi City, Albay',
   hours: 'Monday to Saturday, 8:00 AM - 6:00 PM',
-  email: 'tindahan.ni.isko@nesu.edu.ph',
-  phone: '+63 900 000 0000',
+  email: 'tindahan.ni.isko@bicol-u.edu.ph',
 }
 
 const DEVELOPERS = [
@@ -82,10 +81,6 @@ function AboutSettings({ backTo = '/settings' }) {
               <div>
                 <dt className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Email</dt>
                 <dd className="text-gray-700 font-medium">{STORE.email}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Phone</dt>
-                <dd className="text-gray-700 font-medium">{STORE.phone}</dd>
               </div>
             </dl>
           </Card>

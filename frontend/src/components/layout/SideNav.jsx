@@ -19,7 +19,8 @@ const navItems = [
 function SideNav() {
   const { cartItems } = useCart()
   const { pathname } = useLocation()
-  const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0)
+  // One per distinct item in the bag, not the summed quantity.
+  const cartCount = cartItems.length
 
   return (
     <nav className="h-full flex flex-col bg-white rounded-lg border border-slate-200 p-4">

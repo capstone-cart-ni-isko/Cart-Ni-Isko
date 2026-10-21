@@ -12,7 +12,7 @@ import { ThemeProvider } from './context/ThemeContext.jsx'
 import { AdminProvider } from './context/AdminContext.jsx'
 import RealtimeBridge from './components/realtime/RealtimeBridge.jsx'
 
-import Welcome from './routes/Welcome.jsx'
+import PwaInstallPrompt from './components/ui/PwaInstallPrompt.jsx'
 import SignUp from './routes/SignUp.jsx'
 import SignIn from './routes/SignIn.jsx'
 import VerifyOtp from './routes/VerifyOtp.jsx'
@@ -117,12 +117,13 @@ function App() {
               <ScrollToTop />
               <GlobalApiLoader />
               <RealtimeBridge />
+              <PwaInstallPrompt />
               <ApiErrorBoundary>
                 <Routes>
                 {/* ── Customer Routes ── */}
                 <Route path="/" element={<EntryRoute />} />
                 <Route path="/home" element={<Home />} />
-                <Route path="/welcome" element={<Welcome />} />
+                <Route path="/welcome" element={<Navigate to="/home" replace />} />
                 <Route path="/signup/*" element={<SignUp />} />
                 <Route path="/signin" element={<SignIn />} />
                 {/* Alias kept for the new-schema spec ("redirects to /login") */}

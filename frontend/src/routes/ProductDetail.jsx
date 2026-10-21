@@ -530,10 +530,12 @@ function ProductDetail() {
             {/* Color Selector — each variation is shown using its own product
                 image so shoppers can see the actual fabric colour; clicking a
                 variation also swaps the large main image above. */}
-            {product.colors && product.colors.length > 0 && (
+            {product.colors && product.colors.length > 0
+              // A size-only product has one 'Standard' swatch: nothing to pick.
+              && !(product.colors.length === 1 && product.colors[0].name === 'Standard') && (
               <div>
                 <h3 className="text-xs font-semibold text-gray-700 mb-2">
-                  Color:
+                  {product.colorAxis || 'Color'}:
                   {selectedColor?.name && (
                     <span className="text-gray-900"> {selectedColor.name}</span>
                   )}

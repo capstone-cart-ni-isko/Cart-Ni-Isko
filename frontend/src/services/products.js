@@ -126,15 +126,29 @@ export function variationSizes(variations, secondAxis = null) {
 }
 
 /**
+ * The swatch a variation belongs to. A row with a colour option answers that
+ * colour; a row that carries options but no colour (a shirt sold by size only,
+ * {"Size": "XS"}) belongs to the single 'Standard' swatch, so its sizes never
+ * show up as colours. A row with no options at all keeps its own label.
+ */
+function variationColorName(options, colorAxis, fallbackName) {
+  const axisKey = colorAxis
+    && Object.keys(options).find((key) => key.toLowerCase() === String(colorAxis).toLowerCase())
+  const value = (axisKey && options[axisKey]) || optionValue(options, 'color', 'colour')
+  if (value) return value
+  return Object.keys(options).length > 0 ? 'Standard' : fallbackName
+}
+
+/**
  * Color swatches derived from prodvar_options. Each entry keeps the
  * catalog shape { name, value, image, gallery } the color picker
  * renders; the image is the variation's own pic when it has one.
  */
-export function variationColors(variations, fallbackImage) {
+export function variationColors(variations, fallbackImage, colorAxis = null) {
   const colors = []
   variations.forEach((variant) => {
     const options = variant.prodvar_options || {}
-    const name = optionValue(options, 'color', 'colour') || variant.prodvar_name
+    const name = variationColorName(options, colorAxis, variant.prodvar_name)
     if (!name || colors.some((entry) => entry.name === name)) return
     const image = variant.prodvar_pic || fallbackImage
     colors.push({ name, value: image, image, gallery: image ? [image] : [] })
@@ -148,13 +162,13 @@ export function variationColors(variations, fallbackImage) {
  * a product that variates by colour and material still resolves
  * [colour][material] rather than [colour]["Black / Metallic"].
  */
-export function variationStockMatrix(variations, secondAxis = null) {
+export function variationStockMatrix(variations, secondAxis = null, colorAxis = null) {
   const matrix = {}
   variations.forEach((variant) => {
     const options = variant.prodvar_options || {}
     // Same key rules as variationColors() / variationSizes(): the matrix is
     // looked up with the labels those lists produce, so they must agree.
-    const color = optionValue(options, 'color', 'colour') || variant.prodvar_name
+    const color = variationColorName(options, colorAxis, variant.prodvar_name)
     const axisKey = secondAxis
       && Object.keys(options).find((key) => key.toLowerCase() === String(secondAxis).toLowerCase())
     const size = (axisKey && options[axisKey]) || optionValue(options, 'size', 'sizes') || variant.prodvar_name
@@ -218,7 +232,9 @@ export function mapProduct(row) {
   const axes = Array.isArray(row.option_axes) && row.option_axes.length > 0
     ? row.option_axes
     : variationAxes(variations)
-  const colorAxis = axes.find((axis) => /colou?r/i.test(axis)) || axes[0] || null
+  // A product sold along one non-colour axis (size only) has no colour axis:
+  // that one axis feeds the second picker, never the swatches.
+  const colorAxis = axes.find((axis) => /colou?r/i.test(axis)) || (axes.length > 1 ? axes[0] : null)
   const secondAxis = axes.find((axis) => axis !== colorAxis) || null
   const preOrder = hasVariations
     ? variations.some((variant) => variant.prodvar_preorder)
@@ -227,8 +243,8 @@ export function mapProduct(row) {
   const sizes = hasVariations && variationSizes(variations, secondAxis).length > 0
     ? variationSizes(variations, secondAxis)
     : (row.prod_sizes || fallback.sizes)
-  const colors = hasVariations && variationColors(variations, mainImage || fallback.images[0]).length > 0
-    ? variationColors(variations, mainImage || fallback.images[0])
+  const colors = hasVariations && variationColors(variations, mainImage || fallback.images[0], colorAxis).length > 0
+    ? variationColors(variations, mainImage || fallback.images[0], colorAxis)
     : (row.prod_colors || fallback.colors)
   const images = hasVariations && mainImage
     ? [mainImage]
@@ -236,7 +252,7 @@ export function mapProduct(row) {
       ? row.prod_images
       : fallback.images)
   const stockMatrix = hasVariations
-    ? variationStockMatrix(variations, secondAxis)
+    ? variationStockMatrix(variations, secondAxis, colorAxis)
     : (row.prod_stock_matrix || fallback.stockMatrix)
   const rating = Number(row.prod_rating ?? 0)
   // prod_reviews is an int count now; a legacy backend may still

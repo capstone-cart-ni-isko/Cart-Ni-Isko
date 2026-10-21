@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import collegesData from '../data/colleges.json'
 import Button from '../components/ui/Button.jsx'
-import AppShell from '../components/layout/AppShell.jsx'
+import TermsModal from '../components/ui/TermsModal.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import brandLogo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
@@ -71,6 +71,7 @@ function SignUp() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [agreeToTerms, setAgreeToTerms] = useState(false)
+  const [showTerms, setShowTerms] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [showConfirmPass, setShowConfirmPass] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -251,12 +252,13 @@ function SignUp() {
   }
 
   return (
-    <AppShell showNav={false} showHeader={false} showBottomNav={false}>
-      {/* ── Focused Page Container (No ribbon, no login button, back button at top-left) ── */}
-      <div className="w-full max-w-xl mx-auto p-4 sm:p-6 md:p-8 animate-fade-in">
+    // One page wrapper and one card: on a phone the card is the page (full
+    // width, no frame); from `sm` up it is a centred card at a fixed width.
+    <div className="min-h-dvh w-full bg-white dark:bg-[var(--surface)] sm:bg-slate-50 sm:dark:bg-[var(--surface-2)] flex justify-center sm:items-center sm:px-4 sm:py-10">
+      <div className="w-full sm:max-w-lg animate-fade-in">
         {/* FORM 1: SELECTION OF BUeño OR GUEST (Separate form from the actual signup form) */}
         {formStep === 0 && (
-          <div className="bg-white dark:bg-[var(--surface)] rounded-3xl border border-gray-100 dark:border-[var(--line)] shadow-xl p-6 sm:p-8 space-y-6">
+          <div className="bg-white dark:bg-[var(--surface)] sm:rounded-3xl sm:shadow-xl px-5 py-6 sm:p-8 space-y-5">
             <div className="flex justify-start">
               {/* System Rule 69: Back button at top-left */}
               <BackButton onClick={handleBackToSignIn} to="/signin" />
@@ -343,7 +345,7 @@ function SignUp() {
 
         {/* FORM 2: ACTUAL SIGNUP FORM (Different form from the BUeño/Guest selection) */}
         {formStep === 1 && (
-          <div className="bg-white dark:bg-[var(--surface)] rounded-3xl border border-gray-100 dark:border-[var(--line)] shadow-xl p-6 sm:p-8 space-y-6">
+          <div className="bg-white dark:bg-[var(--surface)] sm:rounded-3xl sm:shadow-xl px-5 py-6 sm:p-8 space-y-5">
             <div className="flex items-center justify-between">
               {/* System Rule 69: Back button at top-left returns to BUeño/Guest selection */}
               <BackButton onClick={handleBackToTypeSelection} />
@@ -357,11 +359,8 @@ function SignUp() {
             </div>
 
             <div>
-              <div className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-brand-orange/10 text-brand-orange mb-2">
-                {isBueño ? 'BUeño Registration' : 'Guest Registration'}
-              </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-[var(--ink)] leading-tight">
-                Create Account
+                Create {isBueño ? 'BUeño' : 'Guest'} Account
               </h1>
               <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium mt-1">
                 {isBueño
@@ -374,12 +373,9 @@ function SignUp() {
               {/* ADDITIONAL FIELDS - EXCLUSIVE ONLY UPON SELECTION OF BUeño */}
               {isBueño && (
                 <div className="space-y-4 p-4 bg-orange-50/40 dark:bg-[var(--tint-brand-bg)] border border-brand-orange/20 rounded-2xl animate-fade-in">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-brand-orange" />
-                    <h2 className="text-xs font-bold uppercase tracking-wider text-brand-orange">
-                      BUeño Affiliation Details
-                    </h2>
-                  </div>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-brand-orange">
+                    BUeño Affiliation Details
+                  </h2>
 
                   {/* 1. Affiliation Category: Student, Alumni, or Faculty */}
                   <div>
@@ -662,7 +658,15 @@ function SignUp() {
                       className="mt-0.5 rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
                     />
                     <label htmlFor="agree-terms" className="text-xs text-gray-500 dark:text-[var(--muted)] font-medium leading-tight cursor-pointer">
-                      I agree to the Terms and Privacy Policy.
+                      I agree to the{' '}
+                      <button
+                        type="button"
+                        onClick={() => setShowTerms(true)}
+                        className="font-semibold text-brand-orange hover:underline cursor-pointer"
+                      >
+                        Terms and Privacy Policy
+                      </button>
+                      .
                     </label>
                   </div>
                   {fieldError('terms', agreeToTerms ? 'yes' : '', termsError)}
@@ -689,7 +693,17 @@ function SignUp() {
           </div>
         )}
       </div>
-    </AppShell>
+
+      <TermsModal
+        isOpen={showTerms}
+        onClose={() => setShowTerms(false)}
+        onAgree={() => {
+          setAgreeToTerms(true)
+          touch('terms')
+          setShowTerms(false)
+        }}
+      />
+    </div>
   )
 }
 

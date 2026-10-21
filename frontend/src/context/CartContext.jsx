@@ -203,12 +203,15 @@ function resolveProdvarId(product, size, color) {
         || sizes.includes(sizeLabel)
         || values.includes(sizeLabel)
         || (sizeLabel === 'one size' && values.length === 0)
+    const hasColorAxis = Object.keys(opts).some((key) => /colou?r/i.test(key))
     const colorOk = !colorLabel
       ? false
       : name === colorLabel
         || colors.includes(colorLabel)
         || values.includes(colorLabel)
         || values.length === 0
+        // A size-only product has one 'Standard' swatch covering every row.
+        || (colorLabel === 'standard' && !hasColorAxis)
 
     return sizeOk && colorOk
   })
@@ -227,7 +230,7 @@ export function CartProvider({ children }) {
 
   // REQ-BAG-03: the number of live bag lines, mirrored from every response.
   const [cartCount, setCartCount] = useState(() =>
-    readLocal().reduce((total, item) => total + (Number(item.qty) || 1), 0)
+    readLocal().length
   )
   // FLOW-BAG-06: server total amount due (sum of every live line).
   const [serverSubtotal, setServerSubtotal] = useState(null)

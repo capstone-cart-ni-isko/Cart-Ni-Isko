@@ -54,7 +54,8 @@ function BottomNav() {
   const [unread, setUnread] = useState(0)
 
   // REQ-BAG-03: the Bag tab carries the live cart_count (sum of bag quantities).
-  const bagCount = cartItems.reduce((sum, item) => sum + Number(item.qty || 0), 0)
+  // One per distinct item in the bag, not the summed quantity.
+  const bagCount = cartItems.length
 
   // CUSTNOTIF unread badge: rows with no custnotif_read stamp are unread.
   useEffect(() => {

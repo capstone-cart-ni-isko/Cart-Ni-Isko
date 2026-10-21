@@ -129,7 +129,7 @@ function NotificationPreferences() {
                   0 and 1440 (one day), or pick one below.
                 </p>
 
-                <div className="mt-4 flex items-center gap-3">
+                <div className="mt-4 flex flex-wrap items-center gap-3">
                   <input
                     type="number"
                     min="0"

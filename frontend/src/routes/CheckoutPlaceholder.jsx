@@ -698,7 +698,7 @@ function CheckoutPlaceholder() {
                     Edit Items
                   </button>
                 </p>
-                <div className="max-h-48 lg:max-h-72 overflow-y-auto divide-y divide-slate-100 rounded-lg px-3 py-1 bg-slate-50 lg:bg-white lg:border lg:border-slate-100 scrollbar-none">
+                <div className="max-h-48 lg:max-h-72 overflow-y-auto divide-y divide-slate-100 rounded-lg px-3 py-1 bg-slate-50 lg:bg-white lg:dark:bg-[var(--surface)] lg:border lg:border-slate-100 scrollbar-none">
                   {itemsToCheckout.map((item) => {
                     const product = item.product || {}
                     const itemPrice = Number(item.amount ?? product.price ?? 0)
@@ -761,7 +761,7 @@ function CheckoutPlaceholder() {
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   Payment Details
                 </p>
-                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-slate-50/60 lg:bg-white">
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-slate-50/60 lg:bg-white lg:dark:bg-[var(--surface)]">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange shrink-0 mt-0.5">
                     <path d="M21 12V7H5V7M21 17V7M3 17H21M5 17V12M19 17V12" />
                   </svg>
