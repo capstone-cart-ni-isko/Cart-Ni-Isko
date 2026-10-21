@@ -45,8 +45,11 @@ function FocusedLayout({
 
   const handleBack = () => {
     if (onBack) return onBack()
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
     if (backTo) return navigate(backTo)
-    if (window.history.length > 1) return navigate(-1)
     return navigate('/home')
   }
 

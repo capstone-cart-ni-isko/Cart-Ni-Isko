@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useContext } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import { fetchOrders } from '../services/orders.js'
 import { fetchMyAccount } from '../services/accounts.js'
 import { fetchNotifications, unreadCount } from '../services/notifications.js'
@@ -168,31 +168,41 @@ function Profile() {
     completed: orders.filter((o) => ['CLAIMED', 'COMPLETED'].includes(String(o.ord_status).toUpperCase())).length,
   }), [orders, wishlistItems])
 
+  const rightAction = (
+    <div className="flex items-center gap-2">
+      <Link
+        to="/notifications"
+        className="relative p-1.5 text-gray-700 dark:text-[var(--ink)] hover:text-brand-orange transition-colors"
+        aria-label="Notifications"
+      >
+        <img src={notificationIcon} alt="" className="w-5 h-5" />
+        {unreadNotifications > 0 && (
+          <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-2xs font-semibold min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white dark:border-[var(--surface)]">
+            {unreadNotifications > 99 ? '99+' : unreadNotifications}
+          </span>
+        )}
+      </Link>
+      <Link
+        to="/settings"
+        className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-[var(--surface-2)] text-gray-700 dark:text-[var(--ink)] hover:text-brand-orange flex items-center justify-center transition-colors shadow-2xs"
+        title="Settings"
+      >
+        <SettingsIcon className="w-4 h-4" />
+      </Link>
+    </div>
+  )
+
   return (
-    <AccountLayout>
-
+    <FocusedLayout
+      title="Profile"
+      subtitle="Account and orders overview"
+      backTo="/home"
+      containerClassName="max-w-6xl"
+      rightAction={rightAction}
+    >
       {/* ── MOBILE LAYOUT (matching Image 2) ── */}
-      <div className="md:hidden pb-28 bg-[#F8F9FA] min-h-dvh">
-        {/* Top bar with Logo, Notifications (badge 3), and Profile icon —
-            docked through the shared .ribbon primitive so it matches every
-            other page (rules 72-75). */}
-        <div className="ribbon px-4 py-3 flex items-center justify-between">
-          <Link to="/home" className="flex items-center">
-            <img src={logo} alt="Tindahan ni Isko" className="h-7 object-contain" />
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link to="/notifications" className="relative p-1.5 text-gray-700 hover:text-brand-orange" aria-label="Notifications">
-              <img src={notificationIcon} alt="" className="w-6 h-6" />
-              {unreadNotifications > 0 && (
-                <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-2xs font-semibold min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white">
-                  {unreadNotifications > 99 ? '99+' : unreadNotifications}
-                </span>
-              )}
-            </Link>
-          </div>
-        </div>
-
-        <div className="p-4 space-y-4">
+      <div className="md:hidden pb-16 bg-[#F8F9FA] dark:bg-[var(--surface)] min-h-dvh">
+        <div className="space-y-4">
           {/* Orange Banner - Mobile Redesign */}
           <div className="rounded-3xl p-5 text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] space-y-4">
             <div className="absolute inset-0 opacity-[0.05] select-none pointer-events-none flex items-center justify-center">
@@ -681,7 +691,7 @@ function Profile() {
         confirmText="Log Out"
         isDestructive={true}
       />
-    </AccountLayout>
+    </FocusedLayout>
   )
 }
 

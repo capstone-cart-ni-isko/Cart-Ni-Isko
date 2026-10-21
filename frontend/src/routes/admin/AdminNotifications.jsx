@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import Segmented from '../../components/admin/kit/Segmented.jsx'
 import BroadcastNotificationDrawer from '../../components/admin/BroadcastNotificationDrawer.jsx'
+import Modal from '../../components/ui/Modal.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import { fetchAccounts } from '../../services/accounts.js'
@@ -63,6 +65,7 @@ function mapNotification(row, index) {
     time: created ? timeAgo(new Date(created)) : 'Just now',
     // FLOW-NOTIF-05 - unread rows carry no *_read stamp.
     read: Boolean(row.empnotif_read ?? row.read),
+    targetUrl: row.notif_link || null,
   }
 }
 
@@ -74,11 +77,13 @@ function mapNotification(row, index) {
  * the ribbon follows through the `notifications-changed` event.
  */
 export default function AdminNotifications() {
+  const navigate = useNavigate()
   const { currentAdminUser } = useAdmin()
   const { showToast } = useToast()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [selectedNotif, setSelectedNotif] = useState(null)
 
   const empId = currentAdminUser?.id ?? null
 
@@ -114,13 +119,24 @@ export default function AdminNotifications() {
     load()
   }, [load, version])
 
-  /** FLOW-NOTIF-05 - a notification is marked read only when it is opened. */
+  /**
+   * FLOW-NOTIF-05: clicking a notification marks it read only then.
+   * If targetUrl exists, redirects to the concerned page; otherwise displays
+   * a focused closable modal with full concise details.
+   */
   const openNotification = (item) => {
-    if (item.read) return
-    setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)))
-    markRead(item.id, 'employee')
-      .catch(() => {})
-      .finally(() => window.dispatchEvent(new Event('notifications-changed')))
+    if (!item.read) {
+      setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)))
+      markRead(item.id, 'employee')
+        .catch(() => {})
+        .finally(() => window.dispatchEvent(new Event('notifications-changed')))
+    }
+
+    if (item.targetUrl) {
+      navigate(item.targetUrl)
+    } else {
+      setSelectedNotif(item)
+    }
   }
 
   // Staff broadcast (POST /notif/distribute) to customers or employees
@@ -274,6 +290,46 @@ export default function AdminNotifications() {
         accounts={accounts}
         onSent={handleBroadcastSent}
       />
+
+      {/* Focused Notification Detail Popup */}
+      <Modal
+        isOpen={Boolean(selectedNotif)}
+        onClose={() => setSelectedNotif(null)}
+        title={selectedNotif?.priority ? 'Priority Notice' : 'Notification Details'}
+        subtitle={selectedNotif?.time || ''}
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end w-full">
+            <button
+              type="button"
+              onClick={() => setSelectedNotif(null)}
+              className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        {selectedNotif && (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-md ${
+                  selectedNotif.priority
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {selectedNotif.priority ? 'Priority' : 'General'}
+              </span>
+              <span className="text-xs text-gray-400 font-medium">{selectedNotif.time}</span>
+            </div>
+            <p className="text-sm text-gray-800 dark:text-[var(--ink)] leading-relaxed whitespace-pre-line">
+              {selectedNotif.message}
+            </p>
+          </div>
+        )}
+      </Modal>
     </AdminLayout>
   )
 }

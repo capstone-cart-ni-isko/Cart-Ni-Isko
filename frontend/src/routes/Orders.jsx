@@ -5,7 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
 import { useApiChange } from '../hooks/useApiChange.js'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import PageTitle from '../components/ui/PageTitle.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
@@ -411,51 +411,41 @@ function Orders() {
   const canCancel = useCallback((o) => o.status === 'TO PROCESS', [])
 
   return (
-    <AccountLayout>
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/profile')}
-          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-gray-700 transition-colors hover:border-brand-orange hover:text-brand-orange"
-          aria-label="Back to profile"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
-        <div className="min-w-0 flex-1">
-          <PageTitle title="My Orders" subtitle="Track and manage your merchandise orders" />
-        </div>
-      </div>
-
-      {/* Tabs Filter Bar (Sticky) — on mobile it docks below the sticky
-          PageHeader (~3.5rem) instead of overlapping it; on desktop the
-          header is hidden so the bar docks at the very top. */}
-      <div className="bg-white border-b border-gray-100 sticky top-14 md:top-0 z-20 shadow-2xs">
-        <div className="mx-auto flex max-w-7xl flex-nowrap gap-2 overflow-x-auto px-4 py-3 scrollbar-none select-none md:flex-wrap md:justify-center md:overflow-visible">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => selectTab(tab.key)}
-              className={`px-4 py-2 rounded-full text-xs font-semibold shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 ${
-                activeTab === tab.key
-                  ? 'bg-brand-orange border-brand-orange text-white shadow-xs'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900'
-              }`}
-            >
-              <span>{tab.label}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
-                  activeTab === tab.key ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
+    <FocusedLayout
+      title="My Orders"
+      subtitle="Track and manage your merchandise orders"
+      backTo="/profile"
+      containerClassName="max-w-4xl"
+    >
+      <div className="pb-24 animate-fade-in w-full space-y-4">
+        {/* Tabs Filter Bar (Sticky) */}
+        <div className="bg-white dark:bg-[var(--surface)] border border-slate-200 dark:border-[var(--line)] rounded-2xl sticky top-16 z-20 shadow-xs px-2 py-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none select-none md:flex-wrap md:justify-center p-0.5">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => selectTab(tab.key)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === tab.key
+                    ? 'bg-brand-orange border-brand-orange text-white shadow-2xs'
+                    : 'bg-transparent border-transparent text-gray-600 dark:text-[var(--muted)] hover:bg-slate-100 dark:hover:bg-[var(--surface-2)] hover:text-gray-900 dark:hover:text-[var(--ink)]'
                 }`}
               >
-                {counts[tab.key] ?? 0}
-              </span>
-            </button>
-          ))}
+                <span>{tab.label}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    activeTab === tab.key
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-[var(--surface-3)] text-gray-500 dark:text-[var(--muted)]'
+                  }`}
+                >
+                  {counts[tab.key] ?? 0}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
       {/* Single Vertical Column Layout */}
       <div className="px-4 py-6 pb-32 animate-fade-in max-w-3xl mx-auto space-y-4">
@@ -910,7 +900,8 @@ function Orders() {
         onClose={() => setClaimTarget(null)}
         onSuccess={() => load({ silent: true })}
       />
-    </AccountLayout>
+      </div>
+    </FocusedLayout>
   )
 }
 

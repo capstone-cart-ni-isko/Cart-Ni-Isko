@@ -5,6 +5,7 @@ import { useApiChange } from '../hooks/useApiChange.js'
 import AccountLayout from '../components/layout/AccountLayout.jsx'
 import PageTitle from '../components/ui/PageTitle.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
+import Modal from '../components/ui/Modal.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
 import { fetchNotifications, markRead, readNotificationsCache } from '../services/notifications.js'
 
@@ -214,6 +215,7 @@ export default function Notifications() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('All')
+  const [selectedNotif, setSelectedNotif] = useState(null)
 
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
@@ -251,17 +253,23 @@ export default function Notifications() {
     load()
   }, [load, version])
 
-  /** REQ-AN-01: a notification is only marked read when clicked. */
-  const markReadAndGo = async (id, targetUrl) => {
-    const target = items.find((n) => n.id === id)
-    if (target?.unread) {
-      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)))
-      markRead(id, 'customer')
+  /**
+   * Clicking a notification marks it read ONLY then.
+   * If it has a targetUrl, navigates to the concerned page;
+   * otherwise, displays a focused closable details popup.
+   */
+  const handleNotificationClick = async (notif) => {
+    if (notif.unread) {
+      setItems((prev) => prev.map((n) => (n.id === notif.id ? { ...n, unread: false } : n)))
+      markRead(notif.id, 'customer')
         .catch(() => {})
         .finally(() => window.dispatchEvent(new Event('notifications-changed')))
     }
-    if (targetUrl) {
-      navigate(targetUrl)
+
+    if (notif.targetUrl) {
+      navigate(notif.targetUrl)
+    } else {
+      setSelectedNotif(notif)
     }
   }
 
@@ -418,11 +426,11 @@ export default function Notifications() {
                   key={item.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => markReadAndGo(item.id, item.targetUrl)}
+                  onClick={() => handleNotificationClick(item)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault()
-                      markReadAndGo(item.id, item.targetUrl)
+                      handleNotificationClick(item)
                     }
                   }}
                   className={`bg-white rounded-2xl border transition-shadow shadow-2xs hover:shadow-xs cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-orange ${
@@ -508,6 +516,46 @@ export default function Notifications() {
           <span className="text-xs font-semibold text-brand-orange shrink-0">Contact Support</span>
         </div>
       </div>
+
+      {/* Focused Notification Detail Popup */}
+      <Modal
+        isOpen={Boolean(selectedNotif)}
+        onClose={() => setSelectedNotif(null)}
+        title={selectedNotif?.title || 'Notification Details'}
+        subtitle={selectedNotif?.time || ''}
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end w-full">
+            <button
+              type="button"
+              onClick={() => setSelectedNotif(null)}
+              className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        {selectedNotif && (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-md ${
+                  selectedNotif.tag === 'Priority'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {selectedNotif.tag}
+              </span>
+              <span className="text-xs text-gray-400 font-medium">{selectedNotif.time}</span>
+            </div>
+            <p className="text-sm text-gray-800 dark:text-[var(--ink)] leading-relaxed whitespace-pre-line">
+              {selectedNotif.message}
+            </p>
+          </div>
+        )}
+      </Modal>
     </AccountLayout>
   )
 }

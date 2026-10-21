@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useWishlist } from '../hooks/useWishlist.js'
-import AppShell from '../components/layout/AppShell.jsx'
-import PageHeader from '../components/ui/PageHeader.jsx'
+import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
 import { LockIcon, HeartIcon, CartIcon } from '../components/ui/Icons.jsx'
@@ -26,30 +25,32 @@ function Wishlist() {
     }
   }
 
+  const rightAction = currentUser && (
+    <div className="flex items-center gap-2">
+      <span className="inline-flex px-2.5 py-0.5 rounded-full bg-orange-100 text-brand-orange text-xs font-semibold">
+        {wishlistItems.length} {wishlistItems.length === 1 ? 'item' : 'items'}
+      </span>
+      <Link
+        to="/shop"
+        className="inline-flex items-center gap-1 text-xs font-semibold text-brand-orange hover:underline px-2.5 py-1 rounded-lg hover:bg-orange-50 transition-colors"
+      >
+        <span>Shop</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
+          <path d="M5 12h14M12 5l7 7-7-7" />
+        </svg>
+      </Link>
+    </div>
+  )
+
   return (
-    <AppShell>
-      <PageHeader
-        title="Wishlist"
-        backTo="/home"
-        rightAction={currentUser && (
-          <div className="flex items-center gap-2 lg:gap-3">
-            <span className="hidden lg:inline-flex px-2.5 py-0.5 rounded-full bg-orange-100 text-brand-orange text-xs font-semibold">
-              {wishlistItems.length} {wishlistItems.length === 1 ? 'item' : 'items'}
-            </span>
-            <Link
-              to="/shop"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-orange hover:underline lg:gap-1.5 lg:rounded-xl lg:bg-orange-50 lg:px-4 lg:py-2 lg:no-underline lg:transition-colors lg:hover:bg-orange-100"
-            >
-              <span className="lg:hidden">Shop</span>
-              <span className="hidden lg:inline">Explore Campus Store</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="hidden lg:block w-3.5 h-3.5">
-                <path d="M5 12h14M12 5l7 7-7-7" />
-              </svg>
-            </Link>
-          </div>
-        )}
-      />
-      <div className="px-4 py-4 pb-28 lg:px-0 lg:py-0 lg:pb-16 max-w-6xl mx-auto animate-fade-in">
+    <FocusedLayout
+      title="Wishlist"
+      subtitle="Your saved campus merchandise"
+      backTo="/home"
+      containerClassName="max-w-6xl"
+      rightAction={rightAction}
+    >
+      <div className="pb-16 animate-fade-in w-full">
         {!currentUser ? (
           <div className="text-center py-16 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-100 shadow-xs p-8 max-w-md mx-auto">
             <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center border border-orange-100 mb-3 text-brand-orange">
@@ -129,7 +130,7 @@ function Wishlist() {
         onClose={() => setShowLogin(false)}
         message="Sign in to access your wishlist."
       />
-    </AppShell>
+    </FocusedLayout>
   )
 }
 

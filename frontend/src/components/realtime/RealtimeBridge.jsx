@@ -34,7 +34,8 @@ const NOTIFICATION_SOURCES = [
 
 export default function RealtimeBridge() {
   const { currentUser } = useAuth()
-  const { currentAdminUser } = useAdmin()
+  const adminContext = useAdmin()
+  const currentAdminUser = adminContext?.currentAdminUser || null
 
   const signedIn = Boolean(currentUser || currentAdminUser)
 
