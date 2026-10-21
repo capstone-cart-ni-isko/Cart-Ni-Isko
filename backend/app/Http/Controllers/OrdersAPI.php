@@ -3548,34 +3548,54 @@ class OrdersAPI extends Controller
             ], 409);
         }
 
-        $late = $appointment->appoint_end !== null && $appointment->appoint_end->isPast();
+        return $this->claimPickupOrder($order, $pickup, $appointment, $user, 'scan', $byLabel);
+    }
 
-        DB::transaction(function () use ($order, $appointment, $late, $user, $isEmployee) {
-            $appointment->update([
-                'appoint_status' => $late ? 'absent' : 'done',
-                'appoint_closed' => now(),
-                'appoint_qr'     => null,
-            ]);
+    /**
+     * The one place a pickup order turns `claimed` (FLOW-ORD_CLAIM-02..05),
+     * shared by the QR scan and the Order ID fallback. The order row is
+     * re-read under a lock so two counters (or a double click) can never
+     * claim - and fulfil, notify, print - the same order twice.
+     * REQ-ORD_CLAIM-03: the log line names the verification method.
+     */
+    private function claimPickupOrder(Order $order, Pickup $pickup, ?Visit $appointment, Employee $employee, string $method, string $byLabel)
+    {
+        $late = $appointment !== null && $appointment->appoint_end !== null && $appointment->appoint_end->isPast();
 
-            $order->update(['ord_status' => 'claimed']);
-            $this->fulfilOrder($order, $isEmployee ? $user : null);
+        $claimed = DB::transaction(function () use ($order, $appointment, $late, $employee) {
+            $locked = Order::whereKey($order->ord_id)->lockForUpdate()->first();
+            if (! $locked || $locked->ord_status !== 'to claim') {
+                return false;
+            }
+
+            if ($appointment && $appointment->appoint_closed === null) {
+                $appointment->update([
+                    'appoint_status' => $late ? 'absent' : 'done',
+                    'appoint_closed' => now(),
+                    'appoint_qr'     => null,
+                ]);
+            }
+
+            $locked->update(['ord_status' => 'claimed']);
+            $this->fulfilOrder($locked, $employee);
+
+            return true;
         });
 
-        if ($isEmployee) {
-            $this->logEmployee(
-                (int) $user->emp_id,
-                'edit',
-                'tracking/scan pickup-claim order #' . $order->ord_id
-                    . ' - appointment #' . $appointment->appoint_id . ($late ? ' (late)' : '')
-            );
-        } elseif ((int) $order->cust_id > 0) {
-            $this->logCustomer(
-                (int) $order->cust_id,
-                'edit',
-                'tracking/scan pickup-claim order #' . $order->ord_id
-                    . ' - appointment #' . $appointment->appoint_id
-            );
+        if (! $claimed) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order has already been claimed.',
+            ], 409);
         }
+
+        $this->logEmployee(
+            (int) $employee->emp_id,
+            'edit',
+            'tracking/' . $method . ' pickup-claim order #' . $order->ord_id
+                . ($appointment ? ' - appointment #' . $appointment->appoint_id : ' - no appointment')
+                . ($late ? ' (late)' : '')
+        );
 
         if ((int) $order->cust_id > 0) {
             $this->notifyCustomer((int) $order->cust_id,
@@ -3583,11 +3603,13 @@ class OrdersAPI extends Controller
         }
 
         $this->notifyAllEmployees('[PRIORITY] Order #' . $order->ord_id
-            . ' was claimed via QR scan' . $byLabel . '.');
+            . ' was claimed via ' . ($method === 'scan' ? 'QR scan' : 'Order ID') . $byLabel . '.');
 
         $order->refresh();
-        $appointment->refresh();
-        $pickup->setRelation('appointment', $appointment);
+        if ($appointment) {
+            $appointment->refresh();
+            $pickup->setRelation('appointment', $appointment);
+        }
 
         // Physical copy of the receipt for the claimed pickup order.
         ReceiptPrinter::printFor($order);
@@ -3601,11 +3623,184 @@ class OrdersAPI extends Controller
                 'pickup'      => $this->pickupPayload($pickup, $order),
                 'appointment' => $this->appointmentPayload($appointment),
                 'pickup_id'   => $pickup->pickup_id,
-                'appoint_id'  => $appointment->appoint_id,
+                'appoint_id'  => $appointment?->appoint_id,
                 'ord_status'  => $order->ord_status,
                 'status'      => $order->ord_status,
             ],
         ], 200);
+    }
+
+    /**
+     * Counter fallback for a customer without their QR: resolve the Order ID
+     * they read out (`#123` from /orders, or the `#ORD-...` tag the portal
+     * shows) and report whether it can be handed over.
+     */
+    public function lookupPickupOrder(Request $json)
+    {
+        $validator = (new DatabaseAPI())->lookupPickupOrder($json);
+        if ($validator) return $validator;
+
+        try {
+            $employee = $json->user('api');
+            if (! $this->isEmployee($employee)) {
+                return response()->json(['success' => false, 'message' => 'Employee access is required.'], 403);
+            }
+
+            $this->sweepExpiredPickups();
+
+            $order = $this->findOrderByTypedId((string) $json->input('order_id'));
+            if (! $order) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No order matches that Order ID.',
+                ], 404);
+            }
+
+            $order->loadMissing(['items.bag.prodvar.product', 'pickup.appointment', 'delivery']);
+            $this->logEmployee((int) $employee->emp_id, 'view', 'tracking/lookup order #' . $order->ord_id);
+
+            $customer = (int) $order->cust_id > 0 ? Customer::find((int) $order->cust_id) : null;
+            $appointment = $order->pickup?->appointment;
+            $reason = $this->unclaimableReason($order);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'ord_id'      => (int) $order->ord_id,
+                    'ord_tag'     => $order->ord_tag,
+                    'ord_status'  => $order->ord_status,
+                    'ord_created' => $order->ord_created,
+                    'claimable'   => $reason === null,
+                    'reason'      => $reason,
+                    'customer'    => [
+                        'name'  => $this->customerDisplayName($customer),
+                        'phone' => $customer?->cust_phone,
+                        'email' => $customer?->cust_email,
+                    ],
+                    'items' => $order->items->map(fn (Item $item) => [
+                        'name'      => $item->bag?->prodvar?->product?->prod_name ?? 'Item',
+                        'variation' => $item->bag?->prodvar?->prodvar_name,
+                        'qty'       => (int) ($item->bag?->bag_qty ?? 0),
+                    ])->values()->all(),
+                    'appointment' => $appointment ? [
+                        'start'  => $appointment->appoint_start,
+                        'end'    => $appointment->appoint_end,
+                        'status' => $appointment->appoint_status,
+                    ] : null,
+                ],
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to look up the order',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Hand over a pickup order found by its Order ID. The employee confirms
+     * they checked the customer's identity against the order; the claim then
+     * runs through the same core as a QR scan.
+     */
+    public function claimByOrderId(Request $json)
+    {
+        $validator = (new DatabaseAPI())->claimByOrderId($json);
+        if ($validator) return $validator;
+
+        try {
+            $employee = $json->user('api');
+            if (! $this->isEmployee($employee)) {
+                return response()->json(['success' => false, 'message' => 'Employee access is required.'], 403);
+            }
+
+            $this->sweepExpiredPickups();
+
+            $order = Order::find((int) $json->input('ord_id'));
+            if (! $order || str_starts_with((string) $order->ord_tag, 'CART-')) {
+                return response()->json(['success' => false, 'message' => 'No order matches that Order ID.'], 404);
+            }
+
+            $order->loadMissing(['pickup.appointment']);
+
+            $reason = $this->unclaimableReason($order);
+            if ($reason !== null) {
+                return response()->json(['success' => false, 'message' => $reason], 409);
+            }
+
+            $name = trim($employee->emp_givname . ' ' . $employee->emp_surname);
+
+            return $this->claimPickupOrder(
+                $order,
+                $order->pickup,
+                $order->pickup->appointment,
+                $employee,
+                'order-id',
+                $name !== '' ? ' by ' . $name : ''
+            );
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to claim the order',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /** `123`, `#123`, `ORD-ABC` or `#ord-abc` -> the order (carts excluded). */
+    private function findOrderByTypedId(string $typed): ?Order
+    {
+        $key = ltrim(trim($typed), '#');
+        if ($key === '') {
+            return null;
+        }
+
+        $order = ctype_digit($key) ? Order::find((int) $key) : null;
+        if (! $order) {
+            $order = Order::whereRaw('UPPER(ord_tag) = ?', [strtoupper($key)])->first();
+        }
+
+        if ($order && str_starts_with(strtoupper((string) $order->ord_tag), 'CART-')) {
+            return null;
+        }
+
+        return $order;
+    }
+
+    /** Why an order cannot be handed over at the counter, or null when it can. */
+    private function unclaimableReason(Order $order): ?string
+    {
+        $status = (string) $order->ord_status;
+
+        if ($status === 'claimed') {
+            return 'Order has already been claimed.';
+        }
+        if ($status === 'cancelled') {
+            return 'Order is cancelled and cannot be claimed.';
+        }
+        if (! $order->pickup) {
+            return $order->isWalkIn()
+                ? 'Walk-in orders are completed at the register and cannot be claimed here.'
+                : 'This is a delivery order, not an in-store pickup.';
+        }
+        if ($status !== 'to claim') {
+            return 'Order is not ready for pickup (status: ' . $status . ').';
+        }
+
+        return null;
+    }
+
+    private function customerDisplayName(?Customer $customer): string
+    {
+        if (! $customer) {
+            return 'Walk-in customer';
+        }
+
+        $full = trim((string) $customer->cust_givname . ' ' . (string) $customer->cust_surname);
+
+        return $full !== '' ? $full : ($customer->cust_nickname ?: ($customer->cust_email ?: 'Customer #' . $customer->cust_id));
     }
 
     private function completeVisit(Request $json, Visit $appointment, string $byLabel, bool $isEmployee)
