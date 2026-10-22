@@ -362,9 +362,7 @@ export default function ProductReviews({ product, initialOpenWrite = false, ordI
                                   Your Review
                                 </span>
                               )}
-                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                                <span>✓</span> Verified Buyer
-                              </span>
+
                             </div>
                             <span className="text-[11px] text-gray-400 font-medium">
                               Campus Order

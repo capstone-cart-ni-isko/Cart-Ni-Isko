@@ -379,7 +379,6 @@ function SignIn() {
           </div>
           <div>
             <span className="block text-xs font-bold text-slate-800 dark:text-[var(--ink)] tracking-tight">Bicol University</span>
-            <span className="block text-[10px] text-slate-400 dark:text-[var(--muted)] font-medium">Official Student Merch Hub</span>
           </div>
         </div>
 
@@ -395,14 +394,7 @@ function SignIn() {
           <span className="block text-[10px] text-slate-400 dark:text-[var(--muted)]">Legazpi City, Albay</span>
         </div>
 
-        <div className="absolute bottom-6 right-8 flex items-center gap-4 text-xs font-medium text-slate-500 dark:text-[var(--muted)] opacity-70 dark:opacity-40">
-          <span className="flex items-center gap-1.5">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-sky-600">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg>
-            BU-USC Authenticated
-          </span>
-        </div>
+
       </div>
 
       {/* Standardized Centered Login Card - Identical structure & styling as AdminLogin */}
