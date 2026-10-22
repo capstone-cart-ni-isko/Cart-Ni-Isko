@@ -114,7 +114,14 @@ function CheckoutPlaceholder() {
     selectedItems,
     clearSelectedItems,
     refreshCart,
+    updateVariation,
   } = useCart()
+
+  // Issue 3: variation-change modal state
+  // null = closed; { cartItemId, bagId, product, currentProdvarId } = open
+  const [variationModal, setVariationModal] = useState(null)
+  const [selectedProdvarId, setSelectedProdvarId] = useState(null)
+  const [variationBusy, setVariationBusy] = useState(false)
   const { currentUser, addresses } = useAuth()
   const { showToast } = useToast()
 
@@ -746,10 +753,15 @@ function CheckoutPlaceholder() {
                     const itemQty = Number(item.qty || 1)
                     const variantText = [item.size, item.color?.name].filter(Boolean).join(' • ')
                     const isPreorder = item.preOrder ?? product.preOrder
+                    // Only show "Change" when the product has more than one active variation
+                    const activeVariations = (product.variations || []).filter(
+                      (v) => !v.prodvar_disabled && !v.prodvar_deleted
+                    )
+                    const hasMultipleVariations = activeVariations.length > 1
                     return (
                       <div
                         key={item.cartItemId}
-                        className="py-2.5 flex items-center justify-between gap-3 text-sm"
+                        className="py-2.5 flex items-start justify-between gap-3 text-sm"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <img
@@ -763,6 +775,24 @@ function CheckoutPlaceholder() {
                               Qty: {itemQty}
                               {variantText ? ` • ${variantText}` : ''} • ₱{itemPrice.toFixed(2)} each
                             </p>
+                            {/* Issue 3: Change variation without leaving checkout */}
+                            {hasMultipleVariations && (
+                              <button
+                                type="button"
+                                className="mt-1 text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
+                                onClick={() => {
+                                  setVariationModal({
+                                    cartItemId: item.cartItemId,
+                                    bagId: item.bagId,
+                                    product,
+                                    currentProdvarId: item.prodvarId ?? null,
+                                  })
+                                  setSelectedProdvarId(item.prodvarId ?? null)
+                                }}
+                              >
+                                Change variation
+                              </button>
+                            )}
                             {isPreorder && (
                               <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-2xs font-bold uppercase tracking-wider bg-orange-50 text-brand-orange border border-orange-200/60">
                                 Pre-order
@@ -770,7 +800,7 @@ function CheckoutPlaceholder() {
                             )}
                           </div>
                         </div>
-                        <p className="font-semibold text-gray-900 shrink-0">
+                        <p className="font-semibold text-gray-900 shrink-0 pt-0.5">
                           ₱{(itemPrice * itemQty).toFixed(2)}
                         </p>
                       </div>
@@ -791,12 +821,6 @@ function CheckoutPlaceholder() {
                     {dispatchType === 'delivery'
                       ? 'To be calculated when ready'
                       : 'FREE (Pickup)'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-baseline text-sm font-semibold text-gray-900 pt-2 border-t border-orange-200/60">
-                  <span>Total Due</span>
-                  <span className="text-lg font-semibold text-brand-orange">
-                    ₱{totalDue.toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -859,6 +883,97 @@ function CheckoutPlaceholder() {
           </div>
         </div>
       </div>
+
+      {/* Issue 3: Variation-change modal — lets the customer swap a variant without leaving checkout. */}
+      {variationModal && (
+        <Modal
+          isOpen={Boolean(variationModal)}
+          onClose={() => {
+            setVariationModal(null)
+            setSelectedProdvarId(null)
+          }}
+          title="Change variation"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setVariationModal(null)
+                  setSelectedProdvarId(null)
+                }}
+                className="flex-1 h-11"
+                disabled={variationBusy}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                disabled={
+                  variationBusy ||
+                  !selectedProdvarId ||
+                  selectedProdvarId === variationModal.currentProdvarId
+                }
+                className="flex-1 h-11"
+                onClick={async () => {
+                  if (!selectedProdvarId || selectedProdvarId === variationModal.currentProdvarId) return
+                  setVariationBusy(true)
+                  try {
+                    await updateVariation(variationModal.cartItemId, selectedProdvarId)
+                  } catch {
+                    /* updateVariation swallows errors and logs to console */
+                  } finally {
+                    setVariationBusy(false)
+                    setVariationModal(null)
+                    setSelectedProdvarId(null)
+                  }
+                }}
+              >
+                {variationBusy ? <LoadingSpinner size={18} /> : 'Confirm'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4 py-1">
+            <p className="text-sm text-gray-500">
+              Select a new variation for{' '}
+              <span className="font-semibold text-gray-800">
+                {variationModal.product?.name}
+              </span>
+              .
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(variationModal.product?.variations || [])
+                .filter((v) => !v.prodvar_disabled && !v.prodvar_deleted)
+                .map((v) => {
+                  const opts = v.prodvar_options || v.options || {}
+                  const parts = [
+                    Object.entries(opts)
+                      .map(([k, val]) => `${k}: ${val}`)
+                      .join(', '),
+                  ].filter(Boolean)
+                  const label = parts.length > 0 ? parts.join(' | ') : v.prodvar_name
+                  const isSelected = Number(v.prodvar_id) === Number(selectedProdvarId)
+                  const isCurrent = Number(v.prodvar_id) === Number(variationModal.currentProdvarId)
+                  return (
+                    <button
+                      key={v.prodvar_id}
+                      type="button"
+                      onClick={() => setSelectedProdvarId(Number(v.prodvar_id))}
+                      className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'border-brand-orange bg-orange-50 text-brand-orange'
+                          : 'border-slate-200 bg-white text-gray-700 hover:border-orange-300'
+                      }`}
+                    >
+                      {label}
+                      {isCurrent && !isSelected ? ' (current)' : ''}
+                    </button>
+                  )
+                })}
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* FLOW-CHECKOUT-09: five-second confirmation before the order is written. */}
       {confirmOpen && (

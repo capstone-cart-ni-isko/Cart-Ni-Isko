@@ -7,6 +7,7 @@ import {
   fetchCart,
   removeFromCart as removeBagRow,
   updateBagQuantity,
+  updateBagLine,
 } from '../services/cart.js'
 import { mapProduct, optionValue } from '../services/products.js'
 import { onApiChange } from '../services/realtime.js'
@@ -251,6 +252,9 @@ export function CartProvider({ children }) {
   const [selectedItemIds, setSelectedItemIds] = useState(() =>
     readLocal().map((i) => i.cartItemId).filter(Boolean)
   )
+
+  // Track latest request sequence per bagId so out-of-order responses don't revert quantity.
+  const latestQtyReqRef = useRef({})
 
   // Ids we have already seen, so a refetch only auto-selects brand-new items.
   const seenIdsRef = useRef(new Set())
@@ -509,16 +513,73 @@ export function CartProvider({ children }) {
     if (!custId) return
 
     if (current.bagId) {
-      // FLOW-BAG-05: absolute quantity on that bag row, clamped server-side.
+      const seq = (latestQtyReqRef.current[current.bagId] || 0) + 1
+      latestQtyReqRef.current[current.bagId] = seq
+
       updateBagQuantity(current.bagId, qty)
-        .then(applyEnvelope)
+        .then((envelope) => {
+          if (latestQtyReqRef.current[current.bagId] === seq) {
+            applyEnvelope(envelope)
+          }
+        })
         .catch((err) => console.warn('Quantity sync failed:', err.message))
       return
     }
 
     // A line that has not reached the server yet: push the delta so the
     // server-side increment lands on the right total.
-    pushLine(current, Math.abs(delta))
+    pushLine(current, qty)
+  }
+
+  /**
+   * Update variation for a cart line (e.g. from checkout or bag).
+   * Persists both locally and on the backend bag table.
+   */
+  const updateVariation = async (cartItemId, newProdvarId) => {
+    const prev = cartItemsRef.current
+    const current = prev.find((i) => i.cartItemId === cartItemId)
+    if (!current) return null
+
+    const prodvarIdNum = Number(newProdvarId)
+    const product = current.product || {}
+    const variations = product.variations || []
+    const newVariant = variations.find((v) => Number(v.prodvar_id) === prodvarIdNum)
+    if (!newVariant) return null
+
+    const opts = newVariant.prodvar_options || newVariant.options || {}
+    const colorLabel = optionValue(opts, 'color', 'colour')
+    const sizeLabel = optionValue(opts, 'size', 'sizes')
+    const newPic = newVariant.prodvar_pic || ''
+    const newColor = newPic || colorLabel ? { name: colorLabel || newVariant.prodvar_name, image: newPic, value: newPic } : current.color
+    const newSize = sizeLabel || newVariant.prodvar_name || current.size
+    const newPrice = Number(newVariant.unit_price ?? product.price ?? current.amount)
+    const isPreorder = Boolean(newVariant.prodvar_preorder) || Boolean(product.productPreOrder)
+
+    // Update local state first
+    const updated = prev.map((item) => {
+      if (item.cartItemId !== cartItemId) return item
+      return {
+        ...item,
+        prodvarId: prodvarIdNum,
+        amount: newPrice,
+        size: newSize,
+        color: newColor,
+        preOrder: isPreorder,
+        stock: Number.isFinite(newVariant.prodvar_stock) ? Number(newVariant.prodvar_stock) : null,
+      }
+    })
+    applyItems(updated)
+
+    if (custId && current.bagId) {
+      try {
+        const envelope = await updateBagLine(current.bagId, { prodvarId: prodvarIdNum, itemQty: current.qty })
+        applyEnvelope(envelope)
+        return envelope
+      } catch (err) {
+        console.warn('Variation sync failed:', err.message)
+      }
+    }
+    return null
   }
 
   /** FLOW-BAG-07: one visible action empties the whole bag. */
@@ -592,6 +653,7 @@ export function CartProvider({ children }) {
         removeFromCart,
         restoreItem,
         updateQuantity,
+        updateVariation,
         clearCart,
         clearSelectedItems,
         toggleSelectItem,

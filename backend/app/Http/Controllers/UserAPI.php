@@ -406,18 +406,11 @@ class UserAPI extends Controller
                     'message' => 'Cart item ID is required.',
                 ], 400);
             }
-            if (! $json->has('item_qty')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Item quantity is required.',
-                ], 400);
-            }
 
-            $qty = (int) $json->input('item_qty');
-            if ($qty < 1) {
+            if (! $json->has('item_qty') && ! $json->has('prodvar_id')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'item_qty must be at least 1.',
+                    'message' => 'Item quantity or variation is required.',
                 ], 400);
             }
 
@@ -426,18 +419,62 @@ class UserAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Cart item not found'], 404);
             }
 
-            if ($bag->prodvar) {
-                $qty = max(1, min($qty, (int) $bag->prodvar->prodvar_stock));
+            if ($json->filled('prodvar_id')) {
+                $newProdvarId = (int) $json->input('prodvar_id');
+                if ($newProdvarId > 0 && $newProdvarId !== (int) $bag->prodvar_id) {
+                    $newProdvar = Prodvar::where('prodvar_id', $newProdvarId)
+                        ->whereNull('prodvar_deleted')
+                        ->first();
+
+                    if (! $newProdvar) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Selected variation is no longer offered.',
+                        ], 400);
+                    }
+
+                    $unit = round((float) $newProdvar->product->prod_price + (float) ($newProdvar->prodvar_markup ?? 0), 2);
+
+                    $existingBag = self::bagQuery($custId)
+                        ->where('prodvar_id', $newProdvarId)
+                        ->where('bag_id', '!=', $bag->bag_id)
+                        ->first();
+
+                    if ($existingBag) {
+                        $qtyToAdd = $json->has('item_qty') ? max(1, (int) $json->input('item_qty')) : (int) $bag->bag_qty;
+                        $existingBag->update([
+                            'bag_qty'    => (int) $existingBag->bag_qty + $qtyToAdd,
+                            'bag_amount' => $unit,
+                        ]);
+                        $bag->delete();
+                        $bag = $existingBag;
+                    } else {
+                        $bag->update([
+                            'prodvar_id' => $newProdvarId,
+                            'bag_amount' => $unit,
+                        ]);
+                    }
+                }
             }
 
-            $bag->update(['bag_qty' => $qty]);
+            if ($json->has('item_qty')) {
+                $qty = (int) $json->input('item_qty');
+                if ($qty < 1) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'item_qty must be at least 1.',
+                    ], 400);
+                }
+
+                $bag->update(['bag_qty' => $qty]);
+            }
 
             self::syncCartCounter($custId);
             $this->logCustomer($custId, 'edit', 'POST /api/orders/add');
 
             return response()->json([
                 'success' => true,
-                'message' => 'Cart quantity updated successfully',
+                'message' => 'Cart item updated successfully',
                 'data'    => self::cartEnvelope($custId),
             ], 200);
 

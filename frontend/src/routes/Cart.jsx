@@ -28,19 +28,12 @@ function Cart() {
     restoreItem,
     clearCart,
     subtotal,
-    serverSubtotal,
   } = useCart()
   const { canCheckoutItem } = useCart()
   const { showToast } = useToast()
 
   const [showLogin, setShowLogin] = useState(false)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
-
-  // FLOW-BAG-06: the total amount due always comes from the server subtotal
-  // (sum of every live line); the local sum is the offline fallback.
-  const bagSubtotal =
-    serverSubtotal ??
-    cartItems.reduce((sum, item) => sum + (item.amount ?? item.product?.price ?? 0) * item.qty, 0)
 
   // Mixed order classification (Requirement 8 & 9)
   // The flag is per LINE, not per product: a product can have one pre-order
@@ -117,15 +110,19 @@ function Cart() {
 
   // Helper to determine max stock per variant (Requirement 12)
   const getItemMaxStock = (item) => {
+    const isPreorder = item.preOrder ?? item.product?.preOrder
+    if (isPreorder) {
+      return item.product?.preOrderInfo?.maxPreOrderQty || 10
+    }
     // The bag line carries its own variation's real stock: trust it first.
-    if (!item.product.preOrder && Number.isFinite(item.stock)) return Math.max(0, item.stock)
-    if (item.product.stockMatrix && item.color?.name) {
+    if (Number.isFinite(item.stock)) return Math.max(0, item.stock)
+    if (item.product?.stockMatrix && item.color?.name) {
       const colorStock = item.product.stockMatrix[item.color.name]
       if (colorStock && item.size && colorStock[item.size] !== undefined) {
         return colorStock[item.size]
       }
     }
-    return item.product.preOrder ? 10 : 15
+    return 15
   }
 
   return (
@@ -441,20 +438,6 @@ function Cart() {
                     <span className="font-semibold text-gray-900 text-base">{formatPrice(subtotal)}</span>
                   </div>
 
-                  {/* FLOW-BAG-06: total amount due for the whole bag, straight
-                      from the server `subtotal` on every cart response. */}
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-500 font-medium">Total Amount Due</span>
-                    <span className="font-semibold text-brand-orange text-base">
-                      {formatPrice(bagSubtotal)}
-                    </span>
-                  </div>
-                  {selectedItems.length !== cartItems.length && (
-                    <p className="text-[11px] text-gray-400 -mt-1">
-                      Across all {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'} in your bag
-                    </p>
-                  )}
-
                   {/* Shipping = Calculated at checkout (Requirement 7) */}
                   <div className="flex justify-between items-center">
                     <span className="text-gray-500 font-medium">Shipping Estimate</span>
@@ -535,10 +518,6 @@ function Cart() {
                 </p>
                 <span className="text-base font-semibold text-brand-orange block leading-tight">
                   {formatPrice(subtotal)}
-                </span>
-                {/* FLOW-BAG-06: the bag's total amount due stays visible here too */}
-                <span className="text-[11px] text-gray-400 block leading-tight">
-                  Bag total {formatPrice(bagSubtotal)}
                 </span>
               </div>
             </div>

@@ -45,10 +45,18 @@ export async function fetchCart(custId) {
   return cartEnvelope(data)
 }
 
+/** POST /orders/add - quantity or variation edit on one bag row (FLOW-BAG-05). */
+export async function updateBagLine(bagId, { itemQty, prodvarId } = {}) {
+  const payload = { bag_id: bagId }
+  if (itemQty !== undefined) payload.item_qty = itemQty
+  if (prodvarId !== undefined) payload.prodvar_id = prodvarId
+  const data = await apiPost('/orders/add', payload)
+  return cartEnvelope(data)
+}
+
 /** POST /orders/add - quantity edit on one bag row (FLOW-BAG-05). */
 export async function updateBagQuantity(bagId, itemQty) {
-  const data = await apiPost('/orders/add', { bag_id: bagId, item_qty: itemQty })
-  return cartEnvelope(data)
+  return updateBagLine(bagId, { itemQty })
 }
 
 /** DELETE /cart/remove - soft-delete one bag row (FLOW-BAG-05). */
