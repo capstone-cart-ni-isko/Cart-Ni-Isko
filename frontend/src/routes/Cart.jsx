@@ -43,8 +43,10 @@ function Cart() {
     cartItems.reduce((sum, item) => sum + (item.amount ?? item.product?.price ?? 0) * item.qty, 0)
 
   // Mixed order classification (Requirement 8 & 9)
-  const regularSelected = selectedItems.filter((i) => !i.product.preOrder)
-  const preorderSelected = selectedItems.filter((i) => i.product.preOrder)
+  // The flag is per LINE, not per product: a product can have one pre-order
+  // combination and ordinary ones.
+  const regularSelected = selectedItems.filter((i) => !(i.preOrder ?? i.product?.preOrder))
+  const preorderSelected = selectedItems.filter((i) => i.preOrder ?? i.product?.preOrder)
   const hasMixedSelection = regularSelected.length > 0 && preorderSelected.length > 0
   const isNoneSelected = selectedItems.length === 0
 
@@ -130,7 +132,7 @@ function Cart() {
     <AppShell>
 
       <PageHeader
-        title={`Shopping Bag (${cartItems.length})`}
+        title={`Shopping Bag`}
         backTo="/home"
         rightAction={
           <button

@@ -44,18 +44,15 @@ function addressText(addr) {
 }
 
 /**
- * Arrival copy under the delivery date. When the server quoted a live courier
- * the local tier row is not the store's to promise on its own, so the server's
- * own estimate (dispatch_details / dispatch) is quoted instead - never the
- * local table's day range.
+ * Pre-order copy.
+ *
+ * A pre-order item is produced to order, so the store cannot promise a date
+ * for it: the order still goes through, but the customer is told plainly that
+ * no delivery estimate is available and that the store will confirm when the
+ * item is ready.
  */
-function etaNote(feeSource, serverEta) {
-  if (feeSource === 'lalamove') {
-    return serverEta
-      ? `Live courier quote — estimated arrival ${String(serverEta).replace('T', ' ')}.`
-      : 'Live courier quote — the courier confirms the arrival window after booking.'
-  }
-  return 'Earliest possible arrival for the selected speed.'
+function preorderNotice() {
+  return 'This order contains pre-order item(s). A delivery date cannot be estimated yet - the store will let you know once the pre-order items are ready.'
 }
 
 /** "Oct 22, 2026" from the server's estimate, else the speed's own window. */
@@ -127,11 +124,13 @@ function CheckoutPlaceholder() {
   // sessionStorage; no appointment row exists client-side (FLOW-CHECKOUT-06).
   const [slot, setSlot] = useState(() => readCheckoutSlot())
 
-  // Delivery (address + date + priority tier) - FLOW-CHECKOUT-07.
-  const [addressIdx, setAddressIdx] = useState(0)
-  const [customAddress, setCustomAddress] = useState('')
-  const [useCustomAddress, setUseCustomAddress] = useState(false)
-  const [tier, setTier] = useState('standard')
+  // Delivery (address + priority tier) - FLOW-CHECKOUT-07.
+  //
+  // The address and the speed are CONFIRMED LATER, on the order screen: the
+  // order is placed without them and the customer picks both - and settles
+  // the courier fee - once the items are ready. The quote below is therefore
+  // priced for the standard speed and for the customer's default address.
+  const tier = 'standard'
 
   // Server quote state
   const [serverPreview, setServerPreview] = useState(null)
@@ -173,13 +172,10 @@ function CheckoutPlaceholder() {
   const sortedAddresses = [...(addresses || [])].sort(
     (a, b) => Number(b.isDefault) - Number(a.isDefault)
   )
-  const chosenAddress = useCustomAddress ? null : sortedAddresses[addressIdx]
-  const deliveryAddress = useCustomAddress
-    ? customAddress.trim()
-    : addressText(chosenAddress)
+  const chosenAddress = sortedAddresses[0]
+  const deliveryAddress = addressText(chosenAddress)
 
   const tierInfo = DELIVERY_TIERS.find((t) => t.key === tier) || DELIVERY_TIERS[1]
-  const clientFee = 0
   const serverDue =
     serverPreview?.total_due ?? serverPreview?.total ?? null
   const totalDue = serverDue != null ? Number(serverDue) : orderSubtotal
@@ -201,6 +197,22 @@ function CheckoutPlaceholder() {
     dispatchType === 'pickup'
       ? 'Fulfillment Fee'
       : 'Delivery Fee (Calculated when ready)'
+
+  /* Pre-order detection.
+     A pre-order item is produced to order, so the store cannot promise a
+     delivery date for it. The flag is read per LINE (a product can have one
+     pre-order combination and ordinary ones) and the server's own answer wins
+     once the quote has come back. */
+  const preorderLines = itemsToCheckout.filter(
+    (item) => item.preOrder ?? item.product?.preOrder
+  )
+  const hasPreorderItems = preorderLines.length > 0
+  const serverSaysPreorder =
+    serverPreview?.preorder === true || dispatchInfo?.preorder === true
+  const orderHasPreorder = serverPreview ? serverSaysPreorder : hasPreorderItems
+  // No estimate is offered for a pre-order order - not by the server, and not
+  // by the local tier table either.
+  const estimateAvailable = !orderHasPreorder && serverPreview?.estimate_available !== false
 
   const touch = (key) => setTouched((prev) => (prev[key] ? prev : { ...prev, [key]: true }))
 
@@ -678,6 +690,35 @@ function CheckoutPlaceholder() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Pre-order: an item that is produced to order has no date
+                      to be estimated against, so no estimate is offered at
+                      all - neither by the server nor by the local tier table. */}
+                  {orderHasPreorder && (
+                    <div className="flex items-start gap-2.5 p-3 rounded-lg border border-orange-200 bg-orange-50">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange shrink-0 mt-0.5">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-orange-900 uppercase tracking-wider">
+                          Pre-order — no delivery estimate
+                        </p>
+                        <p className="text-xs text-orange-800 leading-relaxed mt-1">
+                          {preorderNotice()}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* The estimate, for an order that can have one. */}
+                  {!orderHasPreorder && estimateAvailable && (
+                    <p className="text-xs text-blue-900">
+                      Estimated delivery:{' '}
+                      <strong>{estimatedDeliveryLabel(serverEta, tierInfo.eta)}</strong>
+                      {feeSource === 'lalamove' ? ' (live courier quote)' : ''}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -704,6 +745,7 @@ function CheckoutPlaceholder() {
                     const itemPrice = Number(item.amount ?? product.price ?? 0)
                     const itemQty = Number(item.qty || 1)
                     const variantText = [item.size, item.color?.name].filter(Boolean).join(' • ')
+                    const isPreorder = item.preOrder ?? product.preOrder
                     return (
                       <div
                         key={item.cartItemId}
@@ -721,6 +763,11 @@ function CheckoutPlaceholder() {
                               Qty: {itemQty}
                               {variantText ? ` • ${variantText}` : ''} • ₱{itemPrice.toFixed(2)} each
                             </p>
+                            {isPreorder && (
+                              <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-2xs font-bold uppercase tracking-wider bg-orange-50 text-brand-orange border border-orange-200/60">
+                                Pre-order
+                              </span>
+                            )}
                           </div>
                         </div>
                         <p className="font-semibold text-gray-900 shrink-0">

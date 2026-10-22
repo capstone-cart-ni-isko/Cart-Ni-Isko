@@ -90,6 +90,16 @@ function mapServerItem(row) {
   const stockRaw = row.prodvar_stock ?? variation?.prodvar_stock
   const stock = stockRaw === undefined || stockRaw === null ? null : Number(stockRaw)
 
+  // Is THIS line a pre-order? The product-level flag covers every variation
+  // of the product; the variation flag covers this one combination only. It
+  // is what tells checkout that no delivery date can be promised for the
+  // line, so it must not be derived from the other lines of the same product.
+  const preOrder = Boolean(row.preorder)
+    || Boolean(row.prodvar?.prodvar_preorder)
+    || Boolean(variation?.prodvar_preorder)
+    || Boolean(row.product?.prod_preorder)
+    || Boolean(product?.productPreOrder)
+
   return {
     cartItemId: row.bag_id_display || (row.bag_id != null ? `bag-${row.bag_id}` : row.id),
     bagId: bagId != null ? Number(bagId) : null,
@@ -104,6 +114,7 @@ function mapServerItem(row) {
     // Units left of THIS variation (null when the server did not say).
     stock: Number.isFinite(stock) ? stock : null,
     available: row.available !== false,
+    preOrder,
   }
 }
 
@@ -121,7 +132,8 @@ function isItemAvailable(item) {
   if (!item?.product || item.available === false) return false
   // A variation with fewer units than the line asks for cannot be checked out
   // (pre-orders are not stock-bound).
-  if (!item.product.preOrder && Number.isFinite(item.stock) && item.qty > item.stock) return false
+  const preOrder = item.preOrder ?? item.product.preOrder
+  if (!preOrder && Number.isFinite(item.stock) && item.qty > item.stock) return false
   return true
 }
 
@@ -422,6 +434,9 @@ export function CartProvider({ children }) {
         size: size ?? null,
         color: color ? toColor(color) : null,
         available: true,
+        // A locally added line inherits the product's pre-order flag until the
+        // server sends the authoritative per-line one back.
+        preOrder: Boolean(product?.preOrder),
       }
       next = [...prev, target]
     }
@@ -551,7 +566,10 @@ export function CartProvider({ children }) {
   // Filter selection: select only regular or only pre-order items
   const selectOnlyType = (type) => {
     const matchingIds = cartItems
-      .filter((item) => (type === 'preorder' ? item.product?.preOrder : !item.product?.preOrder))
+      .filter((item) => {
+        const preOrder = item.preOrder ?? item.product?.preOrder
+        return type === 'preorder' ? !!preOrder : !preOrder
+      })
       .map((item) => item.cartItemId)
     setSelectedItemIds(matchingIds)
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useToast } from '../hooks/useToast.js'
@@ -103,8 +103,31 @@ function OrderDetail() {
   const [scanMode, setScanMode] = useState(null)
   const [reviewOpen, setReviewOpen] = useState(false)
 
+  /* The screen must never blank itself while it refreshes.
+     `orderRef` holds the order that is on screen, `loadedIdRef` the one that
+     was last read, and the two flags below keep a second read from running
+     on top of the first one. */
+  const orderRef = useRef(null)
+  const loadedIdRef = useRef(null)
+  const inFlightRef = useRef(false)
+  const queuedRef = useRef(false)
+  // Bumped when a read was asked for while another one was running: the read
+  // effect watches it and serves that queued request.
+  const [reloadTick, setReloadTick] = useState(0)
+
   const load = useCallback(async () => {
-    setLoading(true)
+    // One read at a time. A request that arrives while one is running is
+    // remembered and served the moment the running one settles, so a burst of
+    // realtime pings can never stack reads on top of each other.
+    if (inFlightRef.current) {
+      queuedRef.current = true
+      return
+    }
+    inFlightRef.current = true
+    // The skeleton belongs to the FIRST read only. A background refresh keeps
+    // the order on screen instead of dropping back to a skeleton - that is
+    // what used to look like the screen reloading forever.
+    if (!orderRef.current) setLoading(true)
     try {
       let row = null
       try {
@@ -122,14 +145,24 @@ function OrderDetail() {
       }
 
       if (!row) {
-        setOrder(null)
+        // A refresh that could not read the order must not throw away the one
+        // that is already on screen; only a first read with no row means the
+        // order really is gone.
+        if (!orderRef.current) setOrder(null)
         return
       }
 
       const mapped = mapServerOrder(row)
+      const switchedOrder = loadedIdRef.current !== mapped.id
+      loadedIdRef.current = mapped.id
+      orderRef.current = mapped
       setOrder(mapped)
-      setTimeline([])
-      setTrackRes(null)
+      // The tracking panel is only reset when a DIFFERENT order is shown, so
+      // a refresh keeps the timeline the customer is reading.
+      if (switchedOrder) {
+        setTimeline([])
+        setTrackRes(null)
+      }
 
       // Fulfillment track: pickup QR/queue state, or the delivery track + QR.
       const trackType =
@@ -142,9 +175,24 @@ function OrderDetail() {
         console.warn('Tracking lookup failed:', err?.message)
       }
     } finally {
+      inFlightRef.current = false
       setLoading(false)
+      if (queuedRef.current) {
+        queuedRef.current = false
+        setReloadTick((tick) => tick + 1)
+      }
     }
   }, [id, custId])
+
+  // Opening another order is a fresh screen: the previous order must not stay
+  // on screen while the new one is read, so the skeleton comes back for it.
+  useEffect(() => {
+    orderRef.current = null
+    loadedIdRef.current = null
+    setOrder(null)
+    setTimeline([])
+    setTrackRes(null)
+  }, [id])
 
   // Realtime (REQ-ORD_LIST-02/03, REQ-ORD_CLAIM-*): this screen has no poll of
   // its own, so a status change, a claim scan or a cancellation on another
@@ -154,7 +202,7 @@ function OrderDetail() {
 
   useEffect(() => {
     load()
-  }, [load, version])
+  }, [load, version, reloadTick])
 
   /* QR payload: the signed code from POST /tracking/create (staff scanners
      verify it, REQ-APC-01), falling back to the live dispatch codes the order

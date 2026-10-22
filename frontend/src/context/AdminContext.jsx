@@ -6,7 +6,7 @@ import { clearSession, loadSession, saveSession } from '../services/session.js'
 import { useToast } from '../hooks/useToast.js'
 import { fetchOrders, updateOrder } from '../services/orders.js'
 import { addPosItem, removePosItem, checkoutPos } from '../services/pos.js'
-import { fetchAdminProducts, createAdminProduct, updateAdminProduct as updateAdminProductAPI, saveAdminVariant, removeAdminProduct as removeAdminProductAPI, unlistAdminProduct as unlistAdminProductAPI, sellAdminProduct as sellAdminProductAPI } from '../services/adminProducts.js'
+import { fetchAdminProducts, createAdminProduct, updateAdminProduct as updateAdminProductAPI, saveAdminVariant, removeAdminProduct as removeAdminProductAPI, unlistAdminProduct as unlistAdminProductAPI, sellAdminProduct as sellAdminProductAPI, setAdminProductPreorder as setAdminProductPreorderAPI } from '../services/adminProducts.js'
 import { buildAlerts } from '../services/dashboard.js'
 import { onApiChange } from '../services/realtime.js'
 
@@ -303,7 +303,14 @@ export function AdminProvider({ children }) {
     // a placeholder product is worse than no product.
     const name = String(productData.name || '').trim()
     const price = Number(productData.price)
-    const stock = Number(productData.stock)
+    // A pre-order product is produced to order, so it needs no stock to be
+    // listed: a blank stock field means "nothing on the shelf yet", not
+    // "invalid input".
+    const preorder = !!productData.preorder
+    const rawStock = Number(productData.stock)
+    const stock = preorder
+      ? (Number.isFinite(rawStock) ? Math.max(0, rawStock) : 0)
+      : rawStock
     if (!name) {
       const message = 'Product name is required.'
       showToast(message, 'error')
@@ -335,7 +342,13 @@ export function AdminProvider({ children }) {
         showToast(message, 'error')
         return { success: false, error: message }
       }
-      if (!(Number(row?.stock) >= 0)) {
+      // Same rule as the product: a pre-order variation needs no stock, a
+      // blank field simply means nothing on the shelf yet.
+      const rowStock = Number(row?.stock)
+      const effectiveStock = preorder
+        ? (Number.isFinite(rowStock) ? Math.max(0, rowStock) : 0)
+        : rowStock
+      if (!(effectiveStock >= 0)) {
         const message = `Variation ${i + 1} stock cannot be negative.`
         showToast(message, 'error')
         return { success: false, error: message }
@@ -376,11 +389,15 @@ export function AdminProvider({ children }) {
         stock,
         desc: productData.desc || '',
         photo: productData.photo || '',
+        preorder,
         variations: variations.map((row) => ({
           name: String(row.name || '').trim(),
           stock: Number.isFinite(Number(row.stock)) ? Number(row.stock) : 0,
           markup: Number(row.markup) || 0,
           pic: row.pic || '',
+          // A variation of a pre-order product is a pre-order too, unless the
+          // row says otherwise.
+          preorder: row.preorder !== undefined ? !!row.preorder : preorder,
           // The {axis: value} pairs of this combination. A product that
           // variates along several axes at once - (cream, medium), (black,
           // metallic) - carries them on every variation row, and the backend
@@ -483,6 +500,32 @@ export function AdminProvider({ children }) {
       console.error('Failed to adjust stock:', e)
       showToast(e.message || 'Failed to adjust stock.', 'error')
       refreshProducts()
+    }
+  }, [refreshProducts, showToast])
+
+  // ── PRE-ORDER SWITCH (product level) ──
+  //
+  // A pre-order item is produced to order: it needs no stock to be listed and
+  // it stays orderable with nothing on the shelf. The switch moves the whole
+  // product - and every variation of it - between "Pre-order" and "In Stock",
+  // so an admin never has to edit the combinations one by one.
+  const setProductPreorder = useCallback(async (productId, preorder) => {
+    const numericId = toNumericProductId(productId)
+    if (numericId === null) return { success: false, error: 'Invalid product ID.' }
+    try {
+      await setAdminProductPreorderAPI(numericId, preorder)
+      showToast(
+        preorder
+          ? 'Product marked as a pre-order. It can be listed with no stock.'
+          : 'Product marked as in stock.',
+        'success'
+      )
+      refreshProducts()
+      return { success: true }
+    } catch (e) {
+      console.error('Failed to update the pre-order status:', e)
+      showToast(e.message || 'Could not update the pre-order status.', 'error')
+      return { success: false, error: e.message || 'Failed to update the pre-order status.' }
     }
   }, [refreshProducts, showToast])
 
@@ -832,6 +875,7 @@ export function AdminProvider({ children }) {
         unlistProduct,
         sellProduct,
         adjustStock,
+        setProductPreorder,
         addVariant,
         updateVariant,
         removeVariant,

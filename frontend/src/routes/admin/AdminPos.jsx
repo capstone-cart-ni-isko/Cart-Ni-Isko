@@ -532,7 +532,7 @@ export default function AdminPos() {
                               Pre-order
                             </span>
                           )}
-                          {Number(product.totalStock) <= 0 && (
+                          {!product.preorder && Number(product.totalStock) <= 0 && (
                             <span className="absolute top-2 right-2 bg-rose-50 border border-rose-200 text-rose-700 text-2xs font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
                               Sold out
                             </span>
@@ -901,12 +901,23 @@ export default function AdminPos() {
                         <div className="flex-1 min-w-0">
                           <h4 className="text-xs font-bold text-gray-900 truncate leading-tight">{product.name}</h4>
                           <p className="text-2xs text-gray-400 mt-0.5">
-                            {product.category} • {product.preorder ? 'Pre-order' : 'Regular'}
+                            {product.category} • {product.availability || 'In Stock'}
                           </p>
                           <p className="text-2xs text-gray-400 mt-0.5">
                             SKU: {skuCode}{' '}
-                            <span className={`font-bold ml-1 ${Number(product.totalStock) > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                              • {Number(product.totalStock) > 0 ? 'In stock' : 'Out of stock'}
+                            {/* A pre-order item is produced to order: it has
+                                nothing on the shelf but it is still sellable,
+                                so it is never "out of stock". */}
+                            <span
+                              className={`font-bold ml-1 ${
+                                product.preorder
+                                  ? 'text-brand-orange'
+                                  : Number(product.totalStock) > 0
+                                  ? 'text-emerald-500'
+                                  : 'text-rose-500'
+                              }`}
+                            >
+                              • {product.preorder ? 'Pre-order' : Number(product.totalStock) > 0 ? 'In stock' : 'Out of stock'}
                             </span>
                           </p>
                         </div>

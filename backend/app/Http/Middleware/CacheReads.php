@@ -33,6 +33,27 @@ class CacheReads
         'api/reviews/score',
     ];
 
+    /**
+     * Endpoints that answer with POST but do not change anything.
+     *
+     * They must not bump the write version and must not announce a ping:
+     * a ping tells every open screen that its resource moved, and the screen
+     * that issued the read would then read again - forever. `tracking/create`
+     * is the important one: the customer order detail screen calls it on
+     * every load, so announcing it made that screen reload in a loop
+     * ("loading, showing the order for a second, loading again").
+     *
+     * A read-only POST also must not invalidate the read cache: it moved
+     * nothing, so the cached answer is still current.
+     */
+    private const READ_ONLY_POSTS = [
+        'api/tracking/create',
+        'api/checkout/dispatch',
+        'api/checkout/payment/status',
+        'api/otp/auto_fill',
+        'api/otp/challenge/inbox',
+    ];
+
     public function handle(Request $request, Closure $next)
     {
         if (!$request->is('api/*')) {
@@ -64,6 +85,12 @@ class CacheReads
         $response = $next($request);
 
         if ($response->isSuccessful()) {
+            // A read-only POST moves nothing: no version bump (so the read
+            // cache stays valid) and no ping (so no screen re-reads itself).
+            if ($this->isReadOnlyPost($request)) {
+                return $response;
+            }
+
             // Not Cache::increment(): on the database store it is a silent
             // no-op for a missing key, so the version never moved and reads
             // stayed stale for the full TTL after every write.
@@ -73,6 +100,13 @@ class CacheReads
         }
 
         return $response;
+    }
+
+    /** Is this a POST that only reads? (see READ_ONLY_POSTS) */
+    private function isReadOnlyPost(Request $request): bool
+    {
+        return $request->isMethod('POST')
+            && in_array($request->path(), self::READ_ONLY_POSTS, true);
     }
 
     /**

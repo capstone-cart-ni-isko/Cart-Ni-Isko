@@ -5,7 +5,16 @@ import { uploadImage } from '../../../services/upload.js'
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL } from '../kit/ui.js'
 import { PRODUCT_CATEGORIES } from '../../../data/productCategories.js'
 
-const EMPTY = { name: '', category: 'Shirts', price: '', stock: '', desc: '', photo: '' }
+const EMPTY = {
+  name: '',
+  category: 'Shirts',
+  price: '',
+  stock: '',
+  desc: '',
+  photo: '',
+  // A pre-order item is produced to order, so it needs no stock on the shelf.
+  preorder: false,
+}
 
 /* Adds a catalog product through the same addProduct action as Inventory. */
 export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
@@ -34,7 +43,14 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
 
   const price = Number(form.price)
   const stock = Number(form.stock)
-  const valid = form.name.trim().length >= 2 && price > 0 && Number.isInteger(stock) && stock >= 0 && form.stock !== ''
+  // A pre-order product is produced to order, so the stock field may stay
+  // empty: nothing has to be on the shelf for it to be listed.
+  const valid =
+    form.name.trim().length >= 2 &&
+    price > 0 &&
+    Number.isInteger(stock) &&
+    stock >= 0 &&
+    (form.preorder || form.stock !== '')
 
   const handleSubmit = async (e) => {
     e?.preventDefault()
@@ -48,6 +64,9 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
       stock,
       desc: form.desc.trim(),
       photo: form.photo,
+      // The whole product is a pre-order: it stays orderable with nothing on
+      // the shelf and checkout cannot promise a delivery date for it.
+      preorder: form.preorder,
       // Quick add creates one Standard variation; more can be added from the
       // product page in Inventory.
       variations: [{ name: 'Standard', stock, markup: 0, pic: form.photo || '' }],
@@ -68,7 +87,11 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
       isOpen={isOpen}
       onClose={onClose}
       title="Add new product"
-      subtitle="Published to the storefront immediately"
+      subtitle={
+        form.preorder
+          ? 'Pre-order: produced to order, so no stock is needed'
+          : 'Published to the storefront immediately'
+      }
       footer={
         <>
           <button type="button" onClick={onClose} className={BTN_SECONDARY}>Cancel</button>
@@ -95,10 +118,30 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
             <input id="np-price" type="number" min="1" step="0.01" className={INPUT} value={form.price} onChange={set('price')} required />
           </div>
           <div>
-            <label className={LABEL} htmlFor="np-stock">Stock</label>
-            <input id="np-stock" type="number" min="0" step="1" className={INPUT} value={form.stock} onChange={set('stock')} required />
+            <label className={LABEL} htmlFor="np-stock">
+              {form.preorder ? 'Stock (optional)' : 'Stock'}
+            </label>
+            <input id="np-stock" type="number" min="0" step="1" className={INPUT} value={form.stock} onChange={set('stock')} required={!form.preorder} />
           </div>
         </div>
+        {/* PRE-ORDER: a pre-order item is produced to order, so it can be
+            listed with nothing on the shelf. It stays orderable, and checkout
+            cannot promise a delivery date for it. */}
+        <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={form.preorder}
+            onChange={(e) => setForm((prev) => ({ ...prev, preorder: e.target.checked }))}
+            className="mt-0.5 rounded text-brand-orange focus:ring-0"
+          />
+          <span className="flex-1 min-w-0">
+            <span className="block text-xs font-semibold text-slate-700">This is a pre-order</span>
+            <span className="block text-2xs text-slate-500 mt-0.5">
+              Produced to order, so no stock is needed to list it. The store confirms when it is
+              ready, and checkout will not promise a delivery date.
+            </span>
+          </span>
+        </label>
         <div>
           <label className={LABEL} htmlFor="np-desc">Description</label>
           <textarea id="np-desc" rows={3} className={`${INPUT} h-auto py-2`} value={form.desc} onChange={set('desc')} />

@@ -92,6 +92,7 @@ export default function AdminProductDetail() {
     addVariant,
     updateVariant,
     removeVariant,
+    setProductPreorder,
     currentAdminUser,
   } = useAdmin()
 
@@ -100,6 +101,11 @@ export default function AdminProductDetail() {
   const [row, setRow] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+
+  // The product-level pre-order flag. While it is on, every combination of
+  // the product follows it, so the per-combination switch is locked and the
+  // "Mark In Stock" button is the way back.
+  const productPreorderOn = !!row?.productPreOrder
 
   // View mode active gallery image
   const [activeImage, setActiveImage] = useState('')
@@ -304,7 +310,7 @@ export default function AdminProductDetail() {
       stock: String(variant?.stock ?? 0),
       markup: String(variant?.markup ?? 0),
       pic: variant?.pic || '',
-      preorder: !!variant?.preorder,
+      preorder: productPreorderOn ? true : variant ? !!variant.preorderFlag : false,
     })
     setComboEditorOpen(true)
   }
@@ -465,6 +471,22 @@ export default function AdminProductDetail() {
     }
   }
 
+  /**
+   * The product-level pre-order switch.
+   *
+   * One click moves the whole product - and every variation of it - between
+   * "Pre-order" and "In Stock". It is the same switch the inventory list
+   * offers, so an admin never has to edit the combinations one by one.
+   */
+  const handleTogglePreorder = async () => {
+    if (!row) return
+    const next = !row.preorder
+    const result = await setProductPreorder(row.prodId, next)
+    if (result.success) {
+      await load()
+    }
+  }
+
   const editCategoryOptions = useMemo(() => {
     if (!editCategory || PRODUCT_CATEGORIES.includes(editCategory)) {
       return PRODUCT_CATEGORIES
@@ -527,6 +549,23 @@ export default function AdminProductDetail() {
                     <span>Edit Product</span>
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleTogglePreorder}
+                  disabled={!row}
+                  title={
+                    row?.preorder
+                      ? 'Switch this product back to In Stock'
+                      : 'Mark this product as a pre-order (no stock needed)'
+                  }
+                  className={`h-8 px-3 rounded-lg border text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors shadow-2xs ${
+                    row?.preorder
+                      ? 'border-orange-200 bg-orange-50 text-brand-orange hover:bg-orange-100'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {row?.preorder ? 'Mark In Stock' : 'Mark Pre-order'}
+                </button>
                 <button
                   type="button"
                   onClick={handleToggleListing}
@@ -1265,11 +1304,18 @@ export default function AdminProductDetail() {
                   <input
                     type="checkbox"
                     checked={comboDraft.preorder}
+                    disabled={productPreorderOn}
                     onChange={(e) => setComboDraft((draft) => ({ ...draft, preorder: e.target.checked }))}
                     className="rounded text-brand-orange focus:ring-0"
                   />
                   Available for pre-order when out of stock
                 </label>
+                {productPreorderOn && (
+                  <p className="text-2xs text-slate-400">
+                    The whole product is a pre-order, so every combination follows it. Use
+                    “Mark In Stock” on this page to change that.
+                  </p>
+                )}
 
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">Image (optional)</label>

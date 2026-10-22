@@ -236,9 +236,20 @@ export function mapProduct(row) {
   // that one axis feeds the second picker, never the swatches.
   const colorAxis = axes.find((axis) => /colou?r/i.test(axis)) || (axes.length > 1 ? axes[0] : null)
   const secondAxis = axes.find((axis) => axis !== colorAxis) || null
-  const preOrder = hasVariations
-    ? variations.some((variant) => variant.prodvar_preorder)
-    : row.prod_preorder === true || (qty <= 0 && row.prod_preorder !== false)
+  // The product-level flag is authoritative: an admin can mark a whole product
+  // as a pre-order (or switch it back to in stock) and every variation of it
+  // follows. A per-variation flag still lets a single combination be a
+  // pre-order. A product with no stock and no pre-order flag is out of stock -
+  // not a pre-order.
+  const productLevelPreorder = row.prod_preorder === true
+    || row.prod_preorder === 1
+    || row.prod_preorder === '1'
+  const preOrder = productLevelPreorder
+    || row.prod_preorder_any === true
+    || (hasVariations && variations.some((variant) => Boolean(variant.prodvar_preorder)))
+  // What the customer is told about this item: a pre-order, on the shelf, or
+  // sold out. The catalog badge shows exactly this.
+  const availability = preOrder ? 'Pre-order' : qty > 0 ? 'In Stock' : 'Out of Stock'
   const mainImage = hasVariations ? mainVariationImage(variations) : ''
   const sizes = hasVariations && variationSizes(variations, secondAxis).length > 0
     ? variationSizes(variations, secondAxis)
@@ -289,8 +300,13 @@ export function mapProduct(row) {
     category,
     description: row.prod_desc || '',
     qty,
+    availability,
+    // The product-level switch on its own: true only when the admin marked
+    // the WHOLE product as a pre-order. A cart line needs this plus the flag
+    // of its own variation - never the aggregate `preOrder`.
+    productPreOrder: productLevelPreorder,
     total_var: Number(row.prod_total_var ?? variations.length),
-    status: preOrder ? 'For Pre-order' : qty > 0 ? 'In Stock' : 'Out of Stock',
+    status: availability,
     tag: row.prod_tag || undefined,
     prod_desc: row.prod_desc || undefined,
     prod_categ: category,

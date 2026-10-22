@@ -33,6 +33,31 @@ class ProductsAPI extends Controller
         return $request->attributes->get($key);
     }
 
+    /**
+     * Read a flag the client may send as a boolean, 0/1 or "true"/"false".
+     * Anything that is not explicitly truthy counts as false, so a missing or
+     * malformed value never silently switches a product to pre-order.
+     */
+    protected static function boolInput($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $value = trim($value);
+            if ($value === '') {
+                return false;
+            }
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value !== 0;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === true;
+    }
+
         public static function present(Product $product, $variations = null, ?array $breakdown = null, ?array $metrics = null): array
         {
             $defaultRender = $variations === null && $breakdown === null && $metrics === null;
@@ -84,8 +109,23 @@ class ProductsAPI extends Controller
 
             $payload['option_axes'] = self::optionAxes($vars);
 
+            // Two different questions, two different answers:
+            //   prod_preorder     - the PRODUCT itself is a pre-order. That is
+            //                       the admin-level switch ("Mark as
+            //                       Pre-order" / "Mark as In Stock") and it
+            //                       covers every variation of the product.
+            //   prod_preorder_any - at least ONE variation is a pre-order.
+            // The status below needs either of them; a cart line needs the
+            // first one plus the flag of its own variation, so the two are
+            // never collapsed into a single value.
+            $productPreorder   = (bool) $product->prod_preorder;
+            $variationPreorder = $vars->contains(fn (Prodvar $v) => (bool) $v->prodvar_preorder);
+            $preorder          = $productPreorder || $variationPreorder;
+
             $payload['prod_qty'] = $stock;
-            $payload['prod_status'] = $stock > 0 ? 'In Stock' : 'Out of Stock';
+            $payload['prod_status'] = $preorder
+                ? 'Pre-order'
+                : ($stock > 0 ? 'In Stock' : 'Out of Stock');
             $payload['prod_images'] = $images->all() ?: null;
             $sizeAxis = self::optionAxisNamed($payload['option_axes'], self::sizeKeys);
             $payload['prod_sizes'] = ($sizeAxis
@@ -96,7 +136,8 @@ class ProductsAPI extends Controller
             $payload['prod_stock_matrix'] = $vars->mapWithKeys(
                 fn (Prodvar $v) => [$v->prodvar_name => (int) $v->prodvar_stock]
             )->all();
-            $payload['prod_preorder'] = (bool) $vars->contains(fn (Prodvar $v) => (bool) $v->prodvar_preorder);
+            $payload['prod_preorder'] = $productPreorder;
+            $payload['prod_preorder_any'] = $variationPreorder;
             $payload['main_image'] = $mainImage;
 
             $payload['prod_reviews'] = (int) $product->prod_reviews;
@@ -687,6 +728,7 @@ class ProductsAPI extends Controller
                         'prod_created'  => now(),
                         'prod_disabled' => null,
                         'prod_deleted'  => null,
+                        'prod_preorder' => self::boolInput($json->input('prod_preorder', false)),
                     ]);
 
                     foreach ($variations as $variation) {
@@ -1223,6 +1265,16 @@ class ProductsAPI extends Controller
                     }
                 }
 
+                // The product-level pre-order switch. It is the one control the
+                // inventory screen uses to move a whole product between
+                // "Pre-order" and "In Stock", so it is accepted here and
+                // applied to every variation below.
+                $preorderSwitch = null;
+                if ($json->has('prod_preorder')) {
+                    $preorderSwitch = self::boolInput($json->input('prod_preorder'));
+                    $updateData['prod_preorder'] = $preorderSwitch;
+                }
+
                 foreach (['prod_name', 'prod_tag'] as $uniqueField) {
                     if (! array_key_exists($uniqueField, $updateData)) {
                         continue;
@@ -1335,6 +1387,15 @@ class ProductsAPI extends Controller
                     }
                     $this->syncVariations($product, $variations);
                     $stockChanged = true;
+                }
+
+                if ($preorderSwitch !== null) {
+                    // Applied last, so the product-level switch always wins over
+                    // whatever per-variation flag arrived with the payload: the
+                    // whole product is either a pre-order or it is not.
+                    Prodvar::where('prod_id', $product->prod_id)
+                        ->whereNull('prodvar_deleted')
+                        ->update(['prodvar_preorder' => $preorderSwitch]);
                 }
 
                 $product->refresh();
@@ -1516,6 +1577,12 @@ class ProductsAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'The variations list is not valid.'], 422);
             }
 
+            // When the product itself is a pre-order, every variation of it is
+            // one too - unless the row says otherwise. That keeps the admin
+            // screen's single "Pre-order" switch in charge of the whole
+            // product while still allowing a per-combination override.
+            $productPreorder = self::boolInput($json->input('prod_preorder', false));
+
             $rows = [];
             foreach ((array) $raw as $index => $row) {
                 if (! is_array($row)) {
@@ -1565,7 +1632,7 @@ class ProductsAPI extends Controller
                     'prodvar_main'     => (bool) ($row['prodvar_main'] ?? $row['main'] ?? false),
                     'prodvar_markup'   => ($markup === null || $markup === '') ? 0.0 : round((float) $markup, 2),
                     'prodvar_options'  => self::encodeOptions($options),
-                    'prodvar_preorder' => (bool) ($row['prodvar_preorder'] ?? $row['preorder'] ?? false),
+                    'prodvar_preorder' => self::boolInput($row['prodvar_preorder'] ?? $row['preorder'] ?? $productPreorder),
                 ];
             }
 
@@ -1613,7 +1680,7 @@ class ProductsAPI extends Controller
                     'prodvar_main'     => true,
                     'prodvar_markup'   => 0.0,
                     'prodvar_options'  => null,
-                    'prodvar_preorder' => (bool) $json->input('prod_preorder', false),
+                    'prodvar_preorder' => self::boolInput($json->input('prod_preorder', false)),
                 ];
             }
 

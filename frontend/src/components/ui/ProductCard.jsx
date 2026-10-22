@@ -31,6 +31,18 @@ function ProductCard({ product }) {
   const resolvedImage = product.images && product.images[0] ? getImageUrl(product.images[0]) : null
   const hasValidImage = !!resolvedImage
 
+  // Availability is shown on EVERY card: a customer has to know whether the
+  // item is a pre-order (produced to order), on the shelf, or sold out -
+  // without opening the product. The badge used to render only on the
+  // image-less fallback, so a product with a photo never said what it was.
+  const availability = product.availability
+    || (product.preOrder ? 'Pre-order' : Number(product.qty) > 0 ? 'In Stock' : 'Out of Stock')
+  const availabilityBadge = {
+    'Pre-order': 'badge--brand',
+    'In Stock': 'badge--ok',
+    'Out of Stock': 'badge--danger',
+  }[availability] || 'badge--plain'
+
   return (
     <>
       <Link
@@ -48,13 +60,15 @@ function ProductCard({ product }) {
           ) : (
             <div className="relative flex flex-col items-center justify-center p-3 text-center">
               <ShirtIcon className="w-10 h-10 text-brand-orange opacity-40 mb-1" />
-              {product.preOrder && (
-                <span className="badge badge--info absolute top-2 left-2 uppercase tracking-wider">
-                  Pre-order
-                </span>
-              )}
             </div>
           )}
+
+          {/* Availability badge */}
+          <span
+            className={`badge ${availabilityBadge} absolute top-2 left-2 uppercase tracking-wider z-10`}
+          >
+            {availability}
+          </span>
 
           {/* Heart toggle top-right — the visible chip stays small but the
               tap target is padded out to the 44px minimum via the ::before

@@ -298,6 +298,31 @@ class OrdersAPI extends Controller
         return $bags->map(fn (Bag $bag) => self::lineFromBag($bag))->values()->all();
     }
 
+    /**
+     * The bag ids that hold a pre-order item.
+     *
+     * A line is a pre-order when the product as a whole is flagged as one, or
+     * when that particular variation is. Checkout uses this to decide that no
+     * delivery estimate can be promised: pre-order items are produced to
+     * order, so their arrival date is unknown until the store restocks.
+     */
+    public static function preorderBagIds($bags): array
+    {
+        return collect($bags)
+            ->filter(function (Bag $bag) {
+                $prodvar = $bag->prodvar;
+                if (! $prodvar) {
+                    return false;
+                }
+
+                return (bool) $prodvar->prodvar_preorder
+                    || (bool) ($prodvar->product->prod_preorder ?? false);
+            })
+            ->map(fn (Bag $bag) => (int) $bag->bag_id)
+            ->values()
+            ->all();
+    }
+
     public static function lineFromItem(Item $item): array
     {
         $item->loadMissing('bag');
@@ -503,6 +528,7 @@ class OrdersAPI extends Controller
             $bags        = $scope['bags'];
             $subtotal    = $this->bagSubtotal($bags);
             $quote       = $this->quoteDispatch($json, $dispatchType, $speed);
+            $preorderBagIds = self::preorderBagIds($bags);
             if ($dispatchType === 'delivery') {
                 $dispatchFee = 0.0;
                 $totalDue    = $subtotal;
@@ -551,23 +577,40 @@ class OrdersAPI extends Controller
                     'appoint_end'      => $slotEnd,
                     'appointment_date' => $slotStart,
                     'location'         => 'Tindahan ni Isko Physical Store',
+                    'preorder'         => $preorderBagIds !== [],
+                    'preorder_items'   => $preorderBagIds,
                 ];
             } else {
                 $customer     = Customer::find($custId);
                 $deliverAddress = $this->deliveryAddress($json, $customer);
-                $expect       = $this->deliveryExpectation($json, $speed);
 
                 $dispatchDetails = [
                     'type'               => 'DELIVERY',
                     'speed'              => strtoupper($speed),
                     'deliver_address'    => $deliverAddress,
                     'deliver_phone'      => (string) ($customer->cust_phone ?? ''),
-                    'deliver_expect'     => $expect,
-                    'estimated_delivery' => $expect->toDateTimeString(),
                     'courier'            => $quote['courier'],
                     'fee_source'         => 'pending',
                     'fee_pending'        => true,
+                    'preorder'           => $preorderBagIds !== [],
+                    'preorder_items'     => $preorderBagIds,
                 ];
+
+                if ($preorderBagIds !== []) {
+                    // A pre-order is produced to order: the shop cannot promise
+                    // a delivery date for it, so no estimate is offered at all.
+                    // The customer is told when the items will be ready instead.
+                    $dispatchDetails['estimate_available'] = false;
+                    $dispatchDetails['estimate_note'] = 'This order contains pre-order item(s). '
+                        . 'A delivery date cannot be estimated yet - the store will let you know '
+                        . 'once the pre-order items are ready.';
+                } else {
+                    $expect = $this->deliveryExpectation($json, $speed);
+
+                    $dispatchDetails['deliver_expect']      = $expect;
+                    $dispatchDetails['estimated_delivery']  = $expect->toDateTimeString();
+                    $dispatchDetails['estimate_available']  = true;
+                }
             }
 
             return response()->json([
@@ -582,6 +625,9 @@ class OrdersAPI extends Controller
                     'total'            => $totalDue,
                     'cart_count'       => UserAPI::cartCount($custId),
                     'items'            => self::bagLinesPayload($bags),
+                    'preorder'         => $preorderBagIds !== [],
+                    'preorder_items'   => $preorderBagIds,
+                    'estimate_available' => $preorderBagIds === [],
                     'dispatch_details' => $dispatchDetails,
                 ],
             ], 200);
@@ -1321,13 +1367,19 @@ class OrdersAPI extends Controller
                 $qty   = max(1, (int) $bag->bag_qty);
                 $stock = (int) $prodvar->prodvar_stock;
 
-                if (! $prodvar->prodvar_preorder && $stock < $qty) {
+                // A pre-order line is not limited by the shelf: either the
+                // product as a whole is a pre-order, or this particular
+                // variation of it is.
+                $isPreorder = (bool) $prodvar->prodvar_preorder
+                    || (bool) $prodvar->product->prod_preorder;
+
+                if (! $isPreorder && $stock < $qty) {
                     throw new InsufficientStockException(
                         'Insufficient stock for ' . $name . ' - only ' . $stock . ' unit(s) remain.'
                     );
                 }
 
-                if ((bool) $prodvar->prodvar_preorder) {
+                if ($isPreorder) {
                     $preorderLines[(int) $bag->prodvar_id] = true;
                 }
 
@@ -2945,7 +2997,11 @@ class OrdersAPI extends Controller
 
         $payload = $product->toArray();
         $payload['prod_qty'] = (int) $variants->sum('prodvar_stock');
-        $payload['prod_preorder'] = $variants->contains(fn ($v) => (bool) $v->prodvar_preorder);
+        // The product-level flag and the "one of its variations is a
+        // pre-order" flag are two different answers and are kept apart, the
+        // same way ProductsAPI::present() keeps them apart.
+        $payload['prod_preorder'] = (bool) $product->prod_preorder;
+        $payload['prod_preorder_any'] = $variants->contains(fn ($v) => (bool) $v->prodvar_preorder);
         $payload['prod_sizes'] = $variants->pluck('prodvar_name')->values()->all();
         $payload['prod_images'] = $variants->pluck('prodvar_pic')->filter()->unique()->values()->all();
         $payload['option_axes'] = ProductsAPI::optionAxes($variants);
@@ -4568,7 +4624,11 @@ class OrdersAPI extends Controller
 
         $payload = $product->toArray();
         $payload['prod_qty'] = (int) $variants->sum('prodvar_stock');
-        $payload['prod_preorder'] = $variants->contains(fn ($v) => (bool) $v->prodvar_preorder);
+        // The product-level flag and the "one of its variations is a
+        // pre-order" flag are two different answers and are kept apart, the
+        // same way ProductsAPI::present() keeps them apart.
+        $payload['prod_preorder'] = (bool) $product->prod_preorder;
+        $payload['prod_preorder_any'] = $variants->contains(fn ($v) => (bool) $v->prodvar_preorder);
         $payload['prod_sizes'] = $variants->pluck('prodvar_name')->values()->all();
         $payload['prod_images'] = $variants->pluck('prodvar_pic')->filter()->unique()->values()->all();
 

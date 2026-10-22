@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Modal from '../ui/Modal.jsx'
@@ -106,21 +106,45 @@ export default function CustomerOrderDetailModal({
 
   const orderId = initialOrder?.id ?? initialOrder?.ord_id
 
+  /* The modal reads the order in the background: it must never blank the
+     content that is already on screen, and two reads must never race.
+     `initialOrderRef` keeps the parent's copy available to the reader
+     without making the reader depend on the parent's object identity. */
+  const initialOrderRef = useRef(initialOrder)
+  const inFlightRef = useRef(false)
+  const queuedRef = useRef(false)
+  // Bumped when a read was asked for while another one was running: the read
+  // effect watches it and serves that queued request.
+  const [reloadTick, setReloadTick] = useState(0)
+
+  useEffect(() => {
+    initialOrderRef.current = initialOrder
+  }, [initialOrder])
+
   const loadDetails = useCallback(async () => {
     if (!orderId) return
+    // One read at a time: a request that arrives while one is running waits
+    // for it instead of stacking on top of it.
+    if (inFlightRef.current) {
+      queuedRef.current = true
+      return
+    }
+    inFlightRef.current = true
     setLoading(true)
     try {
+      const fallback = initialOrderRef.current
       let raw = null
       try {
         raw = await fetchOrder(orderId)
       } catch {
-        raw = initialOrder?.raw || null
+        raw = fallback?.raw || null
       }
       if (raw) {
         setFullOrderData(raw)
       }
 
-      const method = initialOrder?.fulfillment?.method || (raw?.ord_claiming === 'deliver' ? 'Courier Delivery' : 'Store Pickup')
+      const method =
+        fallback?.fulfillment?.method || (raw?.ord_claiming === 'deliver' ? 'Courier Delivery' : 'Store Pickup')
       const trackType = method === 'Courier Delivery' ? 'delivery' : 'pickup'
       try {
         const res = await getTrack(orderId, trackType)
@@ -130,24 +154,38 @@ export default function CustomerOrderDetailModal({
         console.warn('Tracking lookup failed in modal:', err?.message)
       }
     } finally {
+      inFlightRef.current = false
       setLoading(false)
+      if (queuedRef.current) {
+        queuedRef.current = false
+        setReloadTick((tick) => tick + 1)
+      }
     }
-  }, [orderId, initialOrder])
+  }, [orderId])
 
+  // A different order in the same modal starts from scratch.
   useEffect(() => {
-    if (isOpen && orderId) {
-      setOrder(initialOrder)
-      setFullOrderData(initialOrder?.raw || null)
-      loadDetails()
-    }
-  }, [isOpen, orderId, initialOrder, loadDetails])
+    setFullOrderData(null)
+    setTimeline([])
+    setTrackRes(null)
+  }, [orderId])
 
+  // The parent re-reads the order after every action, so the mapped copy the
+  // modal shows has to follow it (the status badge, the totals).
+  useEffect(() => {
+    if (!isOpen) return
+    setOrder(initialOrder)
+    setFullOrderData((prev) => prev || initialOrder?.raw || null)
+  }, [isOpen, initialOrder])
+
+  // Read the full order when the modal opens, and again whenever a realtime
+  // ping says the order moved. The reader keeps the content on screen, so a
+  // ping no longer makes the modal flash.
   const version = useApiChange(['orders', 'checkout', 'tracking', 'delivery', 'appoint'])
   useEffect(() => {
-    if (isOpen && orderId) {
-      loadDetails()
-    }
-  }, [isOpen, orderId, version, loadDetails])
+    if (!isOpen || !orderId) return
+    loadDetails()
+  }, [isOpen, orderId, version, reloadTick, loadDetails])
 
   const effectiveRaw = fullOrderData || order?.raw || {}
   const status = order?.status || 'TO PROCESS'
@@ -407,6 +445,14 @@ export default function CustomerOrderDetailModal({
             </div>
             <div className="text-right">
               <StatusBadge status={status} />
+              {/* A background refresh never blanks the modal - it only says
+                  that it is reading again. */}
+              {loading && (
+                <p className="mt-1 flex items-center justify-end gap-1 text-[10px] font-medium text-white/85">
+                  <LoadingSpinner size={10} />
+                  Refreshing…
+                </p>
+              )}
             </div>
           </div>
           {statusContext && (

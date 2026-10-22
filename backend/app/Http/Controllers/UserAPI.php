@@ -535,6 +535,10 @@ class UserAPI extends Controller
                 : null,
             'product'       => $present,
             'available'     => $present ? (bool) $present['available'] : false,
+            // Pre-order lines are produced to order: they are not limited by
+            // the shelf and no delivery date can be promised for them.
+            'preorder'      => (bool) ($prodvar ? $prodvar->prodvar_preorder : false)
+                || (bool) ($product ? $product->prod_preorder : false),
         ];
     }
 

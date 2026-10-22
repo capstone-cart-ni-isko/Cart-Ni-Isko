@@ -75,24 +75,35 @@ export function mapAdminProduct(row) {
   const image = (hasVariations && mainVariant?.prodvar_pic)
     || (Array.isArray(row.prod_images) && row.prod_images[0])
     || categoryImage(category)
-  // Normalize backend status vocabulary ('In Stock' / 'Out of Stock') into the
-  // inventory UI's publication vocabulary ('Published' / 'Draft' / 'Out of Stock').
+  // Normalize backend status vocabulary ('In Stock' / 'Out of Stock' /
+  // 'Pre-order') into the inventory UI's publication vocabulary
+  // ('Published' / 'Draft' / 'Out of Stock').
   const disabled = !!row.prod_disabled
   const rawStatus = String(row.prod_status || '').trim()
   const status = disabled
     ? 'Unlisted'
     : rawStatus === 'In Stock'
     ? 'Published'
+    : rawStatus === 'Pre-order'
+    ? 'Published'
     : rawStatus === 'Out of Stock'
     ? 'Out of Stock'
     : rawStatus || (qty > 0 ? 'Published' : 'Out of Stock')
-  // Same preorder rule the customer catalog applies in services/products.js,
-  // so "Availability: Pre-order" in the admin filters matches what customers
-  // actually see for the same row.
-  const preorder = hasVariations
-    ? variations.some((variant) => variant.prodvar_preorder)
-    : row.prod_preorder === true || (qty <= 0 && row.prod_preorder !== false)
-  const availability = preorder ? 'Pre-order' : qty > 0 ? 'Regular' : 'Out of Stock'
+  // Pre-order: the product-level flag is authoritative (an admin marks the
+  // whole product, or switches it back to in stock), and a per-variation flag
+  // lets a single combination be a pre-order while the rest stays in stock.
+  //
+  // A product with no stock and no pre-order flag is genuinely out of stock -
+  // it is NOT a pre-order - so the availability below can be trusted by the
+  // "Out of Stock" KPI.
+  const productPreorder = row.prod_preorder === true
+    || row.prod_preorder === 1
+    || row.prod_preorder === '1'
+  const variationPreorder = (hasVariations
+    && variations.some((variant) => Boolean(variant.prodvar_preorder)))
+    || row.prod_preorder_any === true
+  const preorder = productPreorder || variationPreorder
+  const availability = preorder ? 'Pre-order' : qty > 0 ? 'In Stock' : 'Out of Stock'
   // Low-stock alerting is driven by the configurable system setting the
   // backend ships on every product row (FLOW-MANAGE_INV-06 / REQ-MANAGE_INV-04
   // ask for a *configurable* threshold). The UI used to hardcode its own
@@ -118,10 +129,15 @@ export function mapAdminProduct(row) {
         markup: Number(variant.prodvar_markup ?? 0),
         price: Number(row.prod_price) + Number(variant.prodvar_markup ?? 0),
         pic: variant.prodvar_pic || '',
-        preorder: !!variant.prodvar_preorder,
+        preorder: productPreorder || !!variant.prodvar_preorder,
+        // The variation's own flag, apart from the product-level one: an
+        // editor has to see which combinations are flagged on their own.
+        preorderFlag: !!variant.prodvar_preorder,
         main: !!variant.prodvar_main,
         available: variant.available !== false,
-        status: (variant.prodvar_stock ?? 0) > 0 ? 'In Stock' : 'Out of Stock',
+        status: (productPreorder || !!variant.prodvar_preorder)
+          ? 'Pre-order'
+          : (variant.prodvar_stock ?? 0) > 0 ? 'In Stock' : 'Out of Stock',
         lowStock: (Number(variant.prodvar_stock) || 0) > 0
           && (Number(variant.prodvar_stock) || 0) <= lowStockThreshold,
         lastUpdated: row.prod_created ? new Date(row.prod_created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now',
@@ -137,10 +153,11 @@ export function mapAdminProduct(row) {
         markup: 0,
         price: Number(row.prod_price) || 0,
         pic: '',
-        preorder: false,
+        preorder: productPreorder,
+        preorderFlag: false,
         main: i === 0,
         available: true,
-        status: qty > 0 ? 'In Stock' : 'Out of Stock',
+        status: productPreorder ? 'Pre-order' : qty > 0 ? 'In Stock' : 'Out of Stock',
         lowStock: qty > 0 && qty <= lowStockThreshold,
         lastUpdated: row.prod_created ? new Date(row.prod_created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now',
       }))
@@ -154,6 +171,9 @@ export function mapAdminProduct(row) {
     categoryName: category,
     availability,
     preorder,
+    // The product-level flag on its own, apart from the per-variation flags:
+    // this is what the "Mark Pre-order" / "Mark In Stock" switch writes.
+    productPreOrder: productPreorder,
     totalStock: qty,
     price: Number(row.prod_price) || 0,
     // prod_peaksold is gone (aggregate from prodsales server-side);
@@ -216,6 +236,7 @@ export async function fetchAdminProducts() {
  * to belong to exactly one product), so a client-made tag would only collide.
  */
 export function createAdminProduct(productData) {
+  const preorder = !!productData.preorder
   return apiPost('/products/add', {
     prod_name: productData.name,
     prod_categ: productData.category,
@@ -223,6 +244,9 @@ export function createAdminProduct(productData) {
     prod_qty: productData.stock,
     prod_desc: productData.desc || '',
     prod_images: productData.photo ? [productData.photo] : null,
+    // A pre-order product needs no stock to be listed, so the switch is sent
+    // as its own flag and the variations inherit it.
+    prod_preorder: preorder,
     ...(Array.isArray(productData.variations) && productData.variations.length > 0
       ? {
           variations: productData.variations.map((row) => ({
@@ -230,6 +254,9 @@ export function createAdminProduct(productData) {
             prodvar_stock: row.stock,
             ...(row.markup ? { prodvar_markup: row.markup } : {}),
             ...(row.pic ? { prodvar_pic: row.pic } : {}),
+            // A variation of a pre-order product is a pre-order too, unless
+            // the row says otherwise.
+            prodvar_preorder: row.preorder !== undefined ? !!row.preorder : preorder,
             // The combination this row stands for. Sent as a JSON string: the
             // backend stores the cell as varchar and decodes it back to a map.
             ...(row.options && Object.keys(row.options).length > 0
@@ -238,6 +265,21 @@ export function createAdminProduct(productData) {
           })),
         }
       : {}),
+  })
+}
+
+/**
+ * PUT /products/update - Move a whole product between "Pre-order" and
+ * "In Stock".
+ *
+ * The switch is product-level: the backend applies it to the product row and
+ * to every one of its variations, so a pre-order product can be switched back
+ * to in stock (and vice versa) without touching each combination by hand.
+ */
+export function setAdminProductPreorder(prodId, preorder) {
+  return apiPut('/products/update', {
+    prod_id: prodId,
+    prod_preorder: !!preorder,
   })
 }
 

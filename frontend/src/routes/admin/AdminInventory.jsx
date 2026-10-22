@@ -84,7 +84,7 @@ function cartesian(axes) {
 }
 
 export default function AdminInventory() {
-  const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, updateVariant, removeVariant, products: backendProducts, currentAdminUser } = useAdmin()
+  const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, setProductPreorder, updateVariant, removeVariant, products: backendProducts, currentAdminUser } = useAdmin()
   const { showToast } = useToast()
 
   // Staff may VIEW the inventory but cannot add, edit, or delete products.
@@ -131,6 +131,10 @@ export default function AdminInventory() {
   const [newProdPhoto, setNewProdPhoto] = useState('')
   const [newProdCategory, setNewProdCategory] = useState('Shirts')
   const [newProdPrice, setNewProdPrice] = useState('')
+  // A pre-order product is produced to order, so it needs no stock to be
+  // listed: the toggle below is what makes it a pre-order, and its variations
+  // inherit it.
+  const [newProdPreorder, setNewProdPreorder] = useState(false)
   // FLOW-ADD_PROD-02/03: a product always needs at least one variation, and
   // each variation carries its own stock, optional markup and optional image.
   // The total stock shown on the list is the sum of these rows.
@@ -207,7 +211,7 @@ export default function AdminInventory() {
   // One combination at a time (FLOW-MANAGE_INV-01). The row the drawer's Edit
   // button opens, plus the fields of it the admin is changing.
   const [variantEditor, setVariantEditor] = useState(null)
-  const [variantDraft, setVariantDraft] = useState({ name: '', stock: '', markup: '', pic: '' })
+  const [variantDraft, setVariantDraft] = useState({ name: '', stock: '', markup: '', pic: '', preorder: false })
 
   // File inputs for real photo uploads (add + edit modals)
   const addPhotoRef = useRef(null)
@@ -473,6 +477,9 @@ export default function AdminInventory() {
         // The list's stock is derived from the variations server-side; the
         // aggregate is still sent so a legacy reader sees the same number.
         stock: variations.reduce((sum, row) => sum + (Number.isFinite(row.stock) ? row.stock : 0), 0),
+        // The whole product is a pre-order: it can be listed with no stock on
+        // the shelf, and every variation of it follows.
+        preorder: newProdPreorder,
         variations: variations.map((row) => ({
           name: row.name,
           stock: Number.isFinite(row.stock) ? row.stock : 0,
@@ -492,6 +499,7 @@ export default function AdminInventory() {
       setNewProdDesc('')
       setNewProdPhoto('')
       setNewProdPrice('')
+      setNewProdPreorder(false)
       setNewProdVariations([{ ...BLANK_VARIATION, name: 'Standard' }])
       setVariationMode('list')
       setAxes([{ axis: 'Color', values: [] }, { axis: 'Size', values: [] }])
@@ -579,6 +587,7 @@ export default function AdminInventory() {
       stock: String(variant.stock ?? ''),
       markup: String(variant.markup ?? ''),
       pic: variant.pic || '',
+      preorder: !!variant.preorder,
     })
   }
 
@@ -599,6 +608,9 @@ export default function AdminInventory() {
       prodvar_name: variantDraft.name,
       prodvar_stock: stock,
       prodvar_markup: Number.isFinite(markup) ? markup : 0,
+      // A pre-order combination is produced to order: it stays orderable with
+      // nothing on the shelf and no delivery date can be promised for it.
+      prodvar_preorder: !!variantDraft.preorder,
       ...(variantDraft.pic !== variantEditor.variant.pic ? { prodvar_pic: variantDraft.pic } : {}),
     })
     if (result.success) {
@@ -670,13 +682,26 @@ export default function AdminInventory() {
   // FLOW-MANAGE_INV-06 — the three counters below were hardcoded ("12", "3",
   // "45") no matter what the catalog held. Each row's own threshold is used so
   // the badge agrees with the alert the backend raises for the same row.
+  //
+  // The counters read the SAME availability the row badge shows, so they add
+  // up to what is on screen:
+  //   • a pre-order item is not "out of stock" - it is produced to order and
+  //     stays orderable with nothing on the shelf (that was the old bug: every
+  //     0-stock pre-order was counted as out of stock);
+  //   • "low stock" is a shelf that is running down but not empty, so it and
+  //     "out of stock" never overlap.
   const inventoryStats = useMemo(() => {
     const stats = { low: 0, out: 0, preorder: 0 }
     productsList.forEach((p) => {
       const stock = Number(p.totalStock) || 0
-      if (stock === 0) stats.out += 1
-      else if (stock <= p.lowStockThreshold) stats.low += 1
-      if (p.preorder) stats.preorder += 1
+      if (p.preorder) {
+        stats.preorder += 1
+      } else if (stock === 0) {
+        stats.out += 1
+      }
+      if (stock > 0 && stock <= p.lowStockThreshold) {
+        stats.low += 1
+      }
     })
     return stats
   }, [productsList])
@@ -742,7 +767,7 @@ export default function AdminInventory() {
             </div>
             <div>
               <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">TOTAL PRODUCTS</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{filteredProducts.length}</h3>
+              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{productsList.length}</h3>
             </div>
           </div>
 
@@ -847,7 +872,8 @@ export default function AdminInventory() {
                 className="h-8 px-2.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:border-slate-300 focus:outline-none focus:ring-0 focus:border-slate-300 cursor-pointer"
               >
                 <option value="All">Availability ▾</option>
-                <option value="Regular">Regular</option>
+                <option value="In Stock">In Stock</option>
+                <option value="Out of Stock">Out of Stock</option>
                 <option value="Pre-order">Pre-order</option>
               </select>
 
@@ -1028,6 +1054,8 @@ export default function AdminInventory() {
                             className={`inline-block px-2.5 py-1 rounded-md text-2xs font-semibold ${
                               prod.availability === 'Pre-order'
                                 ? 'bg-orange-50 text-brand-orange border border-orange-200/60'
+                                : prod.availability === 'Out of Stock'
+                                ? 'bg-rose-50 text-rose-600 border border-rose-200/60'
                                 : 'bg-blue-50 text-blue-700 border border-blue-200/60'
                             }`}
                           >
@@ -1038,14 +1066,14 @@ export default function AdminInventory() {
                         {/* Stock (Total Units) */}
                         <td className="p-4">
                           {prod.availability === 'Pre-order' ? (
-                            <div className="flex items-center gap-1.5 text-blue-600 font-bold text-xs">
+                            <div className="flex items-center gap-1.5 text-brand-orange font-bold text-xs">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
                                 <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
                                 <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
                               </svg>
                               <div>
                                 <span>{prod.totalStock} units total</span>
-                                <span className="block text-2xs text-gray-400 font-normal">{prod.preorderTarget}</span>
+                                <span className="block text-2xs text-gray-400 font-normal">Produced on order</span>
                               </div>
                             </div>
                           ) : prod.lowStock ? (
@@ -1124,6 +1152,28 @@ export default function AdminInventory() {
                             )}
                             {!isStaff && (
                               <>
+                                {/* The pre-order switch: one click moves the whole
+                                    product (and every variation of it) between
+                                    "Pre-order" and "In Stock". */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setProductPreorder(prod.id, !prod.preorder)
+                                  }}
+                                  title={
+                                    prod.preorder
+                                      ? 'Switch this product back to In Stock'
+                                      : 'Mark this product as a pre-order (no stock needed)'
+                                  }
+                                  className={`px-3 py-1 rounded-md border text-xs font-semibold transition-colors cursor-pointer ${
+                                    prod.preorder
+                                      ? 'border-orange-200 bg-orange-50 text-brand-orange hover:bg-orange-100'
+                                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {prod.preorder ? 'Mark In Stock' : 'Mark Pre-order'}
+                                </button>
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -1435,7 +1485,11 @@ export default function AdminInventory() {
           isOpen={showAddProductModal}
           onClose={() => setShowAddProductModal(false)}
           title="Add New Product"
-          subtitle="Every variation needs a name and a stock count. Photos are optional."
+          subtitle={
+            newProdPreorder
+              ? 'Pre-order: every variation needs a name, but no stock - the item is produced to order.'
+              : 'Every variation needs a name and a stock count. Photos are optional.'
+          }
           size="wide"
           bodyClassName="modal-scroll"
           footer={
@@ -1567,6 +1621,27 @@ export default function AdminInventory() {
                   )}
                 </div>
               </div>
+
+              {/* PRE-ORDER: a pre-order item is produced to order, so it can be
+                  listed with nothing on the shelf. The switch covers the whole
+                  product - every variation of it follows - and it can be
+                  switched back to "In Stock" from the inventory list. */}
+              <label className="flex items-start gap-2.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={newProdPreorder}
+                  onChange={(e) => setNewProdPreorder(e.target.checked)}
+                  className="mt-0.5 rounded text-brand-orange focus:ring-0"
+                />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-xs font-semibold text-[var(--ink)]">This is a pre-order</span>
+                  <span className="block text-2xs text-[var(--muted)] mt-0.5">
+                    A pre-order item is produced to order, so no stock is needed to list it. It
+                    stays orderable with nothing on the shelf, and checkout cannot promise a
+                    delivery date for it - the store confirms when it is ready.
+                  </span>
+                </span>
+              </label>
 
               {/* FLOW-ADD_PROD-02/03: variations section */}
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
@@ -1730,7 +1805,9 @@ export default function AdminInventory() {
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <div>
-                          <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Stock</label>
+                          <label className="text-2xs text-[var(--muted)] font-medium block mb-1">
+                            {newProdPreorder ? 'Stock (optional)' : 'Stock'}
+                          </label>
                           <input
                             type="number"
                             min="0"
@@ -2084,6 +2161,23 @@ export default function AdminInventory() {
                   )}
                 </div>
               </div>
+              <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!variantDraft.preorder}
+                  onChange={(e) =>
+                    setVariantDraft((draft) => ({ ...draft, preorder: e.target.checked }))
+                  }
+                  className="mt-0.5 rounded text-brand-orange focus:ring-0"
+                />
+                <span className="flex-1 min-w-0">
+                  <span className="block font-semibold text-slate-700">Pre-order</span>
+                  <span className="block text-2xs text-slate-500 mt-0.5">
+                    This combination is produced to order. It needs no stock on the shelf, and
+                    checkout cannot promise a delivery date for it.
+                  </span>
+                </span>
+              </label>
               {variantFormError && (
                 <p className="field-error" role="alert">{variantFormError}</p>
               )}
