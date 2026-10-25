@@ -267,6 +267,7 @@ input[type="checkbox"].check-plain:checked::after {
   animation: spin 0.7s linear infinite;
 }
 
+
 /* ── Skeleton Loader ── */
 .skeleton {
   background: linear-gradient(90deg, var(--surface-3) 25%, var(--surface-4) 50%, var(--surface-3) 75%);
@@ -1150,3 +1151,4 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
   font-size: 0.875rem;
   line-height: 1.5;
 }
+

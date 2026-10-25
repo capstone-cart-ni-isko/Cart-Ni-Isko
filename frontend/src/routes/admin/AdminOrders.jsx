@@ -10,6 +10,7 @@ import StatusPill from '../../components/admin/StatusPill.jsx'
 import DataTable from '../../components/admin/DataTable.jsx'
 import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
 import DigitalReceipt from '../../components/ui/DigitalReceipt.jsx'
+import { StatCardsSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 import { searchOrders, sortOrders } from '../../services/orders.js'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import {
@@ -61,8 +62,6 @@ const SORT_OPTIONS = [
   { value: 'id:asc', label: 'Sort: Order ID (low to high)', sortBy: 'id', dir: 'asc' },
 ]
 
-const REFRESH_MS = 30000
-
 function sortClientSide(rows, sortValue) {
   const [sortBy, dir] = String(sortValue).split(':')
   const factor = dir === 'asc' ? 1 : -1
@@ -78,7 +77,7 @@ function sortClientSide(rows, sortValue) {
 export default function AdminOrders() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { orders: rawOrders = [], refreshOrders, updateOrderStatus, products = [] } = useAdmin()
+  const { orders: rawOrders = [], ordersLoading, refreshOrders, updateOrderStatus, products = [] } = useAdmin()
   const { showToast } = useToast()
 
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
@@ -114,11 +113,9 @@ export default function AdminOrders() {
 
   const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
 
-  // Keep the order list fresh on mount and every 30s (REQ-SD-02).
+  // Mount refresh; AdminContext owns the single 30s orders poll.
   useEffect(() => {
     refreshOrders()
-    const timer = setInterval(refreshOrders, REFRESH_MS)
-    return () => clearInterval(timer)
   }, [refreshOrders])
 
   // Debounced server-side search. The empty-query reset happens in the input's
@@ -494,6 +491,9 @@ export default function AdminOrders() {
         </div>
 
         {/* Stat cards */}
+        {ordersLoading && rawOrders.length === 0 ? (
+          <StatCardsSkeleton count={4} />
+        ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             title="Total orders"
@@ -542,6 +542,7 @@ export default function AdminOrders() {
             iconBg="bg-blue-50 text-blue-600"
           />
         </div>
+        )}
 
         {/* Filter bar */}
         <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2.5">
@@ -714,6 +715,8 @@ export default function AdminOrders() {
           selectedIds={selectedOrderIds}
           onSelectionChange={setSelectedOrderIds}
           defaultPageSize={10}
+          loading={ordersLoading && rawOrders.length === 0 && !searchQuery}
+          loadingMessage="Loading orders..."
           emptyTitle={orders.length === 0 ? 'No orders yet' : 'No orders match your filters'}
           emptyHint={
             orders.length === 0
@@ -946,9 +949,11 @@ export default function AdminOrders() {
                   <div className="flex justify-between">
                     <span className="text-[var(--muted)]">Amount received</span>
                     <span className="font-semibold text-[var(--ink)] text-sm">
-                      {activeOrderDetail.payGiven != null
+                      {activeOrderDetail.payGiven != null && Number(activeOrderDetail.payGiven) > 0
                         ? `₱${Number(activeOrderDetail.payGiven).toFixed(2)}`
-                        : 'Not paid yet'}
+                        : !activeOrderDetail.isPos
+                          ? `₱${(Number(activeOrderDetail.payDue || activeOrderDetail.total) || 0).toFixed(2)} (Paid Upfront)`
+                          : 'Not paid yet'}
                     </span>
                   </div>
                   <div className="flex justify-between">

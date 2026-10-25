@@ -6,6 +6,7 @@ import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import Button from '../../components/ui/Button.jsx'
+import { StatCardsSkeleton, TableSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { uploadImage } from '../../services/upload.js'
 import { empIsStaff } from '../../components/admin/schema.js'
@@ -84,7 +85,7 @@ function cartesian(axes) {
 }
 
 export default function AdminInventory() {
-  const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, setProductPreorder, updateVariant, removeVariant, products: backendProducts, currentAdminUser } = useAdmin()
+  const { addProduct, updateProduct, deleteProduct, unlistProduct, sellProduct, adjustStock, setProductPreorder, updateVariant, removeVariant, products: backendProducts, productsLoading, currentAdminUser } = useAdmin()
   const { showToast } = useToast()
 
   // Staff may VIEW the inventory but cannot add, edit, or delete products.
@@ -755,66 +756,70 @@ export default function AdminInventory() {
         </div>
 
         {/* 4 Metric Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Total Products */}
-          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                <line x1="12" y1="22.08" x2="12" y2="12" />
-              </svg>
+        {productsLoading ? (
+          <StatCardsSkeleton count={4} />
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Total Products */}
+            <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-md bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">TOTAL PRODUCTS</p>
+                <h3 className="text-xl font-bold text-slate-900 mt-0.5">{productsList.length}</h3>
+              </div>
             </div>
-            <div>
-              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">TOTAL PRODUCTS</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{productsList.length}</h3>
-            </div>
-          </div>
 
-          {/* Low Stock */}
-          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
+            {/* Low Stock */}
+            <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-md bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 shrink-0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">LOW STOCK</p>
+                <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.low}</h3>
+              </div>
             </div>
-            <div>
-              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">LOW STOCK</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.low}</h3>
-            </div>
-          </div>
 
-          {/* Out of Stock */}
-          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500 shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
+            {/* Out of Stock */}
+            <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-md bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500 shrink-0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">OUT OF STOCK</p>
+                <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.out}</h3>
+              </div>
             </div>
-            <div>
-              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">OUT OF STOCK</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.out}</h3>
-            </div>
-          </div>
 
-          {/* Pre-Orders */}
-          <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange shrink-0">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">PRE-ORDERS</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.preorder}</h3>
+            {/* Pre-Orders */}
+            <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-md bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange shrink-0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xs font-bold tracking-wider uppercase text-slate-400">PRE-ORDERS</p>
+                <h3 className="text-xl font-bold text-slate-900 mt-0.5">{inventoryStats.preorder}</h3>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Filter and Search Bar Toolbar */}
         <div className="bg-white rounded-lg p-3 border border-slate-200 space-y-2.5">
@@ -968,7 +973,10 @@ export default function AdminInventory() {
         </div>
 
         {/* Table Container */}
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        {productsLoading ? (
+          <TableSkeleton rows={8} columns={8} />
+        ) : (
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700 border-collapse">
               <thead>
@@ -1120,35 +1128,14 @@ export default function AdminInventory() {
                         </td>
 
                         {/* Actions - Rectangular Buttons */}
-                        <td className="p-4 text-right">
-                          <div className="inline-flex items-center gap-2">
+                        <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
                             {hasVariants && (
-                              <button
-                                type="button"
-                                onClick={() => toggleRow(prod.id)}
-                                aria-expanded={isExpanded}
-                                title={isExpanded ? 'Hide variants' : 'Show variants'}
-                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
-                                  isExpanded
-                                    ? 'bg-orange-100 text-orange-800'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
+                              <span
+                                className="h-8 px-2.5 inline-flex items-center justify-center rounded-md bg-gray-100 text-gray-700 text-xs font-semibold whitespace-nowrap select-none"
                               >
-                                <span>
-                                  {prod.variants.length} {prod.variants.length === 1 ? 'Variant' : 'Variants'}
-                                </span>
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2.5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                >
-                                  <polyline points="6 9 12 15 18 9" />
-                                </svg>
-                              </button>
+                                {prod.variants.length} {prod.variants.length === 1 ? 'Variant' : 'Variants'}
+                              </span>
                             )}
                             {!isStaff && (
                               <>
@@ -1166,7 +1153,7 @@ export default function AdminInventory() {
                                       ? 'Switch this product back to In Stock'
                                       : 'Mark this product as a pre-order (no stock needed)'
                                   }
-                                  className={`px-3 py-1 rounded-md border text-xs font-semibold transition-colors cursor-pointer ${
+                                  className={`h-8 px-3 inline-flex items-center justify-center rounded-md border text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                                     prod.preorder
                                       ? 'border-orange-200 bg-orange-50 text-brand-orange hover:bg-orange-100'
                                       : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
@@ -1182,7 +1169,7 @@ export default function AdminInventory() {
                                     else unlistProduct(prod.id)
                                   }}
                                   title={prod.disabled ? 'Sell (relist in catalog)' : 'Unlist from customer catalog'}
-                                  className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
+                                  className="h-8 px-3 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs whitespace-nowrap cursor-pointer"
                                 >
                                   {prod.disabled ? 'Sell' : 'Unlist'}
                                 </button>
@@ -1192,7 +1179,7 @@ export default function AdminInventory() {
                                     e.stopPropagation()
                                     navigate(`/admin/inventory/${prod.prodId ?? prod.id}?edit=1`)
                                   }}
-                                  className="px-3 py-1 rounded-md border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs cursor-pointer bg-white"
+                                  className="h-8 px-3 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs whitespace-nowrap cursor-pointer"
                                 >
                                   Edit
                                 </button>
@@ -1203,7 +1190,7 @@ export default function AdminInventory() {
                                     setDeleteTarget(prod)
                                   }}
                                   title="Delete product"
-                                  className="p-1 rounded-md border border-gray-200 bg-white text-gray-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                  className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                                 >
                                   ···
                                 </button>
@@ -1475,6 +1462,7 @@ export default function AdminInventory() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Add Product Modal — the shared popup shell; the form scrolls inside

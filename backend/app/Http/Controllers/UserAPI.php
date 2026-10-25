@@ -11,6 +11,7 @@ use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Item;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Models\Prodvar;
 use App\Models\Schedule;
@@ -938,7 +939,7 @@ class UserAPI extends Controller
     protected function orderPayload(Order $order): array
     {
         $order->loadMissing([
-            'items.bag.prodvar.product', 'pickup.appointment',
+            'items.bag.prodvar.product', 'pickup.appointment', 'pickup.payment',
             'delivery', 'parcel.delivery', 'parcel.payment', 'customer',
         ]);
 
@@ -973,14 +974,33 @@ class UserAPI extends Controller
         $payload['amount']     = $amount;
         $payload['total']      = $amount;
 
-        $payment = $order->parcel?->payment ?? null;
+        $payment = $order->parcel?->payment
+            ?? $order->pickup?->payment
+            ?? ($order->pay_reference ? Payment::where('pay_ref', (string) $order->pay_reference)->first() : null);
+
         if ($payment) {
+            $payload['pay_id']        = $payment->pay_id;
             $payload['pay_ref']       = $payment->pay_ref;
             $payload['pay_given']     = (float) $payment->pay_given;
             $payload['pay_due']       = (float) $payment->pay_due;
             $payload['pay_change']    = (float) $payment->pay_change;
             $payload['pay_reference'] = $payment->pay_ref;
+        } else {
+            $payload['pay_ref']       = $order->pay_reference;
+            $payload['pay_reference'] = $order->pay_reference;
+            $payload['pay_given']     = (float) $order->pay_received;
+            $payload['pay_due']       = (float) $amount;
+            $payload['pay_change']    = (float) $order->pay_change;
         }
+
+        // Storefront orders are paid upfront via PayMongo: ensure pay_given reflects paid amounts
+        if (((float) ($payload['pay_given'] ?? 0)) <= 0 && ((float) $order->pay_received) > 0) {
+            $payload['pay_given'] = (float) $order->pay_received;
+        }
+        $payload['pay_received'] = (float) $order->pay_received;
+        $payload['pay_method']   = OrdersAPI::payMethodFromReference(
+            $payload['pay_ref'] ?? $order->pay_reference
+        );
 
         $appointment = $order->pickup?->appointment ?? null;
         if ($appointment) {

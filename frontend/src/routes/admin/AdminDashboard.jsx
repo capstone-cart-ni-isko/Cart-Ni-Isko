@@ -14,6 +14,7 @@ import PosDrawer from '../../components/admin/dashboard/PosDrawer.jsx'
 import RestockDrawer from '../../components/admin/dashboard/RestockDrawer.jsx'
 import AddProductDrawer from '../../components/admin/dashboard/AddProductDrawer.jsx'
 import ExportSalesDrawer from '../../components/admin/dashboard/ExportSalesDrawer.jsx'
+import { StatCardsSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 
 import {
   fetchDashboardSnapshot,
@@ -70,7 +71,7 @@ function BookingMeter({ row }) {
 }
 
 export default function AdminDashboard() {
-  const { orders: rawOrders = [], refreshOrders, currentAdminUser } = useAdmin()
+  const { orders: rawOrders = [], ordersLoading, refreshOrders, currentAdminUser } = useAdmin()
   const [timeRange, setTimeRange] = useState('Today')
   const [snapshot, setSnapshot] = useState(null)
   const [orderFilter, setOrderFilter] = useState(null) // { key, label, match }
@@ -159,6 +160,9 @@ export default function AdminDashboard() {
         </AdminPageHeader>
 
         {/* ── KPI row (F-pattern: first thing scanned) ── */}
+        {ordersLoading && rawOrders.length === 0 ? (
+          <StatCardsSkeleton count={4} className="shrink-0" />
+        ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
           <KpiCard
             label="Gross sales"
@@ -201,6 +205,7 @@ export default function AdminDashboard() {
             icon={<Icon><polyline points="20 6 9 17 4 12" /></Icon>}
           />
         </div>
+        )}
 
         {/* ── Body: one grid with the same row proportions at every desktop size ──
             Left: pipeline + sales on top, recent orders below.

@@ -1,5 +1,6 @@
 import StatusPill from './StatusPill.jsx'
 import Avatar from '../ui/Avatar.jsx'
+import SkeletonBlock from '../ui/SkeletonBlock.jsx'
 import { fmtTime } from './scheduleTime.js'
 
 /**
@@ -25,8 +26,30 @@ export default function OfficerRosterGrid({
 }) {
   if (isLoading) {
     return (
-      <div className="py-10 text-center text-xs font-semibold text-slate-500 flex items-center justify-center gap-2">
-        <span className="spinner-circle !w-3.5 !h-3.5" /> Loading employees…
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" aria-hidden="true">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <div
+            key={index}
+            className="p-4 rounded-lg border border-slate-200 bg-white flex flex-col justify-between space-y-3"
+          >
+            <div className="flex items-center gap-3">
+              <SkeletonBlock className="w-9 h-9 rounded-full shrink-0" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <SkeletonBlock className="h-3.5 w-3/4 rounded" />
+                <SkeletonBlock className="h-2.5 w-1/2 rounded" />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <SkeletonBlock className="h-6 w-20 rounded-md" />
+            </div>
+
+            <div className="space-y-1.5 pt-2">
+              <SkeletonBlock className="h-8 w-full rounded-md" />
+              <SkeletonBlock className="h-6 w-full rounded-md" />
+            </div>
+          </div>
+        ))}
       </div>
     )
   }

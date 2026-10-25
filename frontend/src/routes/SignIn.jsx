@@ -265,51 +265,130 @@ function SignIn() {
 
             {/* Cheerful Student Vector Illustration (Stylized Isko & Iska) */}
             <svg viewBox="0 0 240 280" className="w-64 xl:w-76 h-auto drop-shadow-lg" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Waving Student (Left) */}
+              {/* ISKO (Left) */}
               <g className="animate-fade-in">
-                {/* Waving Arm */}
-                <path d="M72 105 L30 45" stroke="#FED7AA" strokeWidth="14" strokeLinecap="round" />
-                <circle cx="28" cy="42" r="10" fill="#FED7AA" />
-                {/* Head & Hair */}
-                <circle cx="85" cy="80" r="24" fill="#FED7AA" />
-                <path d="M63 76 Q85 45 107 72 Q100 58 75 62 Z" fill="#0F172A" />
+                {/* Raised Left Arm (Naturally proportioned with orange sleeve and bent elbow cheering up towards BU card) */}
+                <path d="M 64 105 L 46 76" stroke="#EA580C" strokeWidth="14" strokeLinecap="round" />
+                <path d="M 46 76 L 38 48" stroke="#FED7AA" strokeWidth="11" strokeLinecap="round" />
+                <circle cx="37" cy="44" r="8" fill="#FED7AA" />
+
+                {/* Head base */}
+                <circle cx="82" cy="78" r="23" fill="#FED7AA" />
+                {/* Ears */}
+                <circle cx="59" cy="80" r="4.5" fill="#FED7AA" />
+                <circle cx="105" cy="80" r="4.5" fill="#FED7AA" />
+
+                {/* Isko Hair (Full, stylish, neat student haircut with volume and fringe — no bald comb-over) */}
+                <path d="M 57 80 C 54 52, 70 42, 84 42 C 98 42, 110 52, 107 80 C 103 66, 94 60, 84 62 C 73 64, 65 72, 57 80 Z" fill="#0F172A" />
+                <path d="M 61 74 C 70 66, 80 65, 87 68 C 94 65, 102 68, 105 76 C 100 70, 92 68, 85 71 C 77 74, 68 77, 61 74 Z" fill="#1E293B" />
+
+                {/* Eyebrows */}
+                <path d="M 70 72 Q 75 69 80 71" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" />
+                <path d="M 86 71 Q 91 69 96 72" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" />
+
+                {/* Eyes with sparkle */}
+                <circle cx="75" cy="79" r="2.5" fill="#0F172A" />
+                <circle cx="76" cy="78" r="0.8" fill="#FFFFFF" />
+                <circle cx="91" cy="79" r="2.5" fill="#0F172A" />
+                <circle cx="92" cy="78" r="0.8" fill="#FFFFFF" />
+
+                {/* Rosy Cheeks */}
+                <ellipse cx="71" cy="85" rx="3.5" ry="2" fill="#F87171" opacity="0.4" />
+                <ellipse cx="95" cy="85" rx="3.5" ry="2" fill="#F87171" opacity="0.4" />
+
                 {/* Smile */}
-                <path d="M78 86 Q85 94 92 86" stroke="#000000" strokeWidth="2.5" strokeLinecap="round" />
-                <circle cx="78" cy="78" r="2.5" fill="#000000" />
-                <circle cx="92" cy="78" r="2.5" fill="#000000" />
-                {/* Orange Polo / Hoodie */}
-                <path d="M60 104 L110 104 L118 180 L52 180 Z" fill="#EA580C" rx="12" />
-                <path d="M60 104 L44 148" stroke="#EA580C" strokeWidth="12" strokeLinecap="round" />
-                {/* Sling Bag Strap */}
-                <line x1="64" y1="104" x2="114" y2="175" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
-                <rect x="100" y="160" width="22" height="26" rx="4" fill="#0F172A" />
-                {/* Pants & Shoes */}
-                <rect x="62" y="180" width="18" height="70" rx="6" fill="#334155" />
-                <rect x="88" y="180" width="18" height="70" rx="6" fill="#334155" />
-                <ellipse cx="69" cy="254" rx="12" ry="6" fill="#000000" />
-                <ellipse cx="99" cy="254" rx="12" ry="6" fill="#000000" />
+                <path d="M 78 86 Q 83 93 88 86" stroke="#0F172A" strokeWidth="2.2" strokeLinecap="round" />
+
+                {/* Right Arm (Relaxed by side) */}
+                <path d="M 102 105 L 110 136" stroke="#EA580C" strokeWidth="13" strokeLinecap="round" />
+                <path d="M 110 136 L 109 152" stroke="#FED7AA" strokeWidth="10" strokeLinecap="round" />
+                <circle cx="108" cy="154" r="5.5" fill="#FED7AA" />
+
+                {/* Orange Shirt / Polo */}
+                <path d="M 58 104 L 106 104 L 112 176 L 52 176 Z" fill="#EA580C" rx="10" />
+                <path d="M 74 104 L 82 113 L 90 104" stroke="#C2410C" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+                {/* Crossbody Bag Strap & Bag */}
+                <line x1="62" y1="104" x2="110" y2="172" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
+                <rect x="98" y="156" width="22" height="24" rx="5" fill="#0F172A" />
+                <rect x="105" y="166" width="8" height="4" rx="1" fill="#475569" />
+
+                {/* Pants */}
+                <rect x="62" y="176" width="17" height="70" rx="5" fill="#334155" />
+                <rect x="85" y="176" width="17" height="70" rx="5" fill="#334155" />
+
+                {/* Shoes */}
+                <ellipse cx="70" cy="252" rx="12" ry="6" fill="#0F172A" />
+                <path d="M 60 254 Q 70 256 80 254" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+                <ellipse cx="93" cy="252" rx="12" ry="6" fill="#0F172A" />
+                <path d="M 83 254 Q 93 256 103 254" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
               </g>
 
-              {/* Companion Student with backpack (Right) */}
+              {/* ISKA (Right) */}
               <g className="animate-fade-in">
-                {/* Head & Hair */}
-                <circle cx="155" cy="90" r="24" fill="#FED7AA" />
-                <path d="M133 86 Q155 55 177 82 Q170 65 145 70 Z" fill="#0F172A" />
-                {/* Smile & Eyes */}
-                <path d="M148 96 Q155 104 162 96" stroke="#000000" strokeWidth="2.5" strokeLinecap="round" />
-                <circle cx="148" cy="88" r="2.5" fill="#000000" />
-                <circle cx="162" cy="88" r="2.5" fill="#000000" />
-                {/* BU Blue Shirt */}
-                <path d="M130 114 L180 114 L186 186 L124 186 Z" fill="#0284C7" rx="12" />
-                {/* Binder in hand */}
-                <rect x="118" y="138" width="18" height="24" rx="2" fill="#0369A1" />
-                {/* Sling / Backpack strap */}
-                <line x1="172" y1="114" x2="134" y2="182" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
-                {/* Dark Jeans & Shoes */}
-                <rect x="132" y="186" width="18" height="66" rx="6" fill="#0F172A" />
-                <rect x="158" y="186" width="18" height="66" rx="6" fill="#0F172A" />
-                <ellipse cx="139" cy="256" rx="12" ry="6" fill="#FFFFFF" stroke="#000000" strokeWidth="2" />
-                <ellipse cx="169" cy="256" rx="12" ry="6" fill="#FFFFFF" stroke="#000000" strokeWidth="2" />
+                {/* Back hair volume resting on shoulders */}
+                <path d="M 134 88 C 126 105, 126 132, 134 142 C 140 136, 140 120, 140 110 L 176 110 C 176 120, 176 136, 182 142 C 190 132, 190 105, 182 88 Z" fill="#0F172A" />
+
+                {/* Head base */}
+                <circle cx="158" cy="88" r="23" fill="#FED7AA" />
+                {/* Ears */}
+                <circle cx="135" cy="90" r="4.5" fill="#FED7AA" />
+                <circle cx="181" cy="90" r="4.5" fill="#FED7AA" />
+
+                {/* Iska Hair (Cute bob/shoulder length with bangs and side framing locks — full volume) */}
+                <path d="M 134 88 C 130 58, 145 48, 158 48 C 172 48, 186 58, 182 88 C 178 74, 170 68, 163 70 C 156 72, 150 67, 143 69 C 137 71, 135 78, 134 88 Z" fill="#0F172A" />
+                <path d="M 134 88 C 133 98, 134 110, 137 118 C 139 110, 138 98, 137 90 Z" fill="#1E293B" />
+                <path d="M 182 88 C 183 98, 182 110, 179 118 C 177 110, 178 98, 179 90 Z" fill="#1E293B" />
+
+                {/* Eyebrows */}
+                <path d="M 146 81 Q 150 78 154 80" stroke="#0F172A" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M 162 80 Q 166 78 170 81" stroke="#0F172A" strokeWidth="1.8" strokeLinecap="round" />
+
+                {/* Eyes with sparkle & lash */}
+                <circle cx="150" cy="87" r="2.5" fill="#0F172A" />
+                <circle cx="151" cy="86" r="0.8" fill="#FFFFFF" />
+                <path d="M 148 84 L 147 83" stroke="#0F172A" strokeWidth="1.2" strokeLinecap="round" />
+
+                <circle cx="166" cy="87" r="2.5" fill="#0F172A" />
+                <circle cx="167" cy="86" r="0.8" fill="#FFFFFF" />
+                <path d="M 168 84 L 169 83" stroke="#0F172A" strokeWidth="1.2" strokeLinecap="round" />
+
+                {/* Rosy Cheeks */}
+                <ellipse cx="145" cy="93" rx="3.5" ry="2" fill="#F87171" opacity="0.5" />
+                <ellipse cx="171" cy="93" rx="3.5" ry="2" fill="#F87171" opacity="0.5" />
+
+                {/* Smile */}
+                <path d="M 154 94 Q 158.5 100 163 94" stroke="#0F172A" strokeWidth="2.2" strokeLinecap="round" />
+
+                {/* BU Blue Shirt Body */}
+                <path d="M 132 112 L 182 112 L 188 184 L 126 184 Z" fill="#0284C7" rx="10" />
+                <path d="M 150 112 L 157 120 L 164 112" stroke="#0369A1" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+
+                {/* Binder in hands */}
+                <rect x="135" y="134" width="22" height="28" rx="3" fill="#0369A1" />
+                <line x1="139" y1="134" x2="139" y2="162" stroke="#38BDF8" strokeWidth="2" />
+                <rect x="144" y="142" width="9" height="12" rx="1" fill="#FFFFFF" opacity="0.85" />
+
+                {/* Left Arm holding binder */}
+                <path d="M 134 112 L 126 136" stroke="#0284C7" strokeWidth="12" strokeLinecap="round" />
+                <path d="M 126 136 L 138 146" stroke="#FED7AA" strokeWidth="9" strokeLinecap="round" />
+                <circle cx="138" cy="146" r="4.5" fill="#FED7AA" />
+
+                {/* Right Arm holding binder */}
+                <path d="M 180 112 L 176 136" stroke="#0284C7" strokeWidth="12" strokeLinecap="round" />
+                <path d="M 176 136 L 157 146" stroke="#FED7AA" strokeWidth="9" strokeLinecap="round" />
+                <circle cx="157" cy="146" r="4.5" fill="#FED7AA" />
+
+                {/* Backpack strap */}
+                <line x1="174" y1="112" x2="136" y2="180" stroke="#0F172A" strokeWidth="5" strokeLinecap="round" />
+
+                {/* Dark Jeans */}
+                <rect x="134" y="184" width="17" height="68" rx="5" fill="#0F172A" />
+                <rect x="157" y="184" width="17" height="68" rx="5" fill="#0F172A" />
+
+                {/* White Shoes with black outline */}
+                <ellipse cx="142" cy="254" rx="12" ry="6" fill="#FFFFFF" stroke="#0F172A" strokeWidth="2" />
+                <ellipse cx="165" cy="254" rx="12" ry="6" fill="#FFFFFF" stroke="#0F172A" strokeWidth="2" />
               </g>
             </svg>
           </div>

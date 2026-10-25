@@ -12,8 +12,10 @@ import { ApiErrorText } from '../components/ui/ApiErrorBoundary.jsx'
 import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import paymongoLogo from '../assets/icons/brand/paymongo-logo.png'
 import { getImageUrl } from '../utils/imageUtils.js'
 import OrderPlacedView from '../components/orders/OrderPlacedView.jsx'
+import { fetchOrder } from '../services/orders.js'
 import {
   clearCheckoutSlot,
   createPaymentIntent,
@@ -327,12 +329,12 @@ function CheckoutPlaceholder() {
         let failure = null
         // PayMongo can take a few seconds to settle after the redirect, so a
         // "paid" return is re-checked briefly before calling it pending.
-        const attempts = status === 'cancelled' ? 1 : 4
+        const attempts = status === 'cancelled' ? 1 : 5
         for (let attempt = 0; attempt < attempts; attempt += 1) {
-          if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2000))
+          if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1500))
           if (!mountedRef.current) return
           try {
-            res = await verifyPaymentStatus({ ord_id: Number(orderId) })
+            res = await verifyPaymentStatus({ ord_id: Number(orderId), status })
             failure = null
           } catch (err) {
             failure = err
@@ -372,12 +374,21 @@ function CheckoutPlaceholder() {
           return
         }
 
-        if (res?.data?.paid === true) {
+        if (res?.data?.paid === true || status === 'paid' || status === 'succeeded') {
           clearCheckoutSlot()
           clearSelectedItems()
+          let fullOrder = res?.data?.order
+          if (!fullOrder || !fullOrder.items || fullOrder.items.length === 0) {
+            try {
+              const fetched = await fetchOrder(Number(orderId))
+              if (fetched) fullOrder = fetched
+            } catch {
+              /* ignore and use fallback */
+            }
+          }
           return {
-            order: res.data.order || { ord_id: Number(orderId) },
-            payRef: res.data.pay_ref || null,
+            order: fullOrder || { ord_id: Number(orderId), ord_amount: totalDue },
+            payRef: res?.data?.pay_ref || null,
           }
         }
 
@@ -639,17 +650,36 @@ function CheckoutPlaceholder() {
               {dispatchType === 'pickup' && (
                 <div className="space-y-2">
                   {slot ? (
-                    <div className="p-3.5 rounded-lg border border-orange-200 bg-orange-50/70 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900">Pickup slot selected</p>
-                        <p className="text-xs text-slate-600 truncate">
-                          {String(slot.appoint_start).replace('T', ' ')} · claimed with your order
-                        </p>
+                    <div className="p-3.5 rounded-xl border border-orange-200 bg-orange-50/70 flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex items-start gap-2.5">
+                        <div className="mt-0.5 shrink-0 w-8 h-8 rounded-lg bg-brand-orange/10 flex items-center justify-center text-brand-orange">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                            <line x1="16" y1="2" x2="16" y2="6" />
+                            <line x1="8" y1="2" x2="8" y2="6" />
+                            <line x1="3" y1="10" x2="21" y2="10" />
+                          </svg>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 leading-tight">Pickup slot selected</p>
+                          <p className="text-xs text-brand-orange font-medium mt-0.5">
+                            {(() => {
+                              const d = new Date(String(slot.appoint_start).replace(' ', 'T'))
+                              if (Number.isNaN(d.getTime())) return String(slot.appoint_start).replace('T', ' ')
+                              const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+                              const month   = d.toLocaleDateString('en-US', { month: 'short' })
+                              const day     = d.getDate()
+                              const time    = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+                              return `${weekday}, ${month} ${day} · ${time}`
+                            })()}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Claimed with your order at checkout</p>
+                        </div>
                       </div>
                       <button
                         type="button"
                         onClick={bookPickupSlot}
-                        className="shrink-0 h-8 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+                        className="shrink-0 h-8 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer whitespace-nowrap"
                       >
                         Change slot
                       </button>
@@ -828,26 +858,69 @@ function CheckoutPlaceholder() {
               {/* Payment: preorders settle online (rule 55) - pickup AND delivery,
                   delivery fee included. There is no pay-at-store tender left, so
                   the gateway is not a choice. */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Payment Details
-                </p>
-                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-slate-50/60 lg:bg-white lg:dark:bg-[var(--surface)]">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange shrink-0 mt-0.5">
-                    <path d="M21 12V7H5V7M21 17V7M3 17H21M5 17V12M19 17V12" />
-                  </svg>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">PayMongo (Online)</p>
-                    <p className="text-xs text-gray-500">
-                      You will be redirected to PayMongo to complete payment securely. Pickup and
-                      courier delivery are both paid online with the order.
+              {/* Payment Details with PayMongo Branding & Clear Hierarchy */}
+              <div className="space-y-3 pt-3 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    Payment Method
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/40 p-3.5 space-y-3 shadow-2xs">
+                  {/* Gateway Logo & Title */}
+                  <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-emerald-100">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-white px-2 py-1 rounded-md border border-slate-200/90 shadow-2xs flex items-center">
+                        <img
+                          src={paymongoLogo}
+                          alt="PayMongo"
+                          className="h-5 w-auto object-contain"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-900 leading-tight">PayMongo Gateway</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Explanation & Text Hierarchy */}
+                  <div className="space-y-2 text-xs text-gray-700">
+                    <p className="font-semibold text-gray-900 text-xs flex items-center gap-1.5">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600 shrink-0">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                      How your payment works:
                     </p>
+                    <ul className="space-y-1.5 pl-5 list-disc text-2xs text-gray-600 leading-relaxed">
+                      <li>
+                        <strong className="text-gray-800">Redirect to PayMongo:</strong> You will be temporarily redirected to PayMongo's secure payment page.
+                      </li>
+                      <li>
+                        <strong className="text-gray-800">Multiple tender options:</strong> Pay conveniently using <strong>GCash, Maya, GrabPay, Visa, Mastercard,</strong> or online bank transfers.
+                      </li>
+                      <li>
+                        <strong className="text-gray-800">Immediate confirmation:</strong> Once completed, you will be automatically returned to Tindahan ni Isko with your confirmed order receipt and QR code.
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Upfront payment reminder badge */}
+                  <div className="p-2 rounded-lg bg-white/90 border border-emerald-200 text-2xs text-emerald-800 flex items-start gap-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    <span>
+                      <strong>Upfront Payment Required:</strong> Both in-stock and pre-order merchandise are paid upfront to guarantee item allocation and production scheduling.
+                    </span>
                   </div>
                 </div>
-                <p className="text-[11px] text-gray-400">
-                  Amount due: <span className="font-semibold text-gray-600">₱{totalDue.toFixed(2)}</span> —
-                  a one-time phone code is required before the order is saved.
-                </p>
+
+                <div className="flex items-center justify-between text-xs text-gray-500 pt-0.5 px-0.5">
+                  <span>Amount to be charged:</span>
+                  <span className="font-bold text-gray-900 text-sm">₱{totalDue.toFixed(2)}</span>
+                </div>
               </div>
 
               {error && <ApiErrorText error={{ message: error }} />}

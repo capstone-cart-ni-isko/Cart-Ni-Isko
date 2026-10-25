@@ -17,7 +17,6 @@ import Button from '../../components/ui/Button.jsx'
 // Dispatch   = PUT /tracking/update {track_id: deliver_id, status: TRANSIT}.
 // Close      = PUT /tracking/close {track_id: parcel_id} (marks DELIVERED).
 
-const REFRESH_MS = 30000 // REQ-SD-02: keep the delivery queues fresh
 const HISTORY_STATUSES = new Set(['CLAIMED', 'RETURNED', 'CANCELLED'])
 
 const ISSUE_REASONS = {
@@ -775,14 +774,12 @@ export default function AdminDelivery() {
     })
   }, [])
 
-  // Keep the order list fresh on mount and every 30s (REQ-SD-02).
+  // Mount refresh; AdminContext owns the single 30s orders poll.
   useEffect(() => {
     refreshOrders()
-    const timer = setInterval(refreshOrders, REFRESH_MS)
-    return () => clearInterval(timer)
   }, [refreshOrders])
 
-  // Active tracks are re-probed whenever the order list refreshes (30s).
+  // Active tracks are re-probed whenever the shared order list refreshes.
   useEffect(() => {
     probe(activeIds)
   }, [probe, activeIds])

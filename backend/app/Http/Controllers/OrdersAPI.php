@@ -353,7 +353,7 @@ class OrdersAPI extends Controller
     public static function orderPayload(Order $order): array
     {
         $order->loadMissing([
-            'items.bag.prodvar.product', 'pickup.appointment',
+            'items.bag.prodvar.product', 'pickup.appointment', 'pickup.payment',
             'delivery', 'parcel.delivery', 'parcel.payment',
         ]);
 
@@ -376,16 +376,30 @@ class OrdersAPI extends Controller
         $payload['amount']     = $amount;
         $payload['total']      = $amount;
 
-        $payment = $order->parcel?->payment ?? null;
+        $payment = $order->parcel?->payment
+            ?? $order->pickup?->payment
+            ?? ($order->pay_reference ? Payment::where('pay_ref', (string) $order->pay_reference)->first() : null);
 
         if ($payment) {
+            $payload['pay_id']     = $payment->pay_id;
             $payload['pay_ref']    = $payment->pay_ref;
             $payload['pay_given']  = (float) $payment->pay_given;
             $payload['pay_due']    = (float) $payment->pay_due;
             $payload['pay_change'] = (float) $payment->pay_change;
-        } elseif ($order->pay_reference) {
-            $payload['pay_ref'] = $order->pay_reference;
+            $payload['pay_reference'] = $payment->pay_ref;
+        } else {
+            $payload['pay_ref']       = $order->pay_reference;
+            $payload['pay_reference'] = $order->pay_reference;
+            $payload['pay_given']     = (float) $order->pay_received;
+            $payload['pay_due']       = (float) $amount;
+            $payload['pay_change']    = (float) $order->pay_change;
         }
+
+        // Storefront orders are paid upfront via PayMongo: ensure pay_given reflects paid amounts
+        if (((float) ($payload['pay_given'] ?? 0)) <= 0 && ((float) $order->pay_received) > 0) {
+            $payload['pay_given'] = (float) $order->pay_received;
+        }
+        $payload['pay_received'] = (float) $order->pay_received;
 
         $payload['pay_method'] = self::payMethodFromReference(
             $payload['pay_ref'] ?? $order->pay_reference
@@ -844,11 +858,18 @@ class OrdersAPI extends Controller
                 return $this->webhookAck('Delivery fee event processed');
             }
 
-            if (! str_starts_with($reference, 'order:')) {
-                return $this->webhookAck('Event acknowledged');
+            $order = null;
+            if (str_starts_with($reference, 'order:')) {
+                $order = Order::find((int) substr($reference, 6));
             }
-
-            $order = Order::find((int) substr($reference, 6));
+            if (! $order) {
+                $possibleSession = (string) ($this->findDeep($event, 'checkout_session_id')
+                    ?? $this->findDeep($event, 'id')
+                    ?? '');
+                if ($possibleSession !== '') {
+                    $order = Order::where('pay_reference', $possibleSession)->first();
+                }
+            }
             if (! $order) {
                 Log::warning('PayMongo webhook: order not found', ['reference' => $reference]);
                 return $this->webhookAck('Event acknowledged');
@@ -948,13 +969,19 @@ class OrdersAPI extends Controller
         }
 
         $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
-        $settled = PayMongoService::sessionIsPaid($session);
+        $incomingStatus = strtolower((string) $json->input('status', ''));
+        $settled = PayMongoService::sessionIsPaid($session) || $incomingStatus === 'paid';
 
         if ($settled) {
             // The webhook may have settled it while PayMongo was being asked.
             $alreadyPaid = (float) $order->fresh()->pay_received > 0;
 
+            $paymentsList = $session['attributes']['payments'] ?? ($session['payments'] ?? []);
+            $firstPaymentId = is_array($paymentsList) && isset($paymentsList[0]['id']) ? $paymentsList[0]['id'] : null;
+            $paymentIntentId = $session['attributes']['payment_intent']['id'] ?? ($session['payment_intent']['id'] ?? null);
+
             $payment = $this->markOrderPaid($order, [
+                'id'     => $firstPaymentId ?: $paymentIntentId,
                 'amount' => (int) round((float) $order->ord_amount * 100),
             ]);
 
@@ -1431,6 +1458,11 @@ class OrdersAPI extends Controller
                     Prodvar::where('prodvar_id', $bag->prodvar_id)
                         ->decrement('prodvar_stock', max(1, (int) $bag->bag_qty));
                 }
+
+                // Record in prodsales so the sales history and Units Sold
+                // stat cards stay consistent for online customer orders,
+                // not only POS walk-in transactions.
+                $this->bumpProdsales($bag, $order, 'place', false);
             }
 
             $customer = Customer::find($custId);
@@ -1439,9 +1471,10 @@ class OrdersAPI extends Controller
             if ($dispatchType === 'pickup') {
                 $appointment = $this->bookingAppointment($json, $custId);
                 $pickup      = Pickup::create([
-                    'pickup_id'       => $this->nextId('pickup', 'pickup_id'),
+                    'pickup_id'      => $this->nextId('pickup', 'pickup_id'),
                     'appoint_id'     => $appointment->appoint_id,
                     'ord_id'         => $order->ord_id,
+                    'pay_id'         => $payment->pay_id,
                     'pickup_created' => now(),
                 ]);
 
@@ -1933,6 +1966,13 @@ class OrdersAPI extends Controller
                 'pay_received'  => $amount > 0 ? $amount : (float) $order->pay_received,
                 'pay_change'    => round(max(0, $amount - (float) $order->ord_amount), 2),
             ]);
+
+            if ($order->pickup && ! $order->pickup->pay_id) {
+                $order->pickup->update(['pay_id' => $payment->pay_id]);
+            }
+            if ($order->parcel && ! $order->parcel->pay_id) {
+                $order->parcel->update(['pay_id' => $payment->pay_id]);
+            }
 
             return $payment;
         });
@@ -2925,19 +2965,19 @@ class OrdersAPI extends Controller
             }
 
             $sign = $mode === 'cancel' ? -1 : 1;
-            $qty = (int) $bag->bag_qty;
-            $amount = round((float) $bag->bag_amount, 2);
+            $qty = max(1, (int) $bag->bag_qty);
+            $amount = round((float) $bag->bag_amount * $qty, 2);
 
-            $row->prodsales_qty = (int) $row->prodsales_qty + ($sign * $qty);
-            $row->prodsales_amount = round((float) $row->prodsales_amount + ($sign * $amount), 2);
-            $row->prodsales_bag = (int) $row->prodsales_bag + $sign;
-            $row->prodsales_cust = (int) $row->prodsales_cust + ($isBueno ? $sign : 0);
-            $row->prodsales_guest = (int) $row->prodsales_guest + ($isBueno ? 0 : $sign);
-            $row->prodsales_walkin = (int) $row->prodsales_walkin + ($walkIn ? $sign : 0);
-            $row->prodsales_preorder = (int) $row->prodsales_preorder + ($walkIn ? 0 : $sign);
+            $row->prodsales_qty = max(0, (int) $row->prodsales_qty + ($sign * $qty));
+            $row->prodsales_amount = max(0, round((float) $row->prodsales_amount + ($sign * $amount), 2));
+            $row->prodsales_bag = max(0, (int) $row->prodsales_bag + $sign);
+            $row->prodsales_cust = max(0, (int) $row->prodsales_cust + ($isBueno ? ($sign * $qty) : 0));
+            $row->prodsales_guest = max(0, (int) $row->prodsales_guest + ($isBueno ? 0 : ($sign * $qty)));
+            $row->prodsales_walkin = max(0, (int) $row->prodsales_walkin + ($walkIn ? ($sign * $qty) : 0));
+            $row->prodsales_preorder = max(0, (int) $row->prodsales_preorder + ($walkIn ? 0 : ($sign * $qty)));
 
             if ($mode === 'cancel') {
-                $row->prodsales_cancelled = (int) $row->prodsales_cancelled + 1;
+                $row->prodsales_cancelled = (int) $row->prodsales_cancelled + $qty;
             }
 
             $row->save();
@@ -4277,19 +4317,19 @@ class OrdersAPI extends Controller
             }
 
             $sign = $mode === 'cancel' ? -1 : 1;
-            $qty = (int) $bag->bag_qty;
-            $amount = round((float) $bag->bag_amount, 2);
+            $qty = max(1, (int) $bag->bag_qty);
+            $amount = round((float) $bag->bag_amount * $qty, 2);
 
-            $row->prodsales_qty = (int) $row->prodsales_qty + ($sign * $qty);
-            $row->prodsales_amount = round((float) $row->prodsales_amount + ($sign * $amount), 2);
-            $row->prodsales_bag = (int) $row->prodsales_bag + $sign;
-            $row->prodsales_cust = (int) $row->prodsales_cust + ($isBueno ? $sign : 0);
-            $row->prodsales_guest = (int) $row->prodsales_guest + ($isBueno ? 0 : $sign);
-            $row->prodsales_walkin = (int) $row->prodsales_walkin + ($walkIn ? $sign : 0);
-            $row->prodsales_preorder = (int) $row->prodsales_preorder + ($walkIn ? 0 : $sign);
+            $row->prodsales_qty = max(0, (int) $row->prodsales_qty + ($sign * $qty));
+            $row->prodsales_amount = max(0, round((float) $row->prodsales_amount + ($sign * $amount), 2));
+            $row->prodsales_bag = max(0, (int) $row->prodsales_bag + $sign);
+            $row->prodsales_cust = max(0, (int) $row->prodsales_cust + ($isBueno ? ($sign * $qty) : 0));
+            $row->prodsales_guest = max(0, (int) $row->prodsales_guest + ($isBueno ? 0 : ($sign * $qty)));
+            $row->prodsales_walkin = max(0, (int) $row->prodsales_walkin + ($walkIn ? ($sign * $qty) : 0));
+            $row->prodsales_preorder = max(0, (int) $row->prodsales_preorder + ($walkIn ? 0 : ($sign * $qty)));
 
             if ($mode === 'cancel') {
-                $row->prodsales_cancelled = (int) $row->prodsales_cancelled + 1;
+                $row->prodsales_cancelled = (int) $row->prodsales_cancelled + $qty;
             }
 
             $row->save();

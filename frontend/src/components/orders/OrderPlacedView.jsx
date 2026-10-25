@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { formatPrice } from '../ui/PriceTag.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import paymongoLogo from '../../assets/icons/brand/paymongo-logo.png'
 
 function formatDateTime(value, withTime = true) {
   if (!value) return null
@@ -16,29 +17,30 @@ function formatDateTime(value, withTime = true) {
 }
 
 /**
- * Shown on /checkout once the PayMongo return has been CONFIRMED by
- * POST /checkout/payment/status - never on the redirect alone. `order` is the
- * server's orderPayload(), so everything here is what was actually saved.
+ * Shown on /checkout once the PayMongo return has completed.
+ * Displays comprehensive order summary, PayMongo transaction confirmation,
+ * item breakdown, claiming details, and clear action buttons to view details
+ * or continue browsing the store.
  */
 function OrderPlacedView({ order, payRef, customerName }) {
   const navigate = useNavigate()
   const items = Array.isArray(order?.items) ? order.items : []
   const isDelivery = order?.dispatch_type === 'delivery' || order?.ord_claiming === 'delivery'
   const total = Number(order?.ord_amount ?? order?.total ?? 0)
-  const paid = Number(order?.pay_given ?? 0) || total
+  const paid = Number(order?.pay_given ?? order?.pay_received ?? 0) || total
   const deliveryFee = isDelivery ? Number(order?.deliver_fee_charged ?? 0) : 0
   const firstName = String(customerName || '').trim().split(/\s+/)[0]
   const reference = payRef || order?.pay_ref || order?.pay_reference
 
   return (
-    <div className="w-full max-w-xl bg-white rounded-xl p-6 md:p-8 border border-slate-100 space-y-6 animate-scale-in">
+    <div className="w-full max-w-xl bg-white rounded-2xl p-6 md:p-8 border border-slate-200/90 shadow-sm space-y-6 animate-scale-in">
       <div className="flex justify-center">
-        <img src={logo} alt="Tindahan ni Isko" className="h-8 object-contain" />
+        <img src={logo} alt="Tindahan ni Isko" className="h-9 object-contain" />
       </div>
 
       {/* Assurance header */}
       <div className="text-center space-y-3">
-        <div className="mx-auto w-16 h-16 rounded-full bg-green-50 flex items-center justify-center">
+        <div className="mx-auto w-16 h-16 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center shadow-xs">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -46,75 +48,105 @@ function OrderPlacedView({ order, payRef, customerName }) {
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="w-8 h-8 text-green-600"
+            className="w-8 h-8 text-emerald-600"
             aria-hidden="true"
           >
             <path d="M20 6 9 17l-5-5" />
           </svg>
         </div>
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Order placed and paid</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">Order Placed & Paid!</h1>
+          <p className="text-sm text-gray-600 mt-1.5 max-w-md mx-auto leading-relaxed">
             {firstName ? `Thank you, ${firstName}! ` : 'Thank you! '}
-            We received your payment and your order is now being processed.
+            Your transaction has been securely processed via PayMongo. Your order is now confirmed and being prepared.
           </p>
         </div>
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 bg-green-50 text-green-700 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-600" />
-          Payment confirmed
-        </span>
+        <div className="flex items-center justify-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+            Payment Verified & Paid Upfront
+          </span>
+        </div>
       </div>
 
       {/* Order + payment summary */}
-      <div className="rounded-lg border border-slate-100 divide-y divide-slate-100 text-sm">
-        <div className="flex justify-between gap-3 p-3.5">
-          <span className="text-gray-500">Order number</span>
-          <span className="font-semibold text-gray-900">#{order?.ord_id}</span>
+      <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm overflow-hidden bg-white shadow-2xs">
+        <div className="flex justify-between items-center gap-3 p-3.5 bg-slate-50/70">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Transaction Details</span>
+          <span className="font-mono text-xs font-semibold text-gray-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+            Order #{order?.ord_id}
+          </span>
         </div>
         {order?.ord_created && (
           <div className="flex justify-between gap-3 p-3.5">
-            <span className="text-gray-500">Placed on</span>
+            <span className="text-gray-500">Date & Time</span>
             <span className="font-medium text-gray-800">{formatDateTime(order.ord_created)}</span>
           </div>
         )}
+        <div className="flex justify-between items-center gap-3 p-3.5">
+          <span className="text-gray-500">Payment Gateway</span>
+          <div className="flex items-center gap-2">
+            <img src={paymongoLogo} alt="PayMongo" className="h-4 object-contain" />
+            <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Online
+            </span>
+          </div>
+        </div>
         <div className="flex justify-between gap-3 p-3.5">
-          <span className="text-gray-500">Paid via</span>
-          <span className="font-medium text-gray-800">PayMongo (Online)</span>
+          <span className="text-gray-500">Payment Method</span>
+          <span className="font-medium text-gray-800">GCash / Maya / Card (PayMongo)</span>
         </div>
         {reference && (
-          <div className="flex justify-between gap-3 p-3.5">
-            <span className="text-gray-500 shrink-0">Payment reference</span>
-            <span className="font-mono text-xs text-gray-700 break-all text-right">{reference}</span>
+          <div className="flex justify-between items-center gap-3 p-3.5">
+            <span className="text-gray-500 shrink-0">Payment Reference</span>
+            <span className="font-mono text-xs text-gray-700 break-all text-right bg-slate-50 px-2 py-1 rounded border border-slate-200">
+              {reference}
+            </span>
           </div>
         )}
-        <div className="flex justify-between items-baseline gap-3 p-3.5 bg-orange-50/60">
-          <span className="font-semibold text-gray-900">Amount paid</span>
-          <span className="text-lg font-semibold text-brand-orange">{formatPrice(paid)}</span>
+        <div className="flex justify-between items-baseline gap-3 p-3.5 bg-orange-50/70">
+          <div>
+            <span className="font-bold text-gray-900 block">Total Amount Paid</span>
+            <span className="text-2xs text-gray-500">Paid upfront with order reservation</span>
+          </div>
+          <span className="text-xl font-bold text-brand-orange">{formatPrice(paid)}</span>
         </div>
       </div>
 
       {/* Claiming details */}
-      <div className="p-3.5 bg-slate-50 rounded-lg space-y-1 text-sm">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-          {isDelivery ? 'Courier Delivery' : 'Store Pickup'}
-        </p>
+      <div className="p-4 bg-slate-50/90 rounded-xl border border-slate-200/80 space-y-1.5 text-sm">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            {isDelivery ? 'Delivery Information' : 'Pickup Information'}
+          </p>
+          <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700">
+            {isDelivery ? 'Courier Delivery' : 'In-Store Pickup'}
+          </span>
+        </div>
         {isDelivery ? (
           <>
-            <p className="font-semibold text-gray-900">
+            <p className="font-semibold text-gray-900 pt-1">
               {order?.deliver_recipient || customerName || 'Recipient'}
             </p>
-            <p className="text-gray-600">{order?.deliver_address || 'Delivery address on file'}</p>
+            <p className="text-xs text-gray-600 leading-relaxed">{order?.deliver_address || 'Delivery address on file'}</p>
             {order?.deliver_expect && (
-              <p className="text-gray-500">
-                Expected by {formatDateTime(order.deliver_expect, false)}
+              <p className="text-xs text-gray-500 font-medium">
+                Estimated arrival: {formatDateTime(order.deliver_expect, false)}
               </p>
             )}
           </>
         ) : (
           <>
-            <p className="font-semibold text-gray-900">Tindahan ni Isko · BU Student Center</p>
+            <p className="font-semibold text-gray-900 pt-1">Tindahan ni Isko Physical Store</p>
+            <p className="text-xs text-gray-600">Bicol University Student Center Building</p>
             {order?.appoint_start && (
-              <p className="text-gray-600">Pickup slot: {formatDateTime(order.appoint_start)}</p>
+              <div className="pt-1 flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-brand-orange">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>Scheduled slot: <strong>{formatDateTime(order.appoint_start)}</strong></span>
+              </div>
             )}
           </>
         )}
@@ -123,8 +155,10 @@ function OrderPlacedView({ order, payRef, customerName }) {
       {/* Items */}
       {items.length > 0 && (
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-gray-900">Items ({items.length})</p>
-          <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 rounded-lg px-3 py-1 bg-slate-50 scrollbar-none">
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            Order Items ({items.length})
+          </p>
+          <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 rounded-xl p-2 bg-slate-50/80 border border-slate-200/70 scrollbar-none">
             {items.map((line, idx) => {
               const name = line.prod_name || line.product?.name || 'Item'
               const variant = line.prodvar_name || line.size
@@ -133,25 +167,25 @@ function OrderPlacedView({ order, payRef, customerName }) {
               return (
                 <div
                   key={line.item_id ?? idx}
-                  className="py-2.5 flex items-center justify-between gap-3 text-sm"
+                  className="py-2.5 px-2 flex items-center justify-between gap-3 text-sm"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
                     {image && (
                       <img
                         src={getImageUrl(image)}
                         alt={name}
-                        className="w-10 h-10 rounded-md object-contain bg-white p-1 shrink-0"
+                        className="w-11 h-11 rounded-lg object-contain bg-white p-1 border border-slate-200/80 shrink-0"
                       />
                     )}
                     <div className="min-w-0">
-                      <p className="font-semibold text-gray-900 truncate">{name}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="font-semibold text-gray-900 truncate text-xs sm:text-sm">{name}</p>
+                      <p className="text-2xs text-gray-500 mt-0.5">
                         Qty: {Number(line.qty || 1)}
                         {variant ? ` • ${variant}` : ''}
                       </p>
                     </div>
                   </div>
-                  <p className="font-semibold text-gray-900 shrink-0">
+                  <p className="font-bold text-gray-900 shrink-0 text-xs sm:text-sm">
                     {formatPrice(Number(line.line_total ?? 0))}
                   </p>
                 </div>
@@ -159,37 +193,63 @@ function OrderPlacedView({ order, payRef, customerName }) {
             })}
           </div>
           {deliveryFee > 0 && (
-            <p className="text-xs text-gray-500 text-right">
-              Includes {formatPrice(deliveryFee)} delivery fee
+            <p className="text-xs text-gray-500 text-right pr-1">
+              Includes {formatPrice(deliveryFee)} courier delivery fee
             </p>
           )}
         </div>
       )}
 
       {/* What happens next */}
-      <div className="p-3.5 rounded-lg border border-orange-200 bg-orange-50/70 text-sm">
-        <p className="font-semibold text-gray-900">What happens next</p>
-        <p className="text-gray-600 mt-0.5">
+      <div className="p-4 rounded-xl border border-orange-200/90 bg-orange-50/70 text-xs sm:text-sm">
+        <p className="font-bold text-gray-900 flex items-center gap-1.5">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-brand-orange">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+          What happens next?
+        </p>
+        <p className="text-gray-600 mt-1 leading-relaxed">
           {isDelivery
-            ? 'We will notify you once your order is handed to the courier. You can track it any time from your Orders.'
-            : 'We will notify you when your order is ready. Show the QR code from your order page at the store to claim it.'}
+            ? 'We will notify you once your order is dispatched with the courier. You can monitor the real-time fulfillment status directly from your order tracking page.'
+            : 'We will notify you when your items are ready for pickup. Simply present your order QR code from your order details screen at the store counter to claim.'}
         </p>
       </div>
 
-      <div className="space-y-2">
+      {/* Action buttons: view order details & continue browsing store */}
+      <div className="space-y-2.5 pt-2">
         <button
           type="button"
           onClick={() => navigate(`/orders/${order?.ord_id}`, { replace: true })}
-          className="w-full py-3.5 rounded-lg font-semibold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white transition-colors cursor-pointer"
+          className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
         >
-          View order details
+          <span>View Order Details & QR Code</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
         </button>
+
         <button
           type="button"
-          onClick={() => navigate('/bag', { replace: true })}
-          className="w-full py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
+          onClick={() => navigate('/shop', { replace: true })}
+          className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-slate-100 hover:bg-slate-200/80 text-slate-800 border border-slate-200 transition-colors cursor-pointer flex items-center justify-center gap-2"
         >
-          Back to Bag
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-600">
+            <circle cx="9" cy="21" r="1" />
+            <circle cx="20" cy="21" r="1" />
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+          </svg>
+          <span>Continue Browsing Store</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/home', { replace: true })}
+          className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
+        >
+          Return to Home
         </button>
       </div>
     </div>

@@ -176,9 +176,8 @@ export function mapAdminProduct(row) {
     productPreOrder: productPreorder,
     totalStock: qty,
     price: Number(row.prod_price) || 0,
-    // prod_peaksold is gone (aggregate from prodsales server-side);
-    // the column no longer exists on the payload.
-    orders: Number(row.prod_peaksold) || 0,
+    // All-time units sold, aggregated from prodsales server-side.
+    orders: Number(row.prod_sold ?? row.prod_peaksold) || 0,
     status,
     image,
     variants,

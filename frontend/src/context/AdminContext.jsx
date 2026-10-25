@@ -103,10 +103,12 @@ export function AdminProvider({ children }) {
 
   // Products state - fetched from backend
   const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(true)
   const [productsRefreshKey, setProductsRefreshKey] = useState(0)
 
   // Live orders (raw backend rows, CART- rows filtered out) - fetched from backend
   const [orders, setOrders] = useState([])
+  const [ordersLoading, setOrdersLoading] = useState(true)
   const [ordersRefreshKey, setOrdersRefreshKey] = useState(0)
 
   // POS in-memory cart state (mirrored into refs so queued syncs read fresh data)
@@ -124,6 +126,7 @@ export function AdminProvider({ children }) {
     fetchAdminProducts()
       .then((rows) => { if (!cancelled) setProducts(rows) })
       .catch(() => { if (!cancelled) setProducts([]) })
+      .finally(() => { if (!cancelled) setProductsLoading(false) })
     return () => { cancelled = true }
   }, [currentAdminUser, productsRefreshKey])
 
@@ -148,12 +151,21 @@ export function AdminProvider({ children }) {
       .catch(() => {
         // Transient failure: keep the last known rows on screen.
       })
+      .finally(() => { if (!cancelled) setOrdersLoading(false) })
     return () => { cancelled = true }
   }, [currentAdminUser, ordersRefreshKey])
 
   const refreshOrders = useCallback(() => {
     setOrdersRefreshKey((k) => k + 1)
   }, [])
+
+  // REQ-SD-02: one poll for the whole console. Every admin screen reads this
+  // shared list, so the interval lives here instead of one timer per page.
+  useEffect(() => {
+    if (!currentAdminUser) return undefined
+    const timer = setInterval(refreshOrders, 30000)
+    return () => clearInterval(timer)
+  }, [currentAdminUser, refreshOrders])
 
   // Realtime (DOMAIN 31 / REQ-SD-02). A write from any device - a customer
   // ordering, a POS sale on another till, an inventory edit - pushes a ping
@@ -209,6 +221,8 @@ export function AdminProvider({ children }) {
       if (!allowedRoles.includes(result.user.role) && !allowedRoles.includes(result.user.roleKey)) {
         return { success: false, error: 'Your account does not have access to the admin panel.' }
       }
+      setOrdersLoading(true)
+      setProductsLoading(true)
       setCurrentAdminUser(result.user)
     }
     return result
@@ -858,11 +872,13 @@ export function AdminProvider({ children }) {
       value={{
         adminState,
         orders,
+        ordersLoading,
         refreshOrders,
         alerts,
         dismissedAlertIds,
         posCart,
         products,
+        productsLoading,
         currentAdminUser,
         isSuperAdmin: isSuperAdmin(currentAdminUser),
         loginAdmin,

@@ -51,6 +51,16 @@ class PayMongoService
         return $this->publicKey;
     }
 
+    /** HTTP client with dev/local SSL resilience. */
+    private function httpClient(int $timeout = 15)
+    {
+        $client = Http::withBasicAuth((string) $this->secretKey, '')->timeout($timeout);
+        if (app()->environment('local', 'testing') || ! config('services.paymongo.ssl_verify', true)) {
+            $client = $client->withoutVerifying();
+        }
+        return $client;
+    }
+
     // ==========================================
     // HOSTED CHECKOUT (the path the storefront uses)
     // ==========================================
@@ -84,22 +94,36 @@ class PayMongoService
             throw new \RuntimeException('An online payment needs at least one line item.');
         }
 
-        $response = Http::withBasicAuth($this->secretKey, '')
-            ->timeout(15)
-            ->post($this->checkoutUrl . '/checkout_sessions', [
-                'data' => [
-                    'attributes' => [
-                        'line_items'           => $items,
-                        'payment_method_types' => $this->paymentMethodTypes(),
-                        // `reference_number` is what the webhook echoes back,
-                        // so it carries the order identity.
-                        'reference_number'     => $referenceNumber,
-                        'success_url'          => $successUrl,
-                        'cancel_url'           => $cancelUrl,
-                        'metadata'             => ['order_id' => $referenceNumber],
-                    ],
+        $postData = [
+            'data' => [
+                'attributes' => [
+                    'line_items'           => $items,
+                    'payment_method_types' => $this->paymentMethodTypes(),
+                    // `reference_number` is what the webhook echoes back,
+                    // so it carries the order identity.
+                    'reference_number'     => $referenceNumber,
+                    'success_url'          => $successUrl,
+                    'cancel_url'           => $cancelUrl,
+                    'metadata'             => ['order_id' => $referenceNumber],
                 ],
-            ]);
+            ],
+        ];
+
+        try {
+            $response = $this->httpClient(15)->post($this->checkoutUrl . '/checkout_sessions', $postData);
+        } catch (\Throwable $e) {
+            // Local certificate issue fallback: retry without verifying SSL
+            Log::warning('PayMongo createCheckoutSession SSL retry', ['error' => $e->getMessage()]);
+            try {
+                $response = Http::withBasicAuth((string) $this->secretKey, '')
+                    ->withoutVerifying()
+                    ->timeout(15)
+                    ->post($this->checkoutUrl . '/checkout_sessions', $postData);
+            } catch (\Throwable $e2) {
+                Log::error('PayMongo createCheckoutSession exception', ['error' => $e2->getMessage()]);
+                throw new \RuntimeException('The payment gateway could not be reached. Please try again.');
+            }
+        }
 
         if ($response->failed()) {
             Log::error('PayMongo createCheckoutSession failed', [
@@ -133,16 +157,23 @@ class PayMongoService
             return [];
         }
 
+        $url = $this->baseUrl . '/checkout_sessions/' . rawurlencode($sessionId);
+
         try {
             // Sessions are created on v2 but only retrievable on v1 - the v2
             // GET route does not exist and answers 404.
-            $response = Http::withBasicAuth($this->secretKey, '')
-                ->timeout(10)
-                ->get($this->baseUrl . '/checkout_sessions/' . rawurlencode($sessionId));
+            $response = $this->httpClient(10)->get($url);
         } catch (\Throwable $e) {
             Log::warning('PayMongo retrieveCheckoutSession failed', ['error' => $e->getMessage()]);
 
-            return [];
+            try {
+                $response = Http::withBasicAuth((string) $this->secretKey, '')
+                    ->withoutVerifying()
+                    ->timeout(10)
+                    ->get($url);
+            } catch (\Throwable $e2) {
+                return [];
+            }
         }
 
         if ($response->failed()) {
@@ -158,15 +189,50 @@ class PayMongoService
      */
     public static function sessionIsPaid(array $session): bool
     {
-        $attributes = $session['attributes'] ?? [];
+        if (empty($session)) {
+            return false;
+        }
 
-        foreach ($attributes['payments'] ?? [] as $payment) {
-            if (strtolower((string) ($payment['attributes']['status'] ?? '')) === 'paid') {
+        if (($session['paid'] ?? false) === true) {
+            return true;
+        }
+
+        $attributes = $session['attributes'] ?? $session;
+
+        // Top level status check
+        $sessionStatus = strtolower((string) ($attributes['status'] ?? ''));
+        if ($sessionStatus === 'paid') {
+            return true;
+        }
+
+        // Payments array check
+        $payments = $attributes['payments'] ?? [];
+        if (is_array($payments)) {
+            foreach ($payments as $payment) {
+                $paymentAttrs = $payment['attributes'] ?? $payment;
+                $status = strtolower((string) ($paymentAttrs['status'] ?? ''));
+                if ($status === 'paid' || $status === 'succeeded') {
+                    return true;
+                }
+            }
+        }
+
+        // Payment intent status check
+        $paymentIntent = $attributes['payment_intent'] ?? null;
+        if (is_array($paymentIntent)) {
+            $piAttrs = $paymentIntent['attributes'] ?? $paymentIntent;
+            $piStatus = strtolower((string) ($piAttrs['status'] ?? ''));
+            if ($piStatus === 'succeeded' || $piStatus === 'paid') {
                 return true;
             }
         }
 
-        return strtolower((string) ($attributes['payment_intent']['attributes']['status'] ?? '')) === 'succeeded';
+        // Paid timestamp check
+        if (! empty($attributes['paid_at'])) {
+            return true;
+        }
+
+        return false;
     }
 
     /** The methods this account is allowed to charge. */

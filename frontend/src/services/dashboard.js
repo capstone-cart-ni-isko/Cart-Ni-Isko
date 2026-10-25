@@ -152,14 +152,33 @@ export function paymentMethodLabel(raw) {
  * and `pay_change` is derived from the tender when the server did not send it.
  */
 export function paymentSummary(row) {
-  const given = row?.pay_given != null ? Number(row.pay_given) : null
+  const isStorefrontOnline =
+    !row?.is_walk_in &&
+    row?.cust_id != null &&
+    !String(row?.ord_tag || '').toUpperCase().startsWith('POS-')
+
+  const isConfirmed =
+    Number(row?.pay_received ?? 0) > 0 ||
+    Number(row?.pay_given ?? 0) > 0 ||
+    ['to process', 'processing', 'to claim', 'to deliver', 'to receive', 'delivering', 'claimed', 'received'].includes(
+      String(row?.ord_status || '').toLowerCase().trim()
+    )
+
+  const given =
+    row?.pay_given != null
+      ? Number(row.pay_given)
+      : row?.pay_received != null && Number(row.pay_received) > 0
+        ? Number(row.pay_received)
+        : isStorefrontOnline && isConfirmed
+          ? Number(row?.ord_amount ?? row?.total ?? 0)
+          : null
   const due = row?.pay_due != null ? Number(row.pay_due) : Number(row?.ord_amount ?? 0)
   let change = row?.pay_change
   if (change == null && given != null) {
     change = Math.max(0, Math.round((given - due) * 100) / 100)
   }
   return {
-    method: paymentMethodLabel(row?.pay_method),
+    method: paymentMethodLabel(row?.pay_method || (isStorefrontOnline ? 'paymongo' : null)),
     due,
     given,
     change: change == null ? null : Number(change),
@@ -760,9 +779,31 @@ export function normalizeSlots(payload) {
   return []
 }
 
+/** Accounts change rarely, so the snapshot re-reads them at most this often. */
+const ACCOUNTS_TTL = 5 * 60 * 1000
+let accountsMemo = { at: 0, value: null }
+
+async function fetchAccountsThrottled() {
+  if (accountsMemo.value && Date.now() - accountsMemo.at < ACCOUNTS_TTL) {
+    return accountsMemo.value
+  }
+  try {
+    const value = await fetchAccounts()
+    accountsMemo = { at: Date.now(), value }
+    return value
+  } catch (e) {
+    if (accountsMemo.value) return accountsMemo.value
+    throw e
+  }
+}
+
 /**
  * One parallel pull of everything the dashboard needs (SRS REQ-SD-02 asks for
  * automatic refresh; callers re-run this on an interval).
+ *
+ * Identical requests are single-flighted by apiGet, so the AdminContext poll
+ * and this snapshot can fetch the same lists concurrently without doubling
+ * network traffic.
  *
  * Returns { orders, cartRows, appointments, accounts, products, slots, fetchedAt }
  * with `orders` already mapped through mapOrderRow and CART- rows removed.
@@ -776,7 +817,7 @@ export async function fetchDashboardSnapshot(date = new Date()) {
       fetchAllOrders().catch(() => []),
       apiGet('/cart/display', { tag_prefix: CART_PREFIX }).catch(() => ({ data: [] })),
       fetchAppointments({ scope: 'master' }).catch(() => []),
-      fetchAccounts().catch(() => ({ customers: [], employees: [] })),
+      fetchAccountsThrottled().catch(() => ({ customers: [], employees: [] })),
       fetchAdminProducts().catch(() => []),
       fetchSlots(today).catch(() => null),
       fetchShifts(today).catch(() => ({ shifts: [] })),

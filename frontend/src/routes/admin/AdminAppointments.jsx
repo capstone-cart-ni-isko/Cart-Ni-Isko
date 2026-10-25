@@ -14,6 +14,7 @@ import { fetchAccounts } from '../../services/accounts.js'
 import Modal from '../../components/ui/Modal.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { logAction } from '../../services/access.js'
+import { TimelineSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 
 // ── Date / time helpers (Schedule Calendar, REQ-SC-01 master view) ─────────
 const pad = (n) => String(n).padStart(2, '0')
@@ -230,6 +231,7 @@ export default function AdminAppointments() {
           title: `${remaining} of ${s.capacity} slots open`,
           subtitle: `${s.occupied} booked · unavailable slots include the cancellation reason`,
           icon: 'clock',
+          occupied: s.occupied,
         })
       } else {
         items.push({
@@ -241,6 +243,7 @@ export default function AdminAppointments() {
           title: s.full ? 'Slot full — unavailable' : 'Slot unavailable',
           location: s.reason || `Capacity reached (${s.occupied}/${s.capacity} booked)`,
           icon: 'book',
+          occupied: s.occupied,
         })
       }
     })
@@ -423,10 +426,8 @@ export default function AdminAppointments() {
                           <circle cx="12" cy="12" r="10" />
                           <polyline points="12 6 12 12 16 14" />
                         </svg>
-                        <span className="font-bold text-slate-800">
-                          {slotsUnavailable
-                            ? 'Slot feed unavailable'
-                            : `${availableSlotCount} slot${availableSlotCount === 1 ? '' : 's'} open`}
+                        <span className="font-bold text-slate-800 whitespace-nowrap">
+                          {slotsUnavailable ? 'Unavailable' : `${availableSlotCount} open`}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -514,20 +515,8 @@ export default function AdminAppointments() {
               )}
 
               {/* Timeline Items */}
-              <div className="space-y-4 relative before:absolute before:left-[102px] before:top-4 before:bottom-4 before:w-0.5 before:bg-gray-100">
-                {isLoading && (
-                  <div className="flex items-center gap-4 relative">
-                    <div className="w-24 text-right shrink-0">
-                      <p className="text-xs font-bold leading-tight text-gray-700">…</p>
-                    </div>
-                    <div className="w-3 h-3 rounded-full border-2 border-white z-10 shrink-0 bg-slate-300" />
-                    <div className="flex-1 rounded-md p-3 bg-slate-50 border border-slate-200 flex items-center gap-2">
-                      <span className="spinner-circle !w-3.5 !h-3.5" />
-                      <p className="text-sm font-bold text-gray-900">Loading schedule…</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Fetching bookings and time slots</p>
-                    </div>
-                  </div>
-                )}
+              <div className="relative">
+                {isLoading && <TimelineSkeleton rows={6} className="border-0 rounded-none shadow-none" />}
                 {!isLoading && timelineItems.length === 0 && (
                   <div className="flex items-center gap-4 relative">
                     <div className="w-24 text-right shrink-0">
@@ -542,118 +531,197 @@ export default function AdminAppointments() {
                     </div>
                   </div>
                 )}
-                {timelineItems.map((item, idx) => {
-                  const isShift = item.type === 'shift'
-                  const isFree = item.type === 'free'
-
-                  return (
-                    <div key={idx} className="flex items-center gap-4 relative">
-                      {/* Time Column (Left) */}
-                      <div className="w-24 text-right shrink-0">
-                        <p className={`text-xs font-bold leading-tight ${isShift ? 'text-[#FF6A00]' : 'text-gray-700'}`}>
-                          {item.time.split('–')[0]}
-                        </p>
-                        <p className="text-2xs text-gray-400">
-                          {item.time.split('–')[1] ? `– ${item.time.split('–')[1]}` : ''}
-                        </p>
-                        {/* Type Badge */}
-                        <span
-                          className={`inline-block text-2xs font-bold px-2 py-0.5 rounded-full mt-1 ${
-                            isShift
-                              ? 'bg-[#FFE2D1] text-[#E65100]'
-                              : isFree
-                              ? 'bg-[#E8F8EE] text-[#10B981]'
-                              : 'bg-gray-100 text-gray-600'
+                {!isLoading && timelineItems.length > 0 && (
+                  <div className="space-y-3">
+                    {Array.from(new Set(timelineItems.map((item) => {
+                      const start = item.time.split('–')[0].trim()
+                      const m = start.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i)
+                      if (!m) return 'Other'
+                      let hh = parseInt(m[1], 10)
+                      const mm = m[2]
+                      const ampm = (m[3] || '').toUpperCase()
+                      if (ampm === 'PM' && hh !== 12) hh += 12
+                      if (ampm === 'AM' && hh === 12) hh = 0
+                      return `${String(hh).padStart(2, '0')}:00`
+                    }))).sort((a, b) => a.localeCompare(b)).map((hourKey) => {
+                      const hourItems = timelineItems.filter((item) => {
+                        const start = item.time.split('–')[0].trim()
+                        const m = start.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i)
+                        if (!m) return hourKey === 'Other'
+                        let hh = parseInt(m[1], 10)
+                        const ampm = (m[3] || '').toUpperCase()
+                        if (ampm === 'PM' && hh !== 12) hh += 12
+                        if (ampm === 'AM' && hh === 12) hh = 0
+                        return `${String(hh).padStart(2, '0')}:00` === hourKey
+                      })
+                      const displayHour = hourKey === 'Other' ? 'Other' : (() => {
+                        const h = parseInt(hourKey.split(':')[0], 10)
+                        const h12 = h % 12 === 0 ? 12 : h % 12
+                        const ampm = h < 12 ? 'AM' : 'PM'
+                        return `${h12}:00 ${ampm}`
+                      })()
+                      const directBookings = hourItems.filter((i) => i.type === 'shift').length
+                      const slotOccupied = hourItems.filter((i) => i.type !== 'shift').reduce((sum, i) => sum + (Number(i.occupied) || 0), 0)
+                      const bookingCount = Math.max(directBookings, slotOccupied)
+                      const hasBookings = bookingCount > 0
+                      const openSlots = hourItems.filter((i) => i.type === 'free').length
+                      return (
+                        <details
+                          key={hourKey}
+                          className={`group rounded-lg overflow-hidden transition-all ${
+                            hasBookings
+                              ? 'border-2 border-brand-orange bg-white shadow-2xs'
+                              : 'border border-slate-200 bg-white'
                           }`}
                         >
-                          {item.typeLabel}
-                        </span>
-                      </div>
-
-                      {/* Timeline Dot */}
-                      <div
-                        className={`w-3 h-3 rounded-full border-2 border-white z-10 shrink-0 ${
-                          isShift
-                            ? 'bg-[#FF6A00] ring-2 ring-orange-100'
-                            : isFree
-                            ? 'bg-[#10B981] ring-2 ring-emerald-100'
-                            : 'bg-slate-300'
-                        }`}
-                      />
-
-                      {/* Content Card (Right) */}
-                      <div
-                        className={`flex-1 rounded-md p-3 flex items-center justify-between gap-3 transition-all ${
-                          isShift
-                            ? 'bg-[#FFF5ED] border border-[#FFE2D1]'
-                            : isFree
-                            ? 'bg-[#F0FDF4] border border-[#DCFCE7]'
-                            : 'bg-slate-50 border border-slate-200 hover:bg-slate-100/60'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
-                              isShift
-                                ? 'bg-[#FFE8D6] text-[#FF6A00]'
-                                : isFree
-                                ? 'bg-emerald-100 text-[#10B981]'
-                                : 'bg-white text-slate-500 border border-slate-200'
+                          <summary
+                            className={`flex items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none transition-colors ${
+                              hasBookings
+                                ? 'bg-orange-50/70 hover:bg-orange-50'
+                                : 'bg-slate-50/70 hover:bg-slate-50'
                             }`}
                           >
-                            {item.icon === 'desk' ? (
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                <rect x="3" y="4" width="18" height="12" rx="2" />
-                                <line x1="7" y1="20" x2="7" y2="16" />
-                                <line x1="17" y1="20" x2="17" y2="16" />
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-20 text-left whitespace-nowrap">
+                                <span className={`text-sm font-bold ${hasBookings ? 'text-brand-orange-dark' : 'text-gray-900'}`}>
+                                  {displayHour}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {hasBookings ? (
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#FFE2D1] text-[#E65100] border border-[#FFD0B5]">
+                                    <span className="w-2 h-2 rounded-full bg-[#FF6A00]" />
+                                    <span>{bookingCount} {bookingCount === 1 ? 'Booking' : 'Bookings'}</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 text-2xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                    <span>No bookings</span>
+                                  </span>
+                                )}
+                                {openSlots > 0 && (
+                                  <span className="text-2xs text-gray-400 font-medium">
+                                    · {openSlots} open slot{openSlots === 1 ? '' : 's'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-2xs font-semibold text-brand-orange group-open:hidden">
+                                {hasBookings ? 'View details' : ''}
+                              </span>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 transition-transform duration-200 group-open:rotate-180">
+                                <polyline points="6 9 12 15 18 9" />
                               </svg>
-                            ) : item.icon === 'clock' ? (
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                <circle cx="12" cy="12" r="10" />
-                                <polyline points="12 6 12 12 16 14" />
-                              </svg>
-                            ) : (
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                              </svg>
-                            )}
+                            </div>
+                          </summary>
+                          <div className="p-3 space-y-2">
+                            {hourItems.map((item) => {
+                              const isShift = item.type === 'shift'
+                              const isFree = item.type === 'free'
+                              return (
+                                <div key={item.key} className="flex items-start gap-4">
+                                  <div className="w-20 text-left shrink-0 pt-1">
+                                    <p className={`text-xs font-bold leading-tight ${isShift ? 'text-[#FF6A00]' : 'text-gray-700'}`}>
+                                      {item.time.split('–')[0]}
+                                    </p>
+                                    <p className="text-2xs text-gray-400">
+                                      {item.time.split('–')[1] ? `– ${item.time.split('–')[1]}` : ''}
+                                    </p>
+                                    <span
+                                      className={`inline-block text-2xs font-bold px-2 py-0.5 rounded-full mt-1 whitespace-nowrap ${
+                                        isShift
+                                          ? 'bg-[#FFE2D1] text-[#E65100]'
+                                          : isFree
+                                          ? 'bg-[#E8F8EE] text-[#10B981]'
+                                          : 'bg-gray-100 text-gray-600'
+                                      }`}
+                                    >
+                                      {item.typeLabel}
+                                    </span>
+                                  </div>
+                                  <div
+                                    className={`w-2.5 h-2.5 rounded-full border-2 border-white shrink-0 ${
+                                      isShift
+                                        ? 'bg-[#FF6A00] ring-2 ring-orange-100'
+                                        : isFree
+                                        ? 'bg-[#10B981] ring-2 ring-emerald-100'
+                                        : 'bg-slate-300'
+                                    }`}
+                                  />
+                                  <div
+                                    className={`flex-1 rounded-lg p-3 flex items-center justify-between gap-3 ${
+                                      isShift
+                                        ? 'bg-[#FFF5ED] border border-[#FFE2D1]'
+                                        : isFree
+                                        ? 'bg-[#F0FDF4] border border-[#DCFCE7]'
+                                        : 'bg-slate-50 border border-slate-200 hover:bg-slate-100/60 transition-colors'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <div
+                                        className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
+                                          isShift
+                                            ? 'bg-[#FFE8D6] text-[#FF6A00]'
+                                            : isFree
+                                            ? 'bg-emerald-100 text-[#10B981]'
+                                            : 'bg-white text-slate-500 border border-slate-200'
+                                        }`}
+                                      >
+                                        {item.icon === 'desk' ? (
+                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                            <rect x="3" y="4" width="18" height="12" rx="2" />
+                                            <line x1="7" y1="20" x2="7" y2="16" />
+                                            <line x1="17" y1="20" x2="17" y2="16" />
+                                          </svg>
+                                        ) : item.icon === 'clock' ? (
+                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                            <circle cx="12" cy="12" r="10" />
+                                            <polyline points="12 6 12 12 16 14" />
+                                          </svg>
+                                        ) : (
+                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-bold text-gray-900 truncate">{item.title}</p>
+                                        {item.location && (
+                                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                            <span>{item.location}</span>
+                                            {item.subtext && <span>• {item.subtext}</span>}
+                                          </p>
+                                        )}
+                                        {item.subtitle && <p className="text-xs text-gray-500 mt-0.5">{item.subtitle}</p>}
+                                      </div>
+                                    </div>
+                                    {item.action ? (
+                                      <button
+                                        type="button"
+                                        onClick={item.onAction}
+                                        className={`text-xs font-bold px-3 py-1.5 rounded-xl border active:scale-95 transition-all shadow-2xs whitespace-nowrap cursor-pointer ${
+                                          item.actionKind === 'cancel'
+                                            ? 'border-red-300 text-red-700 bg-white hover:bg-red-50'
+                                            : 'border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50'
+                                        }`}
+                                      >
+                                        {item.action}
+                                      </button>
+                                    ) : (
+                                      <span className="text-gray-300 text-lg">›</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
                           </div>
-
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-gray-900 truncate">{item.title}</p>
-                            {item.location && (
-                              <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                <span>{item.location}</span>
-                                {item.subtext && <span>• {item.subtext}</span>}
-                              </p>
-                            )}
-                            {item.subtitle && (
-                              <p className="text-xs text-gray-500 mt-0.5">{item.subtitle}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Action on right */}
-                        {item.action ? (
-                          <button
-                            type="button"
-                            onClick={item.onAction}
-                            className={`text-xs font-bold px-3 py-1.5 rounded-xl border active:scale-95 transition-all shadow-2xs whitespace-nowrap cursor-pointer ${
-                              item.actionKind === 'cancel'
-                                ? 'border-red-300 text-red-700 bg-white hover:bg-red-50'
-                                : 'border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50'
-                            }`}
-                          >
-                            {item.action}
-                          </button>
-                        ) : (
-                          <span className="text-gray-300 text-lg">›</span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+                        </details>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -696,9 +764,9 @@ export default function AdminAppointments() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-gray-900 leading-tight">Weekly Availability Summary</h3>
+                  <h3 className="text-base font-black text-gray-900 leading-tight">Bookings Overview</h3>
                   <p className="text-xs text-gray-500 font-medium mt-0.5">
-                    {weekBookingCount} booking{weekBookingCount === 1 ? '' : 's'} this week
+                    {weekBookingCount} scheduled this week
                   </p>
                 </div>
               </div>
@@ -721,14 +789,14 @@ export default function AdminAppointments() {
                       <span className="text-2xs font-bold text-gray-600">{d.label}</span>
                       <span
                         className={`w-2 h-2 rounded-full my-2 ${
-                          d.status === 'shift'
+                          d.bookings > 0
                             ? 'bg-[#FF6A00]'
-                            : d.status === 'free'
-                            ? 'bg-[#10B981]'
-                            : 'bg-gray-300'
+                            : d.day.getDay() === 0
+                            ? 'bg-gray-300'
+                            : 'bg-[#10B981]'
                         }`}
                       />
-                      <span className="text-xs font-extrabold text-gray-800">{d.hours}</span>
+                      <span className="text-xs font-extrabold text-gray-800">{d.bookings}</span>
                     </button>
                   )
                 })}
@@ -742,37 +810,16 @@ export default function AdminAppointments() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-[#FF6A00]" />
-                  <span>Bookings</span>
+                  <span>With bookings</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-gray-300" />
-                  <span>Closed</span>
+                  <span>Closed/Sunday</span>
                 </div>
               </div>
             </div>
 
-            {/* 2. Want more hours? — jumps to the scheduling/availability screen */}
-            <div
-              onClick={() => navigate('/admin/schedules')}
-              className="bg-[#F0F7FF] border border-[#DCEBFE] rounded-3xl p-5 flex items-center justify-between gap-3 shadow-2xs hover:bg-blue-50/80 transition-colors cursor-pointer group"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#2563EB] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-[#2563EB]">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-gray-900 group-hover:text-blue-700 transition-colors">
-                    Want more hours?
-                  </h4>
-                  <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">
-                    You can pick up available shifts or report your availability for extra hours.
-                  </p>
-                </div>
-              </div>
-              <span className="text-gray-400 text-lg group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all">›</span>
-            </div>
+            {/* 2. Want more hours? — removed as requested */}
 
             {/* 3. Quick Actions */}
             <div className="bg-white rounded-lg p-5 border border-slate-200 space-y-3">

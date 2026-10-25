@@ -16,6 +16,7 @@ import { uploadImage } from '../../services/upload.js'
 import { empIsStaff } from '../../components/admin/schema.js'
 import { PRODUCT_CATEGORIES } from '../../data/productCategories.js'
 import { CalendarIcon, ShirtIcon } from '../../components/ui/Icons.jsx'
+import SkeletonBlock from '../../components/ui/SkeletonBlock.jsx'
 
 /**
  * FLOW-MANAGE_INV-05 / FLOW-MANAGE_INV-08 / REQ-MANAGE_INV-06 / REQ-MANAGE_INV-07
@@ -51,6 +52,7 @@ const RANGE_OPTIONS = [
   { value: '7', label: 'Last 7 days' },
   { value: '30', label: 'Last 30 days' },
   { value: '90', label: 'Last 90 days' },
+  { value: 'all', label: 'All time' },
   { value: 'custom', label: 'Custom range' },
 ]
 
@@ -215,6 +217,11 @@ export default function AdminProductDetail() {
   const handleRangeChange = (value) => {
     setRange(value)
     if (value === 'custom') return
+    if (value === 'all') {
+      setDateFrom('2020-01-01')
+      setDateTo(todayISO())
+      return
+    }
     setDateFrom(daysAgoISO(Number(value)))
     setDateTo(todayISO())
   }
@@ -588,9 +595,94 @@ export default function AdminProductDetail() {
         </div>
 
         {isLoading ? (
-          <p className="text-xs text-slate-400 font-medium flex items-center gap-2 py-10">
-            <span className="spinner-circle !w-3.5 !h-3.5" /> Loading product…
-          </p>
+          (isEditing || searchParams.get('edit') === '1') ? (
+            /* Product Edit Mode Skeleton */
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 animate-pulse" aria-hidden="true">
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 flex flex-col items-center text-center space-y-3">
+                <SkeletonBlock className="w-32 h-32 rounded-2xl" />
+                <SkeletonBlock className="h-4 w-28 rounded" />
+                <SkeletonBlock className="h-3 w-20 rounded" />
+                <SkeletonBlock className="h-8 w-28 rounded-lg mt-2" />
+              </div>
+
+              <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-5">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="space-y-1.5">
+                    <SkeletonBlock className="h-4 w-32 rounded" />
+                    <SkeletonBlock className="h-3 w-48 rounded" />
+                  </div>
+                  <SkeletonBlock className="h-6 w-24 rounded-full" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <SkeletonBlock className="h-3 w-24 rounded" />
+                    <SkeletonBlock className="h-9 w-full rounded-xl" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <SkeletonBlock className="h-3 w-24 rounded" />
+                    <SkeletonBlock className="h-9 w-full rounded-xl" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <SkeletonBlock className="h-3 w-20 rounded" />
+                  <SkeletonBlock className="h-9 w-full rounded-xl" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <SkeletonBlock className="h-3 w-28 rounded" />
+                  <SkeletonBlock className="h-24 w-full rounded-xl" />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                  <SkeletonBlock className="h-9 w-20 rounded-xl" />
+                  <SkeletonBlock className="h-9 w-28 rounded-xl" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Product View Mode Skeleton */
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start animate-pulse" aria-hidden="true">
+              <div className="flex flex-col gap-3">
+                <SkeletonBlock className="aspect-square w-full rounded-3xl" />
+                <div className="flex items-center gap-2">
+                  <SkeletonBlock className="w-16 h-16 rounded-xl" />
+                  <SkeletonBlock className="w-16 h-16 rounded-xl" />
+                  <SkeletonBlock className="w-16 h-16 rounded-xl" />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div className="space-y-2">
+                  <SkeletonBlock className="h-4 w-24 rounded" />
+                  <SkeletonBlock className="h-7 w-3/4 rounded" />
+                  <SkeletonBlock className="h-3 w-32 rounded" />
+                </div>
+
+                <SkeletonBlock className="h-8 w-36 rounded" />
+
+                <div className="space-y-2 pt-2">
+                  <SkeletonBlock className="h-3.5 w-full rounded" />
+                  <SkeletonBlock className="h-3.5 w-5/6 rounded" />
+                  <SkeletonBlock className="h-3.5 w-2/3 rounded" />
+                </div>
+
+                <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3 mt-2">
+                  <SkeletonBlock className="h-4 w-32 rounded" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <SkeletonBlock className="h-10 rounded-xl" />
+                    <SkeletonBlock className="h-10 rounded-xl" />
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3 mt-2">
+                  <SkeletonBlock className="h-4 w-40 rounded" />
+                  <SkeletonBlock className="h-24 rounded-xl" />
+                </div>
+              </div>
+            </div>
+          )
         ) : loadError ? (
           <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 flex items-center justify-between gap-3">
             <p className="text-xs font-semibold text-red-700">{loadError}</p>
@@ -898,8 +990,8 @@ export default function AdminProductDetail() {
                     <p className="text-xs font-bold text-slate-800 mt-0.5">{row.availability}</p>
                   </div>
                   <div>
-                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Units Sold</p>
-                    <p className="text-xs font-bold text-slate-800 mt-0.5">{row.orders}</p>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Total Sold (All-time)</p>
+                    <p className="text-xs font-bold text-slate-800 mt-0.5">{row.orders} {row.orders === 1 ? 'unit' : 'units'}</p>
                   </div>
                   <div>
                     <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Variations</p>

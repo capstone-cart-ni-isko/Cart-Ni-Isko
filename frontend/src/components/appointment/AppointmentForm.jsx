@@ -70,6 +70,21 @@ function stampOf(date, clock) {
   return /^\d{4}-\d{2}-\d{2} /.test(clock) ? clock : `${date} ${clock}`
 }
 
+/**
+ * Format a "YYYY-MM-DD HH:MM" stamp into a human-readable string.
+ * e.g. "Mon, Oct 26 · 8:30 AM"
+ */
+function formatStampLabel(stamp) {
+  if (!stamp) return ''
+  const d = new Date(String(stamp).replace(' ', 'T'))
+  if (Number.isNaN(d.getTime())) return stamp
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+  const month   = d.toLocaleDateString('en-US', { month: 'short' })
+  const day     = d.getDate()
+  const time    = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  return `${weekday}, ${month} ${day} · ${time}`
+}
+
 /** True while the slot start is still at least 30 minutes away. */
 function isSelectable(stamp) {
   const start = new Date(stamp.replace(' ', 'T'))
@@ -423,13 +438,28 @@ export default function AppointmentForm({
         type="button"
         disabled={booking || !slot}
         onClick={handleBook}
-        className="w-full h-9 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full h-11 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
-        {booking
-          ? 'Saving…'
-          : slot
-            ? `${reschedule ? 'Reschedule' : 'Book'} • ${slotStamp}`
-            : 'Select a time slot to book'}
+        {booking ? (
+          <>
+            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            Saving…
+          </>
+        ) : slot ? (
+          <>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 shrink-0">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>
+            {reschedule ? 'Reschedule' : 'Book'} · {formatStampLabel(slotStamp)}
+          </>
+        ) : (
+          'Select a time slot to book'
+        )}
       </button>
 
       {required && !slot && (

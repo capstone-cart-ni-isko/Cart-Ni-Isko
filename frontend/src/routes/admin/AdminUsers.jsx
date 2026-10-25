@@ -13,6 +13,11 @@ import {
   fetchAccounts,
   recoverAccount,
 } from '../../services/accounts.js'
+import {
+  StatCardsSkeleton,
+  TableSkeleton,
+  ToolbarSkeleton,
+} from '../../components/admin/kit/AdminSkeleton.jsx'
 import { logAction } from '../../services/access.js'
 import {
   first,
@@ -288,20 +293,27 @@ export default function AdminUsers() {
         </div>
 
         {/* Summary header: total active + category distribution */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
-            <p className="text-2xs font-medium text-slate-500">Total active</p>
-            <p className="text-2xl font-bold text-slate-900 tracking-tight">{activeEmployees.length}</p>
-          </div>
-          {CATEGORIES.map((categ) => (
-            <div key={categ} className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
-              <p className="text-2xs font-medium text-slate-500">{CATEGORY_LABEL[categ]}s</p>
-              <p className="text-2xl font-bold text-slate-900 tracking-tight">{categoryDistribution[categ]}</p>
+        {isLoading ? (
+          <StatCardsSkeleton count={4} />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
+              <p className="text-2xs font-medium text-slate-500">Total active</p>
+              <p className="text-2xl font-bold text-slate-900 tracking-tight">{activeEmployees.length}</p>
             </div>
-          ))}
-        </div>
+            {CATEGORIES.map((categ) => (
+              <div key={categ} className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
+                <p className="text-2xs font-medium text-slate-500">{CATEGORY_LABEL[categ]}s</p>
+                <p className="text-2xl font-bold text-slate-900 tracking-tight">{categoryDistribution[categ]}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
-        {/* Search & filters */}
+        {/* Search & filters — hidden while the first fetch is in-flight */}
+        {isLoading ? (
+          <ToolbarSkeleton />
+        ) : (
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full">
           <div className="relative flex-1">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -394,6 +406,7 @@ export default function AdminUsers() {
             </button>
           </div>
         </div>
+        )} {/* end isLoading ? ToolbarSkeleton : filters */}
 
         {pageError && (
           <div className="flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-xs font-medium bg-rose-50 border-rose-200 text-rose-700">
@@ -418,7 +431,10 @@ export default function AdminUsers() {
           </div>
         )}
 
-        {/* Table */}
+        {/* Table — show skeleton on first load, real table once data arrives */}
+        {isLoading ? (
+          <TableSkeleton rows={8} columns={9} />
+        ) : (
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-visible">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[900px]">
@@ -444,6 +460,7 @@ export default function AdminUsers() {
                     </button>
                   </th>
                   <th className="py-4 px-4">Phone</th>
+                  <th className="py-4 px-4">Availability</th>
                   <th className="py-4 px-4">Category</th>
                   <th className="py-4 px-4">Status</th>
                   <th className="py-4 px-4">
@@ -506,12 +523,12 @@ export default function AdminUsers() {
                         </td>
                         <td className="py-4 px-4">
                           {isSuperAdmin && !emp.deleted ? (
-                            <div className="relative inline-block">
+                            <div className="relative inline-flex items-center">
                               <select
                                 value={emp.category}
                                 disabled={updatingCategoryEmpId === emp.emp_id || String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)}
                                 onChange={(e) => handleCategoryChange(emp, e.target.value)}
-                                className={`text-2xs font-semibold px-2.5 py-1 rounded-full border cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60 disabled:cursor-not-allowed ${
+                                className={`inline-flex items-center h-6 pl-2 pr-5 rounded-md border text-2xs font-medium cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60 disabled:cursor-not-allowed appearance-none ${
                                   emp.category === 'super admin'
                                     ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                                     : emp.category === 'admin'
@@ -526,6 +543,9 @@ export default function AdminUsers() {
                                   </option>
                                 ))}
                               </select>
+                              <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-current opacity-60 absolute right-1.5 pointer-events-none">
+                                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                              </svg>
                             </div>
                           ) : (
                             <StatusBadge
@@ -643,6 +663,7 @@ export default function AdminUsers() {
             )}
           </div>
         </div>
+        )} {/* end isLoading ? TableSkeleton : table */}
       </div>
 
       {/* REQ-UM-03: permanent deletion is behind a confirmation step and is

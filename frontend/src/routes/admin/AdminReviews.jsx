@@ -6,6 +6,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import Segmented from '../../components/admin/kit/Segmented.jsx'
 import { fetchAdminProducts } from '../../services/adminProducts.js'
 import { fetchProductReviews, moderateReview, deleteReview } from '../../services/reviews.js'
+import { ListSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 
 const STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending' },
@@ -478,11 +479,9 @@ export default function AdminReviews() {
               <span>Select all</span>
             </label>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+            <div className="flex-1 overflow-y-auto">
               {isLoading ? (
-                <p className="px-4 py-10 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
-                  <span className="spinner-circle !w-3.5 !h-3.5" /> Loading reviews…
-                </p>
+                <ListSkeleton rows={6} avatar action className="border-0 rounded-none shadow-none divide-y divide-slate-100" />
               ) : filteredReviews.length === 0 ? (
                 <div className="empty-state px-4">
                   <p className="empty-state__title">
@@ -552,9 +551,7 @@ export default function AdminReviews() {
             {!selected ? (
               <div className="flex-1 flex items-center justify-center px-4 py-16 text-xs text-slate-400 font-medium gap-2">
                 {isLoading ? (
-                  <>
-                    <span className="spinner-circle !w-3.5 !h-3.5" /> Loading reviews…
-                  </>
+                  <ListSkeleton rows={2} avatar={false} action={false} className="w-full max-w-md border-0 shadow-none" />
                 ) : (
                   'Select a review to inspect it.'
                 )}

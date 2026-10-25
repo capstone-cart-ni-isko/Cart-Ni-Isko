@@ -635,14 +635,11 @@ export default function AdminPickup() {
       })
   }, [])
 
-  // Mount + 30s: refresh order queues and the schedule data (REQ-SD-02).
+  // Mount refresh; AdminContext owns the single 30s orders poll.
   useEffect(() => {
     refreshOrders()
     loadAux()
-    const timer = setInterval(() => {
-      refreshOrders()
-      loadAux()
-    }, REFRESH_MS)
+    const timer = setInterval(loadAux, REFRESH_MS)
     return () => clearInterval(timer)
   }, [refreshOrders, loadAux])
 

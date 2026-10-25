@@ -1,5 +1,6 @@
 import StatusPill from './StatusPill.jsx'
 import { fmtTime } from './scheduleTime.js'
+import SkeletonBlock from '../ui/SkeletonBlock.jsx'
 
 // Status is derived by the API (duty_shift has no status column), so the pill
 // colour only needs the keyword. COMPLETED keeps StatusPill's default grey.
@@ -25,8 +26,24 @@ export default function ScheduleShiftList({
 }) {
   if (isLoading) {
     return (
-      <div className="py-8 text-center text-xs font-semibold text-slate-500 flex items-center justify-center gap-2">
-        <span className="spinner-circle !w-3.5 !h-3.5" /> Loading duty blocks…
+      <div className="divide-y divide-slate-100" aria-hidden="true">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div
+            key={index}
+            className="py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 justify-between"
+          >
+            <div className="min-w-0 space-y-1.5 flex-1">
+              <SkeletonBlock className="h-3.5 w-36 rounded" />
+              <SkeletonBlock className="h-2.5 w-48 rounded" />
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <SkeletonBlock className="h-6 w-20 rounded-md" />
+              <SkeletonBlock className="h-7 w-12 rounded-md" />
+              <SkeletonBlock className="h-7 w-14 rounded-md" />
+            </div>
+          </div>
+        ))}
       </div>
     )
   }

@@ -234,12 +234,14 @@ export default function QRScanner({ onScan, onError, className = 'aspect-video',
           <div className="absolute left-1/2 top-2 -translate-x-1/2 w-px h-3/4 bg-brand-orange/50 animate-pulse" />
         </div>
         
-        <p className="mt-4 text-white/80 text-sm font-medium text-center px-4">
-          Position QR code within the frame
-        </p>
-        <p className="text-white/50 text-xs text-center px-4 mt-1">
-          The scanner will automatically detect the code
-        </p>
+        <div className="mt-5 px-3 py-2 rounded-2xl bg-black/50 backdrop-blur-sm text-center">
+          <p className="text-white text-sm font-semibold leading-tight">
+            Position QR code within the frame
+          </p>
+          <p className="text-white/70 text-xs mt-0.5">
+            Scanner detects automatically
+          </p>
+        </div>
       </div>
 
       {/* Loading state - only while the camera is genuinely starting up */}

@@ -64,18 +64,18 @@ function FocusedLayout({
       {/* ── Focused Top Header Bar: Back button at top left (Rule 69) ── */}
       <header className="sticky top-0 z-30 select-none bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-md border-b border-gray-200/80 dark:border-[var(--line)] w-full shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <BackButton
               onClick={handleBack}
               label={backLabel === 'Back' ? null : backLabel}
             />
             {title && (
-              <div className="min-w-0">
-                <h1 className="text-sm md:text-base font-bold text-gray-900 dark:text-[var(--ink)] tracking-tight truncate">
+              <div className="min-w-0 border-l border-gray-200 dark:border-[var(--line)] pl-3 ml-1">
+                <h1 className="text-sm md:text-base font-bold text-gray-900 dark:text-[var(--ink)] tracking-tight leading-tight truncate">
                   {title}
                 </h1>
                 {subtitle && (
-                  <p className="hidden sm:block text-[11px] text-gray-500 dark:text-[var(--muted)] truncate">
+                  <p className="text-[11px] text-gray-400 dark:text-[var(--muted)] truncate leading-tight">
                     {subtitle}
                   </p>
                 )}

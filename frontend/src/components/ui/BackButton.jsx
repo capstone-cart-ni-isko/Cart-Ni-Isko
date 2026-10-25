@@ -64,10 +64,10 @@ export default function BackButton({
       type="button"
       onClick={goBack}
       aria-label={label || 'Back'}
-      className={`group inline-flex items-center justify-center gap-2 h-9 w-9 rounded-full bg-transparent hover:bg-slate-100/80 dark:hover:bg-[var(--surface-2)] text-slate-600 dark:text-[var(--ink)] hover:text-slate-900 dark:hover:text-[var(--ink)] active:scale-95 transition-all duration-150 cursor-pointer select-none shrink-0 border-0 shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/50 ${className}`}
+      className={`group inline-flex items-center gap-1.5 h-9 px-2 rounded-lg bg-transparent hover:bg-slate-100/80 dark:hover:bg-[var(--surface-2)] text-slate-600 dark:text-[var(--ink)] hover:text-slate-900 dark:hover:text-[var(--ink)] active:scale-95 transition-all duration-150 cursor-pointer select-none shrink-0 border-0 shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/50 ${className}`}
     >
       {traditionalArrow}
-      {label && <span className="text-xs font-medium tracking-tight pr-1">{label}</span>}
+      {label && <span className="text-xs font-semibold tracking-tight whitespace-nowrap">{label}</span>}
     </button>
   )
 }

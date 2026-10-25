@@ -584,6 +584,8 @@ function ProductDetail() {
               </div>
             )}
 
+        
+
             {/* Size Selector with Size Guide Modal Trigger */}
             {product.sizes &&
               product.sizes.length > 0 &&
@@ -641,6 +643,37 @@ function ProductDetail() {
                   </div>
                 </div>
               )}
+
+                  {/* Quantity Selector */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-gray-900">Quantity</h3>
+                <span className="text-xs text-gray-500">
+                  {product.preOrder ? 'Pre-order available' : `${availableStock} in stock`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 border border-gray-200 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  disabled={qty <= 1}
+                  className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  aria-label="Decrease quantity"
+                >
+                  -
+                </button>
+                <span className="w-10 text-center text-sm font-semibold">{qty}</span>
+                <button
+                  type="button"
+                  onClick={() => setQty((q) => Math.min(product.preOrder ? (product.preOrderInfo?.maxPreOrderQty || 10) : Math.max(1, availableStock), q + 1))}
+                  disabled={!product.preOrder && qty >= availableStock}
+                  className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+            </div>
 
             {/* Desktop Add to Cart / Pre-Order CTA */}
             <div className="hidden md:block pt-1">
@@ -725,13 +758,27 @@ function ProductDetail() {
       {/* Sticky Bottom Bar (Mobile only) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 p-3 safe-bottom">
         <div className="mx-auto max-w-lg flex items-center gap-3">
-          <div className="flex-1">
-            <p className="text-[10px] text-slate-500 font-semibold uppercase">
-              {product.preOrder ? 'Pre-order Total' : 'Total'}
-            </p>
-            <PriceTag amount={product.price * qty} className="text-base font-semibold text-slate-900" />
+          <div className="flex items-center gap-2 border border-gray-200 rounded-md">
+            <button
+              type="button"
+              onClick={() => setQty((q) => Math.max(1, q - 1))}
+              disabled={qty <= 1}
+              className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              aria-label="Decrease quantity"
+            >
+              -
+            </button>
+            <span className="w-8 text-center text-sm font-semibold">{qty}</span>
+            <button
+              type="button"
+              onClick={() => setQty((q) => Math.min(product.preOrder ? (product.preOrderInfo?.maxPreOrderQty || 10) : Math.max(1, availableStock), q + 1))}
+              disabled={!product.preOrder && qty >= availableStock}
+              className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              aria-label="Increase quantity"
+            >
+              +
+            </button>
           </div>
-
           <button
             type="button"
             disabled={isOutOfStock}
@@ -742,7 +789,7 @@ function ProductDetail() {
                 : 'bg-brand-orange hover:bg-brand-orange-dark text-white'
             }`}
           >
-            {ctaLabel}
+            {ctaLabel} {`₱${(product.price * qty).toLocaleString()}`}
           </button>
         </div>
       </div>
