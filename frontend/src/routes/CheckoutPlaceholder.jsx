@@ -135,10 +135,9 @@ function CheckoutPlaceholder() {
 
   // Delivery (address + priority tier) - FLOW-CHECKOUT-07.
   //
-  // The address and the speed are CONFIRMED LATER, on the order screen: the
-  // order is placed without them and the customer picks both - and settles
-  // the courier fee - once the items are ready. The quote below is therefore
-  // priced for the standard speed and for the customer's default address.
+  // The order is delivered to the customer's default address at the standard
+  // speed; the courier fee is quoted for that address and charged with the
+  // products. The courier itself is booked once staff mark the items ready.
   const tier = 'standard'
 
   // Server quote state
@@ -205,7 +204,15 @@ function CheckoutPlaceholder() {
   const feeRowLabel =
     dispatchType === 'pickup'
       ? 'Fulfillment Fee'
-      : 'Delivery Fee (Calculated when ready)'
+      : feeSource === 'lalamove'
+      ? 'Delivery Fee (LalaMove)'
+      : 'Delivery Fee'
+  // Charged with the products: the live courier quote, or the store's fee
+  // table when the courier cannot be reached. null while the quote loads.
+  const deliveryFee =
+    dispatchType === 'delivery' && serverPreview?.dispatch_fee != null
+      ? Number(serverPreview.dispatch_fee)
+      : null
 
   /* Pre-order detection.
      A pre-order item is produced to order, so the store cannot promise a
@@ -716,14 +723,14 @@ function CheckoutPlaceholder() {
                     </div>
                     <div className="space-y-1">
                       <p className="font-bold text-blue-950 text-sm">
-                        Delivery Details &amp; Fee Deferred
+                        Courier Delivery
                       </p>
                       <p className="text-xs text-blue-900 leading-relaxed">
-                        To protect you from premature or inaccurate courier charges while items are prepared,
-                        <strong> you pay only for your products now.</strong>
+                        Delivering to <strong>{deliveryAddress || 'your default address'}</strong>.
                       </p>
                       <p className="text-xs text-blue-800 leading-relaxed pt-1">
-                        When all your items are ready for dispatch, you will be notified to confirm your delivery address, choose your delivery speed, and complete the exact courier fee.
+                        The delivery fee is included in your total. A LalaMove rider is booked as soon as
+                        your items are packed, and you can follow the parcel from your order page.
                       </p>
                     </div>
                   </div>
@@ -849,7 +856,9 @@ function CheckoutPlaceholder() {
                   <span>{feeRowLabel}</span>
                   <span>
                     {dispatchType === 'delivery'
-                      ? 'To be calculated when ready'
+                      ? deliveryFee != null
+                        ? `₱${deliveryFee.toFixed(2)}`
+                        : 'Calculating…'
                       : 'FREE (Pickup)'}
                   </span>
                 </div>

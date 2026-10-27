@@ -6,7 +6,8 @@
         "serve": "php artisan serve --host=127.0.0.1 --port=8000",
         "test": "php artisan test",
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "schedule": "php artisan schedule:work"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

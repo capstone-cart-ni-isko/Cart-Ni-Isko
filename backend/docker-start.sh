@@ -28,6 +28,10 @@ server=$!
 # never written and GET /api/health/scheduler answers 503 forever, even
 # though the app itself is healthy.
 php artisan schedule:work >/dev/null 2>&1 &
+# LalaMove keeps one webhook URL per API key and pings it while registering,
+# so claim it once the server answers. Never fatal: the scheduled courier
+# sync still applies status changes without it.
+(sleep 15 && php artisan lalamove:webhook || true) &
 sleep 2
 i=0
 while [ $i -lt "${PHP_CLI_SERVER_WORKERS:-8}" ]; do

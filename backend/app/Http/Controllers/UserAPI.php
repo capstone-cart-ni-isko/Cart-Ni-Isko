@@ -1031,8 +1031,21 @@ class UserAPI extends Controller
             $payload['deliver_service']    = $delivery->deliver_service;
             $payload['deliver_fee_charged'] = $delivery->deliver_fee_charged;
             $payload['deliver_fee_actual']  = $delivery->deliver_fee_actual;
-            $payload['deliver_share_link']  = $delivery->deliver_share_link;
+            $payload['deliver_env']         = $delivery->deliver_env;
             $payload['deliver_last_event']  = $delivery->deliver_last_event;
+
+            // deliver_share_link stores the courier booking as JSON; the
+            // customer's order screen needs the tracking URL and status.
+            $courier = $delivery->courier();
+            $payload['deliver_share_link'] = $courier['url'];
+            $payload['courier'] = [
+                'provider'    => $delivery->deliver_env ? 'lalamove' : null,
+                'order_id'    => $courier['id'],
+                'share_url'   => $courier['url'],
+                'status'      => $courier['status'],
+                'booked'      => $delivery->isBooked(),
+                'environment' => $delivery->deliver_env,
+            ];
         }
 
         $payload['is_preorder'] = $order->pickup !== null

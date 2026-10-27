@@ -65,6 +65,10 @@ return [
         'language'     => env('LALAMOVE_LANGUAGE', 'en_PH'),
         'service_type' => env('LALAMOVE_SERVICE_TYPE', 'MOTORCYCLE'),
         'base_url'     => env('LALAMOVE_BASE_URL'),
+        // Where LalaMove pushes status changes (`php artisan lalamove:webhook`).
+        // On Render the service's own public URL is used when unset.
+        'webhook_url'  => env('LALAMOVE_WEBHOOK_URL') ?: (env('RENDER_EXTERNAL_URL')
+            ? rtrim(env('RENDER_EXTERNAL_URL'), '/') . '/api/delivery/webhook' : null),
     ],
 
     /*

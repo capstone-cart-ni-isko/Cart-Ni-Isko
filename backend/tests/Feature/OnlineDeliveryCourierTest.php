@@ -40,6 +40,7 @@ class OnlineDeliveryCourierTest extends TestCase
     use RefreshDatabase;
 
     private int $seq = 0;
+    private string $courierStatus = 'ASSIGNING_DRIVER';
     private array $tokens = [];
 
     // ==========================================
@@ -216,10 +217,12 @@ class OnlineDeliveryCourierTest extends TestCase
                     'priceBreakdown' => ['total' => $totalCents / 100, 'currency' => 'PHP'],
                 ],
             ], 200),
-            'rest.sandbox.lalamove.com/v3/orders/*' => Http::response([
+            // The webhook reads the status back from LalaMove, so the fake
+            // answers whatever the test last set in $courierStatus.
+            'rest.sandbox.lalamove.com/v3/orders/*' => fn () => Http::response([
                 'data' => [
                     'orderId'   => '107900701184',
-                    'status'    => 'ON_GOING',
+                    'status'    => $this->courierStatus,
                     'shareLink' => 'https://share.lalamove.com/107900701184',
                 ],
             ], 200),
@@ -280,6 +283,34 @@ class OnlineDeliveryCourierTest extends TestCase
         return [$order, $response];
     }
 
+    /** Settle the order through the signed PayMongo webhook. */
+    private function payThroughWebhook(Order $order, string $secret): void
+    {
+        $raw = json_encode([
+            'data' => [
+                'id'         => 'evt_delivery_paid',
+                'type'       => 'checkout_session.payment.paid',
+                'attributes' => ['reference_number' => 'order:' . $order->ord_id, 'status' => 'paid'],
+            ],
+        ], JSON_UNESCAPED_SLASHES);
+
+        $this->withHeaders([
+            'Content-Type'       => 'application/json',
+            'Paymongo-Signature' => $this->payMongoSignature($raw, $secret),
+        ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))->assertStatus(200);
+    }
+
+    /** Staff mark the packed items ready, which books the courier. */
+    private function markReady(Order $order): void
+    {
+        $admin = $this->makeEmployee(['emp_type' => 'ADMIN']);
+
+        $this->json('PUT', '/api/orders/update', [
+            'ord_id'     => $order->ord_id,
+            'ord_status' => 'to deliver',
+        ], $this->headers($admin))->assertStatus(200);
+    }
+
     // ==========================================
     // RULE 55 - ONLINE ONLY
     // ==========================================
@@ -337,7 +368,7 @@ class OnlineDeliveryCourierTest extends TestCase
     // DELIVERY FEE (rule 55: paid online, with the goods)
     // ==========================================
 
-    public function test_a_delivery_defers_fee_at_checkout_until_order_is_ready()
+    public function test_a_delivery_charges_the_store_fee_with_the_goods_without_a_courier()
     {
         $customer = $this->makeCustomer();
         $product  = $this->makeProduct();
@@ -347,89 +378,53 @@ class OnlineDeliveryCourierTest extends TestCase
         [$order, $checkout] = $this->checkoutDelivery($customer, $product);
 
         $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
-        $this->assertSame('sandbox', $delivery->deliver_env ?? 'sandbox');
-        // Goods only at checkout: 2 x 250 = 500
-        $this->assertEquals(500.0, (float) $order->ord_amount);
-        $this->assertNull($delivery->deliver_fee_charged);
-
-        // Checkout response indicates deferred fee
-        $this->assertTrue((bool) $checkout->json('data.order.fee_pending'));
+        // 2 x 250 goods + the store's standard fee, one payment.
+        $this->assertEquals(50.0, (float) $delivery->deliver_fee_charged);
+        $this->assertEquals(550.0, (float) $order->ord_amount);
+        $this->assertEquals(550.0, (float) $checkout->json('data.total_due'));
         $this->assertFalse((bool) $checkout->json('data.order.courier.booked'));
     }
 
-    public function test_customer_can_submit_delivery_details_and_complete_delivery_fee()
+    public function test_a_delivery_charges_the_live_courier_quote_with_the_goods()
     {
         $customer = $this->makeCustomer();
-        $admin    = $this->makeEmployee(['emp_type' => 'ADMIN']);
         $product  = $this->makeProduct();
-        $secret   = $this->fakePayMongo();
+        $this->fakePayMongo();
         $this->fakeLalamove(12000); // 120 PHP quote
 
+        [$order, $checkout] = $this->checkoutDelivery($customer, $product);
+
+        $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
+        $this->assertEquals(120.0, (float) $delivery->deliver_fee_charged);
+        $this->assertEquals(620.0, (float) $order->ord_amount); // 500 + 120
+        $this->assertSame('lalamove', $checkout->json('data.dispatch.dispatch_fee_source'));
+        $this->assertFalse($delivery->isBooked());
+    }
+
+    public function test_marking_a_prepaid_delivery_ready_books_the_courier()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct();
+        $secret   = $this->fakePayMongo();
+        $this->fakeLalamove(12000);
+
         [$order] = $this->checkoutDelivery($customer, $product);
-        $this->assertEquals('processing', $order->fresh()->ord_status);
+        $this->payThroughWebhook($order, $secret);
 
-        // Settle initial products payment
-        $initialPayRaw = json_encode([
-            'data' => [
-                'id'         => 'evt_initial_paid',
-                'type'       => 'checkout_session.payment.paid',
-                'attributes' => ['reference_number' => 'order:' . $order->ord_id, 'status' => 'paid'],
-            ],
-        ], JSON_UNESCAPED_SLASHES);
-        $this->withHeaders([
-            'Content-Type'       => 'application/json',
-            'Paymongo-Signature' => $this->payMongoSignature($initialPayRaw, $secret),
-        ])->postJson('/api/checkout/payment/webhook', json_decode($initialPayRaw, true))->assertStatus(200);
+        // Paid, but the items are not packed yet: no rider is called.
+        $this->assertEquals(620.0, (float) $order->fresh()->pay_received);
+        $this->assertFalse(Delivery::where('ord_id', $order->ord_id)->firstOrFail()->isBooked());
 
-        $this->assertEquals(500.0, (float) $order->fresh()->pay_received);
+        $this->markReady($order);
 
-        // Staff/Admin requests delivery details (moves order to 'to deliver')
-        $this->json('PUT', '/api/orders/update', [
-            'ord_id'     => $order->ord_id,
-            'ord_status' => 'to deliver',
-        ], $this->headers($admin))->assertStatus(200);
-
-        $this->assertEquals('to deliver', $order->fresh()->ord_status);
-
-        // Customer submits delivery details
-        $res = $this->json('POST', '/api/orders/delivery-details', [
-            'ord_id'           => $order->ord_id,
-            'deliver_address'  => 'Bagumbayan, Legazpi City, Albay',
-            'deliver_recipient'=> 'Maria Santos',
-            'deliver_phone'    => '09123456789',
-            'deliver_notes'    => 'Leave at door',
-            'speed'            => 'standard',
-        ], $this->headers($customer))->assertStatus(200);
-
-        $this->assertTrue($res->json('success'));
-        $this->assertNotNull($res->json('data.checkout_url'));
-
-        // Customer completes delivery fee via webhook or confirmation endpoint
-        $raw = json_encode([
-            'data' => [
-                'id'         => 'evt_delivery_fee_paid',
-                'type'       => 'checkout_session.payment.paid',
-                'attributes' => [
-                    'reference_number' => 'delivery_fee:' . $order->ord_id,
-                    'status'           => 'paid',
-                ],
-            ],
-        ], JSON_UNESCAPED_SLASHES);
-
-        $this->withHeaders([
-            'Content-Type'       => 'application/json',
-            'Paymongo-Signature' => $this->payMongoSignature($raw, $secret),
-        ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))->assertStatus(200);
-
+        // No "pay the courier fee" step is left for the customer.
         $order->refresh();
         $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
-
-        // Status moved to 'to receive' and courier booked
         $this->assertEquals('to receive', $order->ord_status);
-        $this->assertEquals(620.0, (float) $order->ord_amount); // 500 + 120
-        $this->assertEquals(620.0, (float) $order->pay_received);
-        $this->assertEquals(120.0, (float) $delivery->deliver_fee_charged);
         $this->assertTrue($delivery->isBooked());
+        $this->assertSame('107900701184', $delivery->courierOrderId());
+        $this->assertEquals(120.0, (float) $delivery->deliver_fee_actual);
+        $this->assertEquals(620.0, (float) $order->pay_received);
     }
 
     public function test_customer_can_switch_claiming_method_while_order_is_processing()
@@ -485,10 +480,10 @@ class OnlineDeliveryCourierTest extends TestCase
     }
 
     // ==========================================
-    // THE COURIER IS BOOKED ONCE THE MONEY ARRIVES
+    // THE COURIER IS BOOKED ONCE THE ITEMS ARE READY
     // ==========================================
 
-    public function test_the_webhook_marks_the_order_paid_and_books_the_courier()
+    public function test_the_webhook_marks_the_order_paid_without_calling_a_rider_yet()
     {
         $customer = $this->makeCustomer();
         $product  = $this->makeProduct();
@@ -497,36 +492,12 @@ class OnlineDeliveryCourierTest extends TestCase
 
         [$order] = $this->checkoutDelivery($customer, $product);
         $this->assertSame(0.0, (float) $order->fresh()->pay_received);
-        $this->assertFalse(Delivery::where('ord_id', $order->ord_id)->firstOrFail()->isBooked());
 
-        $raw = json_encode([
-            'data' => [
-                'id'         => 'evt_delivery_paid',
-                'type'       => 'checkout_session.payment.paid',
-                'attributes' => [
-                    'reference_number' => 'order:' . $order->ord_id,
-                    'status'           => 'paid',
-                ],
-            ],
-        ], JSON_UNESCAPED_SLASHES);
-
-        $this->withHeaders([
-            'Content-Type'       => 'application/json',
-            'Paymongo-Signature' => $this->payMongoSignature($raw, $secret),
-        ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))
-            ->assertStatus(200);
+        $this->payThroughWebhook($order, $secret);
 
         $order->refresh();
-        $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
-
         $this->assertEquals((float) $order->ord_amount, (float) $order->pay_received);
-        $this->assertTrue($delivery->isBooked());
-        // The LalaMove order id and its tracking URL ride inside the one
-        // column the live schema already has.
-        $this->assertSame('107900701184', $delivery->courierOrderId());
-        $this->assertSame('https://share.lalamove.com/107900701184', $delivery->shareUrl());
-        $this->assertSame('ASSIGNING_DRIVER', $delivery->courier()['status']);
-        $this->assertNotNull($delivery->deliver_placed);
+        $this->assertFalse(Delivery::where('ord_id', $order->ord_id)->firstOrFail()->isBooked());
 
         // The status poll answers the same truth to a browser that came back
         // from PayMongo before the webhook landed, and never double-settles.
@@ -545,32 +516,23 @@ class OnlineDeliveryCourierTest extends TestCase
         $this->fakeLalamove();
 
         [$order] = $this->checkoutDelivery($customer, $product);
+        $this->payThroughWebhook($order, $secret);
+        $this->markReady($order);
 
-        $raw = json_encode([
-            'data' => [
-                'id'         => 'evt_delivery_paid',
-                'type'       => 'checkout_session.payment.paid',
-                'attributes' => ['reference_number' => 'order:' . $order->ord_id, 'status' => 'paid'],
-            ],
-        ], JSON_UNESCAPED_SLASHES);
-
-        $this->withHeaders([
-            'Content-Type'       => 'application/json',
-            'Paymongo-Signature' => $this->payMongoSignature($raw, $secret),
-        ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))->assertStatus(200);
+        $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
+        $this->assertSame('https://share.lalamove.com/107900701184', $delivery->shareUrl());
 
         // LalaMove pushes a status change - no bearer token exists for a
         // courier, so the route is public and the handler is idempotent.
+        $this->courierStatus = 'PICKED_UP';
         $this->withHeaders(['Content-Type' => 'application/json'])
             ->postJson('/api/delivery/webhook', [
-                'orderId' => '107900701184',
-                'status'  => 'PICKED_UP',
-                'message' => 'ORDER_STATUS_CHANGED',
+                'eventType' => 'ORDER_STATUS_CHANGED',
+                'data'      => ['order' => ['orderId' => '107900701184', 'status' => 'PICKED_UP']],
             ])->assertStatus(200);
 
-        $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
+        $delivery->refresh();
         $this->assertSame('PICKED_UP', $delivery->courier()['status']);
-        $this->assertSame('delivering', $order->fresh()->ord_status);
         $this->assertNotNull($delivery->deliver_pickedup);
 
         // The same event again must not re-announce or move anything.
@@ -579,9 +541,10 @@ class OnlineDeliveryCourierTest extends TestCase
                 'orderId' => '107900701184',
                 'status'  => 'PICKED_UP',
             ])->assertStatus(200);
-        $this->assertSame('delivering', $order->fresh()->ord_status);
+        $this->assertSame('to receive', $order->fresh()->ord_status);
 
         // Arrived: the customer still confirms by scanning the parcel QR.
+        $this->courierStatus = 'COMPLETED';
         $this->withHeaders(['Content-Type' => 'application/json'])
             ->postJson('/api/delivery/webhook', [
                 'orderId' => '107900701184',
@@ -594,6 +557,30 @@ class OnlineDeliveryCourierTest extends TestCase
         $this->assertNotNull($delivery->deliver_end);
     }
 
+    public function test_a_forged_courier_event_cannot_move_the_order()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct();
+        $secret   = $this->fakePayMongo();
+        $this->fakeLalamove();
+
+        [$order] = $this->checkoutDelivery($customer, $product);
+        $this->payThroughWebhook($order, $secret);
+        $this->markReady($order);
+
+        // Someone posts COMPLETED, but LalaMove still says the driver is
+        // being assigned - the read-back wins.
+        $this->withHeaders(['Content-Type' => 'application/json'])
+            ->postJson('/api/delivery/webhook', [
+                'orderId' => '107900701184',
+                'status'  => 'COMPLETED',
+            ])->assertStatus(200);
+
+        $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
+        $this->assertNull($delivery->deliver_completed);
+        $this->assertTrue($delivery->isBooked());
+    }
+
     public function test_a_courier_that_cannot_take_it_frees_the_row_for_a_rebooking()
     {
         $customer = $this->makeCustomer();
@@ -602,26 +589,16 @@ class OnlineDeliveryCourierTest extends TestCase
         $this->fakeLalamove();
 
         [$order] = $this->checkoutDelivery($customer, $product);
-
-        $raw = json_encode([
-            'data' => [
-                'id'         => 'evt_delivery_paid',
-                'type'       => 'checkout_session.payment.paid',
-                'attributes' => ['reference_number' => 'order:' . $order->ord_id, 'status' => 'paid'],
-            ],
-        ], JSON_UNESCAPED_SLASHES);
-
-        $this->withHeaders([
-            'Content-Type'       => 'application/json',
-            'Paymongo-Signature' => $this->payMongoSignature($raw, $secret),
-        ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))->assertStatus(200);
+        $this->payThroughWebhook($order, $secret);
+        $this->markReady($order);
 
         $this->assertTrue(Delivery::where('ord_id', $order->ord_id)->firstOrFail()->isBooked());
 
+        $this->courierStatus = 'EXPIRED';
         $this->withHeaders(['Content-Type' => 'application/json'])
             ->postJson('/api/delivery/webhook', [
                 'orderId' => '107900701184',
-                'status'  => 'CANCELED',
+                'status'  => 'EXPIRED',
             ])->assertStatus(200);
 
         // The money stays paid; only the booking is released so staff can
@@ -629,7 +606,30 @@ class OnlineDeliveryCourierTest extends TestCase
         $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
         $this->assertFalse($delivery->isBooked());
         $this->assertEquals((float) $order->fresh()->ord_amount, (float) $order->fresh()->pay_received);
-        $this->assertSame('CANCELED', $delivery->courier()['status']);
+        $this->assertSame('EXPIRED', $delivery->courier()['status']);
+    }
+
+    public function test_the_scheduled_sync_applies_courier_changes_without_a_webhook()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct();
+        $secret   = $this->fakePayMongo();
+        $this->fakeLalamove();
+
+        [$order] = $this->checkoutDelivery($customer, $product);
+        $this->payThroughWebhook($order, $secret);
+        $this->markReady($order);
+
+        // Nothing changed at LalaMove yet.
+        $this->assertSame(['unchanged' => 1], app(\App\Http\Controllers\OrdersAPI::class)->syncActiveCouriers());
+
+        // The rider picked it up, but no webhook ever arrived.
+        $this->courierStatus = 'PICKED_UP';
+        $this->assertSame(['updated' => 1], app(\App\Http\Controllers\OrdersAPI::class)->syncActiveCouriers());
+
+        $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
+        $this->assertSame('PICKED_UP', $delivery->courier()['status']);
+        $this->assertNotNull($delivery->deliver_pickedup);
     }
 
     // ==========================================

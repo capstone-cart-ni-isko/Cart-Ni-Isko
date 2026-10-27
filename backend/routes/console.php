@@ -129,3 +129,51 @@ Schedule::call(fn () => app(\App\Http\Controllers\DatabaseAPI::class)->promptAcc
     ->withoutOverlapping();
 
 
+
+/*
+    LalaMove status changes reach the app two ways. The webhook below is
+    instant but needs a public URL registered against the API key (one URL
+    per key, so local dev and production cannot both hold it). This sync is
+    the safety net that works everywhere: every live courier booking is read
+    back from LalaMove every two minutes and any change is applied exactly as
+    a webhook would apply it.
+*/
+Schedule::call(function () {
+    $counts = app(OrdersAPI::class)->syncActiveCouriers();
+
+    if (($counts['updated'] ?? 0) > 0) {
+        \Log::info('LalaMove courier sync', $counts);
+    }
+})->everyTwoMinutes()->name('lalamove-courier-sync')->withoutOverlapping();
+
+Artisan::command('lalamove:sync', function () {
+    $counts = app(OrdersAPI::class)->syncActiveCouriers();
+    $this->info($counts === [] ? 'No live courier bookings to sync.' : json_encode($counts));
+})->purpose('Read every live LalaMove booking back and apply status changes');
+
+/*
+    Registers the webhook URL with LalaMove. Without an argument it uses
+    LALAMOVE_WEBHOOK_URL, else the public URL Render gives the service
+    (RENDER_EXTERNAL_URL) - docker-start.sh runs it on every boot, so the
+    deployed API always owns the webhook. LalaMove calls the URL while
+    registering, so the API must already be reachable.
+*/
+Artisan::command('lalamove:webhook {url?}', function (?string $url = null) {
+    $url = $url ?: config('services.lalamove.webhook_url');
+    if (! $url) {
+        $this->error('No webhook URL: pass one, or set LALAMOVE_WEBHOOK_URL.');
+        return 1;
+    }
+    if (! \App\Services\LalamoveService::isConfigured()) {
+        $this->warn('LalaMove keys are not set - webhook not registered.');
+        return 0;
+    }
+
+    try {
+        (new \App\Services\LalamoveService())->registerWebhook($url);
+        $this->info('LalaMove (' . \App\Services\LalamoveService::environment() . ') webhook set to ' . $url);
+    } catch (\App\Services\LalamoveUnavailableException $e) {
+        $this->error('LalaMove refused the webhook: ' . $e->getMessage());
+        return 1;
+    }
+})->purpose('Register the LalaMove status webhook URL');

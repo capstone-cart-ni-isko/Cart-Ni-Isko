@@ -225,6 +225,32 @@ class OrdersAPI extends Controller
             'orders/update ' . $status . ' - order #' . $order->ord_id
                 . ' (was ' . trim($priorStatus) . ')'
         );
+
+        // Delivery fee already paid at checkout: the items being ready is
+        // the moment to call the courier - no customer action is left.
+        if ($status === 'to deliver' && $this->deliveryFeePrepaid($order)) {
+            $order->update(['ord_status' => 'to receive']);
+            $booking = $this->bookDeliveryCourier($order);
+
+            if ($booking['booked']) {
+                $this->announce((int) $order->cust_id, 'Order #' . $order->ord_id
+                    . ' is packed and a courier has been booked. Track it from your order page.');
+            } else {
+                $this->announce((int) $order->cust_id, 'Order #' . $order->ord_id
+                    . ' is packed and waiting for a courier.');
+                $this->alertAdmins('[PRIORITY] Courier booking for order #' . $order->ord_id
+                    . ' failed: ' . $booking['message'] . ' Retry it from Deliveries.');
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $booking['booked']
+                    ? 'Order is ready and the courier has been booked.'
+                    : 'Order is ready, but the courier could not be booked: ' . $booking['message'],
+                'data'    => self::orderPayload($order->fresh()),
+            ], 200);
+        }
+
         $this->announceStatus($order, $status);
 
         return response()->json([
@@ -232,6 +258,16 @@ class OrdersAPI extends Controller
             'message' => 'Order status updated successfully.',
             'data'    => self::orderPayload($order->fresh()),
         ], 200);
+    }
+
+    /** The courier fee was charged with the products at checkout. */
+    protected function deliveryFeePrepaid(Order $order): bool
+    {
+        $delivery = Delivery::where('ord_id', $order->ord_id)->first();
+
+        return $delivery !== null
+            && (float) ($delivery->deliver_fee_charged ?? 0) > 0
+            && (float) $order->pay_received >= (float) $order->ord_amount;
     }
 
     protected function closeDispatch(Order $order): void
@@ -543,13 +579,10 @@ class OrdersAPI extends Controller
             $subtotal    = $this->bagSubtotal($bags);
             $quote       = $this->quoteDispatch($json, $dispatchType, $speed);
             $preorderBagIds = self::preorderBagIds($bags);
-            if ($dispatchType === 'delivery') {
-                $dispatchFee = 0.0;
-                $totalDue    = $subtotal;
-            } else {
-                $dispatchFee = $quote['fee'];
-                $totalDue    = round($subtotal + $dispatchFee, 2);
-            }
+            // The courier fee is charged with the products (live LalaMove
+            // quote, or the store fee table when the courier is unavailable).
+            $dispatchFee = round((float) $quote['fee'], 2);
+            $totalDue    = round($subtotal + $dispatchFee, 2);
 
             if ($dispatchType === 'pickup') {
                 $slotStart = $this->slotStartFrom($json);
@@ -604,8 +637,8 @@ class OrdersAPI extends Controller
                     'deliver_address'    => $deliverAddress,
                     'deliver_phone'      => (string) ($customer->cust_phone ?? ''),
                     'courier'            => $quote['courier'],
-                    'fee_source'         => 'pending',
-                    'fee_pending'        => true,
+                    'fee_source'         => $quote['source'],
+                    'fee_pending'        => false,
                     'preorder'           => $preorderBagIds !== [],
                     'preorder_items'     => $preorderBagIds,
                 ];
@@ -634,6 +667,7 @@ class OrdersAPI extends Controller
                     'bag_ids'          => $bags->pluck('bag_id')->all(),
                     'subtotal'         => $subtotal,
                     'dispatch_fee'     => $dispatchFee,
+                    'dispatch_fee_source' => $quote['source'],
                     'dispatch_quote'   => $quote,
                     'total_due'        => $totalDue,
                     'total'            => $totalDue,
@@ -914,12 +948,8 @@ class OrdersAPI extends Controller
                         . '. Your order is being processed.'
                 );
                 $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
-
-                $booking = $this->bookDeliveryCourier($order);
-                if ($booking['booked'] && ! empty($booking['order_id'])) {
-                    $this->alertAdmins('LalaMove booked for order #' . $order->ord_id
-                        . ' (courier order ' . $booking['order_id'] . ').');
-                }
+                // The courier is booked once staff mark the items ready
+                // (employeeStatusUpdate -> 'to deliver'), not at payment.
             }
 
             return response()->json([
@@ -1007,8 +1037,6 @@ class OrdersAPI extends Controller
                     '[PRIORITY] Payment confirmed for order #' . $order->ord_id
                         . '. Your order is being processed.');
                 $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
-
-                $booking = $this->bookDeliveryCourier($order);
             }
 
             $state['paid']   = true;
@@ -1053,8 +1081,6 @@ class OrdersAPI extends Controller
             $event = $json->all();
 
             $orderId = (string) ($this->findDeep($event, 'orderId') ?? '');
-            $message = strtoupper((string) ($this->findDeep($event, 'message') ?? $this->findDeep($event, 'type') ?? ''));
-            $status  = strtoupper((string) ($this->findDeep($event, 'status') ?? ''));
 
             if ($orderId === '') {
                 return $this->webhookAck('Event acknowledged');
@@ -1071,30 +1097,80 @@ class OrdersAPI extends Controller
                 return $this->webhookAck('Event acknowledged');
             }
 
-            $state = $status !== '' && in_array($status, [
-                'ASSIGNING_DRIVER', 'ON_GOING', 'PICKED_UP', 'COMPLETED',
-                'CANCELED', 'REJECTED', 'EXPIRED',
-            ], true) ? $status : ($message === 'DRIVER_ASSIGNED' ? 'ON_GOING' : null);
+            // The event body is not trusted: the status is read back from
+            // LalaMove itself, so a forged POST can only trigger a re-sync.
+            $outcome = $this->syncCourierStatus($order, $delivery, $orderId);
 
-            if ($state === null) {
-                return $this->webhookAck('Event acknowledged');
-            }
-
-            $previous = $delivery->courier()['status'];
-            if ($previous === $state && $delivery->deliver_last_event !== null) {
-                return $this->webhookAck('Duplicate event ignored');
-            }
-
-            $delivery->forceFill(['deliver_last_event' => now()])->save();
-            $delivery->storeCourier(['status' => $state]);
-
-            $this->applyCourierState($order, $delivery, $state);
-
-            return $this->webhookAck('Event acknowledged');
+            return $this->webhookAck($outcome === 'unchanged' ? 'Duplicate event ignored' : 'Event acknowledged');
         } catch (\Throwable $e) {
             Log::error('LalaMove webhook error', ['error' => $e->getMessage()]);
             return $this->webhookAck('Event acknowledged');
         }
+    }
+
+    /**
+     * Scheduled safety net for the webhook: every live courier booking is
+     * read back from LalaMove, so status changes land even when no webhook
+     * URL is registered (local dev) or an event was missed.
+     *
+     * @return array<string, int> outcome => count
+     */
+    public function syncActiveCouriers(): array
+    {
+        if (! LalamoveService::isConfigured()) {
+            return [];
+        }
+
+        $counts = [];
+        $deliveries = Delivery::whereNotNull('deliver_placed')
+            ->whereNull('deliver_completed')
+            ->where('deliver_placed', '>=', now()->subDays(7))
+            ->get();
+
+        foreach ($deliveries as $delivery) {
+            $courierId = $delivery->courierOrderId();
+            $order     = $courierId ? $this->resolveDeliveryOrder($delivery) : null;
+            if (! $order) {
+                continue;
+            }
+
+            $outcome = $this->syncCourierStatus($order, $delivery, $courierId);
+            $counts[$outcome] = ($counts[$outcome] ?? 0) + 1;
+        }
+
+        return $counts;
+    }
+
+    /** @return string 'updated' | 'unchanged' | 'unknown' | 'unavailable' */
+    private function syncCourierStatus(Order $order, Delivery $delivery, string $courierId): string
+    {
+        try {
+            $state = strtoupper((string) (new LalamoveService())->orderDetails($courierId)['status']);
+        } catch (\Throwable $e) {
+            Log::warning('LalaMove status read-back failed', [
+                'order_id' => $courierId,
+                'error'    => $e->getMessage(),
+            ]);
+            return 'unavailable';
+        }
+
+        if (! in_array($state, [
+            'ASSIGNING_DRIVER', 'ON_GOING', 'PICKED_UP', 'COMPLETED',
+            'CANCELED', 'REJECTED', 'EXPIRED',
+        ], true)) {
+            return 'unknown';
+        }
+
+        if ($delivery->courier()['status'] === $state) {
+            return 'unchanged';
+        }
+
+        $delivery->forceFill(['deliver_last_event' => now()])->save();
+        $delivery->storeCourier(['status' => $state]);
+
+        $this->applyCourierState($order, $delivery, $state);
+
+        return 'updated';
     }
 
     private function applyCourierState(Order $order, Delivery $delivery, string $state): void
@@ -1453,7 +1529,7 @@ class OrdersAPI extends Controller
             }
 
             $subtotal    = round($subtotal, 2);
-            $dispatchFee = $dispatchType === 'delivery' ? 0.0 : round((float) ($quote['fee'] ?? 0), 2);
+            $dispatchFee = round((float) ($quote['fee'] ?? 0), 2);
             $totalDue    = round($subtotal + $dispatchFee, 2);
 
             $order = Order::create([
@@ -1557,7 +1633,7 @@ class OrdersAPI extends Controller
                     'deliver_lng'         => is_numeric($lng) ? (float) $lng : null,
                     'deliver_service'     => strtoupper($speed),
                     'deliver_env'         => LalamoveService::environment(),
-                    'deliver_fee_charged' => null,
+                    'deliver_fee_charged' => $dispatchFee,
                 ]);
 
                 $parcel = Parcel::create([
