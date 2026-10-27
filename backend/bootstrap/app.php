@@ -26,6 +26,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(App\Http\Middleware\CacheReads::class);
         $middleware->append(App\Http\Middleware\RenewApiToken::class);
 
+        // Render terminates TLS at its proxy and forwards plain HTTP. Trusting
+        // its X-Forwarded-* headers makes generated URLs (product images
+        // under /storage) https:// instead of http://.
+        $middleware->trustProxies(at: '*');
+
         // API-only app: an unauthenticated request has no page to be sent to,
         // so guests stay put and the handler below answers 401 JSON.
         $middleware->redirectGuestsTo(fn () => null);

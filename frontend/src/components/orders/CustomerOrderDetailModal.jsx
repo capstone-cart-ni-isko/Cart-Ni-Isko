@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Modal from '../ui/Modal.jsx'
 import Button from '../ui/Button.jsx'
+import ConfirmModal from '../ui/ConfirmModal.jsx'
 import StatusBadge from '../ui/StatusBadge.jsx'
 import { formatPrice } from '../ui/PriceTag.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
@@ -99,6 +100,7 @@ export default function CustomerOrderDetailModal({
   const [trackRes, setTrackRes] = useState(null)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
   const [scanMode, setScanMode] = useState(null)
   const [isRescheduling, setIsRescheduling] = useState(false)
   const [isSwitchingToPickup, setIsSwitchingToPickup] = useState(false)
@@ -390,6 +392,10 @@ export default function CustomerOrderDetailModal({
   const delivery = {
     expect: formatStamp(effectiveRaw?.deliver_expect),
     received: formatStamp(effectiveRaw?.deliver_end),
+    // Courier stamps, written as LalaMove reports each step.
+    booked: formatStamp(effectiveRaw?.deliver_placed),
+    pickedUp: formatStamp(effectiveRaw?.deliver_pickedup),
+    delivered: formatStamp(effectiveRaw?.deliver_completed),
     address: effectiveRaw?.deliver_address || order?.fulfillment?.location || null,
     phone: effectiveRaw?.deliver_phone || null,
     recipient: effectiveRaw?.deliver_recipient || null,
@@ -721,8 +727,11 @@ export default function CustomerOrderDetailModal({
             <div className="space-y-2 text-xs divide-y divide-[var(--line)]">
               {[
                 isDelivery
-                  ? { label: 'Expected delivery', value: delivery.expect }
+                  ? { label: delivery.booked ? 'Estimated arrival' : 'Expected delivery', value: delivery.delivered ? null : delivery.expect }
                   : { label: 'Claim window', value: appointment.start ? `${appointment.start} – ${appointment.end || '—'}` : null },
+                isDelivery && delivery.booked ? { label: 'Courier booked', value: delivery.booked } : null,
+                isDelivery && delivery.pickedUp ? { label: 'Picked up', value: delivery.pickedUp } : null,
+                isDelivery && delivery.delivered ? { label: 'Delivered', value: delivery.delivered } : null,
                 isDelivery && delivery.received ? { label: 'Received at', value: delivery.received } : null,
                 !isDelivery && appointment.closed ? { label: 'Claimed at', value: appointment.closed } : null,
                 !isDelivery && appointment.status ? { label: 'Appointment status', value: appointment.status } : null,
@@ -1004,7 +1013,7 @@ export default function CustomerOrderDetailModal({
               <button
                 type="button"
                 disabled={busy}
-                onClick={handleCancel}
+                onClick={() => setConfirmCancel(true)}
                 className="w-full sm:w-auto px-4 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition-colors cursor-pointer disabled:opacity-60"
               >
                 {busy ? <><LoadingSpinner size={13} /> Sending…</> : 'Cancel Order'}
@@ -1080,6 +1089,16 @@ export default function CustomerOrderDetailModal({
           />
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        onConfirm={handleCancel}
+        title="Cancel this order?"
+        message={`This sends a cancellation request for order #${orderId}. The store reviews it, and a paid order is refunded once the request is approved.`}
+        confirmText="Yes, cancel order"
+        cancelText="Keep order"
+      />
 
       {/* Reschedule Pickup Modal (FLOW-MANAGE_BOOKED-04) */}
       {isRescheduling && (

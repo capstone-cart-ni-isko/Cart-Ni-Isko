@@ -15,6 +15,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import Modal from '../components/ui/Modal.jsx'
 import Button from '../components/ui/Button.jsx'
+import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import QRCode from 'qrcode'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import CustomerOrderDetailModal from '../components/orders/CustomerOrderDetailModal.jsx'
@@ -217,6 +218,7 @@ function Orders() {
   const [bucket, setBucket] = useState({ key: null, rows: null })
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
   const [claimTarget, setClaimTarget] = useState(null)
   const [pickupQrTarget, setPickupQrTarget] = useState(null)
   const [pickupQrDataUrl, setPickupQrDataUrl] = useState('')
@@ -782,7 +784,7 @@ function Orders() {
                       <button
                         type="button"
                         disabled={busyId === order.id}
-                        onClick={() => handleCancel(order)}
+                        onClick={() => setCancelTarget(order)}
                         className="px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
                       >
                         {busyId === order.id ? <><LoadingSpinner size={14} /> Sending…</> : 'Cancel Order'}
@@ -840,6 +842,16 @@ function Orders() {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={cancelTarget != null}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => cancelTarget && handleCancel(cancelTarget)}
+        title="Cancel this order?"
+        message={`This sends a cancellation request for order #${cancelTarget?.id ?? ''}. The store reviews it, and a paid order is refunded once the request is approved.`}
+        confirmText="Yes, cancel order"
+        cancelText="Keep order"
+      />
 
       {/* Rate & review each item of a claimed / received order */}
       {reviewTarget && (

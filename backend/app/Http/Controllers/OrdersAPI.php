@@ -1145,7 +1145,8 @@ class OrdersAPI extends Controller
     private function syncCourierStatus(Order $order, Delivery $delivery, string $courierId): string
     {
         try {
-            $state = strtoupper((string) (new LalamoveService())->orderDetails($courierId)['status']);
+            $details = (new LalamoveService())->orderDetails($courierId);
+            $state   = strtoupper((string) $details['status']);
         } catch (\Throwable $e) {
             Log::warning('LalaMove status read-back failed', [
                 'order_id' => $courierId,
@@ -1168,17 +1169,54 @@ class OrdersAPI extends Controller
         $delivery->forceFill(['deliver_last_event' => now()])->save();
         $delivery->storeCourier(['status' => $state]);
 
-        $this->applyCourierState($order, $delivery, $state);
+        $distance = $details['raw']['distance']['value'] ?? null;
+        $this->applyCourierState($order, $delivery, $state, is_numeric($distance) ? (int) $distance : null);
+        $this->announceDeliveryChange();
 
         return 'updated';
     }
 
-    private function applyCourierState(Order $order, Delivery $delivery, string $state): void
+    /**
+     * Courier arrival estimate in minutes: city riding at ~20 km/h (3 min per
+     * km), plus 30 minutes for a rider to accept and collect the parcel when
+     * it has not been picked up yet.
+     */
+    private function courierEtaMinutes(?int $distanceM, bool $pickedUp): int
+    {
+        $travel = $distanceM !== null && $distanceM > 0
+            ? (int) ceil($distanceM / 1000 * 3)
+            : 20;
+
+        return max(10, $travel) + ($pickedUp ? 0 : 30);
+    }
+
+    /**
+     * Same signal CacheReads sends after an API write: the scheduled courier
+     * sync writes outside a request, so it bumps the read-cache version and
+     * pings open screens itself.
+     */
+    private function announceDeliveryChange(): void
+    {
+        $version = (int) \Illuminate\Support\Facades\Cache::get('api:version', 0) + 1;
+        \Illuminate\Support\Facades\Cache::forever('api:version', $version);
+
+        try {
+            event(new \App\Events\ApiDataChanged('orders', $version));
+            event(new \App\Events\ApiDataChanged('delivery', $version));
+        } catch (\Throwable $e) {
+            // Best-effort, as in CacheReads: polling still refreshes screens.
+        }
+    }
+
+    private function applyCourierState(Order $order, Delivery $delivery, string $state, ?int $distanceM = null): void
     {
         switch ($state) {
             case 'PICKED_UP':
                 if ($delivery->deliver_pickedup === null) {
-                    $delivery->forceFill(['deliver_pickedup' => now()])->save();
+                    $delivery->forceFill([
+                        'deliver_pickedup' => now(),
+                        'deliver_expect'   => now()->addMinutes($this->courierEtaMinutes($distanceM, true)),
+                    ])->save();
                 }
                 if ($order->ord_status === 'processing' || $order->ord_status === 'to claim') {
                     $order->update(['ord_status' => 'delivering']);
@@ -1427,6 +1465,8 @@ class OrdersAPI extends Controller
 
             $delivery->forceFill([
                 'deliver_placed'     => now(),
+                // From here the estimate is the courier's, counted from now.
+                'deliver_expect'     => now()->addMinutes($this->courierEtaMinutes($quote['distance_m'], false)),
                 'deliver_service'    => $quote['service_type'],
                 'deliver_fee_actual' => $quote['total'],
                 'deliver_env'        => LalamoveService::environment(),

@@ -25,6 +25,7 @@ import { parseDate, paymentSummary } from '../services/dashboard.js'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
+import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
 import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
 import { canReviewOrder } from '../services/reviews.js'
@@ -99,6 +100,7 @@ function OrderDetail() {
   const [trackRes, setTrackRes] = useState(null)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
   // null | 'delivery' (FLOW-ORD_CLAIM-07) | 'pickup' (FLOW-ORD_CLAIM-01)
   const [scanMode, setScanMode] = useState(null)
   const [reviewOpen, setReviewOpen] = useState(false)
@@ -373,6 +375,10 @@ function OrderDetail() {
   const delivery = {
     expect: formatStamp(order.raw?.deliver_expect),
     received: formatStamp(order.raw?.deliver_end),
+    // Courier stamps, written as LalaMove reports each step.
+    booked: formatStamp(order.raw?.deliver_placed),
+    pickedUp: formatStamp(order.raw?.deliver_pickedup),
+    delivered: formatStamp(order.raw?.deliver_completed),
     address: order.raw?.deliver_address || null,
     phone: order.raw?.deliver_phone || null,
     recipient: order.raw?.deliver_recipient || null,
@@ -559,8 +565,11 @@ function OrderDetail() {
                 deliver_expect (ETA) / deliver_end (claim time) for delivery. */}
             {[
               isDelivery
-                ? { label: 'Expected delivery', value: delivery.expect }
+                ? { label: delivery.booked ? 'Estimated arrival' : 'Expected delivery', value: delivery.delivered ? null : delivery.expect }
                 : { label: 'Claim window', value: appointment.start ? `${appointment.start} – ${appointment.end || '—'}` : null },
+              isDelivery && delivery.booked ? { label: 'Courier booked', value: delivery.booked } : null,
+              isDelivery && delivery.pickedUp ? { label: 'Picked up', value: delivery.pickedUp } : null,
+              isDelivery && delivery.delivered ? { label: 'Delivered', value: delivery.delivered } : null,
               isDelivery && delivery.received
                 ? { label: 'Received at', value: delivery.received }
                 : null,
@@ -832,7 +841,7 @@ function OrderDetail() {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={handleCancel}
+                  onClick={() => setConfirmCancel(true)}
                   className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
                 >
                   {busy ? 'Sending…' : 'Cancel Order'}
@@ -926,6 +935,15 @@ function OrderDetail() {
           </div>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        onConfirm={handleCancel}
+        title="Cancel this order?"
+        message={`This sends a cancellation request for order #${order.id}. The store reviews it, and a paid order is refunded once the request is approved.`}
+        confirmText="Yes, cancel order"
+        cancelText="Keep order"
+      />
       <OrderReviewModal
         isOpen={reviewOpen}
         order={order}

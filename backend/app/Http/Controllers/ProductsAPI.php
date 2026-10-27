@@ -304,6 +304,11 @@ class ProductsAPI extends Controller
         public static function publicPicture($value)
         {
             $value = trim((string) $value);
+            // Our own storage saved with a host (e.g. http://127.0.0.1:8000)
+            // is re-served from whichever host is answering now.
+            if (preg_match('#^https?://[^/]+(/storage/.+)$#i', $value, $m)) {
+                $value = $m[1];
+            }
             if ($value === '' || preg_match('#^(data:|https?:|//)#i', $value)) {
                 return $value === '' ? null : $value;
             }
@@ -313,6 +318,23 @@ class ProductsAPI extends Controller
                 : 'storage/' . ltrim($value, '/');
 
             return self::publicUrl($path);
+        }
+
+        /**
+         * A picture on our own storage is saved as its "/storage/..." path,
+         * never with the host it was uploaded through: an upload made against
+         * a local API would otherwise save "http://127.0.0.1:8000/storage/..."
+         * and break on every other deployment. publicPicture() adds the host
+         * on the way out.
+         */
+        public static function storedPicture($value): ?string
+        {
+            $value = trim((string) $value);
+            if (preg_match('#^https?://[^/]+(/storage/.+)$#i', $value, $m)) {
+                $value = $m[1];
+            }
+
+            return $value === '' ? null : $value;
         }
 
         protected static function imageWithinSize($value): bool
@@ -1627,7 +1649,7 @@ class ProductsAPI extends Controller
 
                 $rows[] = [
                     'prodvar_name'     => $name,
-                    'prodvar_pic'      => filled($pic) ? $pic : null,
+                    'prodvar_pic'      => self::storedPicture($pic),
                     'prodvar_stock'    => (int) $stock,
                     'prodvar_main'     => (bool) ($row['prodvar_main'] ?? $row['main'] ?? false),
                     'prodvar_markup'   => ($markup === null || $markup === '') ? 0.0 : round((float) $markup, 2),
@@ -1675,7 +1697,7 @@ class ProductsAPI extends Controller
 
                 $rows[] = [
                     'prodvar_name'     => 'Standard',
-                    'prodvar_pic'      => filled($pic) ? $pic : null,
+                    'prodvar_pic'      => self::storedPicture($pic),
                     'prodvar_stock'    => max(0, (int) $json->input('prod_qty', 0)),
                     'prodvar_main'     => true,
                     'prodvar_markup'   => 0.0,
@@ -1773,7 +1795,7 @@ class ProductsAPI extends Controller
                 ->orderBy('prodvar_id')
                 ->first();
 
-            $main?->update(['prodvar_pic' => $image]);
+            $main?->update(['prodvar_pic' => self::storedPicture($image)]);
         }
 
         protected function syncVariations(Product $product, array $incoming): void
@@ -1798,7 +1820,7 @@ class ProductsAPI extends Controller
 
                 $attributes = [
                     'prodvar_name'     => $row['prodvar_name'],
-                    'prodvar_pic'      => $row['prodvar_pic'],
+                    'prodvar_pic'      => self::storedPicture($row['prodvar_pic']),
                     'prodvar_stock'    => $row['prodvar_stock'],
                     'prodvar_main'     => $row['prodvar_main'],
                     'prodvar_markup'   => $row['prodvar_markup'],
@@ -1912,7 +1934,7 @@ class ProductsAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Product images must be 2 MB or smaller.'], 422);
             }
             if (array_key_exists('prodvar_pic', $input) || array_key_exists('pic', $input)) {
-                $attributes['prodvar_pic'] = filled($pic) ? $pic : null;
+                $attributes['prodvar_pic'] = self::storedPicture($pic);
             }
 
             if (array_key_exists('prodvar_preorder', $input)) {

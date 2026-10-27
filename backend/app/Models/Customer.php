@@ -75,6 +75,25 @@ class Customer extends Authenticatable
         'cust_cred_changed' => 'datetime',
     ];
 
+    /**
+     * Avatars on our own storage are saved as their "/storage/..." path and
+     * served with the host answering the request, so an upload made through
+     * a local API (http://127.0.0.1:8000) still shows on the deployed site.
+     */
+    public function getCustAvatarAttribute($value)
+    {
+        return filled($value) ? \App\Http\Controllers\ProductsAPI::publicPicture($value) : $value;
+    }
+
+    public function setCustAvatarAttribute($value)
+    {
+        if (is_string($value) && preg_match('#^https?://[^/]+(/storage/.+)$#i', trim($value), $m)) {
+            $value = $m[1];
+        }
+
+        $this->attributes['cust_avatar'] = $value;
+    }
+
     public function bag()
     {
         return $this->hasMany(Bag::class, 'cust_id', 'cust_id');

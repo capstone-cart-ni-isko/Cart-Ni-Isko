@@ -425,6 +425,10 @@ class OnlineDeliveryCourierTest extends TestCase
         $this->assertSame('107900701184', $delivery->courierOrderId());
         $this->assertEquals(120.0, (float) $delivery->deliver_fee_actual);
         $this->assertEquals(620.0, (float) $order->pay_received);
+
+        // The 2-day checkout estimate becomes the courier's, counted from
+        // now: 30 min to collect + 4.2 km at 3 min/km = 43 min.
+        $this->assertTrue($delivery->deliver_expect->between(now()->addMinutes(40), now()->addMinutes(46)));
     }
 
     public function test_customer_can_switch_claiming_method_while_order_is_processing()
@@ -534,6 +538,8 @@ class OnlineDeliveryCourierTest extends TestCase
         $delivery->refresh();
         $this->assertSame('PICKED_UP', $delivery->courier()['status']);
         $this->assertNotNull($delivery->deliver_pickedup);
+        // Picked up: the estimate is the ride alone, counted from the pickup.
+        $this->assertTrue($delivery->deliver_expect->between(now()->addMinutes(5), now()->addMinutes(30)));
 
         // The same event again must not re-announce or move anything.
         $this->withHeaders(['Content-Type' => 'application/json'])

@@ -117,6 +117,25 @@ class Employee extends Authenticatable
         return $this->emp_deleted === null && $this->emp_suspended === null;
     }
 
+    /**
+     * Avatars on our own storage are saved as their "/storage/..." path and
+     * served with the host answering the request, so an upload made through
+     * a local API (http://127.0.0.1:8000) still shows on the deployed site.
+     */
+    public function getEmpAvatarAttribute($value)
+    {
+        return filled($value) ? \App\Http\Controllers\ProductsAPI::publicPicture($value) : $value;
+    }
+
+    public function setEmpAvatarAttribute($value)
+    {
+        if (is_string($value) && preg_match('#^https?://[^/]+(/storage/.+)$#i', trim($value), $m)) {
+            $value = $m[1];
+        }
+
+        $this->attributes['emp_avatar'] = $value;
+    }
+
     public function schedules()
     {
         return $this->hasMany(Schedule::class, 'emp_id', 'emp_id');
