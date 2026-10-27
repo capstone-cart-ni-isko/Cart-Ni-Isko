@@ -2121,7 +2121,7 @@ class ProductsAPI extends Controller
             return $out;
         }
 
-        protected const notPurchased = ['processing', 'to cancel', 'cancelled'];
+        protected const notPurchased = ['to pay', 'processing', 'to cancel', 'cancelled'];
 
         /** rev_msg is a 255-char column that also carries "<rating>|" and the moderation markers. */
         public const reviewMaxLength = 200;

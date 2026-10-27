@@ -46,9 +46,11 @@ const SERVER_TABS = ['processing', 'to-claim', 'claimed', 'unclaimed', 'cancelle
 
 /** Friendly line under the status pill (SRS status vocabulary). */
 export const STATUS_CONTEXT = {
+  'AWAITING PAYMENT': 'Waiting for your online payment to go through.',
   'TO PROCESS': 'Your order is being prepared by the store.',
   'TO CLAIM': 'Ready for pickup — show your claim QR at the counter.',
-  'TO DELIVER': 'Items ready! Please complete delivery details and fee to dispatch your order.',
+  'READY TO SHIP': 'Packed and handed to the courier — a rider is on the way to collect it.',
+  'IN TRANSIT': 'Your parcel is on its way to you.',
   'TO RECEIVE': 'Out for courier delivery to your address.',
   CLAIMED: 'Picked up and claimed. Thank you!',
   RECEIVED: 'Delivered and received. Thank you!',
@@ -59,7 +61,7 @@ export const STATUS_CONTEXT = {
   'CANCEL REQUESTED': 'Cancellation requested — waiting for staff approval.',
 }
 
-const RECEIVING = ['TO CLAIM', 'TO DELIVER', 'TO RECEIVE']
+const RECEIVING = ['TO CLAIM', 'READY TO SHIP', 'IN TRANSIT', 'TO RECEIVE']
 
 /**
  * The API now stores lowercase statuses (`processing`, `to claim`, …). Normalize
@@ -68,11 +70,12 @@ const RECEIVING = ['TO CLAIM', 'TO DELIVER', 'TO RECEIVE']
  * display vocabulary pass through untouched.
  */
 const STATUS_DISPLAY_MAP = {
+  'to pay': 'AWAITING PAYMENT',
   processing: 'TO PROCESS',
   'to cancel': 'CANCEL REQUESTED',
   'to claim': 'TO CLAIM',
-  'to deliver': 'TO DELIVER',
-  delivering: 'TO RECEIVE',
+  'to deliver': 'READY TO SHIP',
+  delivering: 'IN TRANSIT',
   'to receive': 'TO RECEIVE',
   claimed: 'CLAIMED',
   received: 'RECEIVED',
@@ -198,6 +201,8 @@ function Orders() {
     to_claim: 'to-claim',
     to_deliver: 'to-claim',
     'to deliver': 'to-claim',
+    'ready to ship': 'to-claim',
+    'to pay': 'processing',
     claimed: 'claimed',
     received: 'claimed',
     completed: 'claimed',
@@ -410,7 +415,7 @@ function Orders() {
     }
   }
 
-  const canCancel = useCallback((o) => o.status === 'TO PROCESS', [])
+  const canCancel = useCallback((o) => o.status === 'TO PROCESS' || o.status === 'AWAITING PAYMENT', [])
 
   return (
     <FocusedLayout
@@ -532,6 +537,8 @@ function Orders() {
             const method = order.fulfillment?.method || 'Store Pickup'
             const isDelivery = method === 'Courier Delivery'
             const orderTotal = order.total
+            // The courier fee paid with the order, shown apart from the items.
+            const deliveryFee = isDelivery ? Number(order.raw?.deliver_fee_charged || 0) : 0
             const pickupQrCode = order.pickupQr || order.raw?.appoint_qr || null
             const hasPickupQr = !isDelivery && Boolean(pickupQrCode)
             const claimable =
@@ -539,7 +546,7 @@ function Orders() {
             // FLOW-ORD_CLAIM-07: a delivery order in "to receive" can be
             // confirmed from this list by scanning the parcel's deliver_qr.
             const deliverable =
-              isDelivery && order.status === 'TO RECEIVE' && Boolean(order.deliverQr)
+              isDelivery && ['IN TRANSIT', 'TO RECEIVE'].includes(order.status) && Boolean(order.deliverQr)
 
             return (
               <article
@@ -645,7 +652,7 @@ function Orders() {
                         <span>Show Pickup QR</span>
                       </button>
                     )}
-                    {order.status === 'TO DELIVER' && (
+                    {order.status === 'READY TO SHIP' && !(Number(order.raw?.deliver_fee_charged) > 0) && (
                       <button
                         type="button"
                         onClick={() => setSelectedOrder(order)}
@@ -656,7 +663,7 @@ function Orders() {
                         <span>Pay Courier Fee</span>
                       </button>
                     )}
-                    {RECEIVING.includes(order.status) && !hasPickupQr && order.status !== 'TO DELIVER' && (
+                    {RECEIVING.includes(order.status) && !hasPickupQr && !(order.status === 'READY TO SHIP' && !(Number(order.raw?.deliver_fee_charged) > 0)) && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
                         {order.status === 'TO CLAIM' ? 'Claim QR ready' : 'Tracking active'}
                       </span>
@@ -723,6 +730,11 @@ function Orders() {
                     <span className="text-base sm:text-lg font-semibold text-gray-900">
                       {formatPrice(orderTotal)}
                     </span>
+                    {deliveryFee > 0 && (
+                      <span className="text-[11px] text-gray-500 block">
+                        incl. {formatPrice(deliveryFee)} delivery fee
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">

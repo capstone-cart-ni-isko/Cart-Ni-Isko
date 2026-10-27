@@ -17,6 +17,7 @@ use App\Models\Prodsales;
 use App\Models\Product;
 use App\Models\Prodvar;
 use App\Http\Controllers\ProductsAPI;
+use App\Services\Geocoder;
 use App\Services\LalamoveService;
 use App\Services\LalamoveUnavailableException;
 use App\Services\PayMongoService;
@@ -116,7 +117,7 @@ class OrdersAPI extends Controller
         $priorKey   = $this->normalizeStatus($priorStatus) ?? strtolower(trim($priorStatus));
         $isReturn = $rawLabel === 'RETURN REQUESTED';
 
-        if ($isReturn || ! $requesting || $priorKey !== 'processing') {
+        if ($isReturn || ! $requesting || ! in_array($priorKey, ['to pay', 'processing'], true)) {
             return response()->json([
                 'success' => false,
                 'message' => 'This order change requires staff review.',
@@ -226,18 +227,18 @@ class OrdersAPI extends Controller
                 . ' (was ' . trim($priorStatus) . ')'
         );
 
-        // Delivery fee already paid at checkout: the items being ready is
-        // the moment to call the courier - no customer action is left.
+        // Delivery fee already paid at checkout: Ready to Ship is the moment
+        // to call the courier - no customer action is left. The order stays
+        // Ready to Ship until LalaMove reports the pickup (In Transit).
         if ($status === 'to deliver' && $this->deliveryFeePrepaid($order)) {
-            $order->update(['ord_status' => 'to receive']);
             $booking = $this->bookDeliveryCourier($order);
 
             if ($booking['booked']) {
                 $this->announce((int) $order->cust_id, 'Order #' . $order->ord_id
-                    . ' is packed and a courier has been booked. Track it from your order page.');
+                    . ' is ready to ship and a courier has been booked. Track it from your order page.');
             } else {
                 $this->announce((int) $order->cust_id, 'Order #' . $order->ord_id
-                    . ' is packed and waiting for a courier.');
+                    . ' is ready to ship and waiting for a courier.');
                 $this->alertAdmins('[PRIORITY] Courier booking for order #' . $order->ord_id
                     . ' failed: ' . $booking['message'] . ' Retry it from Deliveries.');
             }
@@ -245,8 +246,8 @@ class OrdersAPI extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $booking['booked']
-                    ? 'Order is ready and the courier has been booked.'
-                    : 'Order is ready, but the courier could not be booked: ' . $booking['message'],
+                    ? 'Order is ready to ship and the courier has been booked.'
+                    : 'Order is ready to ship, but the courier could not be booked: ' . $booking['message'],
                 'data'    => self::orderPayload($order->fresh()),
             ], 200);
         }
@@ -301,7 +302,7 @@ class OrdersAPI extends Controller
         try {
             $message = 'Order #' . $order->ord_id . ' status changed to ' . $status . '.';
             if ($status === 'to deliver') {
-                $message = 'Order #' . $order->ord_id . ' items are ready! Please complete your delivery details and delivery fee.';
+                $message = 'Order #' . $order->ord_id . ' is ready to ship! Please complete your delivery details and delivery fee.';
             } elseif ($status === 'to claim') {
                 $message = 'Order #' . $order->ord_id . ' items are ready! You may now claim your order.';
             }
@@ -515,6 +516,8 @@ class OrdersAPI extends Controller
         $status = trim(strtolower($raw));
 
         $map = [
+            'to pay'           => 'to pay',
+            'awaiting payment' => 'to pay',
             'to process'       => 'processing',
             'processing'       => 'processing',
             'to cancel'        => 'to cancel',
@@ -522,7 +525,9 @@ class OrdersAPI extends Controller
             'return requested' => 'to cancel',
             'to claim'         => 'to claim',
             'to deliver'       => 'to deliver',
+            'ready to ship'    => 'to deliver',
             'delivering'       => 'delivering',
+            'in transit'       => 'delivering',
             'to receive'       => 'to receive',
             'claimed'          => 'claimed',
             'received'         => 'received',
@@ -758,15 +763,26 @@ class OrdersAPI extends Controller
             $returnBase = rtrim((string) config('services.frontend_url'), '/');
 
             $result = $this->placeOrder($json, $custId, $dispatchType, $speed,
-                function (Order $order, float $due) use ($returnBase) {
+                function (Order $order, float $due, float $fee = 0.0) use ($returnBase, $dispatchType) {
                     $paymongo = new PayMongoService();
 
-                    $session = $paymongo->createCheckoutSession(
-                        [[
-                            'name'     => 'Order #' . $order->ord_id . ' - Tindahan ni Isko',
-                            'amount'   => $due,
+                    // The delivery fee is its own line, so the customer sees
+                    // what part of the total pays the courier.
+                    $lines = [[
+                        'name'     => 'Items - Order #' . $order->ord_id . ' (Tindahan ni Isko)',
+                        'amount'   => round($due - $fee, 2),
+                        'quantity' => 1,
+                    ]];
+                    if ($fee > 0) {
+                        $lines[] = [
+                            'name'     => $dispatchType === 'delivery' ? 'Delivery fee (LalaMove)' : 'Fulfillment fee',
+                            'amount'   => $fee,
                             'quantity' => 1,
-                        ]],
+                        ];
+                    }
+
+                    $session = $paymongo->createCheckoutSession(
+                        $lines,
                         'order:' . $order->ord_id,
                         $returnBase . '/checkout?status=paid&order=' . $order->ord_id,
                         $returnBase . '/checkout?status=cancelled&order=' . $order->ord_id
@@ -1162,7 +1178,8 @@ class OrdersAPI extends Controller
             return 'unknown';
         }
 
-        if ($delivery->courier()['status'] === $state) {
+        $previous = $delivery->courier()['status'];
+        if ($previous === $state) {
             return 'unchanged';
         }
 
@@ -1170,7 +1187,7 @@ class OrdersAPI extends Controller
         $delivery->storeCourier(['status' => $state]);
 
         $distance = $details['raw']['distance']['value'] ?? null;
-        $this->applyCourierState($order, $delivery, $state, is_numeric($distance) ? (int) $distance : null);
+        $this->applyCourierState($order, $delivery, $state, is_numeric($distance) ? (int) $distance : null, $previous);
         $this->announceDeliveryChange();
 
         return 'updated';
@@ -1208,9 +1225,32 @@ class OrdersAPI extends Controller
         }
     }
 
-    private function applyCourierState(Order $order, Delivery $delivery, string $state, ?int $distanceM = null): void
+    /**
+     * LalaMove status -> order status. A courier order moves through three
+     * statuses the store can see: Ready to Ship (`to deliver`, courier booked
+     * and a rider being found or on the way), In Transit (`delivering`, the
+     * parcel was picked up) and Claimed (`claimed`, delivered).
+     */
+    private function applyCourierState(Order $order, Delivery $delivery, string $state, ?int $distanceM = null, ?string $previous = null): void
     {
+        $custId = (int) $order->cust_id;
+
         switch ($state) {
+            case 'ON_GOING':
+                // Driver accepted: still Ready to Ship until the pickup.
+                if ($custId > 0) {
+                    $this->announce($custId, 'A rider is on the way to collect order #' . $order->ord_id . '.');
+                }
+                break;
+
+            case 'ASSIGNING_DRIVER':
+                // Back to matching after a rider dropped the job.
+                if ($previous === 'ON_GOING' && $custId > 0) {
+                    $this->announce($custId, 'The rider for order #' . $order->ord_id
+                        . ' could not take it. Finding another rider.');
+                }
+                break;
+
             case 'PICKED_UP':
                 if ($delivery->deliver_pickedup === null) {
                     $delivery->forceFill([
@@ -1218,28 +1258,35 @@ class OrdersAPI extends Controller
                         'deliver_expect'   => now()->addMinutes($this->courierEtaMinutes($distanceM, true)),
                     ])->save();
                 }
-                if ($order->ord_status === 'processing' || $order->ord_status === 'to claim') {
+                if (in_array($order->ord_status, ['processing', 'to deliver', 'to receive'], true)) {
                     $order->update(['ord_status' => 'delivering']);
                 }
-                if ((int) $order->cust_id > 0) {
-                    $this->announce((int) $order->cust_id,
-                        'Order #' . $order->ord_id . ' is on its way to you.');
+                if ($custId > 0) {
+                    $this->announce($custId, 'Order #' . $order->ord_id . ' is in transit to you.');
                 }
                 break;
 
             case 'COMPLETED':
-                if ($delivery->deliver_completed === null) {
-                    $delivery->forceFill(['deliver_completed' => now()])->save();
+                $claim = in_array($order->ord_status, ['to deliver', 'delivering', 'to receive'], true);
+
+                DB::transaction(function () use ($order, $delivery, $claim) {
+                    $delivery->forceFill([
+                        'deliver_completed' => $delivery->deliver_completed ?? now(),
+                        'deliver_end'       => $delivery->deliver_end ?? now(),
+                    ])->save();
+
+                    if ($claim) {
+                        $order->update(['ord_status' => 'claimed']);
+                        // Same side effects as a confirmed receipt scan.
+                        $this->fulfilOrder($order);
+                    }
+                });
+
+                if ($custId > 0) {
+                    $this->announce($custId, 'Order #' . $order->ord_id . ' was delivered. Thank you for shopping!');
                 }
-                if ($delivery->deliver_end === null) {
-                    $delivery->forceFill(['deliver_end' => now()])->save();
-                }
-                if ($order->ord_status === 'delivering') {
-                    $order->update(['ord_status' => 'to receive']);
-                }
-                if ((int) $order->cust_id > 0) {
-                    $this->announce((int) $order->cust_id,
-                        'Order #' . $order->ord_id . ' has arrived. Please scan the parcel code to confirm receipt.');
+                if ($claim) {
+                    $this->alertAdmins('Order #' . $order->ord_id . ' was delivered by LalaMove and marked Claimed.');
                 }
                 break;
 
@@ -1249,8 +1296,8 @@ class OrdersAPI extends Controller
                 $delivery->forceFill(['deliver_placed' => null])->save();
                 $this->alertAdmins('[PRIORITY] Courier booking for order #' . $order->ord_id
                     . ' was ' . strtolower($state) . '. Book it again from Deliveries.');
-                if ((int) $order->cust_id > 0) {
-                    $this->announce((int) $order->cust_id,
+                if ($custId > 0) {
+                    $this->announce($custId,
                         'The courier for order #' . $order->ord_id
                         . ' could not take the delivery. The store is re-arranging it.');
                 }
@@ -1417,6 +1464,14 @@ class OrdersAPI extends Controller
         try {
             $customer = Customer::find((int) $order->cust_id);
 
+            // Orders placed before drop-offs were located: locate it now.
+            if (! is_numeric($delivery->deliver_lat) || ! is_numeric($delivery->deliver_lng)) {
+                $spot = (new Geocoder())->locate((string) $delivery->deliver_address);
+                if ($spot) {
+                    $delivery->forceFill(['deliver_lat' => $spot['lat'], 'deliver_lng' => $spot['lng']])->save();
+                }
+            }
+
             $stops = [
                 $this->storeStop(),
                 [
@@ -1576,12 +1631,13 @@ class OrdersAPI extends Controller
                 'ord_id'      => $this->nextId('orders', 'ord_id'),
                 'cust_id'      => $custId,
                 'ord_amount'   => $totalDue,
-                'ord_status'   => 'processing',
+                // Awaiting Payment until PayMongo confirms (markOrderPaid).
+                'ord_status'   => 'to pay',
                 'ord_claiming' => $dispatchType === 'pickup' ? 'pickup' : 'delivery',
                 'ord_created'  => now(),
             ]);
 
-            $reference = $resolveReference($order, $totalDue);
+            $reference = $resolveReference($order, $totalDue, $dispatchFee);
             if ($reference['paid'] && $reference['given'] < $reference['due']) {
                 throw new \RuntimeException('Payment amount is below the server-calculated total.');
             }
@@ -1654,8 +1710,7 @@ class OrdersAPI extends Controller
                     'deliver_recipient',
                     $this->customerFullName($customer)
                 ));
-                $lat   = $json->input('deliver_lat');
-                $lng   = $json->input('deliver_lng');
+                [$lat, $lng] = $this->dropoffCoordinates($json, $address);
                 $notes = trim((string) $json->input('deliver_notes', ''));
 
                 $delivery = Delivery::create([
@@ -1849,19 +1904,42 @@ class OrdersAPI extends Controller
         $customer = Customer::find($this->customerId($json));
         $address  = $this->deliveryAddress($json, $customer);
 
-        $lat = $json->input('deliver_lat');
-        $lng = $json->input('deliver_lng');
+        [$lat, $lng] = $this->dropoffCoordinates($json, $address);
 
         $stops = [
             $this->storeStop(),
             [
                 'address' => $address,
-                'lat'     => is_numeric($lat) ? $lat : null,
-                'lng'     => is_numeric($lng) ? $lng : null,
+                'lat'     => $lat,
+                'lng'     => $lng,
             ],
         ];
 
         return (new LalamoveService())->quote($stops);
+    }
+
+    /**
+     * Drop-off coordinates: the ones the customer sent, else the address
+     * located on the map (closest match). [null, null] lets LalaMove read
+     * the address text itself, as before.
+     *
+     * @return array{0: ?float, 1: ?float}
+     */
+    protected function dropoffCoordinates(Request $json, string $address): array
+    {
+        $lat = $json->input('deliver_lat');
+        $lng = $json->input('deliver_lng');
+        if (is_numeric($lat) && is_numeric($lng)) {
+            return [(float) $lat, (float) $lng];
+        }
+        // Only the courier needs coordinates.
+        if (! LalamoveService::isConfigured()) {
+            return [null, null];
+        }
+
+        $spot = (new Geocoder())->locate($address);
+
+        return $spot ? [$spot['lat'], $spot['lng']] : [null, null];
     }
 
     protected function storeStop(): array
@@ -1871,8 +1949,8 @@ class OrdersAPI extends Controller
                 'store_address',
                 'Tindahan ni Isko, Bicol University, Legazpi City, Albay'
             ),
-            'lat' => $this->settingValue('store_lat', null),
-            'lng' => $this->settingValue('store_lng', null),
+            'lat' => $this->settingValue('store_lat', null) ?: config('services.lalamove.store_lat'),
+            'lng' => $this->settingValue('store_lng', null) ?: config('services.lalamove.store_lng'),
         ];
     }
 
@@ -2121,6 +2199,11 @@ class OrdersAPI extends Controller
                 'pay_received'  => $amount > 0 ? $amount : (float) $order->pay_received,
                 'pay_change'    => round(max(0, $amount - (float) $order->ord_amount), 2),
             ]);
+
+            // Awaiting Payment -> Processing the moment the money is in.
+            if ($order->ord_status === 'to pay') {
+                $order->update(['ord_status' => 'processing']);
+            }
 
             if ($order->pickup && ! $order->pickup->pay_id) {
                 $order->pickup->update(['pay_id' => $payment->pay_id]);
@@ -4226,6 +4309,9 @@ class OrdersAPI extends Controller
             ->get();
 
         foreach ($deliveries as $delivery) {
+            // A LalaMove booking reports its own pickup and arrival.
+            if ($delivery->courierOrderId()) continue;
+
             $order = $this->resolveDeliveryOrder($delivery);
             if (! $order || $order->ord_status !== 'delivering') continue;
             if (! $this->orderIsPaid($order)) continue;
@@ -4405,7 +4491,7 @@ class OrdersAPI extends Controller
     {
         $order->loadMissing('items.bag.prodvar.product');
 
-        $openStatuses = ['processing', 'to cancel', 'to claim', 'unclaimed', 'delivering', 'to receive'];
+        $openStatuses = ['to pay', 'processing', 'to cancel', 'to claim', 'unclaimed', 'to deliver', 'delivering', 'to receive'];
 
         $short = [];
         foreach ($order->items as $item) {
@@ -4502,11 +4588,12 @@ class OrdersAPI extends Controller
     public function transitions(): array
     {
         return [
+            'to pay'     => ['processing', 'to cancel', 'cancelled'],
             'processing' => ['to claim', 'to deliver', 'delivering', 'to cancel', 'cancelled'],
             'to cancel'  => ['cancelled', 'processing', 'returned', 'refunded'],
             'to claim'   => ['claimed', 'unclaimed', 'cancelled', 'processing'],
-            'to deliver' => ['to receive', 'delivering', 'processing', 'to cancel', 'cancelled'],
-            'delivering' => ['to receive', 'received', 'cancelled', 'processing'],
+            'to deliver' => ['to receive', 'delivering', 'claimed', 'processing', 'to cancel', 'cancelled'],
+            'delivering' => ['to receive', 'received', 'claimed', 'cancelled', 'processing'],
             'to receive' => ['received', 'claimed', 'cancelled', 'processing', 'delivering'],
             'claimed'    => ['cancelled', 'received', 'returned', 'refunded'],
             'received'   => ['returned', 'refunded'],
@@ -4547,9 +4634,10 @@ class OrdersAPI extends Controller
     protected function statusLabel(string $key): string
     {
         return [
-            'processing' => 'To Process',
+            'to pay'     => 'Awaiting Payment',
+            'processing' => 'Processing',
             'to claim'   => 'To Claim',
-            'to deliver' => 'To Deliver',
+            'to deliver' => 'Ready to Ship',
             'delivering' => 'In Transit',
             'cancelled'  => 'Cancelled',
             'returned'   => 'Returned',
@@ -4584,6 +4672,10 @@ class OrdersAPI extends Controller
             'CANCELLING'       => 'to cancel',
             'TO CLAIM'         => 'to claim',
             'TO DELIVER'       => 'to deliver',
+            'READY TO SHIP'    => 'to deliver',
+            'IN TRANSIT'       => 'delivering',
+            'TO PAY'           => 'to pay',
+            'AWAITING PAYMENT' => 'to pay',
             'REQUEST DELIVERY DETAILS' => 'to deliver',
             'DELIVERING'       => 'delivering',
             'TRANSIT'          => 'delivering',
@@ -4605,7 +4697,7 @@ class OrdersAPI extends Controller
             return $map[$key];
         }
 
-        $vocabulary = ['processing', 'to cancel', 'to claim', 'to deliver', 'delivering', 'to receive', 'claimed', 'received', 'unclaimed', 'cancelled'];
+        $vocabulary = ['to pay', 'processing', 'to cancel', 'to claim', 'to deliver', 'delivering', 'to receive', 'claimed', 'received', 'unclaimed', 'cancelled'];
 
         return in_array(strtolower($trimmed), $vocabulary, true) ? strtolower($trimmed) : null;
     }
@@ -5088,10 +5180,10 @@ class OrdersAPI extends Controller
         }
 
         $currentStatus = strtolower(trim((string) $order->ord_status));
-        if ($currentStatus !== 'processing') {
+        if (! in_array($currentStatus, ['to pay', 'processing'], true)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Claiming method can only be switched while the order status is Processing.',
+                'message' => 'Claiming method can only be switched while the order is Awaiting Payment or Processing.',
             ], 422);
         }
 

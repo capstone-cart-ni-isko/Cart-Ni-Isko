@@ -69,6 +69,20 @@ return [
         // On Render the service's own public URL is used when unset.
         'webhook_url'  => env('LALAMOVE_WEBHOOK_URL') ?: (env('RENDER_EXTERNAL_URL')
             ? rtrim(env('RENDER_EXTERNAL_URL'), '/') . '/api/delivery/webhook' : null),
+        // Pickup point (Tindahan ni Isko, Bicol University, Rizal Ave, Legazpi)
+        // when the store_lat / store_lng settings are not filled in.
+        'store_lat'    => (float) env('LALAMOVE_STORE_LAT', 13.1440608),
+        'store_lng'    => (float) env('LALAMOVE_STORE_LNG', 123.7228153),
+    ],
+
+    /*
+    | Address -> coordinates for courier stops (App\Services\Geocoder),
+    | OpenStreetMap Nominatim. Its policy asks for an identifying User-Agent
+    | and at most one request per second.
+    */
+    'geocoder' => [
+        'user_agent' => env('GEOCODER_USER_AGENT', 'CartNiIsko/1.0 (tindahan.ni.isko@bicol-u.edu.ph)'),
+        'spacing_ms' => (int) env('GEOCODER_SPACING_MS', 1100),
     ],
 
     /*

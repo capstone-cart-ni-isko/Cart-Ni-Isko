@@ -10,14 +10,17 @@ import Modal from '../../components/ui/Modal.jsx'
 import Button from '../../components/ui/Button.jsx'
 
 // ─── Delivery Workflow (live data) ────────────────────────────────────────
-// Queue      = "TO RECEIVE" orders whose delivery track is not confirmed TRANSIT.
-// In Transit = "TO RECEIVE" orders whose delivery track is TRANSIT.
-// Completed  = "CLAIMED" orders that own a delivery/parcel track.
+// Queue      = "READY TO SHIP" orders (courier booked, rider not there yet),
+//              plus legacy "TO RECEIVE" orders whose track is not TRANSIT.
+// In Transit = "IN TRANSIT" orders (LalaMove reported the pickup), plus legacy
+//              "TO RECEIVE" orders whose delivery track is TRANSIT.
+// Completed  = "CLAIMED" / "RECEIVED" orders that own a delivery/parcel track.
 // Issues     = "RETURNED" / "CANCELLED" orders that own a delivery track.
 // Dispatch   = PUT /tracking/update {track_id: deliver_id, status: TRANSIT}.
 // Close      = PUT /tracking/close {track_id: parcel_id} (marks DELIVERED).
 
-const HISTORY_STATUSES = new Set(['CLAIMED', 'RETURNED', 'CANCELLED'])
+const HISTORY_STATUSES = new Set(['CLAIMED', 'RECEIVED', 'RETURNED', 'CANCELLED'])
+const ACTIVE_STATUSES = new Set(['READY TO SHIP', 'IN TRANSIT', 'TO RECEIVE'])
 
 const ISSUE_REASONS = {
   CANCELLED: 'Delivery booking was cancelled.',
@@ -112,7 +115,7 @@ function enrichDelivery(order, track) {
     ref: delivery?.delivery_ref || '—',
     eta: delivery?.deliver_date || null,
     trackStatus,
-    statusLabel: trackStatus === 'TRANSIT' ? 'On the way' : 'Ready',
+    statusLabel: order.rawStatus === 'IN TRANSIT' || trackStatus === 'TRANSIT' ? 'In transit' : 'Ready to ship',
     fee,
     deliveryPayment: fee.endsWith('Paid') ? fee : null,
     // Courier booking (POST /delivery/book|cancel): the LalaMove envelope the
@@ -736,7 +739,7 @@ export default function AdminDelivery() {
 
   const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
   const activeOrders = useMemo(
-    () => orders.filter((o) => o.rawStatus === 'TO RECEIVE'),
+    () => orders.filter((o) => ACTIVE_STATUSES.has(o.rawStatus)),
     [orders]
   )
   const activeIds = useMemo(() => activeOrders.map((o) => o.ordId), [activeOrders])
@@ -794,6 +797,8 @@ export default function AdminDelivery() {
     () =>
       activeOrders
         .filter((o) => {
+          if (o.rawStatus === 'READY TO SHIP') return true
+          if (o.rawStatus === 'IN TRANSIT') return false
           const track = tracks[o.ordId]
           if (track === undefined) return false // probe still pending
           if (track === null) return true // no delivery track -> not confirmed TRANSIT
@@ -807,6 +812,8 @@ export default function AdminDelivery() {
     () =>
       activeOrders
         .filter((o) => {
+          if (o.rawStatus === 'IN TRANSIT') return true
+          if (o.rawStatus === 'READY TO SHIP') return false
           const track = tracks[o.ordId]
           return Boolean(track) && trackStatusOf(track) === 'TRANSIT'
         })
@@ -817,7 +824,7 @@ export default function AdminDelivery() {
   const completed = useMemo(
     () =>
       orders
-        .filter((o) => o.rawStatus === 'CLAIMED' && Boolean(tracks[o.ordId]))
+        .filter((o) => (o.rawStatus === 'CLAIMED' || o.rawStatus === 'RECEIVED') && Boolean(tracks[o.ordId]))
         .map((o) => enrichDelivery(o, tracks[o.ordId])),
     [orders, tracks]
   )

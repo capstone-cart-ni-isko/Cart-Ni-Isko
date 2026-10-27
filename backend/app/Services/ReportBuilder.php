@@ -24,7 +24,7 @@ class ReportBuilder
         // REQ-ANALYTICS-04: revenue counts only realised sales. The statuses the
         // storefront treats as "not purchased" are excluded, case-insensitively.
         $notSold = [
-            'processing', 'to process', 'pending', 'to cancel',
+            'to pay', 'awaiting payment', 'processing', 'to process', 'pending', 'to cancel',
             'cancel requested', 'cancellation requested', 'cancelled', 'canceled',
         ];
 

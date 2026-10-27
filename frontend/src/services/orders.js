@@ -10,8 +10,8 @@ const ACTIVE = ['TO PROCESS', 'TO CLAIM', 'TO RECEIVE', 'CLAIMED', 'UNCLAIMED', 
  * returns for the same bucket.
  */
 export const ORDER_FILTER_BUCKETS = {
-  processing: ['processing', 'to cancel', 'to process', 'cancel requested', 'cancelling', 'return requested'],
-  'to-claim': ['to claim', 'to deliver', 'to receive', 'delivering', 'transit'],
+  processing: ['to pay', 'awaiting payment', 'processing', 'to cancel', 'to process', 'cancel requested', 'cancelling', 'return requested'],
+  'to-claim': ['to claim', 'to deliver', 'ready to ship', 'to receive', 'delivering', 'in transit', 'transit'],
   claimed: ['claimed', 'received', 'delivered', 'completed'],
   unclaimed: ['unclaimed'],
   cancelled: ['cancelled', 'cancel', 'canceled', 'returned', 'refunded'],

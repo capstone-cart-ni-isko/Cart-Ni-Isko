@@ -342,8 +342,9 @@ class LalamoveService
     {
         $string = (string) $value;
 
+        // 7 decimals is ~1 cm - more only prints float noise (13.1423976000001).
         if (str_contains($string, 'E') || str_contains($string, '.')) {
-            $string = rtrim(rtrim(number_format((float) $value, 15, '.', ''), '0'), '.');
+            $string = rtrim(rtrim(number_format(round((float) $value, 7), 7, '.', ''), '0'), '.');
         }
 
         return $string === '' || $string === '-0' ? '0' : $string;

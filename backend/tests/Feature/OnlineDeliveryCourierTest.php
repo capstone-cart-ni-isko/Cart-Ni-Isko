@@ -413,14 +413,16 @@ class OnlineDeliveryCourierTest extends TestCase
 
         // Paid, but the items are not packed yet: no rider is called.
         $this->assertEquals(620.0, (float) $order->fresh()->pay_received);
+        $this->assertEquals('processing', $order->fresh()->ord_status);
         $this->assertFalse(Delivery::where('ord_id', $order->ord_id)->firstOrFail()->isBooked());
 
         $this->markReady($order);
 
-        // No "pay the courier fee" step is left for the customer.
+        // No "pay the courier fee" step is left for the customer, and the
+        // order stays Ready to Ship until the rider picks it up.
         $order->refresh();
         $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
-        $this->assertEquals('to receive', $order->ord_status);
+        $this->assertEquals('to deliver', $order->ord_status);
         $this->assertTrue($delivery->isBooked());
         $this->assertSame('107900701184', $delivery->courierOrderId());
         $this->assertEquals(120.0, (float) $delivery->deliver_fee_actual);
@@ -436,12 +438,12 @@ class OnlineDeliveryCourierTest extends TestCase
         $customer = $this->makeCustomer();
         $admin    = $this->makeEmployee(['emp_type' => 'ADMIN']);
         $product  = $this->makeProduct();
-        $this->fakePayMongo();
+        $secret   = $this->fakePayMongo();
         $this->fakeLalamove();
 
         // 1. Initial checkout as delivery
         [$order] = $this->checkoutDelivery($customer, $product);
-        $this->assertEquals('processing', $order->fresh()->ord_status);
+        $this->assertEquals('to pay', $order->fresh()->ord_status);
         $this->assertNotNull(Delivery::where('ord_id', $order->ord_id)->first());
 
         // 2. Customer switches from delivery to pickup
@@ -470,7 +472,14 @@ class OnlineDeliveryCourierTest extends TestCase
         $this->assertNotNull(Delivery::where('ord_id', $order->ord_id)->first());
         $this->assertNull(Pickup::where('ord_id', $order->ord_id)->first());
 
-        // 4. Switching is rejected once order moves away from processing
+        // 4. Switching is rejected once order moves away from processing.
+        // An unpaid order cannot be made Ready to Ship, so it is paid first.
+        $this->json('PUT', '/api/orders/update', [
+            'ord_id'     => $order->ord_id,
+            'ord_status' => 'to deliver',
+        ], $this->headers($admin))->assertStatus(422);
+        $this->payThroughWebhook($order, $secret);
+
         $this->json('PUT', '/api/orders/update', [
             'ord_id'     => $order->ord_id,
             'ord_status' => 'to deliver',
@@ -541,15 +550,18 @@ class OnlineDeliveryCourierTest extends TestCase
         // Picked up: the estimate is the ride alone, counted from the pickup.
         $this->assertTrue($delivery->deliver_expect->between(now()->addMinutes(5), now()->addMinutes(30)));
 
+        // Picked up: In Transit.
+        $this->assertSame('delivering', $order->fresh()->ord_status);
+
         // The same event again must not re-announce or move anything.
         $this->withHeaders(['Content-Type' => 'application/json'])
             ->postJson('/api/delivery/webhook', [
                 'orderId' => '107900701184',
                 'status'  => 'PICKED_UP',
             ])->assertStatus(200);
-        $this->assertSame('to receive', $order->fresh()->ord_status);
+        $this->assertSame('delivering', $order->fresh()->ord_status);
 
-        // Arrived: the customer still confirms by scanning the parcel QR.
+        // Delivered: Claimed automatically, with the claim side effects.
         $this->courierStatus = 'COMPLETED';
         $this->withHeaders(['Content-Type' => 'application/json'])
             ->postJson('/api/delivery/webhook', [
@@ -558,7 +570,13 @@ class OnlineDeliveryCourierTest extends TestCase
             ])->assertStatus(200);
 
         $delivery->refresh();
-        $this->assertSame('to receive', $order->fresh()->ord_status);
+        $this->assertSame('claimed', $order->fresh()->ord_status);
+        $this->assertTrue(
+            \Illuminate\Support\Facades\DB::table('custnotif')
+                ->where('cust_id', $customer->cust_id)
+                ->where('custnotif_msg', 'like', '%was delivered%')
+                ->exists()
+        );
         $this->assertNotNull($delivery->deliver_completed);
         $this->assertNotNull($delivery->deliver_end);
     }
@@ -636,6 +654,95 @@ class OnlineDeliveryCourierTest extends TestCase
         $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
         $this->assertSame('PICKED_UP', $delivery->courier()['status']);
         $this->assertNotNull($delivery->deliver_pickedup);
+    }
+
+    public function test_driver_accept_and_reject_keep_the_order_ready_to_ship()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct();
+        $secret   = $this->fakePayMongo();
+        $this->fakeLalamove();
+
+        [$order] = $this->checkoutDelivery($customer, $product);
+        $this->payThroughWebhook($order, $secret);
+        $this->markReady($order);
+        $sync = fn () => app(\App\Http\Controllers\OrdersAPI::class)->syncActiveCouriers();
+
+        // Driver accepts: still Ready to Ship, the customer hears a rider is coming.
+        $this->courierStatus = 'ON_GOING';
+        $sync();
+        $this->assertSame('to deliver', $order->fresh()->ord_status);
+
+        // Driver rejects: LalaMove looks for another rider.
+        $this->courierStatus = 'ASSIGNING_DRIVER';
+        $sync();
+        $this->assertSame('to deliver', $order->fresh()->ord_status);
+        $this->assertTrue(Delivery::where('ord_id', $order->ord_id)->firstOrFail()->isBooked());
+
+        $messages = \Illuminate\Support\Facades\DB::table('custnotif')
+            ->where('cust_id', $customer->cust_id)->pluck('custnotif_msg')->implode(' | ');
+        $this->assertStringContainsString('A rider is on the way', $messages);
+        $this->assertStringContainsString('Finding another rider', $messages);
+    }
+
+    public function test_an_order_awaits_payment_and_the_fee_is_its_own_paymongo_line()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct();
+        $secret   = $this->fakePayMongo();
+        $this->fakeLalamove(12000);
+
+        [$order] = $this->checkoutDelivery($customer, $product);
+        $this->assertSame('to pay', $order->fresh()->ord_status);
+
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), 'checkout_sessions')) {
+                return false;
+            }
+            $lines = $request['data']['attributes']['line_items'] ?? [];
+
+            return count($lines) === 2
+                && $lines[0]['amount'] === 50000
+                && $lines[1]['name'] === 'Delivery fee (LalaMove)'
+                && $lines[1]['amount'] === 12000;
+        });
+
+        $this->payThroughWebhook($order, $secret);
+        $this->assertSame('processing', $order->fresh()->ord_status);
+    }
+
+    public function test_a_drop_off_without_coordinates_is_located_on_the_map()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct();
+        $this->fakePayMongo();
+        $this->fakeLalamove();
+        config(['services.geocoder.spacing_ms' => 0]);
+        Http::fake([
+            'nominatim.openstreetmap.org/*' => Http::response([
+                ['lat' => '13.1423976', 'lon' => '123.7247484'],
+            ], 200),
+        ]);
+
+        [$order] = $this->checkoutDelivery($customer, $product, [
+            'deliver_lat' => null,
+            'deliver_lng' => null,
+        ]);
+
+        // Saved on the delivery, and sent to LalaMove with both stops located.
+        $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
+        $this->assertEqualsWithDelta(13.1423976, (float) $delivery->deliver_lat, 0.000001);
+        $this->assertEqualsWithDelta(123.7247484, (float) $delivery->deliver_lng, 0.000001);
+
+        Http::assertSent(function ($request) {
+            if (! str_ends_with($request->url(), '/v3/quotations')) {
+                return false;
+            }
+            $stops = $request['data']['stops'];
+
+            return isset($stops[0]['coordinates']['lat'])
+                && $stops[1]['coordinates'] === ['lat' => '13.1423976', 'lng' => '123.7247484'];
+        });
     }
 
     // ==========================================

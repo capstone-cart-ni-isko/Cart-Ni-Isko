@@ -27,8 +27,8 @@ import { useApiChange } from '../../hooks/useApiChange.js'
 import { STATUS_CONTEXT } from '../../routes/Orders.jsx'
 import { canReviewOrder } from '../../services/reviews.js'
 
-const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
-const CAN_CANCEL = ['TO PROCESS']
+const RECEIVING = ['TO CLAIM', 'IN TRANSIT', 'TO RECEIVE']
+const CAN_CANCEL = ['AWAITING PAYMENT', 'TO PROCESS']
 const CAN_REFUND = ['CLAIMED', 'RECEIVED', 'DELIVERED', 'COMPLETED']
 
 const COURIER_STATUS_LABELS = {
@@ -404,7 +404,9 @@ export default function CustomerOrderDetailModal({
   const courierTrackUrl = courier?.share_url || effectiveRaw?.deliver_share_link || null
   const appointId = effectiveRaw?.appoint_id || effectiveRaw?.appointment?.appoint_id || null
   const canReschedulePickup = !isDelivery && Boolean(appointId) && !['CLAIMED', 'RECEIVED', 'CANCELLED', 'RETURNED'].includes(status)
-  const canSwitchClaiming = status === 'TO PROCESS' || String(effectiveRaw?.ord_status || '').toLowerCase() === 'processing'
+  const canSwitchClaiming =
+    ['AWAITING PAYMENT', 'TO PROCESS'].includes(status) ||
+    ['to pay', 'processing'].includes(String(effectiveRaw?.ord_status || '').toLowerCase())
 
   if (!isOpen || !order) return null
 
@@ -469,8 +471,9 @@ export default function CustomerOrderDetailModal({
           )}
         </div>
 
-        {/* Complete Delivery Details & Fee Banner (TO DELIVER) */}
-        {isDelivery && status === 'TO DELIVER' && (
+        {/* Complete Delivery Details & Fee Banner - older orders that were
+            placed without the delivery fee (it is now paid at checkout) */}
+        {isDelivery && status === 'READY TO SHIP' && !(deliveryFee > 0) && (
           <div className="p-4 sm:p-5 bg-gradient-to-br from-blue-500/10 via-brand-orange/10 to-transparent rounded-2xl border-2 border-brand-orange/40 space-y-3.5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
@@ -633,7 +636,7 @@ export default function CustomerOrderDetailModal({
                   <p className="font-mono text-xs text-[var(--ink-2)] break-all bg-[var(--surface)] px-2.5 py-1.5 rounded-lg border border-[var(--line)] inline-block">
                     {String(qrPayload)}
                   </p>
-                  {isDelivery && status === 'TO RECEIVE' && (
+                  {isDelivery && ['IN TRANSIT', 'TO RECEIVE'].includes(status) && (
                     <div className="flex flex-col sm:flex-row justify-center gap-2 pt-1.5 w-full">
                       <button
                         type="button"
@@ -841,7 +844,7 @@ export default function CustomerOrderDetailModal({
                 <span className="font-semibold text-[var(--ink)] text-sm">{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[var(--muted)]">Delivery Fee</span>
+                <span className="text-[var(--muted)]">{isDelivery ? 'Delivery fee (LalaMove courier)' : 'Delivery fee'}</span>
                 <span className="font-semibold text-[var(--ink)] text-sm">
                   {!isDelivery
                     ? 'FREE (Pickup)'
@@ -852,7 +855,9 @@ export default function CustomerOrderDetailModal({
               </div>
               <div className="h-px bg-[var(--line)] my-1.5" />
               <div className="flex justify-between items-baseline">
-                <span className="font-bold text-[var(--ink)] text-sm">Order Total</span>
+                <span className="font-bold text-[var(--ink)] text-sm">
+                  {deliveryFee > 0 ? 'Order Total (items + delivery fee)' : 'Order Total'}
+                </span>
                 <span className="font-bold text-brand-orange text-base">{formatPrice(total)}</span>
               </div>
               <div className="h-px bg-[var(--line)] my-1.5" />

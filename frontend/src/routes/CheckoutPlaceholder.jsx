@@ -930,6 +930,12 @@ function CheckoutPlaceholder() {
                   <span>Amount to be charged:</span>
                   <span className="font-bold text-gray-900 text-sm">₱{totalDue.toFixed(2)}</span>
                 </div>
+                {dispatchType === 'delivery' && deliveryFee > 0 && (
+                  <p className="text-[11px] text-gray-500 text-right px-0.5 -mt-1">
+                    Includes ₱{deliveryFee.toFixed(2)} delivery fee
+                    {feeSource === 'lalamove' ? ' (LalaMove)' : ''}
+                  </p>
+                )}
               </div>
 
               {error && <ApiErrorText error={{ message: error }} />}

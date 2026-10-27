@@ -30,8 +30,8 @@ import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
 import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
 import { canReviewOrder } from '../services/reviews.js'
 
-const RECEIVING = ['TO CLAIM', 'TO RECEIVE']
-const CAN_CANCEL = ['TO PROCESS']
+const RECEIVING = ['TO CLAIM', 'IN TRANSIT', 'TO RECEIVE']
+const CAN_CANCEL = ['AWAITING PAYMENT', 'TO PROCESS']
 const CAN_REFUND = ['CLAIMED', 'RECEIVED', 'DELIVERED', 'COMPLETED']
 
 /** LalaMove booking states the order carries, in the customer's own words. */
@@ -466,7 +466,7 @@ function OrderDetail() {
                     <p className="font-mono text-[11px] text-gray-500 break-all">
                       {String(qrPayload)}
                     </p>
-                    {isDelivery && order.status === 'TO RECEIVE' && (
+                    {isDelivery && ['IN TRANSIT', 'TO RECEIVE'].includes(order.status) && (
                       <>
                         <button
                           type="button"
@@ -754,7 +754,7 @@ function OrderDetail() {
             </div>
             <div className="flex justify-between text-xs items-center">
               <span className="text-gray-500">
-                Delivery Fee ({isDelivery ? 'Courier' : 'Store Pickup'})
+                {isDelivery ? 'Delivery fee (LalaMove courier)' : 'Delivery fee (Store Pickup)'}
               </span>
               <span className="font-semibold text-gray-800">
                 {!isDelivery
@@ -771,7 +771,9 @@ function OrderDetail() {
             )}
             <div className="h-px bg-slate-200 my-1" />
             <div className="flex justify-between items-baseline">
-              <span className="font-semibold text-gray-900 text-xs">Order Total</span>
+              <span className="font-semibold text-gray-900 text-xs">
+                {deliveryFee > 0 ? 'Order Total (items + delivery fee)' : 'Order Total'}
+              </span>
               <span className="font-semibold text-brand-orange text-base">
                 {formatPrice(total)}
               </span>

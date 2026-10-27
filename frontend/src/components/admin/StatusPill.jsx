@@ -23,6 +23,8 @@ function toneFor(norm) {
   // Order matters: "unclaimed" before "claimed", "requested" before the
   // statuses a request refers to, "unavailable" before "available".
   if (has(norm, ['unavailable', 'off duty', 'draft', 'in class', 'busy'])) return 'neutral'
+  // "Ready to ship" is still in progress - not the 'ready' of a finished item.
+  if (has(norm, ['ready to ship', 'in transit'])) return 'active'
   if (has(norm, ['unclaimed', 'requested', 'pending', 'awaiting', 'warning', 'low stock', 'up next', 'understaffed', 'short'])) return 'urgent'
   if (has(norm, ['cancelled', 'returned', 'refunded', 'failed', 'delayed', 'rejected', 'conflict', 'alert', 'danger', 'no-show', 'no show', 'out of stock'])) return 'lost'
   if (has(norm, ['completed', 'claimed', 'ready', 'published', 'approved', 'available', 'covered', 'received', 'delivered']) || norm === 'on duty') return 'done'

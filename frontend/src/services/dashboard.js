@@ -45,6 +45,7 @@ export function titleCaseStatus(raw) {
   if (lower === 'delivering' || lower === 'delvering' || lower === 'transit') {
     return 'In Transit'
   }
+  if (lower === 'ready to ship' || lower === 'to deliver') return 'Ready to Ship'
   return value
     .toLowerCase()
     .replace(/(^|\s|-)([a-z])/g, (_, pre, ch) => `${pre}${ch.toUpperCase()}`)
@@ -203,11 +204,12 @@ export function mapOrderRow(row) {
   // 'CANCEL REQUESTED' and the Approve/Reject buttons (FLOW-MANAGE_PRE-05)
   // render for it.
   const STATUS_DISPLAY_MAP = {
+    'to pay': 'AWAITING PAYMENT',
     processing: 'TO PROCESS',
     'to cancel': 'CANCEL REQUESTED',
     'to claim': 'TO CLAIM',
-    'to deliver': 'TO DELIVER',
-    delivering: 'TO RECEIVE',
+    'to deliver': 'READY TO SHIP',
+    delivering: 'IN TRANSIT',
     'to receive': 'TO RECEIVE',
     claimed: 'CLAIMED',
     received: 'RECEIVED',
@@ -253,7 +255,11 @@ export function mapOrderRow(row) {
       customer?.cust_email ||
       (isPos ? 'Walk-in Customer' : 'Guest'),
     studentId: 'N/A',
+    // `total` is the items alone (charts sum it); `grandTotal` is what the
+    // customer paid - items plus the courier fee.
     total,
+    deliveryFee: Number(row.deliver_fee_charged ?? delivery?.deliver_fee_charged ?? 0) || 0,
+    grandTotal: row.ord_amount != null ? Number(row.ord_amount) : total,
     items,
     preorder,
     isPos,

@@ -29,10 +29,11 @@ const REFUND_STATUSES = ['RETURN REQUESTED', 'RETURNED', 'REFUNDED']
  * RECEIVED and PAID. Filtering only; nothing here is written back to an order.
  */
 const FILTER_STATUS_OPTIONS = [
+  'Awaiting Payment',
   'Processing',
   'To Process',
   'To Claim',
-  'To Deliver',
+  'Ready to Ship',
   'To Receive',
   'In Transit',
   'Claimed',
@@ -50,7 +51,7 @@ const FILTER_STATUS_OPTIONS = [
 // spelling so a staff filter and a customer status line agree.
 const STATUS_FILTER_ALIASES = {
   Processing: ['To Process'],
-  'To Deliver': ['To Deliver'],
+  'Ready to Ship': ['Ready to Ship'],
   'In Transit': ['In Transit', 'Delivering', 'To Receive'],
 }
 
@@ -367,9 +368,16 @@ export default function AdminOrders() {
       header: 'TOTAL',
       key: 'total',
       render: (row) => (
-        <span className="font-semibold text-gray-900 text-xs">
-          ₱{(Number(row?.total) || 0).toFixed(2)}
-        </span>
+        <div className="leading-tight">
+          <span className="font-semibold text-gray-900 text-xs">
+            ₱{(Number(row?.grandTotal ?? row?.total) || 0).toFixed(2)}
+          </span>
+          {row?.deliveryFee > 0 && (
+            <span className="block text-2xs text-[var(--muted)] whitespace-nowrap">
+              incl. ₱{Number(row.deliveryFee).toFixed(2)} delivery fee
+            </span>
+          )}
+        </div>
       ),
     },
     {
@@ -388,11 +396,11 @@ export default function AdminOrders() {
               <button
                 type="button"
                 disabled={actionBusy}
-                onClick={() => applyStatus(row, 'to deliver')}
+                onClick={() => applyStatus(row, 'Ready to Ship')}
                 className="h-7 px-2.5 rounded-md bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
-                title="Request customer to complete delivery details and fee"
+                title="Items are packed: mark Ready to Ship and book the LalaMove courier"
               >
-                Request delivery details
+                Ready to Ship
               </button>
             )}
             <button
@@ -764,8 +772,13 @@ export default function AdminOrders() {
                 <div className="text-right">
                   <p className="text-2xs uppercase tracking-wider font-semibold text-[var(--muted)]">Grand Total</p>
                   <p className="text-lg font-bold text-brand-orange">
-                    ₱{(Number(activeOrderDetail?.total) || 0).toFixed(2)}
+                    ₱{(Number(activeOrderDetail?.grandTotal ?? activeOrderDetail?.total) || 0).toFixed(2)}
                   </p>
+                  {activeOrderDetail?.deliveryFee > 0 && (
+                    <p className="text-2xs text-[var(--muted)]">
+                      Items ₱{(Number(activeOrderDetail.total) || 0).toFixed(2)} + delivery fee ₱{Number(activeOrderDetail.deliveryFee).toFixed(2)}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -824,8 +837,8 @@ export default function AdminOrders() {
                           const allowedChoices = isDelivery
                             ? [
                                 { label: 'Processing', value: 'To Process' },
-                                { label: 'To Deliver', value: 'To Deliver' },
-                                { label: 'In Transit', value: 'Delivering' },
+                                { label: 'Ready to Ship', value: 'Ready to Ship' },
+                                { label: 'In Transit', value: 'In Transit' },
                               ]
                             : [
                                 { label: 'Processing', value: 'To Process' },

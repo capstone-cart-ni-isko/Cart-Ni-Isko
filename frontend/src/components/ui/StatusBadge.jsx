@@ -8,6 +8,7 @@ function StatusBadge({ status, className = '' }) {
   let tone = 'badge--plain' // fallback
 
   if (
+    normalized === 'AWAITING PAYMENT' ||
     normalized === 'TO PROCESS' ||
     normalized === 'PROCESSING' ||
     normalized === 'PREPARING' ||
@@ -20,6 +21,8 @@ function StatusBadge({ status, className = '' }) {
   } else if (
     normalized === 'TO CLAIM' ||
     normalized === 'TO DELIVER' ||
+    normalized === 'READY TO SHIP' ||
+    normalized === 'IN TRANSIT' ||
     normalized === 'TO RECEIVE' ||
     normalized === 'READY FOR PICK-UP' ||
     normalized === 'PICK-UP' ||

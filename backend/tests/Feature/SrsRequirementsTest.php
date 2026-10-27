@@ -703,9 +703,9 @@ class SrsRequirementsTest extends TestCase
         // auto-booked CLAIM appointment the pickup hangs off.
         $order = Order::where('cust_id', $customer->cust_id)->first();
         $this->assertNotNull($order);
-        // The order waits for the store to release it - a placed order is not
-        // claimable yet (processing -> to claim -> claimed).
-        $this->assertSame('processing', $order->ord_status);
+        // A placed order awaits its PayMongo payment, then waits for the store
+        // to release it (to pay -> processing -> to claim -> claimed).
+        $this->assertSame('to pay', $order->ord_status);
         $this->assertSame('pickup', $order->ord_claiming);
         // The receipt reference is the hosted checkout session the webhook
         // echoes back (REQ-CHECKOUT-03).

@@ -888,8 +888,8 @@ class UserAPI extends Controller
     protected function applyOrderFilter($query, string $filter): void
     {
         $buckets = [
-            'processing'      => ['processing', 'to cancel', 'to process', 'cancel requested', 'cancelling', 'return requested'],
-            'to-claim'        => ['to claim', 'to deliver', 'to receive', 'delivering', 'transit'],
+            'processing'      => ['to pay', 'awaiting payment', 'processing', 'to cancel', 'to process', 'cancel requested', 'cancelling', 'return requested'],
+            'to-claim'        => ['to claim', 'to deliver', 'ready to ship', 'to receive', 'delivering', 'in transit', 'transit'],
             'claimed'         => ['claimed', 'received', 'delivered', 'completed'],
             'unclaimed'       => ['unclaimed'],
             'cancelled'       => ['cancelled', 'cancel', 'canceled', 'returned', 'refunded'],
@@ -973,6 +973,8 @@ class UserAPI extends Controller
         $payload['ord_amount'] = $amount;
         $payload['amount']     = $amount;
         $payload['total']      = $amount;
+        // Items alone; the rest of ord_amount is the delivery fee.
+        $payload['items_subtotal'] = $lineTotal;
 
         $payment = $order->parcel?->payment
             ?? $order->pickup?->payment
