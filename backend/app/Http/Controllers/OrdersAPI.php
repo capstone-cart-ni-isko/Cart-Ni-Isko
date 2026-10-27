@@ -1027,12 +1027,18 @@ class OrdersAPI extends Controller
             ], 200);
         }
 
-        $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
         $incomingStatus = strtolower((string) $json->input('status', ''));
-        $settled = PayMongoService::sessionIsPaid($session) || $incomingStatus === 'paid';
+        // The success_url is only reached after PayMongo has collected the
+        // money, so a paid return needs no third-party round trip - proving it
+        // again can only delay (or, if PayMongo is slow, hide) the receipt.
+        // Every other return asks PayMongo directly.
+        $session = $incomingStatus === 'paid'
+            ? []
+            : (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
+        $settled = $incomingStatus === 'paid' || PayMongoService::sessionIsPaid($session);
 
         if ($settled) {
-            // The webhook may have settled it while PayMongo was being asked.
+            // The webhook may have settled it while the return was in flight.
             $alreadyPaid = (float) $order->fresh()->pay_received > 0;
 
             $paymentsList = $session['attributes']['payments'] ?? ($session['payments'] ?? []);

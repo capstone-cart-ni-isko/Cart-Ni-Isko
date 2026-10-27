@@ -22,8 +22,15 @@ function formatDateTime(value, withTime = true) {
  * item breakdown, claiming details, and clear action buttons to view details
  * or continue browsing the store.
  */
-function OrderPlacedView({ order, payRef, customerName }) {
+function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDismiss }) {
   const navigate = useNavigate()
+  // Clearing the saved receipt happens as the shopper leaves this screen, so
+  // returning to /checkout later starts a fresh checkout instead of replaying
+  // an old success page.
+  const leaveTo = (path) => {
+    onDismiss?.()
+    navigate(path, { replace: true })
+  }
   const items = Array.isArray(order?.items) ? order.items : []
   const isDelivery = order?.dispatch_type === 'delivery' || order?.ord_claiming === 'delivery'
   const total = Number(order?.ord_amount ?? order?.total ?? 0)
@@ -55,16 +62,30 @@ function OrderPlacedView({ order, payRef, customerName }) {
           </svg>
         </div>
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">Order Placed & Paid!</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">
+            {confirmed ? 'Order Placed & Paid!' : 'Order Placed!'}
+          </h1>
           <p className="text-sm text-gray-600 mt-1.5 max-w-md mx-auto leading-relaxed">
             {firstName ? `Thank you, ${firstName}! ` : 'Thank you! '}
-            Your transaction has been securely processed via PayMongo. Your order is now confirmed and being prepared.
+            {confirmed
+              ? 'Your transaction has been securely processed via PayMongo. Your order is now confirmed and being prepared.'
+              : 'Your payment went through. We are finishing the confirmation with PayMongo — your order is saved and this receipt is your reference.'}
           </p>
         </div>
         <div className="flex items-center justify-center gap-2">
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-            Payment Verified & Paid Upfront
+          <span
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 border rounded-full ${
+              confirmed
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                confirmed ? 'bg-emerald-600' : 'bg-amber-500'
+              }`}
+            />
+            {confirmed ? 'Payment Verified & Paid Upfront' : 'Payment received — confirming with PayMongo'}
           </span>
         </div>
       </div>
@@ -221,7 +242,7 @@ function OrderPlacedView({ order, payRef, customerName }) {
       <div className="space-y-2.5 pt-2">
         <button
           type="button"
-          onClick={() => navigate(`/orders/${order?.ord_id}`, { replace: true })}
+          onClick={() => leaveTo(`/orders/${order?.ord_id}`)}
           className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
         >
           <span>View Order Details & QR Code</span>
@@ -233,7 +254,7 @@ function OrderPlacedView({ order, payRef, customerName }) {
 
         <button
           type="button"
-          onClick={() => navigate('/shop', { replace: true })}
+          onClick={() => leaveTo('/shop')}
           className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-slate-100 hover:bg-slate-200/80 text-slate-800 border border-slate-200 transition-colors cursor-pointer flex items-center justify-center gap-2"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-600">
@@ -246,7 +267,7 @@ function OrderPlacedView({ order, payRef, customerName }) {
 
         <button
           type="button"
-          onClick={() => navigate('/home', { replace: true })}
+          onClick={() => leaveTo('/home')}
           className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
         >
           Return to Home

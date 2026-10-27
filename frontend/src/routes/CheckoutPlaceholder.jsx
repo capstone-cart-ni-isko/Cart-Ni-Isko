@@ -37,6 +37,39 @@ const CONFIRM_SECONDS = 5
 /** Marker left behind while the browser is off paying at the gateway. */
 const PENDING_KEY = 'isko_checkout_pending'
 
+/**
+ * The receipt of a successful return, kept for this tab so a refresh (or a
+ * second look before leaving) still shows the same "Order Placed" screen
+ * instead of dumping the shopper on a now-empty bag.
+ */
+const PLACED_KEY = 'isko_checkout_placed'
+
+/** sessionStorage is per-tab and survives the gateway round trip + refresh. */
+function readStoredJson(key) {
+  try {
+    const raw = sessionStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredJson(key, value) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* storage blocked: the in-memory receipt still renders */
+  }
+}
+
+function clearStored(key) {
+  try {
+    sessionStorage.removeItem(key)
+  } catch {
+    /* nothing to clear */
+  }
+}
+
 function addressText(addr) {
   if (!addr) return ''
   if (typeof addr === 'string') return addr
@@ -159,7 +192,18 @@ function CheckoutPlaceholder() {
   // Back from PayMongo: 'checking' while the payment is confirmed, then the
   // saved order once it is paid (the order-placed view replaces the form).
   const [confirmingReturn, setConfirmingReturn] = useState(false)
-  const [placedOrder, setPlacedOrder] = useState(null)
+  // A receipt snapshot survives a refresh of the return screen. A cancelled
+  // return, or a different order in the URL, wins over the old snapshot.
+  const [placedOrder, setPlacedOrder] = useState(() => {
+    const snapshot = readStoredJson(PLACED_KEY)
+    if (!snapshot?.order?.ord_id) return null
+    const params = new URLSearchParams(window.location.search)
+    const status = (params.get('status') || params.get('payment_status') || '').toLowerCase()
+    if (status === 'cancelled') return null
+    const orderId = params.get('order')
+    if (orderId && String(orderId) !== String(snapshot.order.ord_id)) return null
+    return snapshot
+  })
   const mountedRef = useRef(false)
 
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
@@ -288,13 +332,17 @@ function CheckoutPlaceholder() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const status = params.get('status') || params.get('payment_status')
-    const orderId = params.get('order')
+    const status = (params.get('status') || params.get('payment_status') || '').toLowerCase()
+    const urlOrderId = params.get('order')
     const intentId = params.get('payment_intent_id')
-    if (!status && !orderId && !intentId) return undefined
-    // The gateway return URL always names the order; the pending marker only
-    // guards the legacy intent redirect that arrives without one.
-    if (!orderId && !sessionStorage.getItem(PENDING_KEY)) return undefined
+    // Only a URL that actually carries a gateway-return signal may start the
+    // confirmation flow; a stale pending marker must not hijack a fresh
+    // checkout. The marker then supplies the order id if the gateway dropped
+    // that query parameter.
+    if (!status && !urlOrderId && !intentId) return undefined
+    const pending = readStoredJson(PENDING_KEY)
+    const orderId = urlOrderId || pending?.ord_id || null
+    if (!orderId) return undefined
 
     // Refs survive StrictMode's mount/unmount/mount, so this runs only once.
     if (returnHandledRef.current) return undefined
@@ -305,27 +353,36 @@ function CheckoutPlaceholder() {
     returningRef.current = true
     setConfirmingReturn(true)
     window.history.replaceState({}, document.title, window.location.pathname)
-    try {
-      sessionStorage.removeItem(PENDING_KEY)
-    } catch {
-      /* nothing to clear */
-    }
+    clearStored(PENDING_KEY)
+    // A cancelled payment must not resurrect an older success receipt later.
+    if (status === 'cancelled') clearStored(PLACED_KEY)
 
     ;(async () => {
-      let placed
+      let placed = null
       try {
         placed = await handleReturn()
-      } finally {
-        returningRef.current = false
+      } catch {
+        /* no receipt: the bag is the safe landing */
       }
       if (!mountedRef.current) return
-      await refreshCart()
-      if (!mountedRef.current) return
+
       if (placed) {
+        // Publish the receipt BEFORE the cart refresh empties the screen, so
+        // the empty-cart guard below can never race the success view to /bag.
         setPlacedOrder(placed)
         setConfirmingReturn(false)
+        await refreshCart()
+        // Hold the "we are on a gateway return" flag until the cart state has
+        // settled, so the stale-receipt guard cannot mistake this render for a
+        // brand-new checkout.
+        returningRef.current = false
         return
       }
+
+      await refreshCart()
+      if (!mountedRef.current) return
+      returningRef.current = false
+      setConfirmingReturn(false)
       // Every other outcome lands on the bag (FLOW-CHECKOUT-10).
       navigate('/bag', { replace: true })
     })()
@@ -348,9 +405,15 @@ function CheckoutPlaceholder() {
           }
           if (res?.data?.paid === true) break
         }
-        if (!mountedRef.current) return
+        if (!mountedRef.current) return null
 
-        if (failure) {
+        // The success_url is only reached after PayMongo charges the money, so
+        // it is the durable signal that the order was paid. Server settlement
+        // can still be a few seconds behind (webhook/lookup) - that must never
+        // hide the receipt from the shopper.
+        const redirectSaysPaid = status === 'paid' || status === 'succeeded'
+
+        if (failure && !redirectSaysPaid) {
           // 503 PAYMENT_GATEWAY_UNAVAILABLE: say what the server said, plainly,
           // and leave the bag exactly as it was (REQ-CHECKOUT-02).
           if (failure.status === 503) {
@@ -370,7 +433,7 @@ function CheckoutPlaceholder() {
               'error'
             )
           }
-          return
+          return null
         }
 
         if (status === 'cancelled') {
@@ -378,10 +441,10 @@ function CheckoutPlaceholder() {
             `Payment was cancelled, so order #${orderId} was not paid. It stays unpaid in your Orders and its items are no longer in your bag.`,
             'info'
           )
-          return
+          return null
         }
 
-        if (res?.data?.paid === true || status === 'paid' || status === 'succeeded') {
+        if (res?.data?.paid === true || redirectSaysPaid) {
           clearCheckoutSlot()
           clearSelectedItems()
           let fullOrder = res?.data?.order
@@ -390,22 +453,35 @@ function CheckoutPlaceholder() {
               const fetched = await fetchOrder(Number(orderId))
               if (fetched) fullOrder = fetched
             } catch {
-              /* ignore and use fallback */
+              /* fall back to the receipt stub below */
             }
           }
-          return {
-            order: fullOrder || { ord_id: Number(orderId), ord_amount: totalDue },
-            payRef: res?.data?.pay_ref || null,
+          const confirmed = res?.data?.paid === true
+          const fallbackOrder =
+            pending?.order ||
+            { ord_id: Number(orderId), ord_amount: pending?.amount ?? totalDue }
+          const receipt = {
+            order: fullOrder || fallbackOrder,
+            payRef: res?.data?.pay_ref || pending?.pay_ref || null,
+            confirmed,
+            at: Date.now(),
           }
+          // Persist before the caller swaps to the placed view: a refresh of
+          // this tab must land on the same receipt, not on an empty bag.
+          writeStoredJson(PLACED_KEY, receipt)
+          if (!confirmed) {
+            showToast('Payment received. We are finishing the confirmation of your order.', 'info')
+          }
+          return receipt
         }
 
-        // The redirect says paid but the server has not settled it yet: never
-        // claim success while the confirmation is still outstanding.
+        // The gateway did not say "paid" and the server has not settled it:
+        // never invent a receipt, but keep the order visible in Orders.
         showToast(
           'Your payment is still being confirmed. We will update this order as soon as it lands.',
           'info'
         )
-        return
+        return null
       }
 
       if (status === 'paid' || status === 'succeeded') {
@@ -416,7 +492,63 @@ function CheckoutPlaceholder() {
     }
 
     return undefined
-  }, [refreshCart, navigate, showToast, clearSelectedItems])
+  }, [refreshCart, navigate, showToast, clearSelectedItems, totalDue])
+
+  /* The receipt is on screen, but the server may not have settled it yet.
+     Keep checking quietly so the badge flips to "verified" on its own, while
+     never taking the receipt away from the shopper. */
+  useEffect(() => {
+    if (!placedOrder || placedOrder.confirmed) return undefined
+    const ordId = Number(placedOrder.order?.ord_id)
+    if (!Number.isFinite(ordId) || ordId <= 0) return undefined
+
+    let cancelled = false
+    let attempts = 0
+    let timer = null
+
+    const poll = async () => {
+      if (cancelled) return
+      attempts += 1
+      try {
+        const res = await verifyPaymentStatus({ ord_id: ordId, status: 'paid' })
+        if (cancelled) return
+        if (res?.data?.paid === true) {
+          const next = {
+            ...placedOrder,
+            order: res.data.order || placedOrder.order,
+            payRef: res.data.pay_ref || placedOrder.payRef,
+            confirmed: true,
+            at: Date.now(),
+          }
+          writeStoredJson(PLACED_KEY, next)
+          setPlacedOrder(next)
+          return
+        }
+      } catch {
+        /* the receipt stays; retry on the next tick */
+      }
+      if (!cancelled && attempts < 10) timer = setTimeout(poll, 3000)
+    }
+
+    timer = setTimeout(poll, 2500)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [placedOrder])
+
+  /* A saved receipt must not hijack a brand-new checkout. Arriving on
+     /checkout with items in the bag (and not as a gateway return) means the
+     shopper is shopping again, so the old receipt is dropped and the form is
+     shown instead. */
+  useEffect(() => {
+    if (!placedOrder || returningRef.current || confirmingReturn) return
+    if (cartItems.length === 0 && selectedItems.length === 0) return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('status') || params.get('order')) return
+    clearStored(PLACED_KEY)
+    setPlacedOrder(null)
+  }, [placedOrder, confirmingReturn, cartItems.length, selectedItems.length])
 
   // Coming back from /book with a freshly collected slot.
   useEffect(() => {
@@ -429,12 +561,13 @@ function CheckoutPlaceholder() {
       cartItems.length === 0 &&
       selectedItems.length === 0 &&
       !returningRef.current &&
+      !confirmingReturn &&
       !placedOrder &&
-      !sessionStorage.getItem(PENDING_KEY)
+      !readStoredJson(PENDING_KEY)
     ) {
       navigate('/bag', { replace: true })
     }
-  }, [cartItems.length, selectedItems.length, navigate, placedOrder])
+  }, [cartItems.length, selectedItems.length, navigate, placedOrder, confirmingReturn])
 
   // FLOW-CHECKOUT-09: the dialog counts five seconds down, then gives up
   // without ever calling the placement endpoint.
@@ -455,6 +588,8 @@ function CheckoutPlaceholder() {
     busyRef.current = true
     setBusy(true)
     setError('')
+    // A brand-new payment must never inherit the previous order's receipt.
+    clearStored(PLACED_KEY)
 
     const payload = buildCheckoutPayload({
       dispatchType,
@@ -474,7 +609,16 @@ function CheckoutPlaceholder() {
       try {
         sessionStorage.setItem(
           PENDING_KEY,
-          JSON.stringify({ ord_id: res?.data?.ord_id ?? null, at: Date.now() })
+          JSON.stringify({
+            ord_id: res?.data?.ord_id ?? null,
+            // A snapshot of the placement response lets the return screen show
+            // the right receipt even if the settlement check cannot reach the
+            // server; the paid check below still decides the final badge.
+            amount: res?.data?.total_due ?? totalDue,
+            order: res?.data?.order ?? null,
+            pay_ref: res?.data?.checkout_session_id ?? null,
+            at: Date.now(),
+          })
         )
       } catch {
         /* storage blocked: the return handler simply stays quiet */
@@ -558,6 +702,8 @@ function CheckoutPlaceholder() {
               order={placedOrder.order}
               payRef={placedOrder.payRef}
               customerName={currentUser?.fullName}
+              confirmed={placedOrder.confirmed !== false}
+              onDismiss={() => clearStored(PLACED_KEY)}
             />
           ) : (
             <div className="w-full max-w-xl bg-white rounded-xl p-8 border border-slate-100 flex flex-col items-center text-center gap-3">
