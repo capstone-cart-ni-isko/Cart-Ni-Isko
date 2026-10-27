@@ -4,6 +4,7 @@ import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import Segmented from '../../components/admin/kit/Segmented.jsx'
 import BroadcastNotificationDrawer from '../../components/admin/BroadcastNotificationDrawer.jsx'
 import Modal from '../../components/ui/Modal.jsx'
+import NotificationCard, { inferNotificationDetails } from '../../components/ui/NotificationCard.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import { fetchAccounts } from '../../services/accounts.js'
@@ -75,15 +76,21 @@ function extractAdminTarget(message, row) {
 function mapNotification(row, index) {
   const message = String(row.empnotif_msg ?? row.message ?? '')
   const created = row.empnotif_created ?? row.created_at
-  const priority =
-    String(row.empnotif_type || '').toLowerCase() === 'priority' ||
-    /^\s*\[priority\]/i.test(message)
+  const explicitPriority = String(row.empnotif_type || '').toLowerCase() === 'priority'
+
+  const details = inferNotificationDetails(message, explicitPriority)
 
   return {
     id: row.empnotif_id ?? row.id ?? `notif-${index}`,
-    // The Priority chip already says so: remove all [priority] tags from the message text.
-    message: message.replace(/\[\s*priority\s*\]/gi, '').trim(),
-    priority,
+    message: details.cleanMessage,
+    priority: details.priority,
+    orderNumber: details.orderNumber,
+    category: details.category,
+    title: details.title,
+    icon: details.icon,
+    iconBg: details.iconBg,
+    tag: details.tag,
+    tagClass: details.tagClass,
     time: created ? timeAgo(new Date(created)) : 'Just now',
     // FLOW-NOTIF-05 - unread rows carry no *_read stamp.
     read: Boolean(row.empnotif_read ?? row.read),
@@ -246,57 +253,12 @@ export default function AdminNotifications() {
         ) : (
           <div className="space-y-3">
             {shown.map((item) => (
-              <article
+              <NotificationCard
                 key={item.id}
-                onClick={() => openNotification(item)}
-                className={`relative bg-white rounded-xl border transition-colors p-4 flex items-start gap-4 cursor-pointer group ${
-                  item.read ? 'border-slate-200' : 'border-orange-200 bg-orange-50/15'
-                }`}
-              >
-                <div
-                  className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${
-                    item.priority
-                      ? 'bg-amber-50 border-amber-200 text-amber-600'
-                      : 'bg-slate-50 border-slate-200 text-slate-500'
-                  }`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <h3 className="text-sm font-bold text-slate-900 truncate">
-                        {item.priority ? 'Priority notice' : 'Notification'}
-                      </h3>
-                      {!item.read && (
-                        <span className="w-2.5 h-2.5 rounded-full bg-brand-orange shrink-0 animate-pulse" />
-                      )}
-                    </div>
-                    <span className="text-xs font-medium text-slate-400 shrink-0">{item.time}</span>
-                  </div>
-
-                  <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed">
-                    {item.message}
-                  </p>
-
-                  <div className="flex items-center justify-between mt-3">
-                    <span
-                      className={`text-xs font-bold px-2.5 py-1 rounded-md ${
-                        item.priority ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {item.priority ? 'Priority' : 'General'}
-                    </span>
-                    <span className="text-slate-400 group-hover:text-brand-orange transition-colors text-sm font-bold">
-                      ›
-                    </span>
-                  </div>
-                </div>
-              </article>
+                notification={item}
+                onClick={openNotification}
+                actionLabel="View details"
+              />
             ))}
 
             <div className="text-xs text-slate-400 font-medium pt-1 text-center sm:text-left">
@@ -317,7 +279,7 @@ export default function AdminNotifications() {
       <Modal
         isOpen={Boolean(selectedNotif)}
         onClose={() => setSelectedNotif(null)}
-        title={selectedNotif?.priority ? 'Priority Notice' : 'Notification Details'}
+        title={selectedNotif?.title || 'Notification Details'}
         subtitle={selectedNotif?.time || ''}
         size="sm"
         footer={
@@ -334,17 +296,24 @@ export default function AdminNotifications() {
       >
         {selectedNotif && (
           <div className="space-y-4 py-2">
-            <div className="flex items-center gap-2">
-              <span
-                className={`text-[11px] font-bold px-2.5 py-1 rounded-md ${
-                  selectedNotif.priority
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                {selectedNotif.priority ? 'Priority' : 'General'}
-              </span>
-              <span className="text-xs text-gray-400 font-medium">{selectedNotif.time}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {selectedNotif.priority && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-50 text-amber-700 border border-amber-200/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  Priority
+                </span>
+              )}
+              {selectedNotif.orderNumber && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-mono font-semibold bg-orange-50 text-brand-orange border border-orange-200/60">
+                  {selectedNotif.orderNumber}
+                </span>
+              )}
+              {selectedNotif.tag && (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold border ${selectedNotif.tagClass}`}>
+                  {selectedNotif.tag}
+                </span>
+              )}
+              <span className="text-xs text-gray-400 font-medium ml-auto">{selectedNotif.time}</span>
             </div>
             <p className="text-sm text-gray-800 dark:text-[var(--ink)] leading-relaxed whitespace-pre-line">
               {selectedNotif.message}

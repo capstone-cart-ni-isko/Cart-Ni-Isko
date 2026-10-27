@@ -7,6 +7,7 @@ import PageTitle from '../components/ui/PageTitle.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import Modal from '../components/ui/Modal.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
+import NotificationCard, { inferNotificationDetails, NotifIcon } from '../components/ui/NotificationCard.jsx'
 import { fetchNotifications, markRead, readNotificationsCache } from '../services/notifications.js'
 
 /** REQ-OT-01: "to claim"/"to receive" notifications are handled by QR scanning, not regular notifications. */
@@ -191,28 +192,20 @@ function timeAgo(date) {
 /** Map a custnotif_* / empnotif_* row into the inbox card shape this page renders. */
 function mapNotification(row, index) {
   const message = row.custnotif_msg ?? row.empnotif_msg ?? row.message ?? ''
-  const text = String(message).toLowerCase()
-  let category = 'system'
-  if (/order|pickup|claim|deliver|refund|payment/.test(text)) category = 'orders'
-  else if (/production|pre-?order|stock|restock/.test(text)) category = 'production'
-  else if (/promo|sale|discount|voucher|deal/.test(text)) category = 'promotions'
-
-  const style = CATEGORY_STYLES[category] || CATEGORY_STYLES.system
   const created = row.custnotif_created ?? row.empnotif_created ?? row.created_at
-  // REQ-AN-02: priority notices stand out from the rest of the inbox.
-  const priority = /^\s*\[priority\]/i.test(String(message))
+  const details = inferNotificationDetails(message)
 
   return {
     id: row.custnotif_id ?? row.empnotif_id ?? row.id ?? `notif-${index}`,
-    category,
-    icon: style.icon,
-    iconBg: style.iconBg,
-    tag: priority ? 'Priority' : style.tag,
-    tagText: priority ? 'text-amber-700' : style.tagText,
-    dot: priority ? 'bg-amber-500' : style.dot,
-    title: style.title,
-    // The Priority chip already says so: remove all [priority] tags from the message text.
-    message: String(message).replace(/\[\s*priority\s*\]/gi, '').trim(),
+    category: details.category,
+    icon: details.icon,
+    iconBg: details.iconBg,
+    priority: details.priority,
+    orderNumber: details.orderNumber,
+    tag: details.tag,
+    tagClass: details.tagClass,
+    title: details.title,
+    message: details.cleanMessage,
     time: created ? timeAgo(new Date(created)) : 'Just now',
     unread: !(row.custnotif_read || row.empnotif_read),
     targetUrl: row.notif_link || extractOrderTarget(message, row) || calendarTarget(message),
@@ -286,18 +279,18 @@ export default function Notifications() {
 
   // Calculate badge counts
   const countAll = items.length
-  const countOrders = items.filter((n) => n.category === 'orders').length
-  const countProduction = items.filter((n) => n.category === 'production').length
-  const countSystem = items.filter((n) => n.category === 'system').length
+  const countOrders = items.filter((n) => n.category === 'orders' || n.category === 'payment').length
+  const countProduction = items.filter((n) => n.category === 'production' || n.category === 'inventory').length
+  const countSystem = items.filter((n) => n.category === 'system' || n.category === 'security' || n.category === 'announcement' || n.category === 'appointment').length
   const countPromotions = items.filter((n) => n.category === 'promotions').length
   const unreadTotal = items.filter((n) => n.unread).length
 
   // Filter items based on activeTab
   const filteredItems = items.filter((n) => {
     if (activeTab === 'All') return true
-    if (activeTab === 'Orders') return n.category === 'orders'
-    if (activeTab === 'Production') return n.category === 'production'
-    if (activeTab === 'System') return n.category === 'system'
+    if (activeTab === 'Orders') return n.category === 'orders' || n.category === 'payment'
+    if (activeTab === 'Production') return n.category === 'production' || n.category === 'inventory'
+    if (activeTab === 'System') return n.category === 'system' || n.category === 'security' || n.category === 'announcement' || n.category === 'appointment'
     if (activeTab === 'Promotions') return n.category === 'promotions'
     return true
   })
@@ -422,7 +415,7 @@ export default function Notifications() {
             {filteredItems.length === 0 ? (
               <div className="text-center bg-white rounded-2xl border border-slate-200 px-6 py-12 shadow-2xs">
                 <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-3 text-slate-400">
-                  <NotifTypeIcon icon="bell" className="w-6 h-6" />
+                  <NotifIcon icon="bell" className="w-6 h-6" />
                 </div>
                 <p className="text-sm font-semibold text-gray-900">
                   No notifications in this category
@@ -433,75 +426,12 @@ export default function Notifications() {
               </div>
             ) : (
               filteredItems.map((item) => (
-                <article
+                <NotificationCard
                   key={item.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleNotificationClick(item)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      handleNotificationClick(item)
-                    }
-                  }}
-                  className={`bg-white rounded-2xl border transition-shadow shadow-2xs hover:shadow-xs cursor-pointer focus-visible:outline-2 focus-visible:outline-brand-orange ${
-                    item.unread ? 'border-orange-200' : 'border-slate-200'
-                  }`}
-                >
-                  <div className="p-4 sm:p-5 flex items-start gap-3.5">
-                    <div
-                      className={`w-11 h-11 rounded-xl border border-slate-200 flex items-center justify-center shrink-0 ${item.iconBg}`}
-                    >
-                      <NotifTypeIcon icon={item.icon} className="w-5 h-5" />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm sm:text-base font-semibold text-gray-900 tracking-tight">
-                            {item.title}
-                          </h3>
-                          {item.isExempt && (
-                            <span className="text-[11px] font-semibold text-purple-700">
-                              · QR verification
-                            </span>
-                          )}
-                          {item.unread && (
-                            <span
-                              className="w-2 h-2 rounded-full bg-brand-orange shrink-0"
-                              aria-label="Unread"
-                            />
-                          )}
-                        </div>
-                        <span className="text-xs text-gray-400 font-medium shrink-0 pt-0.5">
-                          {item.time}
-                        </span>
-                      </div>
-
-                      <p className="text-sm text-gray-600 mt-1 leading-relaxed break-words line-clamp-3">
-                        {item.message}
-                      </p>
-
-                      <div className="mt-2.5 flex items-center justify-between gap-3 text-xs">
-                        <span className="flex items-center gap-1.5 min-w-0 font-semibold">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.dot}`} />
-                          <span className={item.tagText}>{item.tag}</span>
-                          <span className="text-gray-300 font-normal">•</span>
-                          <span
-                            className={`font-medium ${item.unread ? 'text-brand-orange' : 'text-gray-400'}`}
-                          >
-                            {item.unread ? 'New' : 'Read'}
-                          </span>
-                        </span>
-                        {item.targetUrl && (
-                          <span className="font-semibold text-brand-orange shrink-0">
-                            View details →
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </article>
+                  notification={item}
+                  onClick={handleNotificationClick}
+                  actionLabel="View details"
+                />
               ))
             )}
 
@@ -549,17 +479,24 @@ export default function Notifications() {
       >
         {selectedNotif && (
           <div className="space-y-4 py-2">
-            <div className="flex items-center gap-2">
-              <span
-                className={`text-[11px] font-bold px-2.5 py-1 rounded-md ${
-                  selectedNotif.tag === 'Priority'
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                {selectedNotif.tag}
-              </span>
-              <span className="text-xs text-gray-400 font-medium">{selectedNotif.time}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {selectedNotif.priority && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-50 text-amber-700 border border-amber-200/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  Priority
+                </span>
+              )}
+              {selectedNotif.orderNumber && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-mono font-semibold bg-orange-50 text-brand-orange border border-orange-200/60">
+                  {selectedNotif.orderNumber}
+                </span>
+              )}
+              {selectedNotif.tag && (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold border ${selectedNotif.tagClass}`}>
+                  {selectedNotif.tag}
+                </span>
+              )}
+              <span className="text-xs text-gray-400 font-medium ml-auto">{selectedNotif.time}</span>
             </div>
             <p className="text-sm text-gray-800 dark:text-[var(--ink)] leading-relaxed whitespace-pre-line">
               {selectedNotif.message}
