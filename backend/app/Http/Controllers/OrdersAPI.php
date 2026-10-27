@@ -647,12 +647,19 @@ class OrdersAPI extends Controller
             ], 200);
 
         } catch (\RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
-        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to determine dispatch details',
-                'error'   => $e->getMessage(),
+                'message' => $this->customerSafeMessage(
+                    $e,
+                    'We could not calculate your delivery fee right now. Please try again.'
+                ),
+            ], 409);
+        } catch (\Exception $e) {
+            Log::error('Checkout dispatch details failed', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'We could not calculate your delivery fee right now. Please try again.',
             ], 500);
         }
     }
@@ -776,13 +783,19 @@ class OrdersAPI extends Controller
         } catch (InsufficientStockException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
         } catch (\RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
-        } catch (\Exception $e) {
-            Log::error('PayMongo createPaymentIntent error', ['error' => $e->getMessage()]);
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to create payment intent',
-                'error'   => $e->getMessage(),
+                'message' => $this->customerSafeMessage(
+                    $e,
+                    'We could not place your order right now. Your bag has been kept exactly as it was. Please try again.'
+                ),
+            ], 409);
+        } catch (\Exception $e) {
+            Log::error('PayMongo createPaymentIntent error', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'We could not place your order right now. Your bag has been kept exactly as it was. Please try again.',
             ], 500);
         }
     }
@@ -1366,6 +1379,32 @@ class OrdersAPI extends Controller
         }
     }
 
+    /**
+     * Copy that is safe to put in front of a shopper. Domain failures (stock,
+     * slots, payment availability) explain themselves, but a database or
+     * driver failure must never reach the browser as a SQLSTATE, a stack
+     * trace or a vendor path. The real text still goes to the log.
+     */
+    protected function customerSafeMessage(\Throwable $e, string $fallback): string
+    {
+        $message = trim((string) $e->getMessage());
+
+        $technical = $e instanceof \Illuminate\Database\QueryException
+            || $e instanceof \PDOException
+            || preg_match('/SQLSTATE|SQL:|Connection:|QueryException|PDOException|Stack trace|vendor[\\\\\/]|\.php\b|(?:pgsql|postgres)|violates .*constraint|null value in column|DETAIL:|HINT:/i', $message);
+
+        if ($technical) {
+            Log::error('Checkout failed with a technical error', [
+                'exception' => $e::class,
+                'error'     => $message,
+            ]);
+
+            return $fallback;
+        }
+
+        return $message !== '' ? $message : $fallback;
+    }
+
     protected function placeOrder(Request $json, int $custId, string $dispatchType, string $speed, callable $resolveReference): array
     {
         $quote = $this->quoteDispatch($json, $dispatchType, $speed);
@@ -1517,7 +1556,7 @@ class OrdersAPI extends Controller
                     'deliver_lat'         => is_numeric($lat) ? (float) $lat : null,
                     'deliver_lng'         => is_numeric($lng) ? (float) $lng : null,
                     'deliver_service'     => strtoupper($speed),
-                    'deliver_env'         => LalamoveService::isConfigured() ? LalamoveService::environment() : null,
+                    'deliver_env'         => LalamoveService::environment(),
                     'deliver_fee_charged' => null,
                 ]);
 
@@ -2361,13 +2400,20 @@ class OrdersAPI extends Controller
             return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
 
         } catch (\RuntimeException $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
-
-        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to checkout POS order',
-                'error'   => $e->getMessage(),
+                'message' => $this->customerSafeMessage(
+                    $e,
+                    'We could not check out this order right now. Please try again.'
+                ),
+            ], 409);
+
+        } catch (\Exception $e) {
+            Log::error('POS checkout failed', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'We could not check out this order right now. Please try again.',
             ], 500);
         }
     }
@@ -4724,20 +4770,31 @@ class OrdersAPI extends Controller
         $quote = $this->quoteDispatch($json, 'delivery', $speed);
         $deliveryFee = round((float) ($quote['fee'] ?? 50.0), 2);
 
-        $delivery = $order->delivery;
-        if (! $delivery) {
-            $delivery = Delivery::create([
-                'deliver_id'      => $this->nextId('delivery', 'deliver_id'),
-                'ord_id'          => $order->ord_id,
-                'cust_id'         => $custId,
-                'deliver_created' => now(),
-                'deliver_qr'      => 'QR-DEL-' . strtoupper(Str::random(10)),
-            ]);
-        }
-
         $customer = Customer::find($custId);
         $finalRecipient = $recipient !== '' ? $recipient : $this->customerFullName($customer);
         $finalPhone = $phone !== '' ? $phone : (string) ($customer->cust_phone ?? '');
+        $expect = $this->deliveryExpectation($json, $speed);
+
+        $delivery = $order->delivery;
+        if (! $delivery) {
+            // Every NOT NULL delivery column is supplied up front: the row is
+            // created before the update below, so a missing value fails here
+            // first (e.g. deliver_env when LalaMove has no credentials).
+            $delivery = Delivery::create([
+                'deliver_id'          => $this->nextId('delivery', 'deliver_id'),
+                'ord_id'              => $order->ord_id,
+                'cust_id'             => $custId,
+                'deliver_address'     => $address,
+                'deliver_phone'       => $finalPhone,
+                'deliver_qr'          => 'QR-DEL-' . strtoupper(Str::random(10)),
+                'deliver_expect'      => $expect,
+                'deliver_created'     => now(),
+                'deliver_recipient'   => $finalRecipient,
+                'deliver_service'     => strtoupper($speed),
+                'deliver_env'         => LalamoveService::environment(),
+                'deliver_fee_charged' => $deliveryFee,
+            ]);
+        }
 
         $delivery->update([
             'deliver_address'     => $address,
@@ -4748,7 +4805,7 @@ class OrdersAPI extends Controller
             'deliver_lng'         => is_numeric($lng) ? (float) $lng : null,
             'deliver_service'     => strtoupper($speed),
             'deliver_fee_charged' => $deliveryFee,
-            'deliver_env'         => LalamoveService::isConfigured() ? LalamoveService::environment() : null,
+            'deliver_env'         => LalamoveService::environment(),
         ]);
 
         if (! PayMongoService::isConfigured()) {
@@ -4999,7 +5056,7 @@ class OrdersAPI extends Controller
                     'deliver_created'     => now(),
                     'deliver_recipient'   => $this->customerFullName($customer),
                     'deliver_service'     => strtoupper($speed),
-                    'deliver_env'         => LalamoveService::isConfigured() ? LalamoveService::environment() : null,
+                    'deliver_env'         => LalamoveService::environment(),
                     'deliver_fee_charged' => null,
                 ]);
             }

@@ -14,6 +14,22 @@ export const API_BASE_URL = configuredBaseUrl.replace(/\/$/, '')
 export const REQUEST_TIMEOUT_MS = 30000
 
 /*
+    A shopper must never be shown the inside of the server. Laravel's debug
+    output, a SQLSTATE, or a PHP/JavaScript stack trace is useful in the log
+    and useless - even alarming - on the checkout screen, so anything that
+    looks technical is replaced with a plain-language fallback before it can
+    reach a toast, an alert, or an error card.
+*/
+const TECHNICAL_ERROR = /(SQLSTATE|SQL:|Connection:|QueryException|PDOException|Stack trace|vendor[\\/]|\.php\b|(?:pgsql|postgres)|violates .*constraint|null value in column|DETAIL:|HINT:|Cannot read propert|is not a function|Minified React error)/i
+
+export function friendlyErrorMessage(message, fallback = 'Something went wrong. Please try again.') {
+  const text = typeof message === 'string' ? message.trim() : ''
+  if (!text) return fallback
+  if (text.length > 300 || TECHNICAL_ERROR.test(text)) return fallback
+  return text
+}
+
+/*
     One bearer per portal (system rule 71: "The customer portal and the admin
     portal must be separate"). Holding a single shared token meant that
     signing in on one portal silently re-pointed every request the other
@@ -179,7 +195,11 @@ export async function apiRequest(path, { method = 'GET', body, headers, silent =
         clearSession(sentKind)
         window.dispatchEvent(new CustomEvent('auth-expired', { detail: { kind: sentKind } }))
       }
-      throw new ApiError(data?.message || 'Request failed', response.status, data)
+      // Sanitize before anything can read it: screens often prefer
+      // payload.message, so both copies carry the customer-safe text.
+      const message = friendlyErrorMessage(data?.message)
+      if (data && typeof data === 'object' && 'message' in data) data.message = message
+      throw new ApiError(message, response.status, data)
     }
 
     if (method !== 'GET') clearGetCache()

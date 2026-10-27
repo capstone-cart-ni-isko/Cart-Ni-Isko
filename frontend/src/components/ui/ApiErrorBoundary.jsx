@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { activePortal } from '../../services/api.js'
+import { activePortal, friendlyErrorMessage } from '../../services/api.js'
 import Button from './Button.jsx'
 import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
@@ -10,7 +10,7 @@ import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).s
  */
 export function ApiErrorText({ error, fallback = 'Something went wrong. Please try again.', className = '' }) {
   if (!error) return null
-  const message = error.message || error.payload?.message || fallback
+  const message = friendlyErrorMessage(error.message || error.payload?.message, fallback)
   return (
     <div
       role="alert"
@@ -82,13 +82,11 @@ export class ApiErrorBoundary extends Component {
           </div>
           <h1 className="text-base font-semibold text-slate-900">This page hit an error</h1>
           <p className="text-sm text-slate-600 break-words">
-            {error?.message || 'Something unexpected went wrong while showing this page. Please try again in a moment.'}
+            {friendlyErrorMessage(
+              error?.message,
+              'Something unexpected went wrong while showing this page. Please try again in a moment.'
+            )}
           </p>
-          {error?.stack && (
-            <pre className="text-left text-3xs p-2 bg-slate-50 border border-slate-200 rounded max-h-32 overflow-auto text-slate-600">
-              {String(error.stack).slice(0, 500)}
-            </pre>
-          )}
           <p className="text-xs text-slate-400">
             Nothing was lost - your session is still signed in. You can go back or
             return to your portal and try again.

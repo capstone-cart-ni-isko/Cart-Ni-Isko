@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { onLoadingChange, prefetch, preconnectApi } from '../services/api.js'
+import { onLoadingChange, prefetch, preconnectApi, friendlyErrorMessage } from '../services/api.js'
 
 /**
  * True while any API request is in flight. Drives every spinner/skeleton so
@@ -11,10 +11,10 @@ export function useApiLoading() {
   return isLoading
 }
 
-/** Plain-text message for any thrown API failure - never silent. */
+/** Plain-text message for any thrown API failure - never silent, never technical. */
 export function apiErrorMessage(error, fallback = 'Something went wrong. Please try again.') {
   if (!error) return ''
-  return error.message || error.payload?.message || fallback
+  return friendlyErrorMessage(error.message || error.payload?.message, fallback)
 }
 
 /**
