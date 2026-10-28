@@ -16,13 +16,26 @@ function formatDateTime(value, withTime = true) {
   })
 }
 
+/** Name only the wallet/card PayMongo actually charged. */
+function formatPaymentMethod(value) {
+  const method = String(value ?? '').trim().toLowerCase()
+  if (method === 'gcash') return 'GCash'
+  if (method === 'maya' || method === 'paymaya') return 'Maya'
+  if (method === 'card') return 'Card'
+  if (method === 'grab_pay' || method === 'grabpay') return 'GrabPay'
+  if (method === 'qrph') return 'QR Ph'
+  if (method === 'cash') return 'Cash'
+  if (method === 'digital') return 'Digital Wallet'
+  return 'Online Payment'
+}
+
 /**
  * Shown on /checkout once the PayMongo return has completed.
  * Displays comprehensive order summary, PayMongo transaction confirmation,
  * item breakdown, claiming details, and clear action buttons to view details
  * or continue browsing the store.
  */
-function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDismiss }) {
+function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed = true, onDismiss }) {
   const navigate = useNavigate()
   // Clearing the saved receipt happens as the shopper leaves this screen, so
   // returning to /checkout later starts a fresh checkout instead of replaying
@@ -35,9 +48,11 @@ function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDism
   const isDelivery = order?.dispatch_type === 'delivery' || order?.ord_claiming === 'delivery'
   const total = Number(order?.ord_amount ?? order?.total ?? 0)
   const paid = Number(order?.pay_given ?? order?.pay_received ?? 0) || total
-  const deliveryFee = isDelivery ? Number(order?.deliver_fee_charged ?? 0) : 0
   const firstName = String(customerName || '').trim().split(/\s+/)[0]
   const reference = payRef || order?.pay_ref || order?.pay_reference
+  const method = formatPaymentMethod(
+    paymentMethod || order?.pay_method || order?.payment_method
+  )
 
   return (
     <div className="w-full max-w-xl bg-white rounded-2xl p-6 md:p-8 border border-slate-200/90 shadow-sm space-y-6 animate-scale-in">
@@ -68,25 +83,9 @@ function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDism
           <p className="text-sm text-gray-600 mt-1.5 max-w-md mx-auto leading-relaxed">
             {firstName ? `Thank you, ${firstName}! ` : 'Thank you! '}
             {confirmed
-              ? 'Your transaction has been securely processed via PayMongo. Your order is now confirmed and being prepared.'
+              ? 'Your transaction has been securely processed via PayMongo. Your order is now confirmed.'
               : 'Your payment went through. We are finishing the confirmation with PayMongo — your order is saved and this receipt is your reference.'}
           </p>
-        </div>
-        <div className="flex items-center justify-center gap-2">
-          <span
-            className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 border rounded-full ${
-              confirmed
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-amber-50 text-amber-700 border-amber-200'
-            }`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full animate-pulse ${
-                confirmed ? 'bg-emerald-600' : 'bg-amber-500'
-              }`}
-            />
-            {confirmed ? 'Payment Verified & Paid Upfront' : 'Payment received — confirming with PayMongo'}
-          </span>
         </div>
       </div>
 
@@ -94,7 +93,7 @@ function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDism
       <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm overflow-hidden bg-white shadow-2xs">
         <div className="flex justify-between items-center gap-3 p-3.5 bg-slate-50/70">
           <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Transaction Details</span>
-          <span className="font-mono text-xs font-semibold text-gray-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+          <span className="text-xs font-semibold text-gray-800 bg-white px-2 py-0.5 rounded border border-slate-200">
             Order #{order?.ord_id}
           </span>
         </div>
@@ -108,14 +107,14 @@ function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDism
           <span className="text-gray-500">Payment Gateway</span>
           <div className="flex items-center gap-2">
             <img src={paymongoLogo} alt="PayMongo" className="h-4 object-contain" />
-            <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-              Online
+            <span className="font-medium text-gray-800">
+              PayMongo
             </span>
           </div>
         </div>
         <div className="flex justify-between gap-3 p-3.5">
           <span className="text-gray-500">Payment Method</span>
-          <span className="font-medium text-gray-800">GCash / Maya / Card (PayMongo)</span>
+          <span className="font-medium text-gray-800">{method}</span>
         </div>
         {reference && (
           <div className="flex justify-between items-center gap-3 p-3.5">
@@ -128,7 +127,6 @@ function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDism
         <div className="flex justify-between items-baseline gap-3 p-3.5 bg-orange-50/70">
           <div>
             <span className="font-bold text-gray-900 block">Total Amount Paid</span>
-            <span className="text-2xs text-gray-500">Paid upfront with order reservation</span>
           </div>
           <span className="text-xl font-bold text-brand-orange">{formatPrice(paid)}</span>
         </div>
@@ -213,11 +211,6 @@ function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDism
               )
             })}
           </div>
-          {deliveryFee > 0 && (
-            <p className="text-xs text-gray-500 text-right pr-1">
-              Includes {formatPrice(deliveryFee)} courier delivery fee
-            </p>
-          )}
         </div>
       )}
 
@@ -246,10 +239,7 @@ function OrderPlacedView({ order, payRef, customerName, confirmed = true, onDism
           className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
         >
           <span>View Order Details & QR Code</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4">
-            <line x1="5" y1="12" x2="19" y2="12" />
-            <polyline points="12 5 19 12 12 19" />
-          </svg>
+
         </button>
 
         <button

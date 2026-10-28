@@ -1000,7 +1000,8 @@ class UserAPI extends Controller
             $payload['pay_given'] = (float) $order->pay_received;
         }
         $payload['pay_received'] = (float) $order->pay_received;
-        $payload['pay_method']   = OrdersAPI::payMethodFromReference(
+        $payload['pay_method']   = OrdersAPI::payMethodForOrder(
+            $order,
             $payload['pay_ref'] ?? $order->pay_reference
         );
 

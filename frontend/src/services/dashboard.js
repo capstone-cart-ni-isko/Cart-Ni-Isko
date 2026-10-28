@@ -143,6 +143,11 @@ export function paymentMethodLabel(raw) {
   const value = String(raw ?? '').trim().toLowerCase()
   if (value === 'digital') return 'Digital Wallet'
   if (value === 'cash') return 'Cash'
+  if (value === 'gcash') return 'GCash'
+  if (value === 'maya' || value === 'paymaya') return 'Maya'
+  if (value === 'card') return 'Card'
+  if (value === 'grab_pay' || value === 'grabpay') return 'GrabPay'
+  if (value === 'qrph') return 'QR Ph'
   return 'Online Payment'
 }
 

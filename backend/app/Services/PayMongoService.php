@@ -151,7 +151,7 @@ class PayMongoService
      * truth; this is only the belt-and-braces check used when the customer
      * lands back on `success_url` before the webhook has been delivered.
      */
-    public function retrieveCheckoutSession(string $sessionId): array
+    public function retrieveCheckoutSession(string $sessionId, int $timeout = 10): array
     {
         if (! self::isConfigured() || $sessionId === '') {
             return [];
@@ -162,14 +162,14 @@ class PayMongoService
         try {
             // Sessions are created on v2 but only retrievable on v1 - the v2
             // GET route does not exist and answers 404.
-            $response = $this->httpClient(10)->get($url);
+            $response = $this->httpClient($timeout)->get($url);
         } catch (\Throwable $e) {
             Log::warning('PayMongo retrieveCheckoutSession failed', ['error' => $e->getMessage()]);
 
             try {
                 $response = Http::withBasicAuth((string) $this->secretKey, '')
                     ->withoutVerifying()
-                    ->timeout(10)
+                    ->timeout($timeout)
                     ->get($url);
             } catch (\Throwable $e2) {
                 return [];
@@ -181,6 +181,84 @@ class PayMongoService
         }
 
         return $response->json()['data'] ?? [];
+    }
+
+    /**
+     * The exact PayMongo method a session was paid with.
+     *
+     * A paid Checkout Session carries its payments; each payment names the
+     * source the customer actually used (`gcash`, `paymaya`, `card`, …). The
+     * same shape is used by the `checkout_session.payment.paid` webhook, so
+     * this accepts either a retrieved session or a webhook resource.
+     */
+    public static function paymentMethod(array $payload): ?string
+    {
+        if ($payload === []) {
+            return null;
+        }
+
+        $attributes = $payload['attributes'] ?? $payload;
+        if (! is_array($attributes)) {
+            return null;
+        }
+
+        $payments = [];
+        if (isset($attributes['payments']) && is_array($attributes['payments'])) {
+            $payments = $attributes['payments'];
+        }
+
+        $intent = $attributes['payment_intent'] ?? null;
+        if (is_array($intent)) {
+            $intentAttrs = $intent['attributes'] ?? $intent;
+            if (is_array($intentAttrs) && isset($intentAttrs['payments']) && is_array($intentAttrs['payments'])) {
+                $payments = array_merge($payments, $intentAttrs['payments']);
+            }
+        }
+
+        foreach ($payments as $payment) {
+            if (! is_array($payment)) {
+                continue;
+            }
+
+            $paymentAttrs = $payment['attributes'] ?? $payment;
+            if (! is_array($paymentAttrs)) {
+                continue;
+            }
+
+            $status = strtolower((string) ($paymentAttrs['status'] ?? ''));
+            if ($status !== '' && ! in_array($status, ['paid', 'succeeded'], true)) {
+                continue;
+            }
+
+            $method = self::sourceMethod($paymentAttrs);
+            if ($method !== null) {
+                return $method;
+            }
+        }
+
+        // `payment.paid` webhooks send the payment resource itself.
+        return self::sourceMethod($attributes);
+    }
+
+    private static function sourceMethod(array $attributes): ?string
+    {
+        $source = $attributes['source'] ?? null;
+        if (is_array($source)) {
+            $type = strtolower(trim((string) ($source['type'] ?? '')));
+            if ($type !== '') {
+                return $type;
+            }
+        }
+
+        $method = $attributes['payment_method'] ?? null;
+        if (is_array($method)) {
+            $type = strtolower(trim((string) ($method['type'] ?? '')));
+            if ($type !== '') {
+                return $type;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -148,7 +148,14 @@ class ReceiptRenderer
         $rows[] = ['lines' => ['TOTAL'], 'right' => $money($o['ord_amount'] ?? $subtotal), 'bold' => true];
 
         $rows[] = ['lines' => ['Payment'], 'right' => (string) match (strtolower((string) ($o['pay_method'] ?? ''))) {
-            'cash' => 'Cash', 'digital' => 'Digital Wallet', default => 'Online Payment',
+            'cash'                                     => 'Cash',
+            'digital'                                  => 'Digital Wallet',
+            'gcash'                                    => 'GCash',
+            'maya', 'paymaya'                          => 'Maya',
+            'card'                                     => 'Card',
+            'grab_pay', 'grabpay'                      => 'GrabPay',
+            'qrph'                                     => 'QR Ph',
+            default                                    => 'Online Payment',
         }, 'gap' => 6];
 
         if (isset($o['pay_given'])) {

@@ -25,6 +25,7 @@ use App\Services\Receipts\ReceiptPrinter;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -438,7 +439,8 @@ class OrdersAPI extends Controller
         }
         $payload['pay_received'] = (float) $order->pay_received;
 
-        $payload['pay_method'] = self::payMethodFromReference(
+        $payload['pay_method'] = self::payMethodForOrder(
+            $order,
             $payload['pay_ref'] ?? $order->pay_reference
         );
 
@@ -540,8 +542,16 @@ class OrdersAPI extends Controller
         return $map[$status] ?? null;
     }
 
-    public static function payMethodFromReference(?string $reference): ?string
+    public static function payMethodFromReference(?string $reference, ?string $method = null): ?string
     {
+        // PayMongo reports the source the customer actually paid with. Keep it
+        // as a stable slug so every surface (receipt, order detail, printer)
+        // can label it without ever guessing between GCash, Maya and Card.
+        $method = self::normalizePayMethod($method);
+        if ($method !== null) {
+            return $method;
+        }
+
         $ref = strtoupper(trim((string) $reference));
 
         if (str_starts_with($ref, 'POS-CASH-')) {
@@ -552,6 +562,95 @@ class OrdersAPI extends Controller
         }
 
         return null;
+    }
+
+    private static function normalizePayMethod(?string $method): ?string
+    {
+        $value = strtolower(trim((string) $method));
+
+        if ($value === '') {
+            return null;
+        }
+
+        return match ($value) {
+            'paymaya'                    => 'maya',
+            'credit_card', 'debit_card'  => 'card',
+            'grabpay'                    => 'grab_pay',
+            default                      => $value,
+        };
+    }
+
+    /**
+     * The method is written to the shared cache (and the receipt snapshot on
+     * the browser) rather than a new database column: the live Supabase schema
+     * is maintained by hand, while this only has to outlive the payment view.
+     */
+    public static function rememberPayMethodForOrder($ordId, ?string $method): void
+    {
+        $ordId = (int) $ordId;
+        $method = self::normalizePayMethod($method);
+
+        if ($ordId <= 0 || $method === null) {
+            return;
+        }
+
+        try {
+            Cache::forever(self::payMethodCacheKey($ordId), $method);
+        } catch (\Throwable $e) {
+            Log::warning('Could not cache PayMongo method', ['error' => $e->getMessage()]);
+        }
+    }
+
+    public static function cachedPayMethodForOrder($ordId): ?string
+    {
+        $ordId = (int) $ordId;
+        if ($ordId <= 0) {
+            return null;
+        }
+
+        try {
+            $method = Cache::get(self::payMethodCacheKey($ordId));
+            return $method !== null ? self::normalizePayMethod((string) $method) : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    public static function payMethodForOrder(Order $order, ?string $reference = null): ?string
+    {
+        return self::payMethodFromReference(
+            $reference ?? $order->pay_reference,
+            self::cachedPayMethodForOrder((int) $order->ord_id)
+        );
+    }
+
+    private static function payMethodCacheKey(int $ordId): string
+    {
+        return 'order_pay_method:' . $ordId;
+    }
+
+    /** Look the method up from PayMongo when the cache does not have it yet. */
+    private function lookupPayMethod(Order $order): ?string
+    {
+        $cached = self::cachedPayMethodForOrder((int) $order->ord_id);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        if (! PayMongoService::isConfigured() || ! $order->pay_reference) {
+            return null;
+        }
+
+        // Only a short extra round trip: the receipt must not wait on PayMongo
+        // longer than necessary just to name the wallet.
+        $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference, 6);
+        $method = PayMongoService::paymentMethod($session);
+
+        if ($method !== null) {
+            self::rememberPayMethodForOrder((int) $order->ord_id, $method);
+        }
+
+        return self::normalizePayMethod($method);
     }
 
     const dispatchFees = ['priority' => 100.0, 'standard' => 50.0, 'saver' => 30.0];
@@ -946,6 +1045,15 @@ class OrdersAPI extends Controller
                 return $this->webhookAck('Event acknowledged');
             }
 
+            // The webhook already contains the full checkout session and its
+            // payment source, so the exact wallet can be kept without asking
+            // PayMongo again when the browser lands back on success_url.
+            $resource = $event['data']['data'] ?? $event['data'] ?? [];
+            $method = PayMongoService::paymentMethod(is_array($resource) ? $resource : []);
+            if ($method !== null) {
+                self::rememberPayMethodForOrder((int) $order->ord_id, $method);
+            }
+
             $alreadyPaid = (float) $order->pay_received > 0;
 
             $payment = $this->markOrderPaid($order, [
@@ -1001,14 +1109,21 @@ class OrdersAPI extends Controller
         }
 
         $state = [
-            'ord_id'      => $order->ord_id,
-            'paid'        => (float) $order->pay_received > 0,
-            'pay_ref'     => $order->pay_reference,
-            'ord_status'  => $order->ord_status,
-            'gateway'     => 'paymongo',
+            'ord_id'         => $order->ord_id,
+            'paid'           => (float) $order->pay_received > 0,
+            'pay_ref'        => $order->pay_reference,
+            'ord_status'     => $order->ord_status,
+            'gateway'        => 'paymongo',
+            'payment_method' => self::cachedPayMethodForOrder((int) $order->ord_id),
         ];
 
         if ($state['paid']) {
+            // A receipt restored after the cache was cleared can still recover
+            // the exact wallet from PayMongo.
+            if ($state['payment_method'] === null) {
+                $state['payment_method'] = $this->lookupPayMethod($order);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Payment already confirmed',
@@ -1029,12 +1144,27 @@ class OrdersAPI extends Controller
 
         $incomingStatus = strtolower((string) $json->input('status', ''));
         // The success_url is only reached after PayMongo has collected the
-        // money, so a paid return needs no third-party round trip - proving it
-        // again can only delay (or, if PayMongo is slow, hide) the receipt.
-        // Every other return asks PayMongo directly.
-        $session = $incomingStatus === 'paid'
-            ? []
-            : (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
+        // money, so a paid return needs no third-party round trip to prove it.
+        // The one exception is the exact wallet: when the webhook has not
+        // filled it yet, ask PayMongo once so the receipt can name GCash, Maya
+        // or Card instead of a generic list.
+        $session = [];
+        if ($incomingStatus === 'paid') {
+            if ($state['payment_method'] === null) {
+                $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference, 6);
+            }
+        } else {
+            $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
+        }
+
+        $method = PayMongoService::paymentMethod($session)
+            ?? $state['payment_method'];
+        if ($method !== null) {
+            $method = self::normalizePayMethod($method);
+            $state['payment_method'] = $method;
+            self::rememberPayMethodForOrder((int) $order->ord_id, $method);
+        }
+
         $settled = $incomingStatus === 'paid' || PayMongoService::sessionIsPaid($session);
 
         if ($settled) {

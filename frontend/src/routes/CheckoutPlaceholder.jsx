@@ -463,6 +463,14 @@ function CheckoutPlaceholder() {
           const receipt = {
             order: fullOrder || fallbackOrder,
             payRef: res?.data?.pay_ref || pending?.pay_ref || null,
+            // PayMongo names the wallet/card it charged; keep it with the
+            // receipt so a refresh shows the same method.
+            paymentMethod:
+              res?.data?.payment_method ||
+              res?.data?.order?.pay_method ||
+              fullOrder?.pay_method ||
+              pending?.order?.pay_method ||
+              null,
             confirmed,
             at: Date.now(),
           }
@@ -498,7 +506,9 @@ function CheckoutPlaceholder() {
      Keep checking quietly so the badge flips to "verified" on its own, while
      never taking the receipt away from the shopper. */
   useEffect(() => {
-    if (!placedOrder || placedOrder.confirmed) return undefined
+    // Also keep checking when the payment is already marked paid but the
+    // receipt still has no exact PayMongo method.
+    if (!placedOrder || (placedOrder.confirmed && placedOrder.paymentMethod)) return undefined
     const ordId = Number(placedOrder.order?.ord_id)
     if (!Number.isFinite(ordId) || ordId <= 0) return undefined
 
@@ -517,6 +527,11 @@ function CheckoutPlaceholder() {
             ...placedOrder,
             order: res.data.order || placedOrder.order,
             payRef: res.data.pay_ref || placedOrder.payRef,
+            paymentMethod:
+              res.data.payment_method ||
+              res.data.order?.pay_method ||
+              placedOrder.paymentMethod ||
+              null,
             confirmed: true,
             at: Date.now(),
           }
@@ -702,6 +717,7 @@ function CheckoutPlaceholder() {
               order={placedOrder.order}
               payRef={placedOrder.payRef}
               customerName={currentUser?.fullName}
+              paymentMethod={placedOrder.paymentMethod || placedOrder.order?.pay_method}
               confirmed={placedOrder.confirmed !== false}
               onDismiss={() => clearStored(PLACED_KEY)}
             />
