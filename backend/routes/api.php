@@ -101,6 +101,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/checkout/dispatch', [OrdersAPI::class, 'determineDispatchDetails']);
     Route::post('/checkout/payment', [OrdersAPI::class, 'integratePayment']);
     Route::post('/checkout/payment/intent', [OrdersAPI::class, 'createPaymentIntent']);
+    // An existing order still awaiting payment can reopen hosted checkout
+    // without placing a new order or signing in again.
+    Route::post('/checkout/payment/resume', [OrdersAPI::class, 'resumePayment']);
     // The browser is back from PayMongo: the return URL carries the order id
     // and the webhook may still be in flight, so the PWA asks this to settle.
     Route::post('/checkout/payment/status', [OrdersAPI::class, 'paymentStatus']);

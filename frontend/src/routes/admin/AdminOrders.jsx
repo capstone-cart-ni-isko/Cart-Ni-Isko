@@ -372,11 +372,6 @@ export default function AdminOrders() {
           <span className="font-semibold text-gray-900 text-xs">
             ₱{(Number(row?.grandTotal ?? row?.total) || 0).toFixed(2)}
           </span>
-          {row?.deliveryFee > 0 && (
-            <span className="block text-2xs text-[var(--muted)] whitespace-nowrap">
-              incl. ₱{Number(row.deliveryFee).toFixed(2)} delivery fee
-            </span>
-          )}
         </div>
       ),
     },

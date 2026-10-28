@@ -1,4 +1,4 @@
-import React from 'react'
+/* eslint-disable react-refresh/only-export-components */
 
 /**
  * Universal SVG icons for notification categories across customer & admin portals.
@@ -190,16 +190,29 @@ export default function NotificationCard({
   notification,
   onClick,
   actionLabel = 'View details →',
+  onMarkRead,
+  onViewDetails,
+  showMeta = true,
   className = '',
 }) {
   const isUnread = Boolean(notification.unread ?? !notification.read)
   const isPriority = Boolean(notification.priority)
+  const isOrder = Boolean(
+    notification.orderNumber ||
+    String(notification.targetUrl || '').startsWith('/orders')
+  )
+  const hasActions = Boolean(onMarkRead || onViewDetails)
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       onClick?.(notification)
     }
+  }
+
+  const stop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
   }
 
   return (
@@ -254,16 +267,16 @@ export default function NotificationCard({
           <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-[var(--line)] flex items-center justify-between gap-3 flex-wrap">
             {/* Badges container */}
             <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Priority badge */}
-              {isPriority && (
+              {/* Priority badge - staff portal only */}
+              {showMeta && isPriority && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-50 text-amber-700 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                   Priority
                 </span>
               )}
 
-              {/* Order number tag if present */}
-              {notification.orderNumber && (
+              {/* Order number tag - staff portal only */}
+              {showMeta && notification.orderNumber && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-mono font-semibold bg-orange-50 text-brand-orange border border-orange-200/60 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800/60">
                   {notification.orderNumber}
                 </span>
@@ -288,21 +301,47 @@ export default function NotificationCard({
               </span>
             </div>
 
-            {/* Action affordance */}
-            <div className="flex items-center gap-1 text-xs font-semibold text-slate-500 group-hover:text-brand-orange transition-colors shrink-0">
-              <span>{actionLabel}</span>
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
-              >
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </div>
+            {/* Actions: customers get explicit Mark as Read / View Order Details */}
+            {hasActions ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={!isUnread || !onMarkRead}
+                  onClick={(e) => {
+                    stop(e)
+                    onMarkRead?.(notification)
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[var(--line)] text-2xs font-semibold text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-colors cursor-pointer disabled:cursor-default"
+                >
+                  Mark as Read
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    stop(e)
+                    onViewDetails?.(notification)
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-brand-orange text-white text-2xs font-semibold hover:bg-brand-orange-dark transition-colors cursor-pointer"
+                >
+                  {isOrder ? 'View Order Details' : 'View Details'}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-xs font-semibold text-slate-500 group-hover:text-brand-orange transition-colors shrink-0">
+                <span>{actionLabel}</span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </div>
+            )}
           </div>
         </div>
       </div>

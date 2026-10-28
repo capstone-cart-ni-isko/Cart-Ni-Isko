@@ -105,6 +105,15 @@ export function switchClaimingMethod(payload) {
 }
 
 /**
+ * POST /checkout/payment/resume - reopen PayMongo Hosted Checkout for an
+ * existing order that is still awaiting payment. The order, its items and its
+ * stock hold stay exactly as they are; only a fresh checkout session is made.
+ */
+export function resumePayment(ordId) {
+  return apiPost('/checkout/payment/resume', { ord_id: ordId })
+}
+
+/**
  * FLOW-ORD_LIST-04/06: a customer may only request a cancellation, and only
  * while the order is still `processing` (the backend answers 403 otherwise);
  * the request parks the order on `to cancel` for staff to approve.

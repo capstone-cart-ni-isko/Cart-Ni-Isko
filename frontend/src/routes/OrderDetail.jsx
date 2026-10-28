@@ -772,7 +772,7 @@ function OrderDetail() {
             <div className="h-px bg-slate-200 my-1" />
             <div className="flex justify-between items-baseline">
               <span className="font-semibold text-gray-900 text-xs">
-                {deliveryFee > 0 ? 'Order Total (items + delivery fee)' : 'Order Total'}
+                {deliveryFee > 0 ? 'Order Total' : 'Order Total'}
               </span>
               <span className="font-semibold text-brand-orange text-base">
                 {formatPrice(total)}

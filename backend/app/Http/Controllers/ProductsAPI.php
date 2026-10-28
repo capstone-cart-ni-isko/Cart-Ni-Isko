@@ -58,7 +58,7 @@ class ProductsAPI extends Controller
         return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === true;
     }
 
-        public static function present(Product $product, $variations = null, ?array $breakdown = null, ?array $metrics = null): array
+        public static function present(Product $product, $variations = null, ?array $breakdown = null, ?array $metrics = null, bool $includeProdvarAlias = true): array
         {
             $defaultRender = $variations === null && $breakdown === null && $metrics === null;
             $memo = $defaultRender ? self::presentMemo() : null;
@@ -105,7 +105,12 @@ class ProductsAPI extends Controller
             })->values()->all();
 
             $payload['variations'] = $variationsPayload;
-            $payload['prodvar'] = $variationsPayload;
+            // Legacy alias: kept for single-product responses (older callers)
+            // but omitted from list responses, where it doubled the variation
+            // payload for no consumer.
+            if ($includeProdvarAlias) {
+                $payload['prodvar'] = $variationsPayload;
+            }
 
             $payload['option_axes'] = self::optionAxes($vars);
 
@@ -195,7 +200,8 @@ class ProductsAPI extends Controller
                     $product,
                     $variations->get($product->prod_id) ?? collect(),
                     $breakdowns[(int) $product->prod_id] ?? null,
-                    ['sold' => $sold[(int) $product->prod_id] ?? 0]
+                    ['sold' => $sold[(int) $product->prod_id] ?? 0],
+                    false
                 );
             })->all();
         }

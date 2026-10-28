@@ -6,7 +6,6 @@ import { useToast } from '../hooks/useToast.js'
 import { useAuth } from '../hooks/useAuth.js'
 import { useApiChange } from '../hooks/useApiChange.js'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
-import PageTitle from '../components/ui/PageTitle.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
@@ -21,7 +20,7 @@ import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import CustomerOrderDetailModal from '../components/orders/CustomerOrderDetailModal.jsx'
 import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
 import { canReviewOrder } from '../services/reviews.js'
-import { fetchOrders, requestCancel, orderFilterBucket, confirmDeliveryFeePayment } from '../services/orders.js'
+import { fetchOrders, requestCancel, orderFilterBucket, confirmDeliveryFeePayment, resumePayment } from '../services/orders.js'
 import { parseDate } from '../services/dashboard.js'
 
 /**
@@ -417,6 +416,30 @@ function Orders() {
 
   const canCancel = useCallback((o) => o.status === 'TO PROCESS' || o.status === 'AWAITING PAYMENT', [])
 
+  /**
+   * Reopen PayMongo for an order that is still awaiting payment. The order and
+   * its stock hold already exist, so this only replaces the expired checkout
+   * session - the customer never has to place the order again (or sign in
+   * again) just because the payment page timed out.
+   */
+  const handleContinuePayment = async (order) => {
+    if (busyId) return
+    setBusyId(order.id)
+    try {
+      const res = await resumePayment(order.id)
+      const checkoutUrl = res?.data?.checkout_url
+      if (checkoutUrl) {
+        window.location.assign(checkoutUrl)
+        return
+      }
+      showToast('We could not reopen the payment page. Please try again.', 'error')
+    } catch (err) {
+      showToast(err?.message || 'We could not reopen the payment page. Please try again.', 'error')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <FocusedLayout
       title="My Orders"
@@ -789,6 +812,17 @@ function Orders() {
                         className="px-3.5 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-800 text-xs font-semibold hover:bg-blue-100 transition-colors cursor-pointer"
                       >
                         Claim Pass
+                      </button>
+                    )}
+
+                    {order.status === 'AWAITING PAYMENT' && (
+                      <button
+                        type="button"
+                        disabled={busyId === order.id}
+                        onClick={() => handleContinuePayment(order)}
+                        className="px-3.5 py-2 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange-dark transition-colors shadow-2xs cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
+                      >
+                        {busyId === order.id ? <><LoadingSpinner size={14} /> Opening…</> : 'Continue Payment'}
                       </button>
                     )}
 

@@ -6,14 +6,12 @@
  * two portals overwrite each other's bearer on the shared slot and a reload
  * can quietly hand an employee's tab to a customer (or the other way round).
  *
- * CUSTOMER (kind: 'customer') - REQ-CUST_LOGIN-01 / FLOW-CUST_LOGIN-01:
- * the session lives in `sessionStorage`, so it survives a reload and every
- * client-side navigation (FLOW-CUST_LOGIN-03: "no longer need to log in when
- * going to other pages and tabs"), but it is thrown away the moment the
- * browser closes - which is exactly where REQ-CUST_LOGIN-01 wants a fresh
- * login. REQ-CUST_LOGOUT-01 says closing the browser must NOT log the
- * customer out, and it does not: nothing is sent to the server, the row keeps
- * its `cust_last_logout`, only this tab's copy of the bearer goes away.
+ * CUSTOMER (kind: 'customer') - REQ-CUST_LOGIN-01 / FLOW-CUST_LOGIN-03 /
+ * REQ-CUST_LOGOUT-01: the session lives in `localStorage`, so it survives a
+ * reload, every client-side navigation, a new tab, and closing/reopening the
+ * browser. Only an explicit logout or a genuine server-side expiry
+ * (ApiToken::CUSTOMER_TTL / revocation) ends it - never the browser losing its
+ * per-tab copy.
  *
  * STAFF (kind: 'staff') - DOMAIN 16 / FLOW-EMP_LOGOUT-03. An employee stays
  * signed in across a reload of the portal the same way, because the session
@@ -34,25 +32,62 @@ const STORAGE_KEYS = {
 /** In-memory mirror of both slots: `{ customer: entry|null, staff: entry|null }`. */
 const sessions = { customer: null, staff: null }
 
-/** sessionStorage can be unavailable (private mode, blocked storage). */
+/** Customer survives a browser restart; staff keeps the older per-tab slot. */
+function primaryStore(kind) {
+  return kind === 'customer' ? window.localStorage : window.sessionStorage
+}
+
+function parseEntry(raw, kind) {
+  const parsed = raw ? JSON.parse(raw) : null
+  return parsed && parsed.kind === kind ? parsed : null
+}
+
+/**
+ * Read a slot. Customers fall back to the legacy sessionStorage slot once so
+ * a deploy of this change does not sign anybody out; the entry is promoted to
+ * localStorage on the way through.
+ */
 function readStored(kind) {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEYS[kind])
-    const parsed = raw ? JSON.parse(raw) : null
-    return parsed && parsed.kind === kind ? parsed : null
+    const primary = parseEntry(primaryStore(kind).getItem(STORAGE_KEYS[kind]), kind)
+    if (primary) return primary
   } catch {
-    return null
+    // Storage unavailable; the legacy/in-memory paths below still work.
   }
+
+  if (kind === 'customer') {
+    try {
+      const legacy = parseEntry(sessionStorage.getItem(STORAGE_KEYS[kind]), kind)
+      if (legacy) {
+        writeStored(kind, legacy)
+        return legacy
+      }
+    } catch {
+      // Ignore blocked legacy storage.
+    }
+  }
+
+  return null
 }
 
 function writeStored(kind, value) {
+  const key = STORAGE_KEYS[kind]
   try {
-    const key = STORAGE_KEYS[kind]
-    if (value) sessionStorage.setItem(key, JSON.stringify(value))
-    else sessionStorage.removeItem(key)
+    const store = primaryStore(kind)
+    if (value) store.setItem(key, JSON.stringify(value))
+    else store.removeItem(key)
   } catch {
     // A blocked storage must never break the screen: the in-memory copy below
     // still carries this tab's session.
+  }
+
+  // Retire the legacy customer slot after a migration or a logout.
+  if (kind === 'customer') {
+    try {
+      sessionStorage.removeItem(key)
+    } catch {
+      // Ignore blocked legacy storage.
+    }
   }
 }
 

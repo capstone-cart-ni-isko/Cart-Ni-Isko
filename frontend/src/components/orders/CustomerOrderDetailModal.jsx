@@ -8,13 +8,12 @@ import StatusBadge from '../ui/StatusBadge.jsx'
 import { formatPrice } from '../ui/PriceTag.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import {
-  PackageIcon,
   ShirtIcon,
   TruckIcon,
   MapPinIcon,
   MessageSquareIcon,
 } from '../ui/Icons.jsx'
-import { fetchOrder, requestCancel, updateOrder, submitDeliveryDetails, confirmDeliveryFeePayment, switchClaimingMethod } from '../../services/orders.js'
+import { fetchOrder, requestCancel, updateOrder, submitDeliveryDetails, switchClaimingMethod, resumePayment } from '../../services/orders.js'
 import { getTrack, scanQr } from '../../services/tracking.js'
 import { parseDate, paymentSummary } from '../../services/dashboard.js'
 import { QrScanModal } from '../ui/QRScanner.jsx'
@@ -242,8 +241,31 @@ export default function CustomerOrderDetailModal({
     }
   }
 
-  const handleRequestRefund = async () => {
+  /**
+   * Reopen hosted checkout for this still-unpaid order. The order id is enough:
+   * the backend verifies ownership and only issues a new PayMongo session, so
+   * an expired payment page never forces a re-login or a re-order.
+   */
+  const handleContinuePayment = async () => {
     if (busy || !orderId) return
+    setBusy(true)
+    try {
+      const res = await resumePayment(orderId)
+      const checkoutUrl = res?.data?.checkout_url
+      if (checkoutUrl) {
+        showToast('Redirecting to PayMongo to complete payment…', 'success')
+        window.location.assign(checkoutUrl)
+        return
+      }
+      showToast('We could not reopen the payment page. Please try again.', 'error')
+    } catch (err) {
+      showToast(err?.message || 'We could not reopen the payment page. Please try again.', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleRequestRefund = async () => {    if (busy || !orderId) return
     if (!window.confirm('Are you sure you want to request a return and refund for this order? The store will review your request.')) {
       return
     }
@@ -1007,6 +1029,27 @@ export default function CustomerOrderDetailModal({
           </p>
           <p className="text-[var(--muted)]">{currentUser?.course || ''}</p>
         </div>
+
+        {/* Awaiting Payment: reopen the hosted checkout without re-ordering */}
+        {status === 'AWAITING PAYMENT' && (
+          <div className="p-4 bg-brand-orange/5 rounded-xl border border-brand-orange/30 space-y-2.5">
+            <h3 className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
+              Complete your payment
+            </h3>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleContinuePayment}
+              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange-dark transition-colors shadow-2xs cursor-pointer disabled:opacity-60 flex items-center justify-center gap-1.5"
+            >
+              {busy ? <><LoadingSpinner size={13} /> Opening…</> : 'Continue Payment'}
+            </button>
+            <p className="text-xs text-[var(--muted)]">
+              Your order is saved and your items are reserved. Reopen the secure payment page to finish paying;
+              you can close it and come back later if you need to.
+            </p>
+          </div>
+        )}
 
         {/* Cancel Action (TO PROCESS) */}
         {CAN_CANCEL.includes(status) && (

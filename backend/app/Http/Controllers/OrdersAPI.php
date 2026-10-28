@@ -949,6 +949,168 @@ class OrdersAPI extends Controller
         }
     }
 
+    /**
+     * Restart PayMongo checkout for an order that is still awaiting payment.
+     *
+     * A customer who closed the hosted checkout (or came back after the
+     * session timed out) keeps the same order, bag lines and stock hold - this
+     * only mints a fresh checkout session for whatever is still owed and
+     * repoints the existing payment row at it. No new order is created and no
+     * customer session is touched, so resuming never asks them to log in
+     * again.
+     */
+    public function resumePayment(Request $json)
+    {
+        $custId = $this->customerId($json);
+        if ($custId === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer authentication is required.',
+            ], 403);
+        }
+
+        $ordId = (int) $json->input('ord_id', $json->input('order_id', 0));
+        if ($ordId <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Choose an order to pay for.',
+            ], 422);
+        }
+
+        $order = Order::with(['pickup', 'parcel.delivery', 'delivery'])->find($ordId);
+        if (! $order || (int) $order->cust_id !== (int) $custId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Order not found.',
+            ], 404);
+        }
+
+        $status = strtolower(trim((string) $order->ord_status));
+        if (! in_array($status, ['to pay', 'awaiting payment'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This order no longer needs an online payment.',
+                'code'    => 'ORDER_NOT_AWAITING_PAYMENT',
+            ], 409);
+        }
+
+        $due = round((float) $order->ord_amount - (float) $order->pay_received, 2);
+        if ($due <= 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This order is already fully paid.',
+                'code'    => 'ORDER_ALREADY_PAID',
+            ], 409);
+        }
+
+        if (! PayMongoService::isConfigured()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Online payment is not yet configured. Please try again once the store enables online payments.',
+                'code'    => 'PAYMENT_GATEWAY_UNAVAILABLE',
+            ], 503);
+        }
+
+        try {
+            $delivery = $order->delivery ?? $order->parcel?->delivery;
+            $fee      = $delivery
+                ? min($due, max(0.0, round((float) ($delivery->deliver_fee_charged ?? 0), 2)))
+                : 0.0;
+
+            // Keep the original split so the customer still sees which part of
+            // the total is the courier fee.
+            $lines = [];
+            if (round($due - $fee, 2) > 0) {
+                $lines[] = [
+                    'name'     => 'Items - Order #' . $order->ord_id . ' (Tindahan ni Isko)',
+                    'amount'   => round($due - $fee, 2),
+                    'quantity' => 1,
+                ];
+            }
+            if ($fee > 0) {
+                $lines[] = [
+                    'name'     => strtolower((string) $order->ord_claiming) === 'delivery'
+                        ? 'Delivery fee (LalaMove)'
+                        : 'Fulfillment fee',
+                    'amount'   => $fee,
+                    'quantity' => 1,
+                ];
+            }
+            if ($lines === []) {
+                $lines[] = [
+                    'name'     => 'Order #' . $order->ord_id . ' (Tindahan ni Isko)',
+                    'amount'   => $due,
+                    'quantity' => 1,
+                ];
+            }
+
+            $returnBase = rtrim((string) config('services.frontend_url'), '/');
+            $session = (new PayMongoService())->createCheckoutSession(
+                $lines,
+                'order:' . $order->ord_id,
+                $returnBase . '/checkout?status=paid&order=' . $order->ord_id,
+                $returnBase . '/checkout?status=cancelled&order=' . $order->ord_id
+            );
+
+            DB::transaction(function () use ($order, $session, $due) {
+                $payment = Payment::where('pay_ref', $order->pay_reference)->first()
+                    ?? $order->pickup?->payment
+                    ?? $order->parcel?->payment;
+
+                if ($payment) {
+                    // Keep anything already collected; only repoint this
+                    // attempt at the fresh session and its remaining balance.
+                    $payment->update([
+                        'pay_ref' => $session['id'],
+                        'pay_due' => $due,
+                    ]);
+                } else {
+                    $payment = Payment::create([
+                        'pay_created' => now(),
+                        'pay_ref'     => $session['id'],
+                        'pay_given'   => 0,
+                        'pay_due'     => $due,
+                        'pay_change'  => 0,
+                    ]);
+                }
+
+                $order->update(['pay_reference' => $session['id']]);
+
+                if ($order->pickup && ! $order->pickup->pay_id) {
+                    $order->pickup->update(['pay_id' => $payment->pay_id]);
+                }
+                if ($order->parcel && ! $order->parcel->pay_id) {
+                    $order->parcel->update(['pay_id' => $payment->pay_id]);
+                }
+            });
+
+            $this->logCustomer($custId, 'edit',
+                'POST /api/checkout/payment/resume - order #' . $order->ord_id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Checkout ready. Continue to PayMongo to finish your payment.',
+                'data'    => [
+                    'checkout_url'        => $session['checkout_url'],
+                    'checkout_session_id' => $session['id'],
+                    'reference'           => 'order:' . $order->ord_id,
+                    'ord_id'              => (int) $order->ord_id,
+                    'total_due'           => $due,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('PayMongo resumePayment error', [
+                'order' => $ordId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'We could not reopen the payment page right now. Please try again.',
+            ], 502);
+        }
+    }
+
     public function paymentWebhook(Request $json)
     {
         $signature = $json->header('Paymongo-Signature');
@@ -1066,12 +1228,9 @@ class OrdersAPI extends Controller
                         'POST /api/checkout/payment/webhook - order #' . $order->ord_id . ' paid');
                 }
 
-                $this->announce(
-                    (int) $order->cust_id,
-                    '[PRIORITY] Payment confirmed for order #' . $order->ord_id
-                        . '. Your order is being processed.'
-                );
                 $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
+                // The customer already has the "order placed" update; a second
+                // "payment received" notice would only duplicate it.
                 // The courier is booked once staff mark the items ready
                 // (employeeStatusUpdate -> 'to deliver'), not at payment.
             }
@@ -1185,10 +1344,9 @@ class OrdersAPI extends Controller
                 $this->logCustomer((int) $order->cust_id, 'edit',
                     'POST /api/checkout/payment/status - order #' . $order->ord_id . ' paid');
 
-                $this->announce((int) $order->cust_id,
-                    '[PRIORITY] Payment confirmed for order #' . $order->ord_id
-                        . '. Your order is being processed.');
                 $this->alertAdmins('[PRIORITY] Online payment received for order #' . $order->ord_id . '.');
+                // No duplicate customer "payment received" notification here:
+                // the order-placed update already covers it.
             }
 
             $state['paid']   = true;

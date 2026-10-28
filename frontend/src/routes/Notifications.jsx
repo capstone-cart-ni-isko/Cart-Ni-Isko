@@ -35,59 +35,6 @@ function extractOrderTarget(message, row) {
   return null
 }
 
-// SVG Icons tailored for notification types
-function NotifTypeIcon({ icon, className = 'w-5 h-5' }) {
-  switch (icon) {
-    case 'megaphone':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-          <path d="m3 11 18-5v12L3 14v-3z" />
-          <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
-        </svg>
-      )
-    case 'box':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-          <line x1="12" y1="22.08" x2="12" y2="12" />
-        </svg>
-      )
-    case 'bag':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <path d="M16 10a4 4 0 0 1-8 0" />
-        </svg>
-      )
-    case 'truck':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-          <rect x="1" y="3" width="15" height="13" />
-          <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-          <circle cx="5.5" cy="18.5" r="2.5" />
-          <circle cx="18.5" cy="18.5" r="2.5" />
-        </svg>
-      )
-    case 'alert':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-      )
-    default:
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
-      )
-  }
-}
-
 // Caught Up illustration component
 function CaughtUpIllustration({ className = 'w-44 h-44' }) {
   return (
@@ -138,42 +85,6 @@ function CaughtUpIllustration({ className = 'w-44 h-44' }) {
       </svg>
     </div>
   )
-}
-
-/** Inbox presentation per inferred category. */
-const CATEGORY_STYLES = {
-  orders: {
-    icon: 'box',
-    iconBg: 'bg-orange-50 text-brand-orange',
-    tag: 'Orders',
-    tagText: 'text-brand-orange',
-    dot: 'bg-brand-orange',
-    title: 'Order Update',
-  },
-  production: {
-    icon: 'megaphone',
-    iconBg: 'bg-blue-50 text-blue-600',
-    tag: 'Production',
-    tagText: 'text-blue-600',
-    dot: 'bg-blue-500',
-    title: 'Production Update',
-  },
-  system: {
-    icon: 'bell',
-    iconBg: 'bg-slate-50 text-slate-600',
-    tag: 'System',
-    tagText: 'text-slate-500',
-    dot: 'bg-slate-400',
-    title: 'Announcement',
-  },
-  promotions: {
-    icon: 'bag',
-    iconBg: 'bg-emerald-50 text-emerald-600',
-    tag: 'Promotions',
-    tagText: 'text-emerald-600',
-    dot: 'bg-emerald-500',
-    title: 'Promo',
-  },
 }
 
 function timeAgo(date) {
@@ -258,22 +169,26 @@ export default function Notifications() {
   }, [load, version])
 
   /**
-   * Clicking a notification marks it read ONLY then.
-   * If it has a targetUrl, navigates to the concerned page;
-   * otherwise, displays a focused closable details popup.
+   * Clicking a notification marks it read and opens its target. A card's
+   * explicit "Mark as Read" action calls the same helper without navigating.
    */
-  const handleNotificationClick = async (notif) => {
-    if (notif.unread) {
-      setItems((prev) => prev.map((n) => (n.id === notif.id ? { ...n, unread: false } : n)))
-      markRead(notif.id, 'customer')
-        .catch(() => {})
-        .finally(() => window.dispatchEvent(new Event('notifications-changed')))
-    }
+  const markNotificationRead = (notif) => {
+    if (!notif?.id || !notif.unread) return
+    setItems((prev) => prev.map((n) => (n.id === notif.id ? { ...n, unread: false } : n)))
+    setSelectedNotif((prev) => (
+      prev && prev.id === notif.id ? { ...prev, unread: false } : prev
+    ))
+    markRead(notif.id, 'customer')
+      .catch(() => {})
+      .finally(() => window.dispatchEvent(new Event('notifications-changed')))
+  }
 
+  const handleNotificationClick = (notif) => {
+    markNotificationRead(notif)
     if (notif.targetUrl) {
       navigate(notif.targetUrl)
     } else {
-      setSelectedNotif(notif)
+      setSelectedNotif({ ...notif, unread: false })
     }
   }
 
@@ -282,7 +197,6 @@ export default function Notifications() {
   const countOrders = items.filter((n) => n.category === 'orders' || n.category === 'payment').length
   const countProduction = items.filter((n) => n.category === 'production' || n.category === 'inventory').length
   const countSystem = items.filter((n) => n.category === 'system' || n.category === 'security' || n.category === 'announcement' || n.category === 'appointment').length
-  const countPromotions = items.filter((n) => n.category === 'promotions').length
   const unreadTotal = items.filter((n) => n.unread).length
 
   // Filter items based on activeTab
@@ -291,7 +205,6 @@ export default function Notifications() {
     if (activeTab === 'Orders') return n.category === 'orders' || n.category === 'payment'
     if (activeTab === 'Production') return n.category === 'production' || n.category === 'inventory'
     if (activeTab === 'System') return n.category === 'system' || n.category === 'security' || n.category === 'announcement' || n.category === 'appointment'
-    if (activeTab === 'Promotions') return n.category === 'promotions'
     return true
   })
 
@@ -300,7 +213,6 @@ export default function Notifications() {
     { label: 'Orders', count: countOrders },
     { label: 'Production', count: countProduction },
     { label: 'System', count: countSystem },
-    { label: 'Promotions', count: countPromotions },
   ]
 
   return (
@@ -430,7 +342,9 @@ export default function Notifications() {
                   key={item.id}
                   notification={item}
                   onClick={handleNotificationClick}
-                  actionLabel="View details"
+                  onMarkRead={markNotificationRead}
+                  onViewDetails={handleNotificationClick}
+                  showMeta={false}
                 />
               ))
             )}
@@ -466,11 +380,34 @@ export default function Notifications() {
         subtitle={selectedNotif?.time || ''}
         size="sm"
         footer={
-          <div className="flex items-center justify-end w-full">
+          <div className="flex flex-wrap items-center justify-end w-full gap-2">
+            <button
+              type="button"
+              disabled={!selectedNotif?.unread}
+              onClick={() => markNotificationRead(selectedNotif)}
+              className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-[var(--line)] text-xs font-semibold text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-colors cursor-pointer disabled:cursor-default"
+            >
+              Mark as Read
+            </button>
+            {selectedNotif?.targetUrl && (
+              <button
+                type="button"
+                onClick={() => {
+                  const target = selectedNotif.targetUrl
+                  setSelectedNotif(null)
+                  navigate(target)
+                }}
+                className="px-3.5 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-colors cursor-pointer"
+              >
+                {selectedNotif?.orderNumber || String(selectedNotif?.targetUrl || '').startsWith('/orders')
+                  ? 'View Order Details'
+                  : 'View Details'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setSelectedNotif(null)}
-              className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-orange-600 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-[var(--line)] text-xs font-semibold text-slate-600 dark:text-[var(--muted)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] transition-colors cursor-pointer"
             >
               Close
             </button>
@@ -480,17 +417,6 @@ export default function Notifications() {
         {selectedNotif && (
           <div className="space-y-4 py-2">
             <div className="flex items-center gap-2 flex-wrap">
-              {selectedNotif.priority && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-50 text-amber-700 border border-amber-200/80">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-                  Priority
-                </span>
-              )}
-              {selectedNotif.orderNumber && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-mono font-semibold bg-orange-50 text-brand-orange border border-orange-200/60">
-                  {selectedNotif.orderNumber}
-                </span>
-              )}
               {selectedNotif.tag && (
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold border ${selectedNotif.tagClass}`}>
                   {selectedNotif.tag}

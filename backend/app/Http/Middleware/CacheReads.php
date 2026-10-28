@@ -15,6 +15,14 @@ class CacheReads
 {
     private const TTL = 30;
 
+    /**
+     * Public catalog answers only change when staff edit a product, and every
+     * such write already bumps `api:version` (which is part of the cache key).
+     * A longer TTL therefore cannot serve stale rows after an edit, while it
+     * removes the ~1.5 s Supabase round trip from most storefront navigations.
+     */
+    private const SHARED_TTL = 300;
+
     // Public catalog reads: identical for every caller, so no account
     // scoping and no token lookup are needed for these paths.
     //
@@ -76,7 +84,7 @@ class CacheReads
                     'body'   => $response->getContent(),
                     'status' => 200,
                     'type'   => $response->headers->get('Content-Type'),
-                ], self::TTL);
+                ], in_array($request->path(), self::SHARED, true) ? self::SHARED_TTL : self::TTL);
             }
 
             return $response;

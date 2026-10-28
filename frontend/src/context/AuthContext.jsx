@@ -86,17 +86,17 @@ function linesToAddresses(lines) {
 
 /**
  * Customer session. The signed-in account (user + bearer token) lives in the
- * shared slot in services/session.js: it is written to `sessionStorage`, so it
- * survives a reload and every client-side navigation (FLOW-CUST_LOGIN-03) but
- * is gone once the browser closes - which is where REQ-CUST_LOGIN-01 asks for
- * a fresh login. A 401 from the API still ends the session immediately.
+ * shared slot in services/session.js: it is written to `localStorage`, so it
+ * survives a reload, a new tab and a browser restart (FLOW-CUST_LOGIN-03), and
+ * only an explicit logout or a genuine 401/token expiry ends it. A 401 from
+ * the API still ends the session immediately.
  */
 export function AuthProvider({ children }) {
   const navigate = useNavigate()
 
   // Restores the session that survived the reload (FLOW-CUST_LOGIN-01: a
   // previously signed-in customer lands on /home), or starts signed out when
-  // the browser was closed and sessionStorage went with it.
+  // the server-side token really has expired.
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = loadSession('customer')
     // Explicit kind: on a reload of /admin/* the URL default is 'staff', and
@@ -224,8 +224,8 @@ export function AuthProvider({ children }) {
     }
 
     // The API answers carry the whole row, password hash included; the
-    // session slot must never hold a credential (it is written to
-    // sessionStorage on every login).
+    // session slot must never hold a credential (it is written to localStorage
+    // on every login).
     delete shaped.password
     delete shaped.cust_password
     delete shaped.token
