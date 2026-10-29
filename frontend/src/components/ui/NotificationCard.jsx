@@ -291,14 +291,7 @@ export default function NotificationCard({
                 </span>
               )}
 
-              {/* Read / New pill */}
-              <span
-                className={`text-2xs font-semibold ${
-                  isUnread ? 'text-brand-orange' : 'text-slate-400 dark:text-[var(--muted)]'
-                }`}
-              >
-                {isUnread ? '• New' : '• Read'}
-              </span>
+              {/* Read status removed as requested */}
             </div>
 
             {/* Actions: customers get explicit Mark as Read / View Order Details */}

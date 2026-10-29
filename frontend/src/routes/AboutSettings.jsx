@@ -17,8 +17,9 @@ const STORE = {
 
 const DEVELOPERS = [
   { name: 'John Marvin Marfil', role: 'Full-stack developer' },
-  { name: 'Kristel Ann B. Ebuenga', role: 'Full-stack developer' },
-  { name: 'Austin Doki', role: 'Full-stack developer' },
+  { name: 'Kristel Ann Ebuenga', role: 'Full-stack developer' },
+  { name: 'Austin Fenis', role: 'Full-stack developer' },
+  { name: 'Alyssa Mae Brucelo', role: 'Full-stack developer' },
 ]
 
 const VERSIONS = [

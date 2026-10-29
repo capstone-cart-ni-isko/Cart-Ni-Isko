@@ -129,7 +129,7 @@ export default function Notifications() {
   const { currentUser } = useAuth()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('All')
+  const [activeTab, setActiveTab] = useState('Unread')
   const [selectedNotif, setSelectedNotif] = useState(null)
 
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
@@ -183,6 +183,18 @@ export default function Notifications() {
       .finally(() => window.dispatchEvent(new Event('notifications-changed')))
   }
 
+  const markAllAsRead = async () => {
+    const unreadItems = items.filter((n) => n.unread && n.id)
+    if (unreadItems.length === 0) return
+    setItems((prev) => prev.map((n) => ({ ...n, unread: false })))
+    setSelectedNotif((prev) => (prev ? { ...prev, unread: false } : prev))
+    try {
+      await Promise.all(unreadItems.map((n) => markRead(n.id, 'customer').catch(() => {})))
+    } finally {
+      window.dispatchEvent(new Event('notifications-changed'))
+    }
+  }
+
   const handleNotificationClick = (notif) => {
     markNotificationRead(notif)
     if (notif.targetUrl) {
@@ -194,14 +206,15 @@ export default function Notifications() {
 
   // Calculate badge counts
   const countAll = items.length
+  const countUnread = items.filter((n) => n.unread).length
   const countOrders = items.filter((n) => n.category === 'orders' || n.category === 'payment').length
   const countProduction = items.filter((n) => n.category === 'production' || n.category === 'inventory').length
   const countSystem = items.filter((n) => n.category === 'system' || n.category === 'security' || n.category === 'announcement' || n.category === 'appointment').length
-  const unreadTotal = items.filter((n) => n.unread).length
+  const unreadTotal = countUnread
 
   // Filter items based on activeTab
   const filteredItems = items.filter((n) => {
-    if (activeTab === 'All') return true
+    if (activeTab === 'Unread') return n.unread
     if (activeTab === 'Orders') return n.category === 'orders' || n.category === 'payment'
     if (activeTab === 'Production') return n.category === 'production' || n.category === 'inventory'
     if (activeTab === 'System') return n.category === 'system' || n.category === 'security' || n.category === 'announcement' || n.category === 'appointment'
@@ -209,7 +222,7 @@ export default function Notifications() {
   })
 
   const tabs = [
-    { label: 'All', count: countAll },
+    { label: 'Unread', count: countUnread },
     { label: 'Orders', count: countOrders },
     { label: 'Production', count: countProduction },
     { label: 'System', count: countSystem },
@@ -245,36 +258,47 @@ export default function Notifications() {
           aria-label="Notification categories"
           className="sticky top-14 md:top-0 z-20 -mx-4 px-4 pt-3 bg-[#F8F9FA]/90 dark:bg-[var(--surface)]/90 backdrop-blur-sm"
         >
-          <div
-            role="tablist"
-            className="flex flex-nowrap gap-6 overflow-x-auto scrollbar-none select-none border-b border-slate-200"
-          >
-            {tabs.map(({ label, count }) => {
-              const active = activeTab === label
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setActiveTab(label)}
-                  className={`relative -mb-px shrink-0 pb-3 pt-1 text-sm font-semibold transition-colors cursor-pointer border-b-2 flex items-baseline gap-1.5 ${
-                    active
-                      ? 'border-brand-orange text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  <span>{label}</span>
-                  <span
-                    className={`text-xs font-semibold tabular-nums ${
-                      active ? 'text-brand-orange' : 'text-gray-400'
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div
+              role="tablist"
+              className="flex flex-nowrap gap-6 overflow-x-auto scrollbar-none select-none border-b border-slate-200 flex-1"
+            >
+              {tabs.map(({ label, count }) => {
+                const active = activeTab === label
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setActiveTab(label)}
+                    className={`relative -mb-px shrink-0 pb-3 pt-1 text-sm font-semibold transition-colors cursor-pointer border-b-2 flex items-baseline gap-1.5 ${
+                      active
+                        ? 'border-brand-orange text-gray-900'
+                        : 'border-transparent text-gray-500 hover:text-gray-800'
                     }`}
                   >
-                    {count}
-                  </span>
-                </button>
-              )
-            })}
+                    <span>{label}</span>
+                    <span
+                      className={`text-xs font-semibold tabular-nums ${
+                        active ? 'text-brand-orange' : 'text-gray-400'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            {unreadTotal > 0 && (
+              <button
+                type="button"
+                onClick={markAllAsRead}
+                className="shrink-0 mb-2 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:text-brand-orange-dark hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
+              >
+                Mark All as Read
+              </button>
+            )}
           </div>
         </nav>
 
@@ -351,7 +375,7 @@ export default function Notifications() {
 
             {filteredItems.length > 0 && (
               <p className="text-xs text-gray-400 font-medium text-center">
-                Showing {filteredItems.length} of {countAll} notifications
+                Showing {filteredItems.length} notification{filteredItems.length !== 1 ? 's' : ''}
               </p>
             )}
           </>

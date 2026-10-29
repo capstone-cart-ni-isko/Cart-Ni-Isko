@@ -11,7 +11,7 @@ return [
     'allowed_origins' => $allowedOrigins,
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['Accept', 'Authorization', 'Content-Type', 'X-Requested-With'],
-    'exposed_headers' => [],
+    'exposed_headers' => ['X-Renewed-Token'],
     'max_age' => 600,
     'supports_credentials' => false,
 ];

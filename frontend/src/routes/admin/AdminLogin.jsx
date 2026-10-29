@@ -234,7 +234,6 @@ export default function AdminLogin() {
 
                   {/* Isko Hair (Full, stylish, neat student haircut with volume and fringe — no bald comb-over) */}
                   <path d="M 57 80 C 54 52, 70 42, 84 42 C 98 42, 110 52, 107 80 C 103 66, 94 60, 84 62 C 73 64, 65 72, 57 80 Z" fill="#0F172A" />
-                  <path d="M 61 74 C 70 66, 80 65, 87 68 C 94 65, 102 68, 105 76 C 100 70, 92 68, 85 71 C 77 74, 68 77, 61 74 Z" fill="#1E293B" />
 
                   {/* Eyebrows */}
                   <path d="M 70 72 Q 75 69 80 71" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" />
@@ -262,10 +261,6 @@ export default function AdminLogin() {
                   <path d="M 58 104 L 106 104 L 112 176 L 52 176 Z" fill="#EA580C" rx="10" />
                   <path d="M 74 104 L 82 113 L 90 104" stroke="#C2410C" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
-                  {/* Crossbody Bag Strap & Bag */}
-                  <line x1="62" y1="104" x2="110" y2="172" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
-                  <rect x="98" y="156" width="22" height="24" rx="5" fill="#0F172A" />
-                  <rect x="105" y="166" width="8" height="4" rx="1" fill="#475569" />
 
                   {/* Pants */}
                   <rect x="62" y="176" width="17" height="70" rx="5" fill="#334155" />
@@ -291,8 +286,7 @@ export default function AdminLogin() {
 
                   {/* Iska Hair (Cute bob/shoulder length with bangs and side framing locks — full volume) */}
                   <path d="M 134 88 C 130 58, 145 48, 158 48 C 172 48, 186 58, 182 88 C 178 74, 170 68, 163 70 C 156 72, 150 67, 143 69 C 137 71, 135 78, 134 88 Z" fill="#0F172A" />
-                  <path d="M 134 88 C 133 98, 134 110, 137 118 C 139 110, 138 98, 137 90 Z" fill="#1E293B" />
-                  <path d="M 182 88 C 183 98, 182 110, 179 118 C 177 110, 178 98, 179 90 Z" fill="#1E293B" />
+
 
                   {/* Eyebrows */}
                   <path d="M 146 81 Q 150 78 154 80" stroke="#0F172A" strokeWidth="1.8" strokeLinecap="round" />
@@ -333,8 +327,6 @@ export default function AdminLogin() {
                   <path d="M 176 136 L 157 146" stroke="#FED7AA" strokeWidth="9" strokeLinecap="round" />
                   <circle cx="157" cy="146" r="4.5" fill="#FED7AA" />
 
-                  {/* Backpack strap */}
-                  <line x1="174" y1="112" x2="136" y2="180" stroke="#0F172A" strokeWidth="5" strokeLinecap="round" />
 
                   {/* Dark Jeans */}
                   <rect x="134" y="184" width="17" height="68" rx="5" fill="#0F172A" />
@@ -390,7 +382,7 @@ export default function AdminLogin() {
                     <img src={merchBadgeIcon} alt="" className="w-6 h-6 object-contain" />
                   </div>
                   <div>
-                    <span className="block text-xs font-bold text-slate-800 dark:text-[var(--ink)]">Fast Campus Pickup</span>
+                    <span className="block text-xs font-bold text-slate-800 dark:text-[var(--ink)]">Campus Pickup</span>
                     <span className="block text-[10px] text-slate-400 dark:text-[var(--muted)]">USC Office or Delivery</span>
                   </div>
                 </div>
@@ -428,14 +420,6 @@ export default function AdminLogin() {
             <span className="block text-[10px] text-slate-400 dark:text-[var(--muted)]">Legazpi City, Albay</span>
           </div>
 
-          <div className="absolute bottom-6 right-8 flex items-center gap-4 text-xs font-medium text-slate-500 dark:text-[var(--muted)] opacity-70 dark:opacity-40">
-            <span className="flex items-center gap-1.5">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-sky-600">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-              BU-USC Authenticated
-            </span>
-          </div>
         </div>
 
         {/* Standardized login card */}
@@ -450,10 +434,6 @@ export default function AdminLogin() {
               />
             </div>
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[var(--surface-2)] border border-slate-200 dark:border-[var(--line)] text-slate-700 dark:text-[var(--ink)] text-[10px] font-bold uppercase tracking-wider mb-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-600 animate-pulse" />
-                <span>Staff Portal</span>
-              </div>
               <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[var(--ink)]">Staff &amp; Admin Sign In</h1>
               <p className="text-xs text-gray-500 dark:text-[var(--muted)] font-medium mt-0.5 leading-relaxed">
                 Authorized Bicol University - USC Access Only
@@ -600,12 +580,6 @@ export default function AdminLogin() {
           </button>
         </form>
 
-        {/* Security disclaimer */}
-        <div className="text-center pt-2 border-t border-slate-100 dark:border-[var(--line)]">
-          <p className="text-xs text-gray-400 dark:text-[var(--muted)]">
-            Protected by Bicol University Student Council IAM System
-          </p>
-        </div>
       </div>
     </div>
   )
