@@ -1285,7 +1285,7 @@ class ProductsAPI extends Controller
                 }
 
                 $updateData = [];
-                $fields = ['prod_name', 'prod_tag', 'prod_categ', 'prod_price', 'prod_desc'];
+                $fields = ['prod_name', 'prod_tag', 'prod_categ', 'prod_price', 'prod_desc', 'prod_details'];
 
                 foreach ($fields as $field) {
                     if ($json->has($field)) {

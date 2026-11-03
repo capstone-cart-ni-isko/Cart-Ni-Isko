@@ -243,14 +243,6 @@ export default function NotificationCard({
               <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-[var(--ink)] tracking-tight leading-snug truncate">
                 {notification.title}
               </h3>
-
-              {isUnread && (
-                <span
-                  className="w-2 h-2 rounded-full bg-brand-orange shrink-0 animate-pulse"
-                  title="Unread notification"
-                  aria-label="Unread"
-                />
-              )}
             </div>
 
             <span className="text-2xs sm:text-xs font-medium text-slate-400 dark:text-[var(--muted)] shrink-0 pt-0.5 whitespace-nowrap">
@@ -294,47 +286,21 @@ export default function NotificationCard({
               {/* Read status removed as requested */}
             </div>
 
-            {/* Actions: customers get explicit Mark as Read / View Order Details */}
-            {hasActions ? (
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  disabled={!isUnread || !onMarkRead}
-                  onClick={(e) => {
-                    stop(e)
-                    onMarkRead?.(notification)
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[var(--line)] text-2xs font-semibold text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-colors cursor-pointer disabled:cursor-default"
-                >
-                  Mark as Read
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    stop(e)
-                    onViewDetails?.(notification)
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-brand-orange text-white text-2xs font-semibold hover:bg-brand-orange-dark transition-colors cursor-pointer"
-                >
-                  {isOrder ? 'View Order Details' : 'View Details'}
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 text-xs font-semibold text-slate-500 group-hover:text-brand-orange transition-colors shrink-0">
-                <span>{actionLabel}</span>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
-                >
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </div>
-            )}
+            {/* Actions */}
+            <div className="flex items-center gap-1 text-xs font-semibold text-slate-500 group-hover:text-brand-orange transition-colors shrink-0">
+              <span>{actionLabel}</span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-3.5 h-3.5 transition-transform duration-150 group-hover:translate-x-0.5"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </div>
           </div>
         </div>
       </div>

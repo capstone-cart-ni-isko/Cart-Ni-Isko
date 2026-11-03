@@ -51,6 +51,21 @@ const posLineTarget = (line) => ({
   ...(line.prodvarId != null ? { prodvar_id: line.prodvarId } : {}),
 })
 
+/**
+ * What the server copy of one cart line is: the target the /pos endpoints need
+ * to address it AND the quantity last pushed.
+ *
+ * Keeping the target next to the quantity is load-bearing. A line that leaves
+ * the cart is removed by its own target; remembering only the number left
+ * `/pos/remove` with no `prod_id` at all, and the backend rightly rejected it
+ * with "Product ID is required." every time an item was taken off the sale.
+ */
+const posServerLine = (line, qty) => ({
+  prodId: line.prodId,
+  prodvarId: line.prodvarId ?? null,
+  qty,
+})
+
 export function AdminProvider({ children }) {
   const { showToast } = useToast()
 
@@ -115,7 +130,7 @@ export function AdminProvider({ children }) {
   const [posCart, setPosCart] = useState([])
   const posCartRef = useRef([])
   const posOrderIdRef = useRef(null) // backend ord_id of the open walk-in order
-  const posServerQtyRef = useRef({}) // posLineKey(line) -> qty we believe the server has
+  const posServerQtyRef = useRef({}) // posLineKey(line) -> { prodId, prodvarId, qty }
   const posQueueRef = useRef(Promise.resolve())
 
   // Fetch products from backend whenever admin is logged in or refresh key changes.
@@ -648,21 +663,32 @@ export function AdminProvider({ children }) {
       const server = posServerQtyRef.current
       let ordId = posOrderIdRef.current
 
-      // 1. Lines dropped from the cart are removed server-side.
+      // 1. Lines dropped from the cart are removed server-side. The mirror
+      //    carries the line's own prod_id/prodvar_id, which is the only thing
+      //    /pos/remove can address it by.
       for (const key of Object.keys(server)) {
         if (!local.some((line) => posLineKey(line) === key)) {
-          if (ordId) {
+          if (ordId && server[key]) {
             await removePosItem({ ord_id: ordId, ...posLineTarget(server[key]) })
           }
           delete server[key]
         }
       }
 
+      // A cart line without a numeric product id cannot be addressed by the
+      // /pos endpoints. Say so plainly here instead of sending a request that
+      // the backend answers with "Product ID is required."
+      const broken = local.find((line) => !(Number(line.prodId) > 0))
+      if (broken) {
+        throw new Error(
+          `"${broken.name || 'An item'}" is no longer a valid product. Remove it from the sale and add it again.`
+        )
+      }
+
       // 2. First add creates the anonymous POS order.
       if (!ordId && local.length > 0) {
         const first = local[0]
         const res = await addPosItem({
-          prod_id: first.prodId,
           ...posLineTarget(first),
           item_qty: first.qty,
           item_amount: first.price * first.qty,
@@ -670,7 +696,7 @@ export function AdminProvider({ children }) {
         ordId = res?.data?.order?.ord_id ?? res?.order?.ord_id ?? res?.data?.ord_id ?? null
         if (!ordId) throw new Error('The POS order id was missing from the server response.')
         posOrderIdRef.current = ordId
-        server[posLineKey(first)] = first.qty
+        server[posLineKey(first)] = posServerLine(first, first.qty)
       }
 
       // 3. Every remaining line is set to the exact quantity in the cart.
@@ -678,20 +704,20 @@ export function AdminProvider({ children }) {
         for (const line of local) {
           const key = posLineKey(line)
           const wanted = Number(line.qty) || 0
-          if (server[key] === wanted) continue
-          if (server[key] !== undefined) {
-            await removePosItem({ ord_id: ordId, ...posLineTarget(line) })
+          const known = server[key]
+          if ((known?.qty ?? null) === wanted) continue
+          if (known) {
+            await removePosItem({ ord_id: ordId, ...posLineTarget(known) })
             delete server[key]
           }
           if (wanted > 0) {
             await addPosItem({
               ord_id: ordId,
-              prod_id: line.prodId,
               ...posLineTarget(line),
               item_qty: wanted,
               item_amount: line.price * wanted,
             })
-            server[key] = wanted
+            server[key] = posServerLine(line, wanted)
           }
         }
       }

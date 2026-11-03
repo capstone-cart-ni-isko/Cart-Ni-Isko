@@ -90,8 +90,11 @@ export default function AdminPos() {
   const [checkoutBusy, setCheckoutBusy] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
 
-  // POS sells only currently offered products (unlisted ones stay hidden)
-  const products = backendProducts.filter((p) => !p.disabled)
+  // POS sells only currently offered products (unlisted ones stay hidden) and
+  // never a pre-order one: a pre-order is produced to order and is paid for
+  // through the customer pre-order flow, so it must not be ringable at the
+  // walk-in register.
+  const products = backendProducts.filter((p) => !p.disabled && !p.preorder)
 
   // The pills come from the live catalog, with the store's predefined set as
   // the floor so an empty catalog still offers the standard categories.
@@ -390,15 +393,21 @@ export default function AdminPos() {
       const hits = backendProducts.filter(
         (p) => !p.disabled && String(p.sku || '').toLowerCase() === value.toLowerCase()
       )
-      if (hits.length === 1) {
+      // A pre-order is produced to order: it is priced and paid through the
+      // customer pre-order flow, so scanning it at the counter must not ring
+      // it up as a walk-in sale.
+      const sellable = hits.filter((p) => !p.preorder)
+      if (sellable.length === 1) {
         // FLOW-WALKIN-04: the scanned SKU may be a specific variation's, so
         // the exact prodvar row is rung up instead of the product's default.
-        const scanned = hits[0].variants.find(
+        const scanned = sellable[0].variants.find(
           (v) => String(v.sku || '').toLowerCase() === value.toLowerCase()
-        ) || hits[0].variants[0]
-        posAddToCart(hits[0], scanned?.name || 'Standard', 1, scanned?.prodvarId ?? null, scanned?.price)
-        showToast(`Added ${hits[0].name} to the sale`)
-      } else if (hits.length === 0) {
+        ) || sellable[0].variants[0]
+        posAddToCart(sellable[0], scanned?.name || 'Standard', 1, scanned?.prodvarId ?? null, scanned?.price)
+        showToast(`Added ${sellable[0].name} to the sale`)
+      } else if (sellable.length === 0 && hits.length > 0) {
+        showToast(`"${hits[0].name}" is a pre-order item and cannot be sold at the walk-in register.`, 'error')
+      } else if (sellable.length === 0) {
         showToast(`No product matches barcode "${value}".`, 'error')
       }
       // Several exact matches: the search box narrows the catalog list.
@@ -431,69 +440,66 @@ export default function AdminPos() {
       <div className="h-full flex flex-col min-h-0">
 
         {/* ===================================================================
-            1. DESKTOP / WEB POS VIEW (hidden on mobile, flex on md and up)
+            1. DESKTOP / WEB POS VIEW (hidden on mobile, two-row board on md+)
         =================================================================== */}
-        <div className="hidden md:flex gap-4 h-full min-h-0">
+        <div className="pos-board">
 
-          {/* ── LEFT: PRODUCT CATALOG & FILTERS ── */}
-          {/* min-w-0 is load-bearing: without it `min-width:auto` makes the
-              search box + the category pills a hard 881px floor on the
-              catalog column. flex-1 then cannot shrink it, the row overflows
-              by that floor (585px at 632px available) and the checkout pane
-              is pushed off-screen instead of sitting beside it. */}
-          <div className="flex-1 min-w-0 flex flex-col min-h-0 gap-3">
-
-            {/* Toolbar */}
-            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-gray-100/90 shadow-xs shrink-0">
-              {/* Search */}
-              {/* min-w-0 + a flexible track instead of the old fixed w-64: the
-                  register's catalog column is the narrower half of the screen,
-                  so a hard 256px box left the category pills with zero width. */}
-              <div className="relative min-w-0 flex-1 max-w-64">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <input
-                  type="search"
-                  placeholder="Search products…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-8 pl-8 pr-3 rounded-lg bg-gray-50 border border-gray-200 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all"
-                />
-              </div>
-
-              <div className="h-5 w-px bg-gray-200 shrink-0" />
-
-              {/* Category Pills — standard rounded rectangle, matches search input height (h-8).
-                  flex-wrap, NOT a horizontal rail: the register is the narrower half of
-                  the screen, so an `overflow-x-auto` strip forced the cashier to scroll
-                  left-right just to reach a category. Wrapping keeps every category
-                  visible (FLOW-WALKIN-03) with no sideways scrolling anywhere in the
-                  catalog column. */}
-              <div className="flex items-center flex-wrap gap-1.5 min-w-0 flex-1">
-                {categoryPills.map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`h-8 px-3 rounded-lg text-2xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
-                      selectedCategory === cat
-                        ? 'bg-brand-orange text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
+          {/* Toolbar — ONE row across the whole page. Lifting it out of the
+              catalog column gives the search box and the category pills the
+              full width; the pills sit on a non-wrapping rail, so the toolbar
+              can never grow into a second row and eat the product grid. */}
+          <div className="flex flex-nowrap items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-gray-100/90 shadow-xs shrink-0 overflow-hidden">
+            {/* Search */}
+            <div className="relative min-w-0 flex-1 max-w-64 shrink-0">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Search products…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-8 pl-8 pr-3 rounded-lg bg-gray-50 border border-gray-200 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all"
+              />
             </div>
+
+            <div className="h-5 w-px bg-gray-200 shrink-0" />
+
+            {/* Category Pills — standard rounded rectangle, matches search input height (h-8).
+                A single non-wrapping rail: every category stays reachable by
+                scrolling sideways within this one row (FLOW-WALKIN-03), while
+                the toolbar itself never grows taller than one row. */}
+            <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-nowrap overflow-x-auto scrollbar-none py-0.5">
+              {categoryPills.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`h-8 px-3 rounded-lg text-2xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                    selectedCategory === cat
+                      ? 'bg-brand-orange text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── LEFT: PRODUCT CATALOG ── */}
+          {/* min-w-0 is load-bearing: without it `min-width:auto` makes the
+              category rail a hard floor on the catalog column. The board's
+              first track then cannot shrink, the row overflows and the
+              checkout pane is pushed off-screen instead of sitting beside it. */}
+          <div className="min-w-0 flex flex-col min-h-0">
 
             {/* Product Grid — 5 columns on wide desktop.
                 overflow-x-hidden is explicit (overflow-y:auto alone silently computes
@@ -527,12 +533,7 @@ export default function AdminPos() {
                             alt={product.name}
                             className="h-full w-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
                           />
-                          {product.preorder && (
-                            <span className="absolute top-2 left-2 bg-blue-50 border border-blue-200 text-blue-700 text-2xs font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
-                              Pre-order
-                            </span>
-                          )}
-                          {!product.preorder && Number(product.totalStock) <= 0 && (
+                          {Number(product.totalStock) <= 0 && (
                             <span className="absolute top-2 right-2 bg-rose-50 border border-rose-200 text-rose-700 text-2xs font-bold px-2 py-0.5 rounded-md uppercase tracking-wider">
                               Sold out
                             </span>
@@ -905,19 +906,14 @@ export default function AdminPos() {
                           </p>
                           <p className="text-2xs text-gray-400 mt-0.5">
                             SKU: {skuCode}{' '}
-                            {/* A pre-order item is produced to order: it has
-                                nothing on the shelf but it is still sellable,
-                                so it is never "out of stock". */}
+                            {/* Pre-order products never reach this grid, so the
+                                only remaining states are on-hand and sold out. */}
                             <span
                               className={`font-bold ml-1 ${
-                                product.preorder
-                                  ? 'text-brand-orange'
-                                  : Number(product.totalStock) > 0
-                                  ? 'text-emerald-500'
-                                  : 'text-rose-500'
+                                Number(product.totalStock) > 0 ? 'text-emerald-500' : 'text-rose-500'
                               }`}
                             >
-                              • {product.preorder ? 'Pre-order' : Number(product.totalStock) > 0 ? 'In stock' : 'Out of stock'}
+                              • {Number(product.totalStock) > 0 ? 'In stock' : 'Out of stock'}
                             </span>
                           </p>
                         </div>

@@ -117,6 +117,13 @@ export default function AdminProductDetail() {
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editCategory, setEditCategory] = useState('Shirts')
+  // The customer-facing spec sections (FLOW-MANAGE_INV-05). They live together
+  // in the product's `prod_details` JSON column and are edited here so an
+  // admin never has to touch the database to correct them.
+  const [editMaterial, setEditMaterial] = useState('')
+  const [editSizeFit, setEditSizeFit] = useState('')
+  const [editCare, setEditCare] = useState('')
+  const [editShippingReturns, setEditShippingReturns] = useState('')
   const [editPrice, setEditPrice] = useState('')
   const [editPhoto, setEditPhoto] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -146,6 +153,13 @@ export default function AdminProductDetail() {
     setEditCategory(productRow.categoryName || 'Shirts')
     setEditPrice(String(productRow.price ?? ''))
     setEditPhoto(productRow.image || '')
+    const details = productRow.details && typeof productRow.details === 'object'
+      ? productRow.details
+      : {}
+    setEditMaterial(details.material || '')
+    setEditSizeFit(details.sizeFit || '')
+    setEditCare(details.care || '')
+    setEditShippingReturns(details.shippingReturns || '')
     setEditTouched({ name: false, price: false })
     setEditFormError('')
   }, [])
@@ -442,6 +456,14 @@ export default function AdminProductDetail() {
         prod_desc: editDesc,
         prod_categ: editCategory,
         prod_price: parsedPrice,
+        // One JSON object for the customer-facing spec block. Empty sections
+        // are dropped so the storefront keeps its own sensible fallbacks.
+        prod_details: {
+          ...(editMaterial.trim() ? { material: editMaterial.trim() } : {}),
+          ...(editSizeFit.trim() ? { sizeFit: editSizeFit.trim() } : {}),
+          ...(editCare.trim() ? { care: editCare.trim() } : {}),
+          ...(editShippingReturns.trim() ? { shippingReturns: editShippingReturns.trim() } : {}),
+        },
         ...(editPhoto ? { prod_images: [editPhoto] } : {}),
       })
       if (result.success) {
@@ -524,25 +546,9 @@ export default function AdminProductDetail() {
           <div className="flex items-center gap-2">
             {!isStaff && (
               <>
-                {isEditing ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      className="h-8 px-3.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors shadow-2xs"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSaveProduct}
-                      disabled={isSaving}
-                      className="h-8 px-4 rounded-lg bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
-                    >
-                      {isSaving ? 'Saving…' : 'Save Changes'}
-                    </button>
-                  </>
-                ) : (
+                {/* The Cancel / Save Changes pair lives at the foot of the edit
+                    form only - no duplicate copy up here beside Mark Pre-order. */}
+                {!isEditing && (
                   <button
                     type="button"
                     onClick={() => setIsEditing(true)}
@@ -836,6 +842,65 @@ export default function AdminProductDetail() {
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
                   />
                 </div>
+
+                <div className="sm:col-span-2 border-t border-slate-100 pt-4">
+                  <h3 className="text-xs font-bold text-slate-900">Product page details</h3>
+                  <p className="text-2xs text-slate-400 mt-0.5">
+                    These sections appear in the accordion on the customer product page.
+                  </p>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
+                    Material &amp; Fabric
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editMaterial}
+                    onChange={(e) => setEditMaterial(e.target.value)}
+                    placeholder="e.g. Heavyweight 330 GSM brushed cotton-poly blend."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
+                    Size &amp; Fit
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editSizeFit}
+                    onChange={(e) => setEditSizeFit(e.target.value)}
+                    placeholder="e.g. Collegiate relaxed fit. True to size."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
+                    Care Instructions
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editCare}
+                    onChange={(e) => setEditCare(e.target.value)}
+                    placeholder="e.g. Machine wash cold inside out. Do not bleach."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
+                    Shipping &amp; Returns
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editShippingReturns}
+                    onChange={(e) => setEditShippingReturns(e.target.value)}
+                    placeholder="e.g. Store pickup at BU Student Center or courier delivery nationwide."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
+                  />
+                </div>
               </div>
 
               {editFormError && (
@@ -1013,14 +1078,7 @@ export default function AdminProductDetail() {
 
                 {/* Product Accordion for Specs (Customer-Side feature) */}
                 <ProductAccordion
-                  details={{
-                    material: row.description || 'Official Tindahan ni Isko merchandise.',
-                    sizeFit: ['Hoodies', 'Jackets', 'Shirts'].includes(row.categoryName)
-                      ? 'True to size collegiate unisex fit.'
-                      : 'Standard one size specification.',
-                    care: 'Wash cold inside out with similar colors. Avoid harsh bleach.',
-                    shippingReturns: 'Store pickup at BU Student Center or courier delivery across Albay & nationwide.',
-                  }}
+                  details={row.details}
                   preOrder={row.availability === 'Pre-order'}
                 />
               </div>

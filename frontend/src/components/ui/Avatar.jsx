@@ -48,6 +48,9 @@ export default function Avatar({ name = '', src, size = 40, className = '', user
         alt={name}
         className={`rounded-full object-cover shrink-0 ${className}`}
         style={{ width: size, height: size }}
+        onError={(e) => {
+          e.currentTarget.style.display = 'none'
+        }}
       />
     )
   }

@@ -467,6 +467,8 @@ export function CartProvider({ children }) {
         qty
       )
     }
+
+    return target
   }
 
   // Remove item from cart and return it for undo
@@ -615,6 +617,11 @@ export function CartProvider({ children }) {
     )
   }
 
+  // Select exactly one line (Buy Now: check out only the product on screen).
+  const selectOnlyItem = (cartItemId) => {
+    setSelectedItemIds(cartItemId ? [cartItemId] : [])
+  }
+
   // Select all or deselect all items (REQ-CHECKOUT-01 "all at once")
   const selectAllItems = (select = true) => {
     if (select) {
@@ -657,6 +664,7 @@ export function CartProvider({ children }) {
         clearCart,
         clearSelectedItems,
         toggleSelectItem,
+        selectOnlyItem,
         selectAllItems,
         selectOnlyType,
         refreshCart,

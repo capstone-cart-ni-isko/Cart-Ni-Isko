@@ -44,6 +44,10 @@ class Product extends Model
         'prod_rating'           => 'float',
         'prod_review_count'     => 'integer',
         'prod_preorder'         => 'boolean',
+        // The customer-facing spec block (material, size & fit, care,
+        // shipping & returns). Stored as a JSON object so the editor can save
+        // it as one value and the product page can read it back as one.
+        'prod_details'          => 'array',
         'prod_created'          => 'datetime',
         'prod_disabled'         => 'datetime',
         'prod_deleted'          => 'datetime',

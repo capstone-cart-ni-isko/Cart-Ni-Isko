@@ -55,6 +55,46 @@ function skuSlug(value) {
     .toUpperCase() || 'VAR'
 }
 
+/** Decode the `prod_details` JSON column (array from Laravel, or legacy text). */
+function storedProductDetails(raw) {
+  if (raw && typeof raw === 'object') return raw
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+/**
+ * The customer-facing spec block shown on the product page, with the same
+ * fallbacks the storefront uses when a section was never filled in.
+ */
+function productDetails(row, category) {
+  const stored = storedProductDetails(row?.prod_details)
+  const pick = (key, fallback) => {
+    const value = stored[key]
+    return typeof value === 'string' && value.trim() !== '' ? value : fallback
+  }
+  return {
+    material: pick('material', row?.prod_desc || 'Official Tindahan ni Isko merchandise.'),
+    sizeFit: pick(
+      'sizeFit',
+      ['Hoodies', 'Jackets', 'Shirts'].includes(category)
+        ? 'True to size collegiate unisex fit.'
+        : 'Standard one size specification.'
+    ),
+    care: pick('care', 'Wash cold inside out with similar colors. Avoid harsh bleach.'),
+    shippingReturns: pick(
+      'shippingReturns',
+      'Store pickup at BU Student Center or courier delivery across Albay & nationwide.'
+    ),
+  }
+}
+
 /**
  * Map a backend Product model row to the admin inventory display shape.
  * Stock, variants and imagery come from the `variations` array (prodvar
@@ -184,6 +224,8 @@ export function mapAdminProduct(row) {
     preOrder: preorder,
     disabled,
     description: row.prod_desc || '',
+    // The four editable spec sections shown on the customer product page.
+    details: productDetails(row, category),
     published: !disabled && status !== 'Draft',
     variations: hasVariations ? variations : [],
     total_var: Number(row.prod_total_var ?? variations.length),

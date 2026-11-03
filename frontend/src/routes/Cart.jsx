@@ -248,7 +248,6 @@ function Cart() {
                   const stockKnown = !item.product.preOrder && Number.isFinite(item.stock)
                   const isOutOfStock = stockKnown && item.stock <= 0
                   const isOverStock = stockKnown && item.stock > 0 && item.qty > item.stock
-                  const isLowStock = stockKnown && item.stock > 0 && item.stock <= 3
                   const isMaxStockReached =
                     !isOutOfStock && !isOverStock && item.qty >= maxStock && !item.product.preOrder
 
@@ -307,22 +306,9 @@ function Cart() {
                                   {item.product.name}
                                 </Link>
 
-                                {/* In Stock / Pre-Order Badge (Requirement 14) */}
-                                {item.product.preOrder ? (
+                                {item.product.preOrder && (
                                   <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200/60">
                                     Pre-order
-                                  </span>
-                                ) : isOutOfStock ? (
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200/60">
-                                    Out of Stock
-                                  </span>
-                                ) : isLowStock || isOverStock ? (
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
-                                    Only {item.stock} Left
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
-                                    In Stock
                                   </span>
                                 )}
                               </div>
@@ -340,11 +326,6 @@ function Cart() {
                                 {item.color && (
                                   <span className="flex items-center gap-1.5">
                                     Color:{' '}
-                                    <span
-                                      className="w-3.5 h-3.5 rounded-full border border-gray-300 inline-block shrink-0"
-                                      style={{ backgroundColor: item.color.value }}
-                                      title={item.color.name}
-                                    />
                                     <strong className="text-gray-800 font-semibold">{item.color.name}</strong>
                                   </span>
                                 )}

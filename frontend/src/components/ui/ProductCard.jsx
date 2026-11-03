@@ -8,12 +8,33 @@ import LoginPromptModal from './LoginPromptModal.jsx'
 import { ShirtIcon } from './Icons.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 
+/** Compact units-sold label: 8 -> "8 sold", 1240 -> "1.2k sold". */
+function formatSold(value) {
+  const count = Math.max(0, Math.round(Number(value) || 0))
+  if (count >= 1_000_000) {
+    const millions = count / 1_000_000
+    return `${millions.toFixed(count % 1_000_000 === 0 ? 0 : 1)}m sold`
+  }
+  if (count >= 1000) {
+    const thousands = count / 1000
+    return `${thousands.toFixed(count % 1000 === 0 ? 0 : 1)}k sold`
+  }
+  return `${count} sold`
+}
+
 function ProductCard({ product }) {
   const { currentUser } = useAuth()
   const { toggleWishlist, isInWishlist } = useWishlist()
   const [showLoginModal, setShowLoginModal] = useState(false)
 
   const isSaved = isInWishlist(product.id)
+
+  // Social proof shown under the name: the average rating from approved
+  // reviews and the all-time units sold. Both come from the product payload,
+  // so the card and the product page never disagree.
+  const rating = Number(product.rating) || 0
+  const reviewCount = Number(product.reviewCount) || 0
+  const sold = Number(product.sold ?? product.orders ?? 0) || 0
 
   const handleWishlistClick = (e) => {
     e.preventDefault()
@@ -89,13 +110,42 @@ function ProductCard({ product }) {
 
         {/* Product details */}
         <div className="p-3">
-          <span className="text-2xs font-normal text-gray-400 dark:text-[var(--muted-2)] uppercase tracking-wider">
-            {product.category}
-          </span>
-          <h3 className="text-xs sm:text-sm font-normal text-gray-900 dark:text-[var(--ink)] mt-0.5 truncate leading-tight group-hover:text-brand-orange transition-colors">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-900 dark:text-[var(--ink)] truncate leading-tight group-hover:text-brand-orange transition-colors">
             {product.name}
           </h3>
-          <div className="mt-1 flex items-center justify-between">
+
+          {/* Rating · units sold — secondary line under the name */}
+          <div className="mt-1 flex items-center gap-1.5 min-w-0 text-[10px] sm:text-2xs text-gray-500 dark:text-[var(--muted)]">
+            {reviewCount > 0 ? (
+              <span
+                className="inline-flex items-center gap-1 shrink-0 font-semibold text-gray-700 dark:text-[var(--ink)]"
+                title={`${rating.toFixed(1)} out of 5 from ${reviewCount} review${reviewCount === 1 ? '' : 's'}`}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                  className="w-3 h-3 text-amber-400 shrink-0"
+                >
+                  <path d="m12 17.27 5.18 3.13-1.37-5.89 4.57-3.96-6.02-.51L12 4.5l-2.36 5.54-6.02.51 4.57 3.96-1.37 5.89z" />
+                </svg>
+                <span>{rating.toFixed(1)}</span>
+                <span className="font-normal text-gray-400 dark:text-[var(--muted-2)]">
+                  ({reviewCount})
+                </span>
+              </span>
+            ) : (
+              <span className="shrink-0 text-gray-400 dark:text-[var(--muted-2)]">No reviews</span>
+            )}
+
+            <span
+              aria-hidden="true"
+              className="w-0.5 h-0.5 rounded-full bg-gray-300 dark:bg-[var(--line-2)] shrink-0"
+            />
+            <span className="truncate">{formatSold(sold)}</span>
+          </div>
+
+          <div className="mt-1.5 flex items-center justify-between">
             <PriceTag amount={product.price} tone="neutral" className="text-xs sm:text-sm" />
           </div>
         </div>

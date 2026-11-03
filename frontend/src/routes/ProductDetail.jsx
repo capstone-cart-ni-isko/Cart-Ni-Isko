@@ -18,13 +18,30 @@ import { fetchCatalog, fetchProduct } from '../services/products.js'
 import { ShirtIcon, CalendarIcon, StoreIcon, RefreshCwIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 
+function firstInStockVariation(product, preferredColor, preferredSize) {
+  const stockFor = (color, size) => {
+    const stock = product.stockMatrix?.[color?.name]?.[size]
+    return stock == null ? null : Number(stock)
+  }
+
+  if (stockFor(preferredColor, preferredSize) !== 0) {
+    return { color: preferredColor, size: preferredSize }
+  }
+
+  const combinations = (product.colors || []).flatMap((color) =>
+    (product.sizes || []).map((size) => ({ color, size }))
+  )
+  const available = combinations.find(({ color, size }) => stockFor(color, size) > 0)
+  return available || { color: preferredColor, size: preferredSize }
+}
+
 function ProductDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const returnTo = location.state?.from || location.state?.returnTo || null
   const { currentUser } = useAuth()
-  const { addToCart } = useCart()
+  const { addToCart, cartCount, selectOnlyItem } = useCart()
   const { toggleWishlist, isInWishlist } = useWishlist()
   const { showToast } = useToast()
 
@@ -83,6 +100,10 @@ function ProductDetail() {
           if (foundColor) newColor = foundColor
         }
 
+        const stockedVariation = firstInStockVariation(item, newColor, newSize)
+        newColor = stockedVariation.color
+        newSize = stockedVariation.size
+
         setSelectedColor(newColor)
         setSelectedSize(newSize)
         setActiveImage(newColor?.image || item?.images?.[0] || '')
@@ -105,7 +126,7 @@ function ProductDetail() {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, location.state?.color, location.state?.prodvarId, location.state?.variationId])
 
   if (loading) {
     return (
@@ -251,6 +272,22 @@ function ProductDetail() {
     showToast(product.preOrder ? 'Pre-order added to bag!' : 'Added to bag!')
   }
 
+  // Buy Now: add this product and check out only that line, ignoring whatever
+  // else the customer had selected in the bag.
+  const handleBuyNow = () => {
+    if (!currentUser) {
+      setShowLoginModal(true)
+      return
+    }
+    if (isOutOfStock) {
+      showToast('Sorry, this variant is currently out of stock.', 'error')
+      return
+    }
+    const line = addToCart(product, qty, selectedSize, selectedColor)
+    selectOnlyItem(line?.cartItemId)
+    navigate('/checkout')
+  }
+
   const handleWishlistToggle = () => {
     if (!currentUser) {
       setShowLoginModal(true)
@@ -275,27 +312,56 @@ function ProductDetail() {
       backTo={returnTo || '/shop'}
       containerClassName="max-w-7xl"
       rightAction={
-        <button
-          type="button"
-          onClick={handleWishlistToggle}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] transition-colors shadow-2xs cursor-pointer"
-          title={isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
-          aria-label={isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className={`w-4 h-4 transition-transform ${
-              isSaved ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'
-            }`}
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <>
+          <Link
+            to="/bag"
+            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] transition-colors shadow-2xs cursor-pointer"
+            title="Open your Bag"
+            aria-label={`Open your Bag${cartCount > 0 ? `, ${cartCount} item${cartCount === 1 ? '' : 's'}` : ''}`}
           >
-            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-          </svg>
-          <span className="hidden sm:inline">{isSaved ? 'Saved' : 'Wishlist'}</span>
-        </button>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-4 h-4 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <path d="M16 10a4 4 0 0 1-8 0" />
+            </svg>
+            <span className="hidden sm:inline">Bag</span>
+            {cartCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-brand-orange text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                {cartCount > 99 ? '99+' : cartCount}
+              </span>
+            )}
+          </Link>
+
+          <button
+            type="button"
+            onClick={handleWishlistToggle}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-xs font-semibold hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] transition-colors shadow-2xs cursor-pointer"
+            title={isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+            aria-label={isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className={`w-4 h-4 transition-transform ${
+                isSaved ? 'text-red-500 fill-red-500' : 'text-gray-400 fill-none'
+              }`}
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+            </svg>
+            <span className="hidden sm:inline">{isSaved ? 'Saved' : 'Wishlist'}</span>
+          </button>
+        </>
       }
     >
       <div className="pb-32 md:pb-16 animate-fade-in w-full">
@@ -675,16 +741,16 @@ function ProductDetail() {
               </div>
             </div>
 
-            {/* Desktop Add to Cart / Pre-Order CTA */}
-            <div className="hidden md:block pt-1">
+            {/* Desktop Add to Bag / Buy Now CTA */}
+            <div className="hidden md:grid grid-cols-2 gap-2 pt-1">
               <button
                 type="button"
                 disabled={isOutOfStock}
                 onClick={handleAddToCart}
-                className={`w-full h-9 font-semibold rounded-md transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer ${
+                className={`w-full h-9 font-semibold rounded-md transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer border ${
                   isOutOfStock
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                    : 'bg-brand-orange hover:bg-brand-orange-dark text-white'
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
+                    : 'bg-white text-brand-orange border-brand-orange hover:bg-orange-50'
                 }`}
               >
                 {!isOutOfStock && (
@@ -695,6 +761,19 @@ function ProductDetail() {
                   </svg>
                 )}
                 <span>{ctaLabel}</span>
+              </button>
+              <button
+                type="button"
+                disabled={isOutOfStock}
+                onClick={handleBuyNow}
+                className={`w-full h-9 font-semibold rounded-md transition-colors text-sm flex items-center justify-center gap-2 ${
+                  isOutOfStock
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                    : 'bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer'
+                }`}
+              >
+
+                <span>Buy Now</span>
                 {!isOutOfStock && <span className="font-semibold">₱{(product.price * qty).toLocaleString()}</span>}
               </button>
             </div>
@@ -757,39 +836,53 @@ function ProductDetail() {
 
       {/* Sticky Bottom Bar (Mobile only) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 p-3 safe-bottom">
-        <div className="mx-auto max-w-lg flex items-center gap-3">
-          <div className="flex items-center gap-2 border border-gray-200 rounded-md">
+        <div className="mx-auto max-w-lg flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 border border-gray-200 rounded-md">
+              <button
+                type="button"
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={qty <= 1}
+                className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                aria-label="Decrease quantity"
+              >
+                -
+              </button>
+              <span className="w-8 text-center text-sm font-semibold">{qty}</span>
+              <button
+                type="button"
+                onClick={() => setQty((q) => Math.min(product.preOrder ? (product.preOrderInfo?.maxPreOrderQty || 10) : Math.max(1, availableStock), q + 1))}
+                disabled={!product.preOrder && qty >= availableStock}
+                className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                aria-label="Increase quantity"
+              >
+                +
+              </button>
+            </div>
             <button
               type="button"
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-              disabled={qty <= 1}
-              className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              aria-label="Decrease quantity"
+              disabled={isOutOfStock}
+              onClick={handleAddToCart}
+              className={`flex-1 h-9 font-semibold rounded-md transition-colors text-xs cursor-pointer border ${
+                isOutOfStock
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
+                  : 'bg-white text-brand-orange border-brand-orange'
+              }`}
             >
-              -
-            </button>
-            <span className="w-8 text-center text-sm font-semibold">{qty}</span>
-            <button
-              type="button"
-              onClick={() => setQty((q) => Math.min(product.preOrder ? (product.preOrderInfo?.maxPreOrderQty || 10) : Math.max(1, availableStock), q + 1))}
-              disabled={!product.preOrder && qty >= availableStock}
-              className="w-9 h-9 flex items-center justify-center text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              aria-label="Increase quantity"
-            >
-              +
+              {ctaLabel}
             </button>
           </div>
           <button
             type="button"
             disabled={isOutOfStock}
-            onClick={handleAddToCart}
-            className={`flex-1 h-9 font-semibold rounded-md transition-colors text-xs cursor-pointer ${
+            onClick={handleBuyNow}
+            className={`w-full h-9 font-semibold rounded-md transition-colors text-xs ${
               isOutOfStock
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                : 'bg-brand-orange hover:bg-brand-orange-dark text-white'
+                : 'bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer'
             }`}
           >
-            {ctaLabel} {`₱${(product.price * qty).toLocaleString()}`}
+            Buy Now {`₱${(product.price * qty).toLocaleString()}`}
           </button>
         </div>
       </div>

@@ -446,6 +446,11 @@ export default function CustomerOrderDetailModal({
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                   </svg>
                 </button>
+                {order?.preOrder && (
+                  <span className="inline-flex items-center rounded-full border border-white/30 bg-white/15 px-2 py-0.5 text-[10px] font-semibold">
+                    Pre-order
+                  </span>
+                )}
               </div>
               <p className="text-white/80 text-xs mt-0.5 font-medium">
                 Placed on {order.date || '—'}

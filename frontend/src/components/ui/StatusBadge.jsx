@@ -1,5 +1,9 @@
-function StatusBadge({ status, className = '' }) {
+function StatusBadge({ status, className = '', appearance = 'default' }) {
   const normalized = status.toUpperCase().replace(/_/g, ' ')
+  const isStatusPill = appearance === 'status-pill'
+  const label = isStatusPill
+    ? normalized.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : normalized
 
   // SRS order pipeline: To Process, To Claim, To Receive, Claimed,
   // Unclaimed, Cancelled, Returned, Refunded (+ pending request states).
@@ -45,9 +49,9 @@ function StatusBadge({ status, className = '' }) {
 
   return (
     <span
-      className={`badge uppercase tracking-wider ${tone} ${className}`}
+      className={`badge ${tone} ${isStatusPill ? 'badge--status-pill' : 'uppercase tracking-wider'} ${className}`}
     >
-      {normalized}
+      {label}
     </span>
   )
 }

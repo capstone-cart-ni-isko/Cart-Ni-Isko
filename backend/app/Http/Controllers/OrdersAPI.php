@@ -130,6 +130,18 @@ class OrdersAPI extends Controller
         $this->logCustomer($customerId, 'edit', 'orders/update ' . $rawLabel . ' - order #' . $order->ord_id);
         $this->announceStatus($order, 'to cancel');
 
+        // A cancellation request needs staff action, so surface it in the admin
+        // inbox as a priority item that links straight to the order to review.
+        $customerName = $customer
+            ? trim(($customer->cust_givname ?? '') . ' ' . ($customer->cust_surname ?? ''))
+            : '';
+
+        $this->alertAdmins(
+            '[PRIORITY] Order #' . $order->ord_id . ': cancellation requested'
+                . ($customerName !== '' ? ' by ' . $customerName : '')
+                . '. Review the request and approve or reject it.'
+        );
+
         return response()->json([
             'success' => true,
             'message' => 'Order details updated successfully',
@@ -253,7 +265,7 @@ class OrdersAPI extends Controller
             ], 200);
         }
 
-        $this->announceStatus($order, $status);
+        $this->announceStatus($order, $status, $priorStatus);
 
         return response()->json([
             'success' => true,
@@ -295,14 +307,26 @@ class OrdersAPI extends Controller
         }
     }
 
-    protected function announceStatus(Order $order, string $status): void
+    protected function announceStatus(Order $order, string $status, ?string $priorStatus = null): void
     {
         $custId = (int) $order->cust_id;
         if ($custId <= 0) return;
 
         try {
+            $priorKey = $priorStatus !== null
+                ? ($this->normalizeStatus($priorStatus) ?? strtolower(trim($priorStatus)))
+                : null;
+
             $message = 'Order #' . $order->ord_id . ' status changed to ' . $status . '.';
-            if ($status === 'to deliver') {
+
+            if ($status === 'processing' && $priorKey === 'to cancel') {
+                // FLOW-ORD_LIST-07: rejecting a cancellation must be explicit -
+                // the customer has to learn their request was not approved, not
+                // just see the status silently return to processing.
+                $message = 'Order #' . $order->ord_id
+                    . ': your cancellation request was not approved by the store. '
+                    . 'The order stays in processing and will continue as scheduled.';
+            } elseif ($status === 'to deliver') {
                 $message = 'Order #' . $order->ord_id . ' is ready to ship! Please complete your delivery details and delivery fee.';
             } elseif ($status === 'to claim') {
                 $message = 'Order #' . $order->ord_id . ' items are ready! You may now claim your order.';

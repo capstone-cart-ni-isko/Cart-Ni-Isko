@@ -23,8 +23,11 @@ export default function PosDrawer({ isOpen, onClose, onCompleted }) {
 
   const sellable = useMemo(() => {
     const q = query.trim().toLowerCase()
+    // The counter only rings up what is physically on the shelf: a pre-order
+    // is produced to order and is checked out through the customer flow, so it
+    // never appears in a walk-in sale (same rule as the full register).
     return products
-      .filter((p) => !p.disabled && (p.totalStock > 0 || p.preOrder))
+      .filter((p) => !p.disabled && !p.preOrder && p.totalStock > 0)
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
       .slice(0, 8)
   }, [products, query])
@@ -117,13 +120,13 @@ export default function PosDrawer({ isOpen, onClose, onCompleted }) {
             <ul className="mt-2 divide-y divide-slate-100 border border-slate-200 rounded-md">
               {sellable.length === 0 && <li className="p-3 text-xs text-slate-400 text-center">No sellable products match.</li>}
               {sellable.map((p) => {
-                const atLimit = !p.preOrder && qtyInCart(p) >= p.totalStock
+                const atLimit = qtyInCart(p) >= p.totalStock
                 return (
                   <li key={p.id} className="flex items-center justify-between gap-2 px-2.5 py-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
                       <p className="text-2xs text-slate-500">
-                        {peso(p.price)} · {p.preOrder ? 'Pre-order' : `${p.totalStock} in stock`}
+                        {peso(p.price)} · {p.totalStock} in stock
                       </p>
                     </div>
                     <button

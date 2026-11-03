@@ -1106,7 +1106,12 @@ export default function AdminOrders() {
         <Modal
           isOpen={Boolean(confirmStatusModal)}
           onClose={() => setConfirmStatusModal(null)}
-          title="Confirm Status Change"
+          title={
+            String(confirmStatusModal.order?.rawStatus || '').toUpperCase() === 'CANCEL REQUESTED' &&
+            String(confirmStatusModal.nextStatus || '').toLowerCase() === 'to process'
+              ? 'Reject cancellation request?'
+              : 'Confirm Status Change'
+          }
           subtitle={`Are you sure you want to update ${confirmStatusModal.order?.id}?`}
           size="sm"
           footer={
@@ -1157,6 +1162,13 @@ export default function AdminOrders() {
             <p className="text-2xs text-[var(--muted)] leading-relaxed">
               This will update the order immediately on the server and notify the customer in realtime.
             </p>
+            {String(confirmStatusModal.order?.rawStatus || '').toUpperCase() === 'CANCEL REQUESTED' &&
+              String(confirmStatusModal.nextStatus || '').toLowerCase() === 'to process' && (
+                <p className="text-2xs font-semibold text-rose-700 dark:text-rose-400 leading-relaxed">
+                  The customer will be told their cancellation request was not approved and that the order
+                  will continue processing.
+                </p>
+              )}
           </div>
         </Modal>
       )}

@@ -7,7 +7,6 @@ import { normalizeProductCategory } from '../../data/productCategories.js'
 const SIZE_CHARTS = {
   Hoodies: {
     title: 'BU Hoodies & Sweatshirts',
-    note: 'Unisex relaxed fit. Measurements are taken with the garment laid flat.',
     sizes: ['S', 'M', 'L', 'XL', '2XL'],
     inches: [
       { size: 'S', chest: '20"', length: '27"', shoulder: '19"', sleeve: '24"' },
@@ -26,7 +25,6 @@ const SIZE_CHARTS = {
   },
   Jackets: {
     title: 'BU Varsity Jackets',
-    note: 'Boxy collegiate varsity cut with room for layering over inner shirts or hoodies.',
     sizes: ['S', 'M', 'L', 'XL', '2XL'],
     inches: [
       { size: 'S', chest: '21.5"', length: '26.5"', shoulder: '19.5"', sleeve: '24.5"' },
@@ -45,7 +43,6 @@ const SIZE_CHARTS = {
   },
   Shirts: {
     title: 'BU T-Shirts & Polos',
-    note: 'Standard tropical cotton fit. True to size; order one size up for oversized style.',
     sizes: ['S', 'M', 'L', 'XL', '2XL'],
     inches: [
       { size: 'S', chest: '19"', length: '26"', shoulder: '17.5"', sleeve: '8"' },
@@ -84,7 +81,6 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodies' }
       size="wide"
       footer={
         <>
-          <span className="field-hint mr-auto">Exchanges allowed within 7 days of campus claim</span>
           <Button variant="primary" onClick={onClose}>
             Got It
           </Button>
@@ -137,9 +133,6 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodies' }
         <div>
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-xs font-semibold text-gray-800">{currentChart.title}</h3>
-            <span className="text-[10px] font-semibold text-brand-orange bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-md">
-              Standard BU Unisex Sizing
-            </span>
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">{currentChart.note}</p>
         </div>
@@ -185,9 +178,6 @@ export default function SizeGuideModal({ isOpen, onClose, category = 'Hoodies' }
             </li>
             <li>
               <strong className="text-orange-900">Sleeve:</strong> Measure from the top shoulder seam down to cuff edge.
-            </li>
-            <li>
-              <strong className="text-orange-900">Streetwear Tip:</strong> If you are between sizes or prefer an oversized drape, order one size up.
             </li>
           </ul>
         </div>

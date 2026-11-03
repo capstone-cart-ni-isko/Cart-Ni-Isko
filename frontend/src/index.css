@@ -1011,6 +1011,14 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
 .badge--danger { background: var(--tint-danger-bg); color: var(--tint-danger-fg); }
 .badge--accent { background: var(--tint-accent-bg); color: var(--tint-accent-fg); }
 .badge--plain { background: var(--tint-plain-bg); color: var(--tint-plain-fg); }
+.badge--status-pill {
+  padding: 0.375rem 0.875rem;
+  border-radius: 9999px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
 
 .stepper {
   display: inline-flex;
@@ -1132,6 +1140,27 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
 @media (min-width: 1024px) { .grid-catalog { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1280px) { .grid-catalog { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 
+/* ── 6a · Walk-in register board (desktop) ──────────────────
+   FLOW-WALKIN-03: the search box and the category filters must read as
+   ONE toolbar row. The board is an explicit two-row grid - the toolbar
+   spans the full width on the first row, the catalog and the current
+   sale share the second - so the filter row can never wrap into a
+   second line, however many category pills the catalog carries. */
+.pos-board {
+  display: none;
+  gap: 0.75rem;
+}
+@media (min-width: 768px) {
+  .pos-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+  }
+}
+.pos-board > :first-child { grid-column: 1 / -1; }
+
 /* One default control size across every form, both portals and every
    viewport — but written with :where() and WITHOUT !important so an
    intentional size (the large login field, the OTP boxes, a h-12 search
@@ -1151,4 +1180,3 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
   font-size: 0.875rem;
   line-height: 1.5;
 }
-

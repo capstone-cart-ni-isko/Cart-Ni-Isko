@@ -178,6 +178,38 @@ export function variationStockMatrix(variations, secondAxis = null, colorAxis = 
   return matrix
 }
 
+/**
+ * Decode the `prod_details` JSON column into a plain object.
+ *
+ * Laravel returns it already decoded (array cast); an older payload may still
+ * carry the raw JSON string, so both shapes are accepted.
+ */
+function storedDetails(raw) {
+  if (raw && typeof raw === 'object') return raw
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+/** The four spec sections a product page shows, stored values winning. */
+const DETAIL_KEYS = ['material', 'sizeFit', 'care', 'shippingReturns']
+
+function mergeDetails(fallback, raw) {
+  const merged = { ...fallback }
+  const stored = storedDetails(raw)
+  DETAIL_KEYS.forEach((key) => {
+    const value = stored[key]
+    if (typeof value === 'string' && value.trim() !== '') merged[key] = value
+  })
+  return merged
+}
+
 function defaultPresentation(row, category) {
   const image = CATEGORY_IMAGES[category] || CATEGORY_IMAGES.Accessories
   const isApparel = ['Hoodies', 'Jackets', 'Shirts'].includes(category)
@@ -273,6 +305,9 @@ export function mapProduct(row) {
     ? row.prod_review_count
     : (row.prod_reviews ?? row.prod_review_count)
   const reviewCount = Number(rawReviewCount ?? 0)
+  // All-time units sold, aggregated from prodsales server-side. Kept on the
+  // product shape so every catalog card can show it next to the rating.
+  const sold = Number(row.prod_sold ?? row.prod_peaksold ?? 0)
 
   return {
     ...fallback,
@@ -280,9 +315,10 @@ export function mapProduct(row) {
     colors,
     images,
     preOrder,
-    details: row.prod_details || fallback.details,
+    details: mergeDetails(fallback.details, row.prod_details),
     rating,
     reviewCount,
+    sold,
     ratingBreakdown: row.prod_rating_breakdown || fallback.ratingBreakdown,
     // The embedded review array is gone; reviews are fetched through
     // /reviews/display (see reviews.js).

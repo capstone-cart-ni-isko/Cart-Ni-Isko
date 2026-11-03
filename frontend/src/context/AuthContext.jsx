@@ -214,13 +214,13 @@ export function AuthProvider({ children }) {
       // Signup-only fields: form value first, then the stored copy, then the
       // spec default so an unfilled profile never renders as blank.
       username: extras.username || account?.cust_username || phone,
-      yearLevel: extras.yearLevel || account?.cust_year || 'N/A',
+      yearLevel: extras.yearLevel || account?.cust_year || account?.cust_categ || 'N/A',
       campus: extras.campus || account?.cust_campus || 'N/A',
       college: extras.college || account?.cust_college || 'N/A',
-      course: extras.course || account?.cust_course || 'N/A',
+      course: extras.course || account?.cust_course || account?.cust_dept || 'N/A',
       studentId: extras.studentId || 'N/A',
       // Real uploaded profile photo (URL served by the backend)
-      avatarImage: account?.cust_photo || extras.avatarImage || '',
+      avatarImage: account?.cust_photo || account?.avatarImage || extras.avatarImage || '',
     }
 
     // The API answers carry the whole row, password hash included; the

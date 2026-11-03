@@ -9,7 +9,7 @@ import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import StatusBadge from '../components/ui/StatusBadge.jsx'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
-import { PackageIcon, ShirtIcon, TruckIcon, MapPinIcon, LockIcon } from '../components/ui/Icons.jsx'
+import { PackageIcon, ShirtIcon, StoreIcon, TruckIcon } from '../components/ui/Icons.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import Modal from '../components/ui/Modal.jsx'
@@ -20,28 +20,111 @@ import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import CustomerOrderDetailModal from '../components/orders/CustomerOrderDetailModal.jsx'
 import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
 import { canReviewOrder } from '../services/reviews.js'
-import { fetchOrders, requestCancel, orderFilterBucket, confirmDeliveryFeePayment, resumePayment } from '../services/orders.js'
+import { fetchOrders, requestCancel, confirmDeliveryFeePayment, resumePayment } from '../services/orders.js'
 import { parseDate } from '../services/dashboard.js'
 
-/**
- * FLOW-ORD_LIST-03: the six spec buckets, each backed by the server-side
- * `filter` param of `GET /cart/display`. The last tab is a client-side view
- * over the full list: a pre-order is derived from the products' own
- * `prod_preorder` / `prodvar_preorder` flags (the orders table carries no
- * tag), so it never needs its own request.
- */
-const tabs = [
-  { key: 'all', label: 'All' },
-  { key: 'processing', label: 'Processing' },
-  { key: 'to-claim', label: 'To claim-receive' },
-  { key: 'claimed', label: 'Claimed-Received' },
-  { key: 'unclaimed', label: 'Unclaimed' },
-  { key: 'cancelled', label: 'Cancelled' },
-  { key: 'pre-order', label: 'Pre-orders' },
+const FULFILLMENT_OPTIONS = [
+  { key: 'pickup', label: 'Pickup' },
+  { key: 'delivery', label: 'Delivery' },
 ]
 
-/** Tabs the backend filters for us (CartAPI::applyOrderFilter). */
-const SERVER_TABS = ['processing', 'to-claim', 'claimed', 'unclaimed', 'cancelled']
+const STATUS_TABS = {
+  pickup: [
+    { key: 'all', label: 'All' },
+    { key: 'processing', label: 'Processing' },
+    { key: 'ready', label: 'Ready for Pickup' },
+    { key: 'claimed', label: 'Claimed' },
+    { key: 'cancelled', label: 'Cancelled' },
+  ],
+  delivery: [
+    { key: 'all', label: 'All' },
+    { key: 'processing', label: 'Processing' },
+    { key: 'shipped', label: 'Shipped' },
+    { key: 'delivered', label: 'Delivered' },
+    { key: 'cancelled', label: 'Cancelled' },
+  ],
+}
+
+const PROCESSING_STATUSES = [
+  'AWAITING PAYMENT',
+  'TO PROCESS',
+  'CANCEL REQUESTED',
+  'TO CANCEL',
+  'CANCELLING',
+  'RETURN REQUESTED',
+  'PREPARING',
+  'CONFIRMED',
+  'IN PRODUCTION',
+  'FOR PRE-ORDER',
+  'PRE-ORDER',
+]
+const CANCELLED_STATUSES = ['CANCELLED', 'CANCEL', 'CANCELED', 'RETURNED', 'REFUNDED', 'UNCLAIMED']
+
+function orderStatusGroup(order, fulfillment) {
+  const status = String(order.status || '').trim().toUpperCase().replace(/_/g, ' ')
+  if (CANCELLED_STATUSES.includes(status)) return 'cancelled'
+  if (PROCESSING_STATUSES.includes(status)) return 'processing'
+
+  if (fulfillment === 'pickup') {
+    if (
+      ['TO CLAIM', 'READY FOR PICK UP', 'READY FOR PICKUP', 'READY FOR PICK-UP', 'PICK UP', 'PICK-UP'].includes(
+        status
+      )
+    ) {
+      return 'ready'
+    }
+    if (['CLAIMED', 'RECEIVED', 'COMPLETED'].includes(status)) return 'claimed'
+  } else {
+    if (
+      ['TO DELIVER', 'READY TO SHIP', 'DELIVERING', 'IN TRANSIT', 'TRANSIT', 'TO RECEIVE'].includes(
+        status
+      )
+    ) {
+      return 'shipped'
+    }
+    if (['DELIVERED', 'RECEIVED', 'COMPLETED'].includes(status)) return 'delivered'
+  }
+
+  return 'processing'
+}
+
+function initialFulfillment(searchParams) {
+  const requested = searchParams.get('fulfillment')
+  if (requested === 'pickup' || requested === 'delivery') return requested
+
+  const legacyStatus = String(searchParams.get('status') || '').toLowerCase()
+  if (legacyStatus === 'for_delivery') return 'delivery'
+  if (legacyStatus === 'for_pickup') return 'pickup'
+
+  try {
+    const saved = window.localStorage.getItem('orders-fulfillment')
+    if (saved === 'pickup' || saved === 'delivery') return saved
+  } catch (err) {
+    console.warn('Unable to read saved order fulfillment preference:', err?.message)
+  }
+  return 'pickup'
+}
+
+function initialStatusTab(searchParams, fulfillment) {
+  const requestedTab = searchParams.get('tab')
+  if (STATUS_TABS[fulfillment].some((tab) => tab.key === requestedTab)) return requestedTab
+
+  const status = String(searchParams.get('status') || requestedTab || '').toLowerCase()
+  if (['processing', 'to_process', 'to pay'].includes(status)) return 'processing'
+  if (['for_pickup', 'to_claim', 'to-claim', 'ready to ship'].includes(status)) {
+    return fulfillment === 'pickup' ? 'ready' : 'shipped'
+  }
+  if (['for_delivery', 'to_deliver', 'delivering', 'in transit', 'to_receive'].includes(status)) {
+    return fulfillment === 'delivery' ? 'shipped' : 'ready'
+  }
+  if (['claimed', 'received', 'completed'].includes(status)) {
+    return fulfillment === 'pickup' ? 'claimed' : 'delivered'
+  }
+  if (['unclaimed', 'cancelled', 'canceled', 'returned', 'refunded'].includes(status)) {
+    return 'cancelled'
+  }
+  return 'all'
+}
 
 /** Friendly line under the status pill (SRS status vocabulary). */
 export const STATUS_CONTEXT = {
@@ -191,35 +274,9 @@ function Orders() {
   const { showToast } = useToast()
   const { currentUser } = useAuth()
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
-
-  const statusToTab = {
-    processing: 'processing',
-    to_process: 'processing',
-    for_pickup: 'to-claim',
-    for_delivery: 'to-claim',
-    to_claim: 'to-claim',
-    to_deliver: 'to-claim',
-    'to deliver': 'to-claim',
-    'ready to ship': 'to-claim',
-    'to pay': 'processing',
-    claimed: 'claimed',
-    received: 'claimed',
-    completed: 'claimed',
-    unclaimed: 'unclaimed',
-    cancelled: 'cancelled',
-  }
-  const initialTab =
-    statusToTab[String(searchParams.get('status') || '').toLowerCase()] ||
-    searchParams.get('tab') ||
-    'all'
-  const [activeTab, setActiveTab] = useState(
-    tabs.some((tab) => tab.key === initialTab) ? initialTab : 'all'
-  )
-  // `orders` is always the FULL list (used for the tab counts); `bucket` is
-  // the server-filtered answer for one FLOW-ORD_LIST-03 bucket, remembered
-  // with its key so a stale answer can never paint under another tab.
+  const [fulfillment, setFulfillment] = useState(() => initialFulfillment(searchParams))
+  const [activeTab, setActiveTab] = useState(() => initialStatusTab(searchParams, fulfillment))
   const [orders, setOrders] = useState([])
-  const [bucket, setBucket] = useState({ key: null, rows: null })
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
   const [cancelTarget, setCancelTarget] = useState(null)
@@ -264,7 +321,6 @@ function Orders() {
     async ({ silent = false } = {}) => {
       if (!custId) {
         setOrders([])
-        setBucket({ key: null, rows: null })
         setLoading(false)
         return
       }
@@ -273,21 +329,8 @@ function Orders() {
       if (showSpinner) setLoading(true)
 
       try {
-        const needsBucket = SERVER_TABS.includes(activeTab)
-        const [baseRows, bucketRows] = await Promise.all([
-          fetchOrders(custId),
-          needsBucket
-            ? fetchOrders(custId, activeTab).catch((err) => {
-                console.warn('Order bucket load failed:', err?.message)
-                return null
-              })
-            : Promise.resolve(null),
-        ])
+        const baseRows = await fetchOrders(custId)
         setOrders((baseRows || []).map(mapServerOrder))
-        setBucket({
-          key: needsBucket ? activeTab : null,
-          rows: bucketRows ? bucketRows.map(mapServerOrder) : null,
-        })
       } catch (err) {
         console.warn('Failed to load orders:', err?.message)
         // Polls fail silently and keep the list already on screen.
@@ -297,8 +340,16 @@ function Orders() {
         if (showSpinner) setLoading(false)
       }
     },
-    [custId, activeTab, showToast]
+    [custId, showToast]
   )
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('orders-fulfillment', fulfillment)
+    } catch (err) {
+      console.warn('Unable to save order fulfillment preference:', err?.message)
+    }
+  }, [fulfillment])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -363,33 +414,59 @@ function Orders() {
     }
   }, [custId, load, version])
 
+  const fulfillmentOrders = useMemo(
+    () =>
+      orders.filter((order) =>
+        fulfillment === 'delivery'
+          ? order.fulfillment?.method === 'Courier Delivery'
+          : order.fulfillment?.method !== 'Courier Delivery'
+      ),
+    [orders, fulfillment]
+  )
+
   const counts = useMemo(() => {
-    const totals = { all: orders.length, 'pre-order': 0 }
-    SERVER_TABS.forEach((key) => {
-      totals[key] = 0
+    const totals = { all: fulfillmentOrders.length }
+    STATUS_TABS[fulfillment].forEach((tab) => {
+      if (tab.key !== 'all') totals[tab.key] = 0
     })
-    orders.forEach((order) => {
-      if (order.preOrder) totals['pre-order'] += 1
-      const bucketKey = orderFilterBucket(order.rawStatus)
-      if (bucketKey) totals[bucketKey] += 1
+    fulfillmentOrders.forEach((order) => {
+      const group = orderStatusGroup(order, fulfillment)
+      totals[group] = (totals[group] || 0) + 1
     })
     return totals
-  }, [orders])
+  }, [fulfillment, fulfillmentOrders])
 
-  const filteredOrders = useMemo(() => {
-    if (activeTab === 'pre-order') return orders.filter((o) => o.preOrder)
-    if (SERVER_TABS.includes(activeTab)) {
-      if (bucket.key === activeTab && bucket.rows) return bucket.rows
-      // While the scoped request is in flight (or if it failed) the bucket is
-      // mirrored locally with the same status lists the server applies.
-      return orders.filter((o) => orderFilterBucket(o.rawStatus) === activeTab)
-    }
-    return orders
-  }, [orders, bucket, activeTab])
+  const filteredOrders = useMemo(
+    () =>
+      activeTab === 'all'
+        ? fulfillmentOrders
+        : fulfillmentOrders.filter((order) => orderStatusGroup(order, fulfillment) === activeTab),
+    [activeTab, fulfillment, fulfillmentOrders]
+  )
+
+  const selectFulfillment = (key) => {
+    setFulfillment(key)
+    setActiveTab('all')
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current)
+      params.delete('status')
+      params.delete('order')
+      params.delete('tab')
+      params.set('fulfillment', key)
+      return params
+    }, { replace: true })
+  }
 
   const selectTab = (key) => {
     setActiveTab(key)
-    setSearchParams(key === 'all' ? {} : { tab: key }, { replace: true })
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current)
+      params.delete('status')
+      params.set('fulfillment', fulfillment)
+      if (key === 'all') params.delete('tab')
+      else params.set('tab', key)
+      return params
+    }, { replace: true })
   }
 
   const handleCopyOrderId = (e, orderId) => {
@@ -448,65 +525,83 @@ function Orders() {
       containerClassName="max-w-4xl"
     >
       <div className="pb-24 animate-fade-in w-full space-y-4">
-        {/* Horizontally scrollable Filter pills - strictly single line with scroll arrows */}
-        <div className="relative flex items-center px-1 py-1">
-          <button
-            type="button"
-            onClick={() => {
-              const el = document.getElementById('orders-filter-container')
-              if (el) el.scrollBy({ left: -160, behavior: 'smooth' })
-            }}
-            className="hidden sm:flex items-center justify-center w-7 h-7 rounded-full bg-white dark:bg-[var(--surface)] border border-gray-200 dark:border-[var(--line)] shadow-xs text-gray-500 hover:text-gray-700 dark:hover:text-white shrink-0 mr-1 z-10 cursor-pointer"
-            aria-label="Scroll filters left"
-          >
-            ‹
-          </button>
-          <div
-            id="orders-filter-container"
-            className="flex gap-2 overflow-x-auto py-1.5 scrollbar-none select-none flex-nowrap whitespace-nowrap flex-1 scroll-smooth"
-          >
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.key
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => selectTab(tab.key)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all border cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                    isActive
-                      ? 'bg-brand-orange border-brand-orange text-white shadow-sm'
-                      : 'bg-white dark:bg-[var(--surface)] border-gray-200 dark:border-[var(--line)] text-gray-600 dark:text-[var(--muted)] hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+        <div className="w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3 scrollbar-none dark:border-[var(--line)] dark:bg-[var(--surface)] sm:p-3.5">
+          <div className="flex w-max min-w-full items-center gap-4">
+          <section className="shrink-0 pr-4" aria-labelledby="fulfillment-filter-heading">
+            <h2
+              id="fulfillment-filter-heading"
+              className="mb-2 text-xs font-bold text-slate-800 dark:text-[var(--ink)]"
+            >
+              Fulfillment Method
+            </h2>
+            <div className="flex flex-nowrap gap-1.5" role="group" aria-label="Filter orders by fulfillment">
+              {FULFILLMENT_OPTIONS.map((option) => {
+                const isActive = fulfillment === option.key
+                const FulfillmentIcon = option.key === 'pickup' ? StoreIcon : TruckIcon
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => selectFulfillment(option.key)}
+                    className={`inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                       isActive
-                        ? 'bg-white/20 text-white'
-                        : 'bg-gray-100 dark:bg-[var(--surface-3)] text-gray-500 dark:text-[var(--muted)]'
+                        ? 'border-brand-orange bg-brand-orange text-white shadow-sm'
+                        : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 dark:border-[var(--line-2)] dark:bg-[var(--surface)] dark:text-[var(--ink-2)]'
                     }`}
                   >
-                    {counts[tab.key] ?? 0}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              const el = document.getElementById('orders-filter-container')
-              if (el) el.scrollBy({ left: 160, behavior: 'smooth' })
-            }}
-            className="hidden sm:flex items-center justify-center w-7 h-7 rounded-full bg-white dark:bg-[var(--surface)] border border-gray-200 dark:border-[var(--line)] shadow-xs text-gray-500 hover:text-gray-700 dark:hover:text-white shrink-0 ml-1 z-10 cursor-pointer"
-            aria-label="Scroll filters right"
+                    <FulfillmentIcon className="h-3.5 w-3.5" />
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
+          <div className="h-12 w-px shrink-0 bg-slate-300 dark:bg-[var(--line)]" aria-hidden="true" />
+
+          <section
+            className="shrink-0"
+            aria-labelledby="order-status-filter-heading"
           >
-            ›
-          </button>
+            <h2
+              id="order-status-filter-heading"
+              className="mb-2 text-xs font-bold text-slate-800 dark:text-[var(--ink)]"
+            >
+              Order Status
+            </h2>
+            <div
+              className="flex flex-nowrap items-center gap-1.5"
+              role="group"
+              aria-label={`${fulfillment === 'pickup' ? 'Pickup' : 'Delivery'} order status`}
+            >
+              {STATUS_TABS[fulfillment].map((tab) => {
+                const isActive = activeTab === tab.key
+                const count = counts[tab.key] ?? 0
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => selectTab(tab.key)}
+                    className={`inline-flex min-h-8 items-center justify-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                      isActive
+                        ? 'border-brand-orange bg-brand-orange text-white shadow-sm'
+                        : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 dark:border-[var(--line-2)] dark:bg-[var(--surface)] dark:text-[var(--ink-2)]'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={count === 0 ? 'opacity-50' : undefined}>({count})</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+          </div>
         </div>
 
       {/* Single Vertical Column Layout */}
-      <div className="px-4 py-6 pb-32 animate-fade-in max-w-3xl mx-auto space-y-4">
+      <div className="w-full px-0 py-6 pb-32 animate-fade-in space-y-4">
         {loading ? (
           <div className="space-y-4" aria-busy={loading} aria-live="polite">
             <span className="sr-only">Loading your orders</span>
@@ -542,7 +637,9 @@ function Orders() {
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center border border-gray-100 mb-2">
               <PackageIcon className="w-7 h-7 text-gray-400" />
             </div>
-            <h3 className="font-semibold text-gray-800 mt-3 text-lg">No orders in this category</h3>
+            <h3 className="font-semibold text-gray-800 mt-3 text-lg">
+              No {fulfillment} orders in this category
+            </h3>
             <p className="text-sm text-gray-450 mt-1 max-w-[260px] mx-auto">
               Your BU campus merchandise orders will show up here as their status updates.
             </p>
@@ -597,22 +694,6 @@ function Orders() {
                         </svg>
                       </button>
 
-                      {/* Fulfillment chip */}
-                      {isDelivery ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold">
-                          <LockIcon className="w-2.5 h-2.5 text-slate-600" />
-                          Courier Delivery
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
-                          Store Pickup
-                        </span>
-                      )}
-                      {order.preOrder && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-semibold">
-                          Pre-order
-                        </span>
-                      )}
                     </div>
 
                     <p className="text-xs text-gray-500 mt-0.5">
@@ -620,77 +701,9 @@ function Orders() {
                     </p>
                   </div>
 
-                  {/* Level 2: Prominent Status Pill & Context */}
+                  {/* Level 2: Primary status badge */}
                   <div className="text-right">
-                    <StatusBadge status={order.status} />
-                    {order.statusContext && (
-                      <p className="text-[11px] text-gray-500 font-medium mt-1 max-w-[200px] sm:max-w-none">
-                        {order.statusContext}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── Level 3: Fulfillment Information ── */}
-                <div className="px-3.5 sm:px-4 py-2.5 bg-blue-50/40 border-b border-blue-100/50 flex items-center justify-between gap-2 flex-wrap text-xs text-blue-950 font-medium">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="shrink-0">
-                      {isDelivery ? (
-                        <TruckIcon className="w-3.5 h-3.5 text-brand-orange" />
-                      ) : (
-                        <MapPinIcon className="w-3.5 h-3.5 text-blue-600" />
-                      )}
-                    </span>
-                    <span className="font-semibold">
-                      {order.fulfillment?.method || 'Store Pickup'}:
-                    </span>
-                    <span className="text-blue-900 truncate">
-                      {order.fulfillment?.location || 'Tindahan ni Isko · BU Student Center'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {hasPickupQr && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPickupQrTarget({
-                            orderId: order.id,
-                            qr: pickupQrCode,
-                            title: `Pickup Claim Pass · Order #${order.id}`,
-                            status: order.status,
-                            date: order.date,
-                            fulfillment: order.fulfillment,
-                          })
-                        }
-                        className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs hover:shadow-xs active:scale-98 transition-all cursor-pointer"
-                        title="Show scannable Claim QR code for counter staff"
-                      >
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="3" width="7" height="7" />
-                          <rect x="14" y="3" width="7" height="7" />
-                          <rect x="14" y="14" width="7" height="7" />
-                          <rect x="3" y="14" width="7" height="7" />
-                        </svg>
-                        <span>Show Pickup QR</span>
-                      </button>
-                    )}
-                    {order.status === 'READY TO SHIP' && !(Number(order.raw?.deliver_fee_charged) > 0) && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOrder(order)}
-                        className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-brand-orange text-white hover:bg-brand-orange-dark shadow-2xs hover:shadow-xs active:scale-98 transition-all cursor-pointer"
-                        title="Complete delivery details and pay delivery fee"
-                      >
-                        <TruckIcon className="w-3.5 h-3.5" />
-                        <span>Pay Courier Fee</span>
-                      </button>
-                    )}
-                    {RECEIVING.includes(order.status) && !hasPickupQr && !(order.status === 'READY TO SHIP' && !(Number(order.raw?.deliver_fee_charged) > 0)) && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                        {order.status === 'TO CLAIM' ? 'Claim QR ready' : 'Tracking active'}
-                      </span>
-                    )}
+                    <StatusBadge status={order.status} appearance="status-pill" />
                   </div>
                 </div>
 
@@ -723,19 +736,12 @@ function Orders() {
                             Size: <strong className="text-gray-900">{order.size}</strong>
                           </span>
                         )}
-                        {order.size && order.color && <span className="text-gray-300">·</span>}
                         {order.color && (
                           <span className="flex items-center gap-1.5">
                             Color:{' '}
-                            <span
-                              className="w-2.5 h-2.5 rounded-full border border-gray-300 inline-block shrink-0"
-                              style={{ backgroundColor: order.color.value || order.color.name }}
-                              title={order.color.name}
-                            />
                             <strong className="text-gray-900">{order.color.name}</strong>
                           </span>
                         )}
-                        {order.size && <span className="text-gray-300">·</span>}
                         <span>
                           Qty: <strong className="text-gray-900">{order.qty}</strong>
                         </span>
@@ -761,6 +767,18 @@ function Orders() {
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    {order.status === 'READY TO SHIP' && !(Number(order.raw?.deliver_fee_charged) > 0) && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOrder(order)}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange-dark shadow-2xs transition-colors cursor-pointer"
+                        title="Complete delivery details and pay delivery fee"
+                      >
+                        <TruckIcon className="w-3.5 h-3.5" />
+                        <span>Pay Courier Fee</span>
+                      </button>
+                    )}
+
                     {/* Prominent Pickup QR code presentation button (easily accessible on order card) */}
                     {hasPickupQr && (
                       <button
@@ -830,10 +848,21 @@ function Orders() {
                       <button
                         type="button"
                         disabled={busyId === order.id}
+                        aria-busy={busyId === order.id}
                         onClick={() => setCancelTarget(order)}
-                        className="px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
+                        className="min-w-[104px] px-3.5 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                       >
-                        {busyId === order.id ? <><LoadingSpinner size={14} /> Sending…</> : 'Cancel Order'}
+                        {busyId === order.id ? (
+                          <>
+                            <span
+                              className="w-3.5 h-3.5 rounded-full border-2 border-rose-700/25 border-t-rose-700 animate-spin"
+                              aria-hidden="true"
+                            />
+                            <span className="sr-only">Requesting cancellation…</span>
+                          </>
+                        ) : (
+                          'Cancel Order'
+                        )}
                       </button>
                     )}
 
@@ -861,11 +890,11 @@ function Orders() {
                     {/* Primary Action — Standardized Order Details Popup */}
                     <button
                       type="button"
+                      disabled={busyId === order.id}
                       onClick={() => setSelectedOrder(order)}
-                      className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-all shadow-2xs hover:shadow-xs active:scale-98 flex items-center gap-1.5 cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-all shadow-2xs hover:shadow-xs active:scale-98 flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
                     >
                       <span>View Order Details</span>
-                      <span>→</span>
                     </button>
                   </div>
                 </div>
@@ -955,12 +984,6 @@ function Orders() {
               <span className="text-gray-400 font-medium">Order Reference:</span>
               <span className="font-mono font-bold text-gray-900">
                 #{pickupQrTarget?.orderId}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-gray-600">
-              <span className="text-gray-400 font-medium">Verification Code:</span>
-              <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-2xs truncate max-w-[170px]">
-                {pickupQrTarget?.qr}
               </span>
             </div>
           </div>

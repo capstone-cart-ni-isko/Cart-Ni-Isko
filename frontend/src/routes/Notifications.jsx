@@ -106,6 +106,19 @@ function mapNotification(row, index) {
   const created = row.custnotif_created ?? row.empnotif_created ?? row.created_at
   const details = inferNotificationDetails(message)
 
+  // A rejected cancellation must read as its own outcome, not a generic
+  // "Order Update": the customer needs the decision spelled out.
+  if (/cancellation request was not approved/i.test(message)) {
+    details.category = 'orders'
+    details.title = 'Cancellation Not Approved'
+    details.tag = 'Not Approved'
+    details.icon = 'alert'
+    details.iconBg =
+      'bg-rose-50 text-rose-600 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60'
+    details.tagClass =
+      'bg-rose-50 text-rose-700 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/60'
+  }
+
   return {
     id: row.custnotif_id ?? row.empnotif_id ?? row.id ?? `notif-${index}`,
     category: details.category,
@@ -169,8 +182,7 @@ export default function Notifications() {
   }, [load, version])
 
   /**
-   * Clicking a notification marks it read and opens its target. A card's
-   * explicit "Mark as Read" action calls the same helper without navigating.
+   * Clicking a notification marks it read and opens its target.
    */
   const markNotificationRead = (notif) => {
     if (!notif?.id || !notif.unread) return
@@ -205,7 +217,6 @@ export default function Notifications() {
   }
 
   // Calculate badge counts
-  const countAll = items.length
   const countUnread = items.filter((n) => n.unread).length
   const countOrders = items.filter((n) => n.category === 'orders' || n.category === 'payment').length
   const countProduction = items.filter((n) => n.category === 'production' || n.category === 'inventory').length
@@ -290,15 +301,13 @@ export default function Notifications() {
                 )
               })}
             </div>
-            {unreadTotal > 0 && (
-              <button
-                type="button"
-                onClick={markAllAsRead}
-                className="shrink-0 mb-2 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:text-brand-orange-dark hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
-              >
-                Mark All as Read
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={markAllAsRead}
+              className="shrink-0 mb-2 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:text-brand-orange-dark hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
+            >
+              Mark All as Read
+            </button>
           </div>
         </nav>
 
@@ -366,9 +375,8 @@ export default function Notifications() {
                   key={item.id}
                   notification={item}
                   onClick={handleNotificationClick}
-                  onMarkRead={markNotificationRead}
-                  onViewDetails={handleNotificationClick}
                   showMeta={false}
+                  actionLabel="View details"
                 />
               ))
             )}
@@ -405,14 +413,6 @@ export default function Notifications() {
         size="sm"
         footer={
           <div className="flex flex-wrap items-center justify-end w-full gap-2">
-            <button
-              type="button"
-              disabled={!selectedNotif?.unread}
-              onClick={() => markNotificationRead(selectedNotif)}
-              className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-[var(--line)] text-xs font-semibold text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange disabled:opacity-50 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-colors cursor-pointer disabled:cursor-default"
-            >
-              Mark as Read
-            </button>
             {selectedNotif?.targetUrl && (
               <button
                 type="button"

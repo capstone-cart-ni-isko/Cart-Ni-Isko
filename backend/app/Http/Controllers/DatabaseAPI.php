@@ -802,6 +802,13 @@ class DatabaseAPI extends Controller
             'prod_qty'   => 'nullable|integer|min:0',
             'prodvar_id' => 'nullable|integer|exists:prodvar,prodvar_id',
             'prod_desc'  => 'nullable|string',
+            // FLOW-MANAGE_INV-05: the customer-facing spec block edited from
+            // the product page. One JSON object, four known sections.
+            'prod_details'                 => 'nullable|array',
+            'prod_details.material'        => 'nullable|string',
+            'prod_details.sizeFit'         => 'nullable|string',
+            'prod_details.care'            => 'nullable|string',
+            'prod_details.shippingReturns' => 'nullable|string',
         ], [
             'prod_id.exists'     => 'Product not found.',
             'prodvar_id.exists'  => 'Product variation not found.',

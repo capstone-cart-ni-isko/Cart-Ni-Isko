@@ -131,9 +131,10 @@ function AccountInfo() {
         // save, so it travels only to keep the read-only field round-tripping.
         cust_email: form.email,
         cust_phone: form.phone,
-        cust_college: form.college,
-        cust_dept: form.course,
-        cust_categ: form.yearLevel !== 'N/A' ? form.yearLevel : null,
+        cust_campus: form.campus && form.campus !== 'N/A' ? form.campus : null,
+        cust_college: form.college && form.college !== 'N/A' ? form.college : null,
+        cust_dept: form.course && form.course !== 'N/A' ? form.course : null,
+        cust_categ: form.yearLevel && form.yearLevel !== 'N/A' ? form.yearLevel : null,
         cust_pronoun: form.pronoun,
         cust_bday: form.birthday,
         cust_callcode: form.callcode,
@@ -154,6 +155,7 @@ function AccountInfo() {
         cust_phone: form.phone,
         yearLevel: form.yearLevel,
         campus: form.campus,
+        cust_campus: form.campus,
         college: form.college,
         cust_college: form.college,
         course: form.course,
@@ -165,7 +167,29 @@ function AccountInfo() {
         callcode: form.callcode,
         cust_callcode: form.callcode,
         avatarImage: photo,
+        cust_photo: photo,
       }))
+      // Update local session so avatar persists across reloads
+      try {
+        const session = JSON.parse(localStorage.getItem('isko_session') || 'null')
+        if (session?.token) {
+          localStorage.setItem('isko_session', JSON.stringify({
+            ...session,
+            user: {
+              ...(session.user || {}),
+              avatarImage: photo,
+              cust_photo: photo,
+              cust_givname: form.givname.trim(),
+              cust_surname: form.surname.trim(),
+              yearLevel: form.yearLevel,
+              campus: form.campus,
+              college: form.college,
+              course: form.course,
+            }
+          }))
+        }
+      } catch {}
+
       setSaveState('Changes saved!')
       showToast('Profile updated successfully')
     } catch (error) {
