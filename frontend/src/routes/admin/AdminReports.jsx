@@ -9,6 +9,7 @@ import { DownloadIcon, FileTextIcon, CalendarIcon, UsersIcon, PackageIcon, SaveI
 import { apiPost, apiGet } from '../../services/api.js'
 import { empCateg, empIsActive, first, fmtDateTime, productStock, toNumber } from '../../components/admin/schema.js'
 import { normalizeProductCategory } from '../../data/productCategories.js'
+import { appointmentStatusLabel } from '../../services/appointments.js'
 import { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
 
@@ -300,7 +301,7 @@ function AdminReports() {
             doc.autoTable({
               startY: y,
               head: [['ID', 'Type', 'Date', 'Status', 'Customer']],
-              body: generatedData.items.slice(0, 50).map(a => [a.appoint_id, a.appoint_type, fmtDateTime(reportDate(a)), reportStatus(a), a.customer]),
+              body: generatedData.items.slice(0, 50).map(a => [a.appoint_id, a.appoint_type, fmtDateTime(reportDate(a)), appointmentStatusLabel(reportStatus(a)), a.customer]),
               theme: 'striped',
               headStyles: { fillColor: [249, 115, 22] },
             })
@@ -375,7 +376,7 @@ function AdminReports() {
     rows.push(['ID', 'QR', 'Type', 'Date', 'Status', 'Customer', 'Phone'])
     data.items?.forEach(a => rows.push([
       a.appoint_id, a.appoint_qr, a.appoint_type, reportDate(a),
-      reportStatus(a), a.customer, a.customer_phone
+      appointmentStatusLabel(reportStatus(a)), a.customer, a.customer_phone
     ]))
     return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
   }
@@ -523,9 +524,9 @@ function AdminReports() {
                   <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-orange focus:ring-1 focus:ring-brand-orange">
                     <option value="">All Statuses</option>
                     <option value="upcoming">Upcoming</option>
-                    <option value="done">Done</option>
+                    <option value="done">Complete</option>
                     <option value="cancelled">Cancelled</option>
-                    <option value="absent">Absent</option>
+                    <option value="absent">No Show</option>
                   </select>
                 </div>
               )}
@@ -673,7 +674,7 @@ function AdminReports() {
                             <td className="p-3 text-center">
                               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${
                                 ['UPCOMING', 'DONE', 'OPEN', 'CLAIMED', 'RECEIVED'].includes(reportStatus(a)) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                              }`}>{reportStatus(a)}</span>
+                              }`}>{appointmentStatusLabel(reportStatus(a))}</span>
                             </td>
                             <td className="p-3">{a.customer}</td>
                           </tr>

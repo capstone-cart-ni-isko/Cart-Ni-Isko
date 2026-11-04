@@ -62,10 +62,10 @@ function getCacheKey(kind, token, url) {
   return `${kind}:${token || 'anon'}:${url}`
 }
 
-/* ── 60-second localStorage mirror for non-sensitive lists (appointments,
+/* ── 30-minute localStorage mirror for non-sensitive lists (appointments,
    products, notifications). The screen paints from the mirror right away and
    the request that follows only refreshes what is already on it. ── */
-export const STORAGE_TTL = 60 * 1000
+export const STORAGE_TTL = 30 * 60 * 1000
 
 export function cacheRead(key) {
   try {

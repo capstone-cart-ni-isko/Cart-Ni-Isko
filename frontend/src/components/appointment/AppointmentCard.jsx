@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { getImageUrl } from '../../utils/imageUtils.js'
+import { appointmentStatusLabel } from '../../services/appointments.js'
 import { ShirtIcon } from '../ui/Icons.jsx'
 import TrackTimeline from './TrackTimeline.jsx'
 
@@ -41,6 +42,7 @@ function endIsFuture(end) {
 export default function AppointmentCard({ appointment, onView, onCancel, onShowQr }) {
   const { status, items } = appointment
   const canCancel = status === 'upcoming' && endIsFuture(appointment.endISO)
+  const displayStatus = appointmentStatusLabel(status)
 
   return (
     <article className="bg-white rounded-xl p-4 border border-slate-200 space-y-3">
@@ -52,7 +54,7 @@ export default function AppointmentCard({ appointment, onView, onCancel, onShowQ
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-current" />
-            {status}
+            {displayStatus}
           </span>
           <h3 className="mt-1.5 text-sm font-semibold text-slate-900 truncate">
             Appointment #{appointment.id}
@@ -162,7 +164,7 @@ export default function AppointmentCard({ appointment, onView, onCancel, onShowQ
             title={
               status === 'upcoming'
                 ? 'This slot can no longer be cancelled.'
-                : `${status === 'done' ? 'Completed' : status === 'cancelled' ? 'Cancelled' : 'Marked absent'} appointments cannot be cancelled.`
+                : `${status === 'done' ? 'Completed' : status === 'cancelled' ? 'Cancelled' : 'Marked no show'} appointments cannot be cancelled.`
             }
             className="flex-1 h-8 rounded-lg bg-slate-100 text-slate-400 text-xs font-semibold flex items-center justify-center cursor-not-allowed"
           >

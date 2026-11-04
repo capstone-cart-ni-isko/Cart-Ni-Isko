@@ -2,9 +2,10 @@ import { apiGet, apiPost, apiDelete, cacheRead, cacheWrite } from './api.js'
 import { normalizeProductCategory } from '../data/productCategories.js'
 
 /* The catalog is public and only changes when an admin edits it, so the last
-   answer per filter set is mirrored for 60s: the storefront paints instantly
-   and the request that follows only refreshes what is on screen. */
+   answer per filter set is mirrored for 30 minutes: the storefront paints
+   instantly and the request that follows only refreshes what is on screen. */
 const CACHE_KEY = (params) => `cartniisko:catalog:${JSON.stringify(params)}`
+const PRODUCT_CACHE_KEY = (id) => `cartniisko:product:${String(id)}`
 
 export function readCatalogCache(params) {
   return cacheRead(CACHE_KEY(params))
@@ -12,6 +13,14 @@ export function readCatalogCache(params) {
 
 export function writeCatalogCache(params, rows) {
   cacheWrite(CACHE_KEY(params), rows)
+}
+
+export function readProductCache(id) {
+  return cacheRead(PRODUCT_CACHE_KEY(id))
+}
+
+export function writeProductCache(id, row) {
+  cacheWrite(PRODUCT_CACHE_KEY(id), row)
 }
 
 const CATEGORY_IMAGES = {
@@ -350,6 +359,9 @@ export function mapProduct(row) {
 }
 
 export async function fetchCatalog(params = {}) {
+  const cached = readCatalogCache(params)
+  if (cached) return cached
+
   const data = await apiGet('/products/filter', { status: 'active', ...params })
   const rows = Array.isArray(data.data) ? data.data.map(mapProduct) : []
   writeCatalogCache(params, rows)
@@ -357,9 +369,15 @@ export async function fetchCatalog(params = {}) {
 }
 
 export async function fetchProduct(id) {
-  const isNumeric = /^\d+$/.test(String(id))
+  const key = String(id)
+  const cached = readProductCache(key)
+  if (cached) return cached
+
+  const isNumeric = /^\d+$/.test(key)
   const data = await apiGet('/products/view', isNumeric ? { prod_id: id } : { prod_tag: id })
-  return mapProduct(data.data)
+  const product = mapProduct(data.data)
+  if (product) writeProductCache(key, product)
+  return product
 }
 
 export async function searchProducts(q) {

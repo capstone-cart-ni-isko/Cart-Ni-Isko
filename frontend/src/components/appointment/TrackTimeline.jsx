@@ -10,7 +10,7 @@ const STEPS = [
   { key: 'booked', label: 'Booked' },
   { key: 'confirmed', label: 'Confirmed' },
   { key: 'store', label: 'In store' },
-  { key: 'done', label: 'Completed' },
+  { key: 'done', label: 'Complete' },
 ]
 
 const DONE_INDEX = { upcoming: 1, done: 3, cancelled: 0 }
@@ -24,11 +24,15 @@ export default function TrackTimeline({ status = 'upcoming', type = 'VISIT' }) {
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Track</p>
 
-      {isCancelled ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-          <p className="text-xs font-semibold text-red-700">Cancelled</p>
-          <p className="text-[11px] text-red-600 leading-snug">
-            This slot is no longer active. Book a new one to reschedule.
+      {isCancelled || status === 'absent' ? (
+        <div className={`rounded-lg border px-3 py-2 ${isCancelled ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+          <p className={`text-xs font-semibold ${isCancelled ? 'text-red-700' : 'text-amber-800'}`}>
+            {isCancelled ? 'Cancelled' : 'No Show'}
+          </p>
+          <p className={`text-[11px] leading-snug ${isCancelled ? 'text-red-600' : 'text-amber-700'}`}>
+            {isCancelled
+              ? 'This slot is no longer active. Book a new one to reschedule.'
+              : 'This appointment was missed. Book a new slot if you still need to visit the store.'}
           </p>
         </div>
       ) : (

@@ -443,16 +443,6 @@ function Cart() {
                   </div>
                 </div>
 
-                {/* Fulfillment note (Requirement 15) */}
-                <div className="bg-slate-50 rounded-lg p-3.5 text-sm text-gray-600 space-y-1.5 leading-relaxed">
-                  <p className="flex items-center gap-2 font-semibold text-gray-800">
-                    <TruckIcon className="w-4 h-4 text-brand-orange shrink-0" />
-                    <span>Campus Pickup & Delivery</span>
-                  </p>
-                  <p>
-                    Free store pickup at BU Student Center. Albay & nationwide courier rates are computed automatically based on your shipping address during checkout.
-                  </p>
-                </div>
 
                 {/* Desktop Checkout CTA Button */}
                 <div className="hidden lg:block pt-2">

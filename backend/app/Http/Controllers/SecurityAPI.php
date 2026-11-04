@@ -496,23 +496,6 @@ class SecurityAPI extends Controller
 
             $newPassword = (string) $json->input('new_password');
 
-            $employeeCategory = $isEmployee
-                ? (string) ($user->emp_categ ?: $user->emp_type)
-                : '';
-            $isSuperAdmin = in_array(
-                strtoupper(str_replace([' ', '-'], '_', trim($employeeCategory))),
-                ['SUPER_ADMIN', 'SUPERADMIN'],
-                true
-            );
-
-            if ($isSuperAdmin && ! EmployeePassword::meetsStandard($newPassword)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Super admin passwords must be at least 16 characters and include an uppercase letter, a lowercase letter, a number and a symbol.',
-                    'code' => 'WEAK_PASSWORD',
-                ], 422);
-            }
-
             if ($isEmployee) {
                 $user->emp_password = EmployeePassword::make($newPassword);
                 $user->emp_login_active = null;

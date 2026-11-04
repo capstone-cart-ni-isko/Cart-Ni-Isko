@@ -52,7 +52,7 @@ function SignIn() {
   // reload, a tab switch and a rejected attempt - only the password is kept
   // in React state, never written to storage.
   const [form, setForm] = useState(readDraft)
-  const [touched, setTouched] = useState({})
+  const [fieldErrors, setFieldErrors] = useState({})
   const [serverError, setServerError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -68,50 +68,29 @@ function SignIn() {
   function handleChange(e) {
     const { name, value } = e.target
     setForm((prev) => ({ ...prev, [name]: value }))
+    setFieldErrors((prev) => ({ ...prev, [name]: '' }))
     // REQ-CUST_LOGIN-03: an error is dropped the moment the field is fixed.
     setServerError('')
   }
 
-  /**
-   * FLOW-CUST_LOGIN-05 / REQ-CUST_LOGIN-05: specific feedback per field, and
-   * only once the customer has actually been in that field.
-   */
-  function fieldError(name) {
-    if (!touched[name]) return ''
-    const value = String(form[name] || '').trim()
-
-    if (name === 'identifier') {
-      if (!value) return 'Enter your phone number.'
-      if (value.replace(/\D/g, '').length < 10) {
-        return 'Enter a valid phone number.'
-      }
-      return ''
-    }
-
-    if (name === 'password') {
-      if (!value) return 'Enter your password.'
-      if (value.length < 8) return 'Password must be at least 8 characters.'
-    }
-
-    return ''
-  }
-
-  const identifierError = fieldError('identifier')
-  const passwordError = fieldError('password')
-  const identifierOk =
-    form.identifier.trim().length > 0 && !identifierError && touched.identifier
-  const formValid =
-    Boolean(!identifierError && !passwordError && form.identifier.trim() && form.password)
-
   async function handleSubmit(e) {
     e.preventDefault()
 
-    // Never submit blind: mark every field so each problem is on screen.
-    setTouched({ identifier: true, password: true })
-    if (identifierError || passwordError || !form.identifier.trim() || !form.password) return
+    const errors = {}
+    const identifier = form.identifier.trim()
+    if (!identifier) errors.identifier = 'Enter your phone number.'
+    else if (identifier.replace(/\D/g, '').length < 10) {
+      errors.identifier = 'Enter a valid phone number.'
+    }
+
+    if (!form.password.trim()) errors.password = 'Enter your password.'
+    else if (form.password.length < 8) errors.password = 'Password must be at least 8 characters.'
+
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
 
     setIsSubmitting(true)
-    const result = await login(form.identifier.trim(), form.password)
+    const result = await login(identifier, form.password)
     setIsSubmitting(false)
 
     // FLOW-CUST_LOGIN-02: the password was right but the OTP gate opened.
@@ -166,24 +145,15 @@ function SignIn() {
           placeholder="09XX XXX XXXX"
           value={form.identifier}
           onChange={handleChange}
-          onFocus={() => {
-            warmApi()
-            setTouched((prev) => (prev.identifier ? prev : { ...prev, identifier: true }))
-          }}
-          onBlur={() => setTouched((prev) => ({ ...prev, identifier: true }))}
-          aria-invalid={identifierError ? 'true' : undefined}
+          onFocus={warmApi}
+          aria-invalid={fieldErrors.identifier ? 'true' : undefined}
           className={`field-input field-input--lg pr-10 ${
-            identifierError ? 'field-input--error' : ''
+            fieldErrors.identifier ? 'field-input--error' : ''
           }`}
         />
-        {identifierOk && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-[#16A34A] text-white text-xs font-semibold animate-scale-in">
-            ✓
-          </span>
-        )}
       </div>
-      {identifierError && <p className="field-error">{identifierError}</p>}
-      {!identifierError && (
+      {fieldErrors.identifier && <p className="field-error">{fieldErrors.identifier}</p>}
+      {!fieldErrors.identifier && (
         <p className="field-hint">
           Enter the phone number registered to your account.
         </p>
@@ -208,13 +178,11 @@ function SignIn() {
           placeholder="Enter password"
           value={form.password}
           onChange={handleChange}
-          onFocus={() => {
-            warmApi()
-            setTouched((prev) => (prev.password ? prev : { ...prev, password: true }))
-          }}
-          onBlur={() => setTouched((prev) => ({ ...prev, password: true }))}
-          aria-invalid={passwordError ? 'true' : undefined}
-          className="field-input field-input--lg pr-20"
+          onFocus={warmApi}
+          aria-invalid={fieldErrors.password ? 'true' : undefined}
+          className={`field-input field-input--lg pr-20 ${
+            fieldErrors.password ? 'field-input--error' : ''
+          }`}
         />
         <button
           type="button"
@@ -224,7 +192,7 @@ function SignIn() {
           {showPassword ? 'Hide' : 'Show'}
         </button>
       </div>
-      {passwordError && <p className="field-error">{passwordError}</p>}
+      {fieldErrors.password && <p className="field-error">{fieldErrors.password}</p>}
     </div>
   )
 
@@ -524,9 +492,9 @@ function SignIn() {
 
           <button
             type="submit"
-            disabled={!formValid || isSubmitting}
+            disabled={isSubmitting}
             className={`btn btn--lg btn--block rounded-xl font-semibold shadow-xs transition-all ${
-              formValid && !isSubmitting
+              !isSubmitting
                 ? 'btn--primary text-white cursor-pointer btn-press'
                 : 'btn--secondary cursor-not-allowed opacity-60'
             }`}

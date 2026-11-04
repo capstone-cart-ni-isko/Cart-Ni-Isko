@@ -1,4 +1,5 @@
 import TrackTimeline from './TrackTimeline.jsx'
+import { appointmentStatusLabel } from '../../services/appointments.js'
 import Modal from '../ui/Modal.jsx'
 import Button from '../ui/Button.jsx'
 
@@ -54,7 +55,7 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit, 
         </div>
 
         <div className="p-4 bg-[var(--surface-2)] rounded-2xl border border-[var(--line)] shadow-2xs">
-          <Row label="Status" value={appointment.status} />
+          <Row label="Status" value={appointmentStatusLabel(appointment.status)} />
           <Row label="Type" value={TYPE_LABEL[appointment.type] || appointment.type} />
           <Row label="Date" value={[appointment.date, appointment.dayOfWeek].filter(Boolean).join(', ')} />
           <Row label="Time" value={appointment.time} />

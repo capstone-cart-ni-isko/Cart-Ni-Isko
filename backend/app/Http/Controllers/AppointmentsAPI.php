@@ -662,7 +662,7 @@ class AppointmentsAPI extends Controller
                         'success' => true,
                         'message' => $requestedStatus === 'done'
                             ? 'Appointment completed successfully'
-                            : 'Appointment marked as absent',
+                            : 'Appointment marked as a no-show',
                         'data' => $appointment->fresh()
                     ], 200);
                 }
@@ -932,11 +932,16 @@ class AppointmentsAPI extends Controller
                     $builder->whereNull('appoint_closed')
                         ->whereBetween('appoint_start', [now()->startOfDay(), now()->endOfDay()]);
                 } elseif ($status === 'done') {
-                    $builder->whereNotNull('appoint_closed')
-                        ->where(function ($closed) {
-                            $closed->whereNull('appoint_status')
-                                ->orWhereNotIn('appoint_status', ['absent', 'cancelled']);
-                        });
+                    $builder->where(function ($done) {
+                        $done->whereIn('appoint_status', ['done', 'complete', 'completed', 'claimed', 'closed'])
+                            ->orWhere(function ($closed) {
+                                $closed->whereNotNull('appoint_closed')
+                                    ->where(function ($legacy) {
+                                        $legacy->whereNull('appoint_status')
+                                            ->orWhereNotIn('appoint_status', ['absent', 'cancelled']);
+                                    });
+                            });
+                    });
                 } elseif ($status === 'upcoming') {
                     $builder->where('appoint_status', 'upcoming')
                         ->whereNull('appoint_closed')

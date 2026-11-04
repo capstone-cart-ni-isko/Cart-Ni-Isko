@@ -7,9 +7,11 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Prodvar;
 use App\Models\Review;
+use App\Support\ProductCatalogCache;
 use App\Support\SystemSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -974,29 +976,33 @@ class ProductsAPI extends Controller
                     $query->whereNull('prod_disabled')->whereNull('prod_deleted');
                 }
 
-                $products = $query->orderBy('prod_name')->get();
-                $rows = self::presentMany($products);
-                if ($categ) {
-                    $wantedCategory = self::normalizeCategory($categ);
-                    $rows = array_values(array_filter(
-                        $rows,
-                        fn ($row) => self::normalizeCategory(
-                            (string) ($row['prod_categ'] ?? ''),
-                            (string) ($row['prod_name'] ?? '')
-                        ) === $wantedCategory
-                    ));
-                }
+                $rows = ProductCatalogCache::rememberList($status, $categ, $stock, function () use ($query, $categ, $stock, $lowStockThreshold) {
+                    $products = $query->orderBy('prod_name')->get();
+                    $rows = self::presentMany($products);
+                    if ($categ) {
+                        $wantedCategory = self::normalizeCategory($categ);
+                        $rows = array_values(array_filter(
+                            $rows,
+                            fn ($row) => self::normalizeCategory(
+                                (string) ($row['prod_categ'] ?? ''),
+                                (string) ($row['prod_name'] ?? '')
+                            ) === $wantedCategory
+                        ));
+                    }
 
-                if ($stock === 'in_stock') {
-                    $rows = array_values(array_filter($rows, fn ($row) => (int) $row['prod_qty'] > 0));
-                } elseif ($stock === 'out_of_stock') {
-                    $rows = array_values(array_filter($rows, fn ($row) => (int) $row['prod_qty'] === 0));
-                } elseif ($stock === 'low_stock') {
-                    $rows = array_values(array_filter(
-                        $rows,
-                        fn ($row) => (int) $row['prod_qty'] <= $lowStockThreshold
-                    ));
-                }
+                    if ($stock === 'in_stock') {
+                        $rows = array_values(array_filter($rows, fn ($row) => (int) $row['prod_qty'] > 0));
+                    } elseif ($stock === 'out_of_stock') {
+                        $rows = array_values(array_filter($rows, fn ($row) => (int) $row['prod_qty'] === 0));
+                    } elseif ($stock === 'low_stock') {
+                        $rows = array_values(array_filter(
+                            $rows,
+                            fn ($row) => (int) $row['prod_qty'] <= $lowStockThreshold
+                        ));
+                    }
+
+                    return $rows;
+                });
 
                 $this->logView($json, 'catalog');
 
@@ -1018,26 +1024,30 @@ class ProductsAPI extends Controller
         public function productCategories(Request $json)
         {
             try {
-                $inUse = Product::whereNull('prod_deleted')
-                    ->get(['prod_name', 'prod_categ'])
-                    ->map(fn (Product $product) => self::normalizeCategory(
-                        (string) $product->prod_categ,
-                        (string) $product->prod_name
-                    ))
-                    ->all();
+                $categories = ProductCatalogCache::rememberCategories(function () {
+                    $inUse = Product::whereNull('prod_deleted')
+                        ->get(['prod_name', 'prod_categ'])
+                        ->map(fn (Product $product) => self::normalizeCategory(
+                            (string) $product->prod_categ,
+                            (string) $product->prod_name
+                        ))
+                        ->all();
 
-                $merged = [];
-                foreach (array_merge(self::categoryWhitelist(), $inUse) as $categ) {
-                    $key = strtolower($categ);
-                    if (! isset($merged[$key])) {
-                        $merged[$key] = $categ;
+                    $merged = [];
+                    foreach (array_merge(self::categoryWhitelist(), $inUse) as $categ) {
+                        $key = strtolower($categ);
+                        if (! isset($merged[$key])) {
+                            $merged[$key] = $categ;
+                        }
                     }
-                }
+
+                    return array_values($merged);
+                });
 
                 return response()->json([
                     'success' => true,
                     'message' => 'Categories loaded successfully',
-                    'data'    => array_values($merged),
+                    'data'    => $categories,
                 ], 200);
 
             } catch (\Exception $e) {
@@ -1063,6 +1073,7 @@ class ProductsAPI extends Controller
                 }
 
                 $product->update(['prod_deleted' => now()]);
+                ProductCatalogCache::invalidateProduct((int) $product->prod_id);
 
                 $this->logInventory($json, 'delete', 'products/remove - "' . $product->prod_name . '" (#' . $product->prod_id . ')');
 
@@ -1345,6 +1356,7 @@ class ProductsAPI extends Controller
                 }
 
                 $product->update($updateData);
+                ProductCatalogCache::invalidateProduct((int) $product->prod_id);
 
                 $stockBefore = Prodvar::where('prod_id', $product->prod_id)
                     ->whereNull('prodvar_deleted')
@@ -1505,12 +1517,16 @@ class ProductsAPI extends Controller
                     ], 404);
                 }
 
+                $payload = ProductCatalogCache::rememberDetail((int) $product->prod_id, function () use ($product) {
+                    return self::present($product);
+                });
+
                 $this->logView($json, 'product');
 
                 return response()->json([
                     'success' => true,
                     'message' => 'Product details retrieved successfully',
-                    'data'    => self::present($product),
+                    'data'    => $payload,
                 ], 200);
 
             } catch (\Exception $e) {
@@ -1536,6 +1552,7 @@ class ProductsAPI extends Controller
                 }
 
                 $product->update(['prod_disabled' => now()]);
+                ProductCatalogCache::invalidateProduct((int) $product->prod_id);
 
                 $this->logInventory($json, 'edit', 'products/unlist - "' . $product->prod_name . '" (#' . $product->prod_id . ')');
 
@@ -1571,6 +1588,7 @@ class ProductsAPI extends Controller
                     'prod_disabled' => null,
                     'prod_deleted' => null
                 ]);
+                ProductCatalogCache::invalidateProduct((int) $product->prod_id);
 
                 $this->logInventory($json, 'edit', 'products/sell - relisted "' . $product->prod_name . '" (#' . $product->prod_id . ')');
 

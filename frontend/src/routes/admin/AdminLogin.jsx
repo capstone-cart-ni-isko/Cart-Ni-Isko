@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
-import { apiRequest, preconnectApi } from '../../services/api.js'
+import { preconnectApi } from '../../services/api.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import merchStoreIcon from '../../assets/Branding/Copy of store.png'
 import merchShirtIcon from '../../assets/Branding/Copy of shirt.png'
@@ -23,10 +23,6 @@ const DRAFT_KEY = 'tni_admin_login_draft'
    seconds. */
 const REMASK_MS = 3000
 
-/* FLOW-EMP_LOGIN-02..08: how long the form waits after the last keystroke
-   before it asks the server what it thinks of the current inputs. */
-const CHECK_DEBOUNCE_MS = 400
-
 function readDraft() {
   try {
     const draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null')
@@ -43,14 +39,11 @@ export default function AdminLogin() {
   const [email, setEmail] = useState(() => readDraft().email)
   const [password, setPassword] = useState(() => readDraft().password)
   const [masked, setMasked] = useState(true)
-  // POST /auth/emp_login/check answer: { email_exists, password_correct, ... }
-  const [check, setCheck] = useState(null)
-  // Messages decided by the last submit, which win over the realtime ones.
+  // Credential errors are only populated after submitting the form.
   const [submitEmailMsg, setSubmitEmailMsg] = useState(null)
   const [submitPasswordMsg, setSubmitPasswordMsg] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [loading, setLoading] = useState(false)
-  const checkSeq = useRef(0)
 
   // Already authenticated → skip straight into the portal (staff never land
   // on the Dashboard: REQ-EMP_HOME-01 keeps it out of their portal entirely).
@@ -77,58 +70,9 @@ export default function AdminLogin() {
     return () => clearTimeout(timer)
   }, [masked])
 
-  // FLOW-EMP_LOGIN-02..08: ask the server - quietly, so no spinner blinks
-  // while the employee types - what it knows about the current pair.
-  useEffect(() => {
-    const target = email.trim()
-    const seq = ++checkSeq.current
-
-    if (!target) {
-      setCheck(null)
-      return undefined
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        const res = await apiRequest('/auth/emp_login/check', {
-          method: 'POST',
-          body: { email: target, password },
-          silent: true,
-        })
-        if (seq === checkSeq.current) setCheck(res?.data || null)
-      } catch {
-        // A throttled or unreachable check simply shows no inline message;
-        // the submit below still answers with the authoritative error.
-        if (seq === checkSeq.current) setCheck(null)
-      }
-    }, CHECK_DEBOUNCE_MS)
-
-    return () => clearTimeout(timer)
-  }, [email, password])
-
   const target = email.trim()
-  const emailMissing = target.length === 0
-  const emailNotFound = !emailMissing && check !== null && !check.email_exists
-
-  // FLOW-EMP_LOGIN-02/03 - below the email field.
-  const realtimeEmailMsg = emailNotFound ? 'User not found' : null
-
-  // FLOW-EMP_LOGIN-04..08 - below the password field. Exactly one of the two
-  // messages can stand there at a time.
-  let realtimePasswordMsg = null
-  if (password.length > 0) {
-    if (emailMissing || emailNotFound) {
-      // FLOW-EMP_LOGIN-04/05: no usable email address behind the password.
-      realtimePasswordMsg = 'Provide a valid email'
-    } else if (check !== null && check.email_exists && !check.password_correct) {
-      // FLOW-EMP_LOGIN-07: the address is real, the password is not.
-      realtimePasswordMsg = 'Wrong password'
-    }
-    // FLOW-EMP_LOGIN-08: a correct password clears the line (null).
-  }
-
-  const emailMsg = submitEmailMsg || realtimeEmailMsg
-  const passwordMsg = submitPasswordMsg || realtimePasswordMsg
+  const emailMsg = submitEmailMsg
+  const passwordMsg = submitPasswordMsg
   const clearSubmitMsgs = () => {
     setSubmitEmailMsg(null)
     setSubmitPasswordMsg(null)
@@ -136,13 +80,15 @@ export default function AdminLogin() {
 
   const handleLogin = async (e) => {
     e.preventDefault()
-    if (!target || !password) {
-      setErrorMsg('Please enter your staff email and password.')
+    clearSubmitMsgs()
+    setErrorMsg('')
+    if (!target || !password.trim()) {
+      setSubmitEmailMsg(target ? null : 'Enter your staff email.')
+      setSubmitPasswordMsg(password.trim() ? null : 'Enter your password.')
       return
     }
 
     setLoading(true)
-    setErrorMsg('')
 
     // REQ-EMP_LOGIN-04/05: nothing typed is ever cleared, whatever the
     // server answers - the fields keep their values and the inline message
@@ -168,11 +114,9 @@ export default function AdminLogin() {
 
     const code = res.code || ''
     if (code === 'EMP_NOT_FOUND' || res.error === 'User not found') {
-      setCheck((prev) => ({ ...(prev || {}), email_exists: false, password_correct: false }))
       setSubmitEmailMsg('User not found')
       setSubmitPasswordMsg(null)
     } else if (code === 'WRONG_PASSWORD' || res.error === 'Wrong password') {
-      setCheck((prev) => ({ ...(prev || {}), email_exists: true, password_correct: false }))
       setSubmitEmailMsg(null)
       setSubmitPasswordMsg('Wrong password')
     } else {
@@ -473,10 +417,9 @@ export default function AdminLogin() {
                 value={email}
                 onFocus={preconnectApi}
                 onChange={(e) => {
-                  // REQ-EMP_LOGIN-04: the address is kept as typed - only the
-                  // message under it reacts.
                   setEmail(e.target.value)
                   clearSubmitMsgs()
+                  setErrorMsg('')
                 }}
                 aria-invalid={emailMsg ? 'true' : undefined}
                 className="field-input field-input--lg !pl-10.5 rounded-xl font-medium"
@@ -511,10 +454,9 @@ export default function AdminLogin() {
                 value={password}
                 onFocus={preconnectApi}
                 onChange={(e) => {
-                  // REQ-EMP_LOGIN-05: the password never disappears, even
-                  // when no email is typed.
                   setPassword(e.target.value)
                   clearSubmitMsgs()
+                  setErrorMsg('')
                 }}
                 aria-invalid={passwordMsg ? 'true' : undefined}
                 className="field-input field-input--lg !pl-10.5 !pr-11 rounded-xl font-medium"

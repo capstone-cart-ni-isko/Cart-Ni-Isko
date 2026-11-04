@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, cacheRead, cacheWrite } from './api.js'
+import { apiGet, apiPost, apiPut, invalidateCache } from './api.js'
 
 /** Timeslot geometry (DOMAIN 8 / DOMAIN 21 / DOMAIN 22): pickup and visit slots are both
  *  10 minutes; a pickup block holds up to 5 open bookings, a visit exactly 1. */
@@ -19,17 +19,13 @@ export async function fetchAppointments(params = {}) {
   return Array.isArray(data.data) ? data.data : []
 }
 
-/* The ribbon opens the list often, so the last answer for each
-   (customer, filter) is mirrored in localStorage: the page paints instantly
-   and the request that follows only refreshes what is on screen. */
-const CACHE_KEY = (custId, status) => `cartniisko:appointments:${custId}:${status}`
-
-export function readAppointmentsCache(custId, status) {
-  return cacheRead(CACHE_KEY(custId, status))
-}
-
-export function writeAppointmentsCache(custId, status, rows) {
-  cacheWrite(CACHE_KEY(custId, status), rows)
+export function appointmentStatusLabel(status) {
+  const normalized = String(status || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ')
+  if (['done', 'complete', 'completed', 'claimed', 'closed'].includes(normalized)) return 'Complete'
+  if (['absent', 'no show'].includes(normalized)) return 'No Show'
+  if (['cancelled', 'canceled'].includes(normalized)) return 'Cancelled'
+  if (['upcoming', 'open'].includes(normalized)) return 'Upcoming'
+  return status || '—'
 }
 
 /** GET /appoint/slots?date= - bookable slots with availability + reasons. */
@@ -40,16 +36,22 @@ export async function fetchSlots(date) {
 }
 
 /** POST /appoint/create - book a slot (validated server-side). */
-export function createAppointment(payload) {
-  return apiPost('/appoint/create', payload)
+export async function createAppointment(payload) {
+  const result = await apiPost('/appoint/create', payload)
+  invalidateCache()
+  return result
 }
 
 /** POST /appoint/close - cancel/close a slot, notifying the customer. */
-export function closeAppointment(appointId, reason = '') {
-  return apiPost('/appoint/close', { appoint_id: appointId, reason })
+export async function closeAppointment(appointId, reason = '') {
+  const result = await apiPost('/appoint/close', { appoint_id: appointId, reason })
+  invalidateCache()
+  return result
 }
 
 /** PUT /appoint/update - reschedule or amend an appointment. */
-export function updateAppointment(appointId, changes) {
-  return apiPut('/appoint/update', { appoint_id: appointId, ...changes })
+export async function updateAppointment(appointId, changes) {
+  const result = await apiPut('/appoint/update', { appoint_id: appointId, ...changes })
+  invalidateCache()
+  return result
 }

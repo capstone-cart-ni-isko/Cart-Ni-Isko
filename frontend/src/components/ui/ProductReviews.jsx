@@ -1,10 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../../hooks/useAuth.js'
-import { useToast } from '../../hooks/useToast.js'
-import LoginPromptModal from './LoginPromptModal.jsx'
-import Modal from './Modal.jsx'
-import Button from './Button.jsx'
-import { createReview, fetchProductReviews } from '../../services/reviews.js'
+import { fetchProductReviews } from '../../services/reviews.js'
 
 function StarRating({ rating = 0, size = 'sm' }) {
   const sizeClasses = {
@@ -26,35 +22,14 @@ function StarRating({ rating = 0, size = 'sm' }) {
   )
 }
 
-export default function ProductReviews({ product, initialOpenWrite = false, ordId = null }) {
+export default function ProductReviews({ product }) {
   const { currentUser } = useAuth()
-  const { showToast } = useToast()
 
   const [reviewsList, setReviewsList] = useState(product.reviews || [])
-  const [showWriteModal, setShowWriteModal] = useState(initialOpenWrite)
-  const [showLoginModal, setShowLoginModal] = useState(false)
-
-  // Auto-open write review modal if requested via prop
-  useEffect(() => {
-    if (initialOpenWrite) {
-      if (currentUser) {
-        setShowWriteModal(true)
-      } else {
-        setShowLoginModal(true)
-      }
-    }
-  }, [initialOpenWrite, currentUser])
 
   // Filters & Sorting
   const [starFilter, setStarFilter] = useState('all')
   const [sortBy, setSortBy] = useState('newest')
-
-  // New review form state
-  const [rating, setRating] = useState(5)
-  const [hoverRating, setHoverRating] = useState(0)
-  const [comment, setComment] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState('')
 
   const prodId = product.prodId ?? (Number(product.id) || product.id) ?? null
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
@@ -118,87 +93,18 @@ export default function ProductReviews({ product, initialOpenWrite = false, ordI
     return list
   }, [approvedReviews, starFilter, sortBy])
 
-  const handleOpenWrite = () => {
-    if (!currentUser) {
-      setShowLoginModal(true)
-      return
-    }
-    setSubmitError('')
-    setShowWriteModal(true)
-  }
-
-  const handleSubmitReview = async (e) => {
-    e.preventDefault()
-    setSubmitError('')
-
-    if (!comment.trim()) {
-      showToast('Please enter your review feedback.', 'error')
-      return
-    }
-    if (prodId == null) {
-      setSubmitError('This product cannot be reviewed right now.')
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const payload = {
-        prod_id: prodId,
-        ord_rating: rating,
-        ord_review: comment.trim(),
-      }
-      if (ordId) {
-        payload.ord_id = ordId
-      }
-      await createReview(payload)
-
-      // Refresh from the server so moderation queue reflects the new review
-      const res = await fetchProductReviews(prodId)
-      if (res.success) {
-        setReviewsList(res.items || [])
-      }
-
-      setComment('')
-      setShowWriteModal(false)
-      showToast('Review submitted! It will appear publicly once verified by staff.', 'success')
-    } catch (err) {
-      const status = err?.status
-      let message = err?.message || 'Unable to submit your review. Please try again.'
-      if (status === 403) {
-        message = err?.message || 'You can only review products from orders you have completed.'
-      } else if (status === 409) {
-        message = err?.message || 'You have already reviewed this product.'
-      }
-      setSubmitError(message)
-      showToast(message, 'error')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   return (
     <div id="product-reviews" className="space-y-6 pt-6 border-t border-gray-100">
-      {/* Header & Write Review Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-xl font-semibold text-gray-900 tracking-tight">Customer Reviews</h2>
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-orange-100 text-brand-orange">
-              {totalApproved} {totalApproved === 1 ? 'review' : 'reviews'}
-            </span>
-          </div>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Real feedback from verified Bicol University students & campus buyers
-          </p>
+      <div>
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-xl font-semibold text-gray-900 tracking-tight">Customer Reviews</h2>
+          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-orange-100 text-brand-orange">
+            {totalApproved} {totalApproved === 1 ? 'review' : 'reviews'}
+          </span>
         </div>
-
-        <button
-          type="button"
-          onClick={handleOpenWrite}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark active:scale-98 transition-all shadow-xs cursor-pointer shrink-0"
-        >
-          <span>Write a Review</span>
-        </button>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Real feedback from verified Bicol University students & campus buyers
+        </p>
       </div>
 
       {/* CUSTOMER'S OWN PENDING / CENSORED REVIEW BANNER */}
@@ -406,106 +312,10 @@ export default function ProductReviews({ product, initialOpenWrite = false, ordI
 
           <h3 className="text-sm font-semibold text-gray-900">No approved reviews yet</h3>
           <p className="text-xs text-gray-500 mt-1 max-w-xs mx-auto leading-relaxed">
-            Be the first to review this merchandise! Share your sizing, fabric, and fit thoughts with fellow Iskolars.
+            Verified customers can share a review after completing an order for this product.
           </p>
-          <button
-            type="button"
-            onClick={handleOpenWrite}
-            className="mt-4 h-8 px-4 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark active:scale-95 transition-all cursor-pointer shadow-xs"
-          >
-            Be the First to Review
-          </button>
         </div>
       )}
-
-      {/* Write a Review Modal — the shared popup shell */}
-      {showWriteModal && (
-        <Modal
-          isOpen={showWriteModal}
-          onClose={() => setShowWriteModal(false)}
-          title="Write a Product Review"
-          subtitle={product.name || 'Campus Merch'}
-          footer={
-            <>
-              <Button variant="secondary" onClick={() => setShowWriteModal(false)} className="px-3.5">
-                Cancel
-              </Button>
-              <Button variant="primary" type="submit" form="write-review-form" disabled={submitting} className="px-3.5">
-                {submitting ? 'Submitting…' : 'Submit Review'}
-              </Button>
-            </>
-          }
-        >
-          {/* Moderation Note */}
-          <div className="p-3 bg-amber-50/70 border border-amber-200/70 rounded-md text-[11px] text-amber-900 space-y-1">
-            <div className="font-semibold flex items-center gap-1.5 text-amber-800">
-              <span>🛡️</span>
-              <span>Campus Moderation Notice</span>
-            </div>
-            <p className="text-amber-800/90 leading-normal">
-              To maintain authentic and respectful feedback for all Iskolars, new reviews are verified by staff before appearing publicly.
-            </p>
-          </div>
-
-          <form id="write-review-form" onSubmit={handleSubmitReview} className="space-y-3.5">
-            {/* Star Rating Selection */}
-            <div>
-              <label className="field-label">Overall Rating</label>
-              <div className="flex items-center gap-1.5">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onMouseEnter={() => setHoverRating(star)}
-                    onMouseLeave={() => setHoverRating(0)}
-                    onClick={() => setRating(star)}
-                    className="text-2xl transition-transform hover:scale-115 cursor-pointer p-0.5"
-                  >
-                    <span
-                      className={
-                        star <= (hoverRating || rating) ? 'text-amber-400' : 'text-gray-200'
-                      }
-                    >
-                      ★
-                    </span>
-                  </button>
-                ))}
-                <span className="text-xs font-semibold text-gray-600 ml-2">
-                  {rating} of 5 Stars
-                </span>
-              </div>
-            </div>
-
-            {/* Review Comment */}
-            <div>
-              <label className="field-label" htmlFor="review-comment">
-                Your Review Comments
-              </label>
-              <textarea
-                id="review-comment"
-                rows={4}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Share details about the fabric quality, sizing fit, color accuracy, and overall satisfaction..."
-                className="field-input resize-none"
-                required
-              />
-            </div>
-
-            {submitError && (
-              <div className="p-3 rounded-md bg-red-50 border border-red-200 text-xs text-red-700 font-semibold leading-relaxed">
-                {submitError}
-              </div>
-            )}
-          </form>
-        </Modal>
-      )}
-
-      <LoginPromptModal
-        isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
-        message="Sign in to write a verified review for this campus merch."
-      />
     </div>
   )
 }

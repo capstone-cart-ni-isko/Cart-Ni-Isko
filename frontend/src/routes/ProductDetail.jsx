@@ -6,6 +6,7 @@ import { useWishlist } from '../hooks/useWishlist.js'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import { useToast } from '../hooks/useToast.js'
+import { useApiChange } from '../hooks/useApiChange.js'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import ViewAllLink from '../components/ui/ViewAllLink.jsx'
 import PriceTag from '../components/ui/PriceTag.jsx'
@@ -50,6 +51,7 @@ function ProductDetail() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const version = useApiChange(['products', 'uploads'])
 
   const [selectedSize, setSelectedSize] = useState('')
   const [selectedColor, setSelectedColor] = useState(null)
@@ -126,7 +128,7 @@ function ProductDetail() {
     return () => {
       cancelled = true
     }
-  }, [id, location.state?.color, location.state?.prodvarId, location.state?.variationId])
+  }, [id, location.state?.color, location.state?.prodvarId, location.state?.variationId, version])
 
   if (loading) {
     return (
@@ -807,8 +809,6 @@ function ProductDetail() {
         <div className="mt-12 border-t border-gray-100 pt-8">
           <ProductReviews
             product={product}
-            initialOpenWrite={Boolean(location.state?.writeReview)}
-            ordId={location.state?.ordId || location.state?.orderId || null}
           />
         </div>
 

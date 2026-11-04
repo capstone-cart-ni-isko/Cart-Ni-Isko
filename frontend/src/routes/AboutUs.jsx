@@ -121,11 +121,11 @@ const ERAS = [
     ),
   },
   {
-    years: '2025–Present',
-    period: 'Academic Year 2025–Present',
+    years: '2025–2026',
+    period: 'Academic Year 2025–2026',
     title: 'Realignment and Continuity — From BU Labels to Tindahan ni Isko',
     image: era2025Image,
-    imageAlt: 'Tindahan ni Isko as the operational face, AY 2025–Present',
+    imageAlt: 'Tindahan ni Isko as the operational face, AY 2025–2026',
     body: (
       <>
         <p className="text-sm leading-relaxed text-slate-600 dark:text-[var(--muted)]">
@@ -142,6 +142,20 @@ const ERAS = [
           cosmic renewal, this phase signals a movement toward refinement and consolidation,
           strengthening Tindahan ni Isko as the operational face of the enterprise while honoring
           the legacy of BU Labels.
+        </p>
+      </>
+    ),
+  },
+  {
+    years: '2026–Present',
+    period: 'Academic Year 2026–Present',
+    title: 'Next Chapter — Details Coming Soon',
+    image: era2025Image,
+    imageAlt: 'Placeholder details for AY 2026–Present',
+    body: (
+      <>
+        <p className="text-sm leading-relaxed text-slate-600 dark:text-[var(--muted)]">
+          Details for this chapter are currently being prepared.
         </p>
       </>
     ),
@@ -201,9 +215,9 @@ function AboutUs({ backTo = '/home' }) {
       backTo={backTo}
       containerClassName="max-w-none"
     >
-      <div className="animate-fade-in w-full pb-16">
+      <div className="animate-fade-in w-full pb-16 bg-[radial-gradient(circle_at_top,_rgba(255,122,26,0.12),_transparent_35%),linear-gradient(180deg,_#fffaf5_0%,_#ffffff_40%,_#fffdfb_100%)]">
         {/* ── HERO: the store logo leads the page, framed by subtle merchandise artwork ── */}
-        <section className="relative -mx-4 overflow-hidden md:-mx-6 lg:-mx-8">
+        <section className="relative -mx-4 overflow-hidden border-b border-[#F4DCC5] bg-gradient-to-br from-[#fff8f2] via-white to-[#fffaf5] md:-mx-6 lg:-mx-8">
           <div/>
 
           {/* Merchandise cutouts framing the hero (desktop only) */}
@@ -240,15 +254,15 @@ function AboutUs({ backTo = '/home' }) {
             </h2>
           </div>
 
-          <div className="mx-auto mt-8 grid max-w-4xl gap-8 border-t border-slate-200 pt-8 sm:grid-cols-2 sm:gap-12 dark:border-[var(--line)]">
-            <div>
+          <div className="mx-auto mt-8 grid max-w-4xl gap-6 border-t border-[#F0D7C0] pt-8 sm:grid-cols-2 sm:gap-8 dark:border-[var(--line)]">
+            <div className="rounded-2xl border border-[#F5E2D4] bg-gradient-to-br from-[#fffaf5] to-[#fff] p-5 shadow-[0_6px_18px_rgba(255,122,26,0.04)]">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-orange">Mission</h3>
               <p className="mt-3 text-lg font-medium leading-relaxed text-slate-700 md:text-xl dark:text-[var(--ink-2)]">
                 To provide accessible, high-quality official merchandise that strengthens
                 university pride while supporting sustainable student initiatives.
               </p>
             </div>
-            <div>
+            <div className="rounded-2xl border border-[#F5E2D4] bg-gradient-to-br from-[#fffaf5] to-[#fff] p-5 shadow-[0_6px_18px_rgba(255,122,26,0.04)]">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-orange">Vision</h3>
               <p className="mt-3 text-lg font-medium leading-relaxed text-slate-700 md:text-xl dark:text-[var(--ink-2)]">
                 To be the recognized student-led merchandise brand that represents the identity,
@@ -279,7 +293,7 @@ function AboutUs({ backTo = '/home' }) {
           <div className="text-center">
             <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-orange">Our history</span>
             <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-[var(--ink)] md:text-3xl">
-              Four eras, one continuous legacy
+              Five eras, one continuous legacy
             </h2>
             <p className="mx-auto mt-2 max-w-2xl text-sm text-slate-600 dark:text-[var(--muted)]">
               From a spark of university pride to the student-led enterprise of today. Hover or tap
@@ -287,7 +301,7 @@ function AboutUs({ backTo = '/home' }) {
             </p>
           </div>
 
-          <div className="mt-8 grid grid-cols-2 gap-px border-y border-slate-200 bg-slate-200 md:grid-cols-4 dark:border-[var(--line)] dark:bg-[var(--line)]">
+          <div className="mt-8 grid grid-cols-1 gap-0 border-y border-slate-200 bg-slate-200 sm:grid-cols-2 md:grid-cols-5 dark:border-[var(--line)] dark:bg-[var(--line)]">
             {ERAS.map((item, index) => {
               const isActive = index === activeEra
               return (
@@ -298,15 +312,14 @@ function AboutUs({ backTo = '/home' }) {
                   onFocus={() => setActiveEra(index)}
                   onClick={() => setActiveEra(index)}
                   aria-pressed={isActive}
-                  className={`cursor-pointer bg-[#F8F9FA] px-4 py-7 text-center transition-colors dark:bg-[var(--surface)] ${
+                  className={`cursor-pointer bg-[#F8F9FA] px-2 py-6 text-center transition-colors dark:bg-[var(--surface)] ${
                     isActive ? 'text-brand-orange' : 'text-slate-400 hover:text-slate-700 dark:text-[var(--muted)] dark:hover:text-[var(--ink)]'
                   }`}
                 >
-                  
-                  <span className="mt-1.5 block text-xl font-bold tracking-tight md:text-3xl">{item.years}</span>
+                  <span className="block text-lg font-bold tracking-tight md:text-[2rem]">{item.years}</span>
                   <span
                     aria-hidden="true"
-                    className={`mx-auto mt-3 block h-0.5 w-10 transition-opacity ${
+                    className={`mx-auto mt-2 block h-0.5 w-9 transition-opacity ${
                       isActive ? 'bg-brand-orange opacity-100' : 'opacity-0'
                     }`}
                   />

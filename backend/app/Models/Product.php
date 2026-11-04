@@ -1,10 +1,23 @@
 <?php
 namespace App\Models;
+
+use App\Support\ProductCatalogCache;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
 class Product extends Model
 {
+    protected static function booted(): void
+    {
+        static::saved(function (self $product) {
+            ProductCatalogCache::invalidateProduct((int) $product->prod_id);
+        });
+
+        static::deleted(function (self $product) {
+            ProductCatalogCache::invalidateProduct((int) $product->prod_id);
+        });
+    }
+
     protected $table = 'product';
     protected $primaryKey = 'prod_id';
     public $timestamps = false;

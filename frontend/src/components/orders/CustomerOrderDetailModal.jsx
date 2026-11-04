@@ -26,6 +26,7 @@ import { useAuth } from '../../hooks/useAuth.js'
 import { useApiChange } from '../../hooks/useApiChange.js'
 import { STATUS_CONTEXT } from '../../routes/Orders.jsx'
 import { canReviewOrder } from '../../services/reviews.js'
+import { appointmentStatusLabel } from '../../services/appointments.js'
 
 const RECEIVING = ['TO CLAIM', 'IN TRANSIT', 'TO RECEIVE']
 const CAN_CANCEL = ['AWAITING PAYMENT', 'TO PROCESS']
@@ -386,7 +387,7 @@ export default function CustomerOrderDetailModal({
   const appointment = {
     start: formatStamp(effectiveRaw?.appoint_start),
     end: formatStamp(effectiveRaw?.appoint_end),
-    status: effectiveRaw?.appoint_status || null,
+    status: effectiveRaw?.appoint_status ? appointmentStatusLabel(effectiveRaw.appoint_status) : null,
     closed: formatStamp(effectiveRaw?.appoint_closed),
   }
   const delivery = {

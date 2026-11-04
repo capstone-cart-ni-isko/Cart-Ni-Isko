@@ -29,6 +29,7 @@ import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
 import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
 import { canReviewOrder } from '../services/reviews.js'
+import { appointmentStatusLabel } from '../services/appointments.js'
 
 const RECEIVING = ['TO CLAIM', 'IN TRANSIT', 'TO RECEIVE']
 const CAN_CANCEL = ['AWAITING PAYMENT', 'TO PROCESS']
@@ -369,7 +370,7 @@ function OrderDetail() {
   const appointment = {
     start: formatStamp(order.raw?.appoint_start),
     end: formatStamp(order.raw?.appoint_end),
-    status: order.raw?.appoint_status || null,
+    status: order.raw?.appoint_status ? appointmentStatusLabel(order.raw.appoint_status) : null,
     closed: formatStamp(order.raw?.appoint_closed),
   }
   const delivery = {

@@ -1307,6 +1307,47 @@ class SrsRequirementsTest extends TestCase
             ->assertJsonCount(1, 'data');
     }
 
+    public function test_appointment_status_filters_match_the_displayed_status()
+    {
+        $customer = $this->makeCustomer();
+        $makeAppointment = function (?string $status, $start, $end, $closed = null) use ($customer) {
+            return Visit::create([
+                'cust_id' => $customer->cust_id,
+                'appoint_type' => 'VISIT',
+                'appoint_status' => $status,
+                'appoint_qr' => 'FILTER-' . uniqid(),
+                'appoint_start' => $start,
+                'appoint_end' => $end,
+                'appoint_created' => now(),
+                'appoint_closed' => $closed,
+            ]);
+        };
+
+        $upcoming = $makeAppointment('upcoming', now()->addDay(), now()->addDay()->addMinutes(10));
+        $completeWithoutCloseStamp = $makeAppointment('done', now()->subDay(), now()->subDay()->addMinutes(10));
+        $noShow = $makeAppointment('absent', now()->subDay(), now()->subDay()->addMinutes(10), now());
+        $cancelled = $makeAppointment('cancelled', now()->subDays(2), now()->subDays(2)->addMinutes(10), now());
+        $legacyComplete = $makeAppointment(null, now()->subDays(3), now()->subDays(3)->addMinutes(10), now());
+        $legacyExpired = $makeAppointment(null, now()->subDays(4), now()->subDays(4)->addMinutes(10));
+
+        $fetchIds = function (string $status) use ($customer): array {
+            return $this->getJson('/api/appoint/display?status=' . $status, $this->headers($customer))
+                ->assertOk()
+                ->json('data.*.appoint_id');
+        };
+
+        $this->assertEqualsCanonicalizing(
+            [$completeWithoutCloseStamp->appoint_id, $legacyComplete->appoint_id],
+            $fetchIds('done')
+        );
+        $this->assertSame([$noShow->appoint_id], $fetchIds('absent'));
+        $this->assertSame([$upcoming->appoint_id], $fetchIds('upcoming'));
+        $this->assertEqualsCanonicalizing(
+            [$cancelled->appoint_id, $legacyExpired->appoint_id],
+            $fetchIds('cancelled')
+        );
+    }
+
     // ==========================================
     // POS WALK-IN SALES (REQ-POS-01)
     // ==========================================

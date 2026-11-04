@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
-import Button from '../components/ui/Button.jsx'
 import OtpInput from '../components/ui/OtpInput.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import { recoverCredentials, resetCredentials } from '../services/auth.js'
@@ -16,7 +15,6 @@ function ForgotPassword() {
   const [identifier, setIdentifier] = useState('')
   const [challenge, setChallenge] = useState('')
   const [maskedContact, setMaskedContact] = useState('')
-  const [channel, setChannel] = useState('phone')
   const [otp, setOtp] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -87,7 +85,6 @@ function ForgotPassword() {
     const payload = data.data
     setChallenge(payload.challenge)
     setMaskedContact(payload.contact || identifierVal)
-    setChannel(payload.channel || (userType === 'employee' ? 'email' : 'phone'))
 
     // The code is never echoed by the API - it is delivered through the
     // account's own inbox and read back with the signed challenge, so the
@@ -195,7 +192,7 @@ function ForgotPassword() {
   const isCustomer = userType === 'customer'
 
   const passwordsMatch = password.length > 0 && password === confirmPassword
-  const passwordLengthValid = password.length >= (isCustomer ? 8 : 8)
+  const passwordLengthValid = password.length >= 8
   const resetValid = passwordLengthValid && passwordsMatch
 
   // Dedicated Admin layout matching AdminLogin.jsx and Admin theme
@@ -226,7 +223,7 @@ function ForgotPassword() {
                   <span className="font-semibold text-gray-700 dark:text-gray-200">{maskedContact || identifier}</span>
                 </>
               )}
-              {step === 2 && 'Create a new secure password for your administrative account.'}
+              {step === 2 && 'Create a new password with at least 8 characters.'}
             </p>
           </div>
 
@@ -390,9 +387,8 @@ function ForgotPassword() {
               </div>
 
               <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-gray-600 dark:text-gray-300 space-y-1">
-                <p className="font-semibold text-gray-700 dark:text-gray-200">Password Requirements:</p>
-                <p>• Standard accounts: Minimum 8 characters.</p>
-                <p>• Super Admin accounts: Minimum 16 characters with uppercase, lowercase, number, and special character.</p>
+                <p className="font-semibold text-gray-700 dark:text-gray-200">Password requirement:</p>
+                <p>Use at least 8 characters. Choose a unique password you do not use elsewhere.</p>
               </div>
 
               <button
@@ -447,7 +443,7 @@ function ForgotPassword() {
                 <span className="font-semibold text-gray-700 dark:text-gray-200">{maskedContact || identifier}</span>
               </>
             )}
-            {step === 2 && 'Create a strong and secure password for your student storefront account.'}
+            {step === 2 && 'Create a secure password with at least 8 characters.'}
           </p>
         </div>
 
@@ -579,7 +575,7 @@ function ForgotPassword() {
                 </button>
               </div>
               {password.length > 0 && !passwordLengthValid && (
-                <p className="field-error mt-1">Must be at least 8 characters.</p>
+                <p className="field-error mt-1">Password must be at least 8 characters.</p>
               )}
             </div>
 

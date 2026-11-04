@@ -4526,7 +4526,9 @@ class OrdersAPI extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Appointment has already been ' . ($final !== '' ? $final : 'closed'),
+                'message' => $final === 'absent'
+                    ? 'Appointment has already been marked as a no-show.'
+                    : 'Appointment has already been ' . ($final !== '' ? $final : 'closed'),
             ], 409);
         }
 
@@ -4567,7 +4569,7 @@ class OrdersAPI extends Controller
             'success' => true,
             'message' => $status === 'done'
                 ? 'Appointment checked in successfully'
-                : 'Appointment checked in late and marked as absent',
+                : 'Appointment checked in late and marked as a no-show',
             'data' => [
                 'track_type'  => 'APPOINTMENT',
                 'appointment' => $this->appointmentPayload($appointment),
@@ -5628,5 +5630,4 @@ class OrdersAPI extends Controller
         ], 200);
     }
 }
-
 

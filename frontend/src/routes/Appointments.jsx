@@ -13,10 +13,8 @@ import ClaimQrModal from '../components/appointment/ClaimQrModal.jsx'
 import {
   APPOINT_TYPE,
   fetchAppointments,
-  readAppointmentsCache,
   SLOT_RULES,
   updateAppointment,
-  writeAppointmentsCache,
 } from '../services/appointments.js'
 import { fetchOrder } from '../services/orders.js'
 
@@ -25,12 +23,13 @@ const STORE = {
   subLocation: 'Bicol University, Main Campus',
 }
 
-/** The four FLOW-MANAGE_BOOKED-02 filter pills, in the order the ribbon expects. */
+/** The customer appointment status filters, in the order the ribbon expects. */
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'upcoming', label: 'Upcoming' },
-  { id: 'done', label: 'Done' },
-  { id: 'absent', label: 'Absent' },
+  { id: 'done', label: 'Complete' },
+  { id: 'absent', label: 'No Show' },
+  { id: 'cancelled', label: 'Cancelled' },
 ]
 
 /** How many cards render before "Load more" - keeps long lists instant. */
@@ -107,11 +106,14 @@ function mapAppointment(row, order) {
   const ends = endMoment(end || start)
   const expired = ends ? ends.getTime() < Date.now() : false
 
-  const raw = String(row.appoint_status ?? row.status ?? '').toUpperCase()
+  const raw = String(row.appoint_status ?? row.status ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, ' ')
   let status = 'upcoming'
-  if (raw.includes('CANCEL')) status = 'cancelled'
-  else if (raw.includes('ABSENT')) status = 'absent'
-  else if (closed || ['COMPLETED', 'CLAIMED', 'CLOSED', 'DONE'].some((k) => raw.includes(k))) {
+  if (raw.includes('cancel')) status = 'cancelled'
+  else if (raw.includes('absent') || raw.includes('no show')) status = 'absent'
+  else if (closed || ['complete', 'claimed', 'closed', 'done'].some((value) => raw.includes(value))) {
     status = 'done'
   } else if (expired) status = 'cancelled'
 
@@ -170,14 +172,30 @@ async function loadAppointments({ custId, status }) {
   return list.map((row) => mapAppointment(row, byId[String(row.ord_id ?? row.order_id)]))
 }
 
+function sortAppointments(appointments, status) {
+  return appointments
+    .map((appointment, index) => ({ appointment, index }))
+    .sort((left, right) => {
+      const a = left.appointment
+      const b = right.appointment
+      const aUpcoming = a.status === 'upcoming'
+      const bUpcoming = b.status === 'upcoming'
+
+      if (status === 'all' && aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1
+
+      const direction = status === 'upcoming' || (status === 'all' && aUpcoming) ? 1 : -1
+      const aTime = Date.parse(String(a.startISO || '').replace(' ', 'T')) || 0
+      const bTime = Date.parse(String(b.startISO || '').replace(' ', 'T')) || 0
+      return (aTime - bTime) * direction || left.index - right.index
+    })
+    .map(({ appointment }) => appointment)
+}
+
 function Appointments() {
   const { currentUser } = useAuth()
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
-  // The pill the customer pressed (instant) and the filter the request uses
-  // (debounced), so tapping pills never fires competing requests.
   const [filter, setFilter] = useState('upcoming')
-  const [status, setStatus] = useState('upcoming')
   const [list, setList] = useState([])
   const [limit, setLimit] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(true) // first paint → skeleton
@@ -191,6 +209,7 @@ function Appointments() {
   const [qrTarget, setQrTarget] = useState(null)
   const alive = useRef(true)
   const firstRun = useRef(true)
+  const requestId = useRef(0)
 
   useEffect(() => {
     alive.current = true
@@ -199,35 +218,27 @@ function Appointments() {
     }
   }, [])
 
-  useEffect(() => {
-    const timer = setTimeout(() => setStatus(filter), 250)
-    return () => clearTimeout(timer)
-  }, [filter])
-
   const load = useCallback(async () => {
+    const currentRequest = ++requestId.current
     if (!custId) {
       setList([])
       setLoading(false)
+      setSwitching(false)
       return
     }
 
     const first = firstRun.current
     firstRun.current = false
-    if (first) {
-      setLoading(true)
-      setList(readAppointmentsCache(custId, status) || [])
-    } else {
-      setSwitching(true)
-    }
+    if (first) setLoading(true)
+    else setSwitching(true)
     setError('')
 
     try {
-      const rows = await loadAppointments({ custId, status })
-      if (!alive.current) return
-      setList(rows)
-      writeAppointmentsCache(custId, status, rows)
+      const rows = await loadAppointments({ custId, status: filter })
+      if (!alive.current || currentRequest !== requestId.current) return
+      setList(sortAppointments(rows, filter))
     } catch (err) {
-      if (!alive.current) return
+      if (!alive.current || currentRequest !== requestId.current) return
       setError(
         apiErrorMessage(
           err,
@@ -237,12 +248,12 @@ function Appointments() {
         )
       )
     } finally {
-      if (alive.current) {
+      if (alive.current && currentRequest === requestId.current) {
         setLoading(false)
         setSwitching(false)
       }
     }
-  }, [custId, status])
+  }, [custId, filter])
 
   // Realtime (REQ-MANAGE_BOOKED-02): staff marking an appointment done or
   // cancelling it on the counter flips this list at once instead of only on the
@@ -288,6 +299,14 @@ function Appointments() {
   }, [cancelTarget, refresh])
 
   const cards = list.slice(0, limit)
+  const selectFilter = (nextFilter) => {
+    if (nextFilter === filter) return
+    requestId.current += 1
+    setList([])
+    setError('')
+    setSwitching(true)
+    setFilter(nextFilter)
+  }
 
   return (
     <AppShell>
@@ -313,7 +332,7 @@ function Appointments() {
           </span>
         </button>
 
-        {/* Filter row: four pill toggles, the list follows without a reload */}
+        {/* Filter row: the list follows the selected appointment status. */}
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <h1 className="text-base font-semibold text-slate-900 tracking-tight">My Appointments</h1>
           <p className="text-xs text-slate-500 leading-relaxed mt-0.5 mb-3">
@@ -324,7 +343,7 @@ function Appointments() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setFilter(id)}
+                onClick={() => selectFilter(id)}
                 aria-pressed={filter === id}
                 className={`h-8 px-4 rounded-full text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
                   filter === id
@@ -363,6 +382,11 @@ function Appointments() {
         {/* Data list */}
         {loading ? (
           <Skeleton />
+        ) : switching ? (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-8 text-xs font-semibold text-slate-500" role="status">
+            <span className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-brand-orange animate-spin" />
+            Loading appointments…
+          </div>
         ) : error && list.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center border border-slate-200 space-y-3">
             <p className="text-sm font-semibold text-red-500">{error}</p>
@@ -390,13 +414,6 @@ function Appointments() {
                 onShowQr={setQrTarget}
               />
             ))}
-
-            {switching && (
-              <p className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-500">
-                <span className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-brand-orange animate-spin" />
-                Loading…
-              </p>
-            )}
 
             {list.length > cards.length && (
               <button

@@ -23,7 +23,7 @@ function ResetPassword() {
 
   function validate() {
     const next = {}
-    if (form.password.length < 7) next.password = 'Password must be at least 7 characters'
+    if (form.password.length < 8) next.password = 'Password must be at least 8 characters'
     if (form.password !== form.confirm) next.confirm = 'Passwords do not match'
     return next
   }
