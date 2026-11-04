@@ -47,15 +47,20 @@ export function removeWishlistItem(custId, prodId) {
 
 /**
  * POST /wishlist/to_order - FLOW-WISHLIST-06: move a saved item straight into
- * the shopping bag. The backend creates/updates the live bag line and answers
- * with the regular cart envelope, so the caller can adopt cart_count right away.
+ * the shopping bag. An optional variation pins the line to the exact selected
+ * variant. The backend answers with the regular cart envelope.
  */
-export async function addWishlistToBag(custId, prodId, itemQty = 1) {
-  const data = await apiPost('/wishlist/to_order', {
+export async function addWishlistToBag(custId, prodId, itemQty = 1, variation = null) {
+  const payload = {
     cust_id: custId,
     prod_id: prodId,
     item_qty: itemQty,
-  })
+  }
+  if (variation?.prodvar_id != null) {
+    payload.prodvar_id = variation.prodvar_id
+    payload.options = variation.prodvar_options || {}
+  }
+  const data = await apiPost('/wishlist/to_order', payload)
   return cartEnvelope(data)
 }
 

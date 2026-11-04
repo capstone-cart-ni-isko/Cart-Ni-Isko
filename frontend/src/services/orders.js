@@ -48,7 +48,11 @@ export async function fetchAllOrders() {
 
 /** Order rows carry the dispatch type and the pickup / parcel record made at checkout. */
 export function dispatchModeOf(row) {
-  if (row?.dispatch_type === 'delivery' || row?.dispatch_type === 'pickup') return row.dispatch_type
+  const claiming = String(row?.dispatch_type ?? row?.claiming ?? row?.ord_claiming ?? '')
+    .trim()
+    .toLowerCase()
+  if (claiming.includes('deliver')) return 'delivery'
+  if (claiming.includes('pick')) return 'pickup'
   if (row?.parcel || row?.delivery) return 'delivery'
   if (row?.pickup) return 'pickup'
   return null

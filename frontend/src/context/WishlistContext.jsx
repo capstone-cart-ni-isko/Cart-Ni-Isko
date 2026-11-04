@@ -37,6 +37,20 @@ function isProductOffered(product) {
   return product.status !== 'Disabled' && product.status !== 'Deleted'
 }
 
+function isVariationAvailable(product, variation) {
+  return Number(variation?.prodvar_stock) > 0
+    || Boolean(variation?.prodvar_preorder)
+    || Boolean(product?.productPreOrder)
+}
+
+function hasAvailableVariation(product) {
+  const variations = product?.variations || []
+  if (variations.length > 0) {
+    return variations.some((variation) => isVariationAvailable(product, variation))
+  }
+  return Boolean(product?.preOrder || product?.productPreOrder) || Number(product?.qty) > 0
+}
+
 export function WishlistProvider({ children }) {
   const { currentUser } = useAuth()
   const { showToast } = useToast()
@@ -148,7 +162,7 @@ export function WishlistProvider({ children }) {
    * cart envelope, so the bag badge is refreshed from cart_count right away.
    */
   const addToBag = useCallback(
-    async (product, qty = 1) => {
+    async (product, qty = 1, variation = null) => {
       const key = wishlistKey(product)
       if (!key) return false
 
@@ -160,14 +174,22 @@ export function WishlistProvider({ children }) {
         showToast('This item is no longer available.', 'error')
         return false
       }
+      if (variation && !isVariationAvailable(product, variation)) {
+        showToast('This variant is out of stock.', 'error')
+        return false
+      }
+      if (!variation && !hasAvailableVariation(product)) {
+        showToast('This item is out of stock.', 'error')
+        return false
+      }
 
       try {
-        await addWishlistToBag(custId, key, qty)
+        await addWishlistToBag(custId, key, qty, variation)
         notifyCartChanged()
         showToast(`Added "${product.name}" to your bag.`, 'success')
         return true
-      } catch {
-        showToast('Could not add this item to your bag. Please try again.', 'error')
+      } catch (error) {
+        showToast(error?.message || 'Could not add this item to your bag. Please try again.', 'error')
         return false
       }
     },
@@ -181,7 +203,7 @@ export function WishlistProvider({ children }) {
         toggleWishlist,
         isInWishlist,
         isProductOffered,
-        canAddToCart: (product) => isProductOffered(product),
+        canAddToCart: (product) => isProductOffered(product) && hasAvailableVariation(product),
         addToBag,
       }}
     >

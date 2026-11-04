@@ -1159,9 +1159,14 @@ class DatabaseAPI extends Controller
         return $this->validateFields($json, [
             'cust_id' => 'required',
             'prod_id' => 'required',
+            'prodvar_id' => 'sometimes|integer',
+            'item_qty' => 'sometimes|integer|min:1',
         ], [
             'cust_id.required' => 'Customer ID is required.',
             'prod_id.required' => 'Product ID is required.',
+            'prodvar_id.integer' => 'A valid product variant is required.',
+            'item_qty.integer' => 'Quantity must be a whole number.',
+            'item_qty.min' => 'Quantity must be at least one.',
         ]);
     }
 
@@ -1524,4 +1529,3 @@ class DatabaseAPI extends Controller
         return null;
     }
 }
-

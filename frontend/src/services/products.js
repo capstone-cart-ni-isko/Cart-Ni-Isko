@@ -134,6 +134,30 @@ export function variationSizes(variations, secondAxis = null) {
   return sizes
 }
 
+/** Normalize legacy size columns and variation labels into a unique string list. */
+export function normalizeProductSizes(rawSizes, fallback = []) {
+  let values = rawSizes
+  if (typeof values === 'string') {
+    try {
+      const parsed = JSON.parse(values)
+      values = Array.isArray(parsed) ? parsed : values.split(',')
+    } catch {
+      values = values.split(',')
+    }
+  }
+
+  if (!Array.isArray(values) || values.length === 0) values = fallback
+  const seen = new Set()
+  return values
+    .map((size) => String(size ?? '').trim())
+    .filter((size) => {
+      const key = size.toLocaleLowerCase()
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
 /**
  * The swatch a variation belongs to. A row with a colour option answers that
  * colour; a row that carries options but no colour (a shirt sold by size only,
@@ -292,9 +316,10 @@ export function mapProduct(row) {
   // sold out. The catalog badge shows exactly this.
   const availability = preOrder ? 'Pre-order' : qty > 0 ? 'In Stock' : 'Out of Stock'
   const mainImage = hasVariations ? mainVariationImage(variations) : ''
-  const sizes = hasVariations && variationSizes(variations, secondAxis).length > 0
+  const rawSizes = hasVariations
     ? variationSizes(variations, secondAxis)
-    : (row.prod_sizes || fallback.sizes)
+    : row.prod_sizes
+  const sizes = normalizeProductSizes(rawSizes, fallback.sizes)
   const colors = hasVariations && variationColors(variations, mainImage || fallback.images[0], colorAxis).length > 0
     ? variationColors(variations, mainImage || fallback.images[0], colorAxis)
     : (row.prod_colors || fallback.colors)

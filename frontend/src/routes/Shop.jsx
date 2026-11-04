@@ -59,11 +59,9 @@ function Shop() {
     }))
   }
 
-  // Filter products logic
-  const filteredProducts = productsData.filter((prod) => {
-    // 1. Search Query filter (matches name, description or category)
-    if (query.trim()) {
-      const q = query.toLowerCase()
+  const matchesFilters = (prod, filters, searchQuery = '') => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
       const match =
         prod.name.toLowerCase().includes(q) ||
         prod.description.toLowerCase().includes(q) ||
@@ -71,43 +69,33 @@ function Shop() {
       if (!match) return false
     }
 
-    // 2. Category filter
     if (
-      activeFilters.category !== 'All' &&
-      normalizeProductCategory(prod.category, prod.name) !== normalizeProductCategory(activeFilters.category)
-    ) {
-      return false
+      filters.category !== 'All' &&
+      normalizeProductCategory(prod.category, prod.name) !== normalizeProductCategory(filters.category)
+    ) return false
+
+    if (filters.collection !== 'All') {
+      const isBUnique = filters.collection === 'BUnique Collection' && prod.name.includes('BUnique')
+      const isClassic = filters.collection === 'Classic BU' && (prod.name.includes('Polo') || prod.name.includes('Varsity'))
+      const isEssentials = filters.collection === 'Essentials' && (!prod.name.includes('BUnique') && !prod.name.includes('Polo'))
+      if (filters.collection === 'BUnique Collection' && !isBUnique) return false
+      if (filters.collection === 'Classic BU' && !isClassic) return false
+      if (filters.collection === 'Essentials' && !isEssentials) return false
     }
 
-    // 3. Collection filter
-    if (activeFilters.collection !== 'All') {
-      const isBUnique = activeFilters.collection === 'BUnique Collection' && prod.name.includes('BUnique')
-      const isClassic = activeFilters.collection === 'Classic BU' && (prod.name.includes('Polo') || prod.name.includes('Varsity'))
-      const isEssentials = activeFilters.collection === 'Essentials' && (!prod.name.includes('BUnique') && !prod.name.includes('Polo'))
-      
-      if (activeFilters.collection === 'BUnique Collection' && !isBUnique) return false
-      if (activeFilters.collection === 'Classic BU' && !isClassic) return false
-      if (activeFilters.collection === 'Essentials' && !isEssentials) return false
-    }
+    if (filters.size && !prod.sizes.some(
+      (size) => String(size).trim().toLocaleLowerCase() === filters.size.trim().toLocaleLowerCase()
+    )) return false
+    if (filters.color && !prod.colors.some((color) => color.name === filters.color)) return false
 
-    // 4. Size filter
-    if (activeFilters.size && !prod.sizes.includes(activeFilters.size)) {
-      return false
-    }
-
-    // 5. Color filter
-    if (activeFilters.color && !prod.colors.some((c) => c.name === activeFilters.color)) {
-      return false
-    }
-
-    // 6. Price Range filter
-    const min = parseFloat(activeFilters.minPrice)
-    const max = parseFloat(activeFilters.maxPrice)
+    const min = parseFloat(filters.minPrice)
+    const max = parseFloat(filters.maxPrice)
     if (!isNaN(min) && prod.price < min) return false
     if (!isNaN(max) && prod.price > max) return false
-
     return true
-  })
+  }
+
+  const filteredProducts = productsData.filter((prod) => matchesFilters(prod, activeFilters, query))
 
   const handleApplyFilters = (newFilters) => {
     setActiveFilters(newFilters)
@@ -272,6 +260,8 @@ function Shop() {
         initialFilters={activeFilters}
         onApply={handleApplyFilters}
         categoryOptions={categories}
+        products={productsData}
+        getResultCount={(filters) => productsData.filter((product) => matchesFilters(product, filters, query)).length}
       />
     </AppShell>
   )

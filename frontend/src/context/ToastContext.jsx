@@ -31,8 +31,8 @@ export function ToastProvider({ children }) {
       {children}
       {toast && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 z-[140000] w-max max-w-sm px-4 animate-slide-up"
-          style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' }}
+          className="fixed right-4 z-[140000] w-max max-w-[calc(100vw-2rem)] px-4 animate-slide-up"
+          style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
           role="status"
           aria-live="polite"
         >

@@ -1211,8 +1211,28 @@ class UserAPI extends Controller
                     'message' => 'Product "' . $product->prod_name . '" is no longer offered',
                 ], 400);
             }
+            if ($json->filled('prodvar_id')
+                && (int) $json->input('prodvar_id') !== (int) $prodvar->prodvar_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The selected variant is no longer available.',
+                ], 400);
+            }
 
             $qty = max(1, (int) $json->input('item_qty', 1));
+            if ($json->filled('prodvar_id')
+                && (int) $prodvar->prodvar_preorder !== 1
+                && (int) $product->prod_preorder !== 1
+                && (int) $prodvar->prodvar_stock
+                    < ((int) UserAPI::bagQuery($custId)
+                        ->where('prodvar_id', $prodvar->prodvar_id)
+                        ->sum('bag_qty') + $qty)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This variant is out of stock.',
+                ], 409);
+            }
+
             $sent = $json->input('item_amount');
             $unit = $sent !== null && $sent !== ''
                 ? round((float) $sent, 2)

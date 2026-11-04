@@ -5,24 +5,113 @@ import { useWishlist } from '../hooks/useWishlist.js'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
+import Modal from '../components/ui/Modal.jsx'
 import { LockIcon, HeartIcon, CartIcon } from '../components/ui/Icons.jsx'
+import { getImageUrl } from '../utils/imageUtils.js'
+
+function optionForAxis(variation, axis) {
+  const key = Object.keys(variation?.prodvar_options || {})
+    .find((candidate) => candidate.toLowerCase() === String(axis || '').toLowerCase())
+  return key ? String(variation.prodvar_options[key] || '') : ''
+}
+
+function variationColor(product, variation) {
+  if (!product.colorAxis) return ''
+  return optionForAxis(variation, product.colorAxis) || 'Standard'
+}
+
+function variationSize(product, variation) {
+  return (product.secondAxis && optionForAxis(variation, product.secondAxis))
+    || optionForAxis(variation, 'size')
+    || optionForAxis(variation, 'sizes')
+    || variation.prodvar_name
+    || 'Standard'
+}
+
+function availableColors(product) {
+  const colors = []
+  product.variations.forEach((variation) => {
+    const name = variationColor(product, variation)
+    if (!name || colors.some((color) => color.name === name)) return
+    const fallbackColor = product.colors?.find((color) => color.name === name)
+    colors.push({
+      name,
+      image: variation.prodvar_pic || fallbackColor?.image || product.images?.[0] || '',
+      available: product.variations.some(
+        (candidate) => variationColor(product, candidate) === name && variantAvailable(product, candidate)
+      ),
+    })
+  })
+  return colors
+}
+
+function selectedVariation(product, color, size) {
+  return product?.variations.find((variation) => (
+    (!product.colorAxis || variationColor(product, variation) === color)
+    && (!product.secondAxis || variationSize(product, variation) === size)
+    && (!product.colorAxis && !product.secondAxis
+      ? variationSize(product, variation) === size
+      : true)
+  )) || null
+}
+
+function variantAvailable(product, variation) {
+  return Number(variation?.prodvar_stock) > 0
+    || Boolean(variation?.prodvar_preorder)
+    || Boolean(product?.productPreOrder)
+}
 
 function Wishlist() {
   const { currentUser } = useAuth()
   const { wishlistItems, canAddToCart, addToBag } = useWishlist()
   const [showLogin, setShowLogin] = useState(false)
   const [addingId, setAddingId] = useState(null)
+  const [variantProduct, setVariantProduct] = useState(null)
+  const [selectedColor, setSelectedColor] = useState('')
+  const [selectedSize, setSelectedSize] = useState('')
 
-  // FLOW-WISHLIST-06: every card carries its own "add to bag" action, which
-  // posts /wishlist/to_order and refreshes the bag badge through the response.
-  const handleAddToBag = async (product) => {
+  const handleAddToBag = async (product, variation = null) => {
     if (addingId) return
     setAddingId(product.id)
     try {
-      await addToBag(product)
+      const added = await addToBag(product, 1, variation)
+      if (added && variation) {
+        setVariantProduct(null)
+        setSelectedColor('')
+        setSelectedSize('')
+      }
     } finally {
       setAddingId(null)
     }
+  }
+
+  const openVariantPicker = (product) => {
+    const firstAvailable = product.variations.find((variation) => variantAvailable(product, variation))
+    setVariantProduct(product)
+    setSelectedColor(firstAvailable ? variationColor(product, firstAvailable) : '')
+    setSelectedSize(firstAvailable ? variationSize(product, firstAvailable) : '')
+  }
+
+  const confirmVariant = () => {
+    const variation = selectedVariation(variantProduct, selectedColor, selectedSize)
+    if (variantProduct && variation && variantAvailable(variantProduct, variation)) {
+      handleAddToBag(variantProduct, variation)
+    }
+  }
+
+  const colorOptions = variantProduct ? availableColors(variantProduct) : []
+  const sizeOptions = variantProduct
+    ? [...new Set(variantProduct.variations
+      .filter((variation) => !variantProduct.colorAxis || variationColor(variantProduct, variation) === selectedColor)
+      .map((variation) => variationSize(variantProduct, variation)))]
+    : []
+  const hasSizeAxis = Boolean(variantProduct?.secondAxis)
+    || (!variantProduct?.colorAxis && variantProduct?.variations?.length > 1)
+  const currentVariation = selectedVariation(variantProduct, selectedColor, selectedSize)
+  const closeVariantPicker = () => {
+    setVariantProduct(null)
+    setSelectedColor('')
+    setSelectedSize('')
   }
 
   const rightAction = currentUser && (
@@ -91,6 +180,7 @@ function Wishlist() {
                 stays visible even when it can no longer be bought. */}
             {wishlistItems.map((product) => {
               const offered = canAddToCart(product)
+              const hasVariants = product.variations?.length > 1
               const adding = addingId === product.id
               return (
                 <div key={product.id} className="flex flex-col">
@@ -105,7 +195,7 @@ function Wishlist() {
                   <button
                     type="button"
                     disabled={!offered || Boolean(addingId)}
-                    onClick={() => handleAddToBag(product)}
+                    onClick={() => hasVariants ? openVariantPicker(product) : handleAddToBag(product, product.variations?.[0] || null)}
                     className={`mt-2 w-full h-9 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors ${
                       !offered
                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -130,6 +220,136 @@ function Wishlist() {
         onClose={() => setShowLogin(false)}
         message="Sign in to access your wishlist."
       />
+      <Modal
+        isOpen={Boolean(variantProduct)}
+        onClose={closeVariantPicker}
+        title="Choose options"
+        subtitle={variantProduct?.name}
+        size="wide"
+        bodyClassName="py-1"
+        footer={(
+          <>
+            <button
+              type="button"
+              onClick={closeVariantPicker}
+              className="btn btn--secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmVariant}
+              disabled={!currentVariation || !variantAvailable(variantProduct, currentVariation) || Boolean(addingId)}
+              className="btn btn--primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {addingId ? 'Adding…' : 'Add to Bag'}
+            </button>
+          </>
+        )}
+      >
+        <div className="space-y-5">
+          {colorOptions.length > 0 && (
+            <section aria-label={`Select ${variantProduct.colorAxis}`}>
+              <h3 className="mb-2.5 text-sm font-semibold text-slate-700">
+                {variantProduct.colorAxis}: <span className="font-bold text-slate-900">{selectedColor}</span>
+              </h3>
+              <div className="flex flex-wrap gap-2.5">
+                {colorOptions.map((color) => {
+                  const selected = color.name === selectedColor
+                  return (
+                    <button
+                      key={color.name}
+                      type="button"
+                      disabled={!color.available || Boolean(addingId)}
+                      aria-pressed={selected}
+                      aria-label={`${color.name}${color.available ? '' : ', out of stock'}`}
+                      onClick={() => {
+                        setSelectedColor(color.name)
+                        const nextSize = variantProduct.variations.find((variation) =>
+                          variationColor(variantProduct, variation) === color.name
+                          && variantAvailable(variantProduct, variation)
+                        )
+                        if (nextSize) setSelectedSize(variationSize(variantProduct, nextSize))
+                      }}
+                      className={`relative h-20 w-20 overflow-hidden rounded-2xl border-2 bg-white p-1.5 transition-colors ${
+                        !color.available
+                          ? 'cursor-not-allowed border-slate-100 opacity-45'
+                          : selected
+                          ? 'border-brand-orange'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {color.image ? (
+                        <img
+                          src={getImageUrl(color.image)}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span className="flex h-full items-center justify-center text-xs font-medium text-slate-500">
+                          {color.name}
+                        </span>
+                      )}
+                      {selected && (
+                        <span className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand-orange text-xs font-bold text-white">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {hasSizeAxis && (
+            <section aria-label={`Select ${variantProduct.secondAxis || 'variant'}`}>
+              <h3 className="mb-2.5 text-sm font-semibold text-slate-700">
+                Select {variantProduct.secondAxis || 'Option'}
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {sizeOptions.map((size) => {
+                  const variation = variantProduct.variations.find((item) =>
+                    (!variantProduct.colorAxis || variationColor(variantProduct, item) === selectedColor)
+                    && variationSize(variantProduct, item) === size
+                  )
+                  const available = variation && variantAvailable(variantProduct, variation)
+                  const selected = size === selectedSize
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      disabled={!available || Boolean(addingId)}
+                      aria-pressed={selected}
+                      onClick={() => setSelectedSize(size)}
+                      className={`min-h-10 rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
+                        !available
+                          ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300 line-through'
+                          : selected
+                          ? 'border-brand-orange bg-brand-orange text-white'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {currentVariation && (
+            <p className="text-xs font-medium text-slate-500">
+              {currentVariation.prodvar_preorder || variantProduct.productPreOrder
+                ? 'Available for pre-order'
+                : `${currentVariation.prodvar_stock} in stock`}
+            </p>
+          )}
+          {variantProduct && !variantProduct.variations.some((variation) => variantAvailable(variantProduct, variation)) && (
+            <p className="text-sm text-red-600" role="status">All variants are currently out of stock.</p>
+          )}
+        </div>
+      </Modal>
     </FocusedLayout>
   )
 }

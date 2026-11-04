@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
-import { fetchOrders } from '../services/orders.js'
+import { dispatchModeOf, fetchOrders, orderFilterBucket } from '../services/orders.js'
 import { fetchMyAccount } from '../services/accounts.js'
 import { fetchNotifications, unreadCount } from '../services/notifications.js'
 import { WishlistContext } from '../context/WishlistContext.jsx'
@@ -14,6 +14,14 @@ import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import ViewAllLink from '../components/ui/ViewAllLink.jsx'
 
 import { SettingsIcon, LogOutIcon } from '../components/ui/Icons.jsx'
+
+const IN_PROGRESS_STATUSES = new Set([
+  'preparing',
+  'confirmed',
+  'in production',
+  'for pre-order',
+  'pre-order',
+])
 
 /* ──────────────────────────────────────────────
    SVG Icon Components for Layout
@@ -122,16 +130,19 @@ function Profile() {
   useEffect(() => {
     if (!custId) return undefined
     let cancelled = false
-    Promise.all([fetchOrders(custId), fetchNotifications('customer', custId)])
-      .then(([orderRows, notificationRows]) => {
+    Promise.allSettled([fetchOrders(custId), fetchNotifications('customer', custId)])
+      .then(([ordersResult, notificationsResult]) => {
         if (cancelled) return
-        setOrders(orderRows)
-        setUnreadNotifications(unreadCount(notificationRows))
-      })
-      .catch(() => {
-        if (cancelled) return
-        setOrders([])
-        setUnreadNotifications(0)
+        if (ordersResult.status === 'fulfilled') {
+          setOrders(ordersResult.value)
+        } else {
+          console.warn('Failed to load profile orders:', ordersResult.reason)
+        }
+        if (notificationsResult.status === 'fulfilled') {
+          setUnreadNotifications(unreadCount(notificationsResult.value))
+        } else {
+          console.warn('Failed to load profile notifications:', notificationsResult.reason)
+        }
       })
     return () => { cancelled = true }
   }, [custId])
@@ -158,15 +169,39 @@ function Profile() {
       : date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   }
 
-  const overview = useMemo(() => ({
-    totalOrders: orders.length,
-    completedOrders: orders.filter((o) => ['CLAIMED', 'COMPLETED'].includes(String(o.ord_status).toUpperCase())).length,
-    savedItems: wishlistItems.length,
-    inProgress: orders.filter((o) => o.ord_status === 'TO PROCESS').length,
-    forPickup: orders.filter((o) => o.ord_status === 'TO CLAIM').length,
-    forDelivery: orders.filter((o) => o.ord_status === 'TO RECEIVE').length,
-    completed: orders.filter((o) => ['CLAIMED', 'COMPLETED'].includes(String(o.ord_status).toUpperCase())).length,
-  }), [orders, wishlistItems])
+  const overview = useMemo(() => {
+    const counts = {
+      totalOrders: orders.length,
+      completedOrders: 0,
+      savedItems: wishlistItems.length,
+      inProgress: 0,
+      forPickup: 0,
+      forDelivery: 0,
+      completed: 0,
+    }
+
+    orders.forEach((order) => {
+      const status = String(order.ord_status ?? order.status ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/_/g, ' ')
+      const bucket = orderFilterBucket(status)
+      if (bucket === 'processing' || IN_PROGRESS_STATUSES.has(status)) {
+        counts.inProgress += 1
+      }
+      if (bucket === 'claimed') {
+        counts.completedOrders += 1
+        counts.completed += 1
+      }
+      if (bucket === 'to-claim') {
+        const dispatchMode = dispatchModeOf(order)
+        if (dispatchMode === 'pickup') counts.forPickup += 1
+        if (dispatchMode === 'delivery') counts.forDelivery += 1
+      }
+    })
+
+    return counts
+  }, [orders, wishlistItems])
 
   const rightAction = (
     <div className="flex items-center gap-2">
