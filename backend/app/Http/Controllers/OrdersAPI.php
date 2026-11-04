@@ -16,6 +16,8 @@ use App\Models\Pickup;
 use App\Models\Prodsales;
 use App\Models\Product;
 use App\Models\Prodvar;
+use App\Models\Review;
+use App\Support\SystemSettings;
 use App\Http\Controllers\ProductsAPI;
 use App\Services\Geocoder;
 use App\Services\LalamoveService;
@@ -220,7 +222,7 @@ class OrdersAPI extends Controller
             }
         }
 
-        DB::transaction(function () use ($order, $status, $deliverExpect) {
+        DB::transaction(function () use ($order, $status, $deliverExpect, $priorKey, $user) {
             $order->update(['ord_status' => $status]);
 
             if ($deliverExpect !== null) {
@@ -230,6 +232,13 @@ class OrdersAPI extends Controller
 
             if ($status === 'cancelled') {
                 $this->closeDispatch($order);
+
+                // Units taken off the shelf at checkout go back on sale when an
+                // order that never reached the customer is cancelled (e.g. a
+                // no-show pickup that was swept to Unclaimed).
+                if (! in_array($priorKey, ['claimed', 'received', 'returned', 'refunded', 'cancelled'], true)) {
+                    $this->releaseHeldStock($order, $user);
+                }
             }
         });
 
@@ -462,6 +471,34 @@ class OrdersAPI extends Controller
             $payload['pay_given'] = (float) $order->pay_received;
         }
         $payload['pay_received'] = (float) $order->pay_received;
+
+        // Whether every product in a claimed/received order already carries a
+        // live review from this customer, so the storefront can swap
+        // "Rate & Review" for "View Review" instead of offering a dead end.
+        $payload['reviewed_all'] = false;
+        if (in_array(strtolower((string) $order->ord_status), ['claimed', 'received'], true)
+            && (int) $order->cust_id > 0) {
+            $prodIds = $order->items
+                ->map(fn (Item $item) => (int) ($item->bag?->prodvar?->prod_id ?? 0))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+            if ($prodIds !== []) {
+                $reviewed = Review::where('cust_id', (int) $order->cust_id)
+                    ->whereIn('prod_id', $prodIds)
+                    ->whereRaw("COALESCE(rev_msg, '') NOT LIKE '[DELETED]%'")
+                    ->where(function ($q) {
+                        $q->whereNotNull('rev_approved')
+                          ->orWhereRaw("COALESCE(rev_msg, '') NOT LIKE '[REJECTED]%'");
+                    })
+                    ->distinct()
+                    ->pluck('prod_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+                $payload['reviewed_all'] = array_diff($prodIds, $reviewed) === [];
+            }
+        }
 
         $payload['pay_method'] = self::payMethodForOrder(
             $order,
@@ -736,6 +773,14 @@ class OrdersAPI extends Controller
 
                     $slotStart = $this->normalizeSlotStart($appointment->appoint_start ?? $slotStart);
                     $slotEnd   = $slotStart->copy()->addMinutes($this->slotMinutes());
+                }
+
+                if ($closed = SystemSettings::closedReason($slotStart)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'The store is closed on that day (' . $closed . '). Please pick another date.',
+                        'code'    => 'STORE_CLOSED',
+                    ], 409);
                 }
 
                 if (! $this->slotHasCapacity($slotStart, $slotEnd, $appointId ?: null)) {
@@ -1986,6 +2031,7 @@ class OrdersAPI extends Controller
                 if (! isset($preorderLines[(int) $bag->prodvar_id])) {
                     Prodvar::where('prodvar_id', $bag->prodvar_id)
                         ->decrement('prodvar_stock', max(1, (int) $bag->bag_qty));
+                    \App\Support\ProductCatalogCache::invalidateStock((int) $bag->prodvar_id);
                 }
 
                 // Record in prodsales so the sales history and Units Sold
@@ -2320,6 +2366,10 @@ class OrdersAPI extends Controller
 
         $ignoreId = $existing ? (int) $existing->appoint_id : null;
 
+        if ($closed = SystemSettings::closedReason($slotStart)) {
+            throw new \RuntimeException('The store is closed on that day (' . $closed . '). Please pick another date.');
+        }
+
         if (! $this->slotHasCapacity($slotStart, $slotEnd, $ignoreId)) {
             throw new \RuntimeException('The selected pickup slot is already full. Please pick another slot.');
         }
@@ -2476,7 +2526,11 @@ class OrdersAPI extends Controller
 
         $saved = trim((string) ($customer->cust_address ?? ''));
         if ($saved !== '') {
-            return str_replace(' | ', ', ', $saved);
+            // The default (first) saved address, without its "[pin:lat,lng]"
+            // map token - the courier needs readable text only.
+            $first = trim(explode(' | ', $saved)[0]);
+
+            return trim((string) preg_replace('/\s*\[pin:[^\]]*\]\s*$/', '', $first));
         }
 
         throw new \RuntimeException('A delivery address is required.');
@@ -2999,6 +3053,7 @@ class OrdersAPI extends Controller
                         if ($bag && $bag->prodvar_id) {
                             Prodvar::where('prodvar_id', $bag->prodvar_id)
                                 ->increment('prodvar_stock', (int) $bag->bag_qty);
+                            \App\Support\ProductCatalogCache::invalidateStock((int) $bag->prodvar_id);
                         }
                         if ($bag) {
                             $this->bumpProdsales($bag, $order, 'cancel', true);
@@ -3388,6 +3443,7 @@ class OrdersAPI extends Controller
             Prodvar::where('prodvar_id', $bag->prodvar_id)
                 ->where('prodvar_stock', '>=', (int) $bag->bag_qty)
                 ->decrement('prodvar_stock', (int) $bag->bag_qty);
+            \App\Support\ProductCatalogCache::invalidateStock((int) $bag->prodvar_id);
 
             $bag->update(['bag_placed' => DB::raw('true')]);
             $this->bumpProdsales($bag, $order, 'place', true);
@@ -4743,6 +4799,7 @@ class OrdersAPI extends Controller
                 $newStock = (int) $prodvar->prodvar_stock - $take;
                 Prodvar::where('prodvar_id', $bag->prodvar_id)
                     ->update(['prodvar_stock' => $newStock]);
+                \App\Support\ProductCatalogCache::invalidateStock((int) $bag->prodvar_id);
                 $prodvar->prodvar_stock = $newStock;
 
                 if ($take > 0) {
@@ -4783,6 +4840,7 @@ class OrdersAPI extends Controller
         foreach ($this->orderBags($order) as $bag) {
             Prodvar::where('prodvar_id', $bag->prodvar_id)
                 ->increment('prodvar_stock', (int) $bag->bag_qty);
+            \App\Support\ProductCatalogCache::invalidateStock((int) $bag->prodvar_id);
             $restocked[] = ($bag->prodvar?->product?->prod_name ?? 'variation #' . $bag->prodvar_id)
                 . ' (#' . $bag->prodvar_id . ') +' . (int) $bag->bag_qty;
         }
@@ -4792,6 +4850,34 @@ class OrdersAPI extends Controller
                 (int) $employee->emp_id,
                 'edit',
                 'stock restock - order #' . $order->ord_id . ' - ' . implode(', ', $restocked)
+            );
+        }
+    }
+
+    /**
+     * Return the units an unfulfilled order took at checkout. Regular lines
+     * were deducted when the order was placed; pre-order lines are only
+     * deducted on claim, so they hold nothing to give back yet.
+     */
+    private function releaseHeldStock(Order $order, $employee = null): void
+    {
+        $released = [];
+        foreach ($this->orderBags($order) as $bag) {
+            $prodvar = Prodvar::with('product')->where('prodvar_id', $bag->prodvar_id)->first();
+            if (! $prodvar) continue;
+            if ((bool) $prodvar->prodvar_preorder || (bool) ($prodvar->product->prod_preorder ?? false)) continue;
+
+            $qty = max(1, (int) $bag->bag_qty);
+            Prodvar::where('prodvar_id', $bag->prodvar_id)->increment('prodvar_stock', $qty);
+            \App\Support\ProductCatalogCache::invalidateStock((int) $bag->prodvar_id);
+            $released[] = 'variation #' . $bag->prodvar_id . ' +' . $qty;
+        }
+
+        if ($released !== [] && $this->isEmployee($employee)) {
+            $this->logEmployee(
+                (int) $employee->emp_id,
+                'edit',
+                'stock release - order #' . $order->ord_id . ' - ' . implode(', ', $released)
             );
         }
     }

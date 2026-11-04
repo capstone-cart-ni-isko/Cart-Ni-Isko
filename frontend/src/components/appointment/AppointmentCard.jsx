@@ -106,9 +106,7 @@ export default function AppointmentCard({ appointment, onView, onCancel, onShowQ
           <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             QR
           </span>
-          <code className="text-xs font-mono font-semibold text-slate-700 break-all">
-            {appointment.qr}
-          </code>
+          <span className="text-xs font-semibold text-slate-700">Claim pass ready</span>
           <span className="ml-auto flex items-center gap-2">
             <span className="hidden sm:inline text-[10px] text-slate-400 font-medium">
               Staff scans this at the counter
@@ -164,7 +162,7 @@ export default function AppointmentCard({ appointment, onView, onCancel, onShowQ
             title={
               status === 'upcoming'
                 ? 'This slot can no longer be cancelled.'
-                : `${status === 'done' ? 'Completed' : status === 'cancelled' ? 'Cancelled' : 'Marked no show'} appointments cannot be cancelled.`
+                : `${status === 'done' ? 'Completed' : status === 'cancelled' ? 'Cancelled' : 'No-show'} appointments cannot be cancelled.`
             }
             className="flex-1 h-8 rounded-lg bg-slate-100 text-slate-400 text-xs font-semibold flex items-center justify-center cursor-not-allowed"
           >

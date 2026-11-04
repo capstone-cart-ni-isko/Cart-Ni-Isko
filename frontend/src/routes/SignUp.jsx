@@ -6,6 +6,7 @@ import collegesData from '../data/colleges.json'
 import Button from '../components/ui/Button.jsx'
 import TermsModal from '../components/ui/TermsModal.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
+import { passwordProblem, PASSWORD_HINT } from '../utils/passwordRules.js'
 import brandLogo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 const selectStyle = {
@@ -37,7 +38,7 @@ function SignUp() {
   const [form, setForm] = useState(() => {
     const defaults = {
       custType: 'BUENO', // Default to BUeño
-      role: 'Student',   // Student | Alumni | Faculty for BUeño; Guest for guest
+      role: 'Student',   // Student | Faculty for BUeño; Guest for guest
       firstName: '',
       lastName: '',
       phone: '',
@@ -137,9 +138,7 @@ function SignUp() {
 
   const passwordError = !password
     ? 'Password is required.'
-    : password.length < 8
-      ? 'Password must be at least 8 characters.'
-      : ''
+    : passwordProblem(password)
   const confirmError = !confirmPassword
     ? 'Please re-enter your password.'
     : confirmPassword !== password
@@ -148,8 +147,8 @@ function SignUp() {
   const termsError = agreeToTerms ? '' : 'You must agree to the Terms and Privacy.'
 
   // BUeño-specific validation
-  const roleError = isBueño && !['Student', 'Alumni', 'Faculty'].includes(form.role)
-    ? 'Please choose whether a student, alumni, or faculty.'
+  const roleError = isBueño && !['Student', 'Faculty'].includes(form.role)
+    ? 'Please choose whether you are a student or faculty.'
     : ''
   const addressError = isBueño && !form.address?.trim() ? 'Address is required.' : ''
   const collegeError = isBueño && !form.college ? 'College or institute is required.' : ''
@@ -175,7 +174,7 @@ function SignUp() {
     if (type === 'GUEST') {
       updateForm({ custType: 'GUEST', role: 'Guest', college: '', course: '', address: '' })
     } else {
-      const validRole = ['Student', 'Alumni', 'Faculty'].includes(form.role) ? form.role : 'Student'
+      const validRole = ['Student', 'Faculty'].includes(form.role) ? form.role : 'Student'
       updateForm({ custType: 'BUENO', role: validRole })
     }
   }
@@ -293,7 +292,7 @@ function SignUp() {
                 <div>
                   <span className="block text-base">BUeño</span>
                   <span className="block text-xs font-normal text-gray-400 dark:text-[var(--muted)] mt-0.5">
-                    Student, alumni, or faculty of Bicol University
+                    Current student or faculty of Bicol University
                   </span>
                 </div>
                 {isBueño && (
@@ -377,13 +376,13 @@ function SignUp() {
                     BUeño Affiliation Details
                   </h2>
 
-                  {/* 1. Affiliation Category: Student, Alumni, or Faculty */}
+                  {/* 1. Affiliation Category: Student or Faculty */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1.5">
                       I am a... <span className="text-red-500">*</span>
                     </label>
                     <div className="grid grid-cols-3 gap-2">
-                      {['Student', 'Alumni', 'Faculty'].map((r) => (
+                      {['Student', 'Faculty'].map((r) => (
                         <button
                           key={r}
                           type="button"
@@ -594,7 +593,7 @@ function SignUp() {
                     <div className="relative">
                       <input
                         type={showPass ? 'text' : 'password'}
-                        placeholder="At least 8 characters"
+                        placeholder={PASSWORD_HINT}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         onBlur={() => touch('password')}

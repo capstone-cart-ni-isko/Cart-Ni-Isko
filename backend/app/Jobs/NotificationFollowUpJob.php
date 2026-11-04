@@ -37,9 +37,11 @@ class NotificationFollowUpJob implements ShouldQueue
             ->get();
 
         foreach ($customerFollowUps as $notif) {
-            // Check if follow-up already exists for this notification
+            // One follow-up per notification: match the exact marker the
+            // follow-up text below carries (the old "[FOLLOW-UP] #id" probe
+            // never matched, so a new copy was added every 15 minutes).
             $exists = CustNotif::where('cust_id', $notif->cust_id)
-                ->where('custnotif_msg', 'like', '%[FOLLOW-UP] #' . $notif->custnotif_id . '%')
+                ->where('custnotif_msg', 'like', '%(follow-up for notification #' . $notif->custnotif_id . ')%')
                 ->exists();
 
             if ($exists) continue;
@@ -71,7 +73,7 @@ class NotificationFollowUpJob implements ShouldQueue
         foreach ($employeeFollowUps as $notif) {
             // Check if follow-up already exists for this notification
             $exists = EmpNotif::where('emp_id', $notif->emp_id)
-                ->where('empnotif_msg', 'like', '%[FOLLOW-UP] #' . $notif->empnotif_id . '%')
+                ->where('empnotif_msg', 'like', '%(follow-up for notification #' . $notif->empnotif_id . ')%')
                 ->exists();
 
             if ($exists) continue;

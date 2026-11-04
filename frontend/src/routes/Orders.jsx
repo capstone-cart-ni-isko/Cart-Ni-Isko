@@ -230,6 +230,8 @@ export function mapServerOrder(row) {
 
   return {
     id: row.ord_id ?? row.id,
+    // Every product of the order already has a live review (server flag).
+    reviewedAll: Boolean(row.reviewed_all),
     date: formatDate(row.ord_created ?? row.created ?? null),
     status,
     statusContext: STATUS_CONTEXT[status] || '',
@@ -286,6 +288,7 @@ function Orders() {
   const [selectedOrder, setSelectedOrder] = useState(null)
   // Claimed / received orders can have each of their items rated and reviewed.
   const [reviewTarget, setReviewTarget] = useState(null)
+  const statusSeenRef = useRef(null)
   const firstLoad = useRef(true)
 
   // Generate QR code Data URL whenever pickupQrTarget changes
@@ -330,7 +333,20 @@ function Orders() {
 
       try {
         const baseRows = await fetchOrders(custId)
-        setOrders((baseRows || []).map(mapServerOrder))
+        const mapped = (baseRows || []).map(mapServerOrder)
+        // Review prompt: when an order the customer was watching turns
+        // Claimed / Received while this page is open (staff scan, or their
+        // own parcel scan), open the review popup for it once.
+        const prior = statusSeenRef.current
+        if (prior) {
+          const justFinished = mapped.find(
+            (o) => canReviewOrder(o.status) && !o.reviewedAll
+              && prior[o.id] && !canReviewOrder(prior[o.id])
+          )
+          if (justFinished) setReviewTarget((current) => current || justFinished)
+        }
+        statusSeenRef.current = Object.fromEntries(mapped.map((o) => [o.id, o.status]))
+        setOrders(mapped)
       } catch (err) {
         console.warn('Failed to load orders:', err?.message)
         // Polls fail silently and keep the list already on screen.
@@ -870,10 +886,12 @@ function Orders() {
                       <button
                         type="button"
                         onClick={() => setReviewTarget(order)}
-                        className="px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                        className={order.reviewedAll
+                          ? 'px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-1.5'
+                          : 'px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-1.5'}
                       >
                         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-amber-500" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-                        <span>Rate &amp; Review</span>
+                        <span>{order.reviewedAll ? 'View Review' : 'Rate & Review'}</span>
                       </button>
                     )}
 
@@ -933,7 +951,10 @@ function Orders() {
         <OrderReviewModal
           isOpen={Boolean(reviewTarget)}
           order={reviewTarget}
-          onClose={() => setReviewTarget(null)}
+          onClose={() => {
+            setReviewTarget(null)
+            load({ silent: true })
+          }}
         />
       )}
 
@@ -945,10 +966,7 @@ function Orders() {
         subtitle="Present this QR code together with your student ID at the pickup counter."
         size="sm"
         footer={
-          <div className="flex items-center justify-between w-full gap-2">
-            <span className="text-[11px] text-gray-500 font-mono truncate">
-              {pickupQrTarget?.qr || ''}
-            </span>
+          <div className="flex items-center justify-end w-full gap-2">
             <Button variant="secondary" onClick={() => setPickupQrTarget(null)}>
               Close
             </Button>

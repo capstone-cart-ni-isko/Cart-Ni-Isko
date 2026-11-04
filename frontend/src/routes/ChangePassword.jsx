@@ -6,6 +6,7 @@ import { updateCredentials } from '../services/auth.js'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import Button from '../components/ui/Button.jsx'
 import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
+import { passwordProblem, PASSWORD_HINT } from '../utils/passwordRules.js'
 
 function PasswordField({ label, name, value, onChange, placeholder }) {
   const [show, setShow] = useState(false)
@@ -46,7 +47,8 @@ function ChangePassword() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  const newValid = form.newPass.length >= 8
+  const newProblem = passwordProblem(form.newPass)
+  const newValid = newProblem === ''
   const matchValid = form.newPass === form.confirm && form.confirm.length > 0
   const canSubmit = form.current.length > 0 && newValid && matchValid
 
@@ -95,10 +97,10 @@ function ChangePassword() {
               name="newPass"
               value={form.newPass}
               onChange={handleChange}
-              placeholder="At least 8 characters"
+              placeholder={PASSWORD_HINT}
             />
             {form.newPass.length > 0 && !newValid && (
-              <p className="text-red-500 text-xs font-semibold -mt-3">Password must be at least 8 characters.</p>
+              <p className="text-red-500 text-xs font-semibold -mt-3">{newProblem}</p>
             )}
             <PasswordField
               label="Confirm New Password"

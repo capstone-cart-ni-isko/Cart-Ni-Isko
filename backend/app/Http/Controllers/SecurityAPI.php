@@ -243,6 +243,35 @@ class SecurityAPI extends Controller
                     ], 503);
                 }
 
+                // Two-factor sign-in: the password alone opens no session. A
+                // code goes to the employee's BU email and the signed
+                // challenge is redeemed at POST /otp/challenge/verify.
+                if ($this->staffLoginNeedsOtp()) {
+                    [$code, $otpError] = $this->issueOtpCode($employee, 'login');
+                    if ($code === null) {
+                        return response()->json(['success' => false, 'message' => $otpError], 429);
+                    }
+
+                    Cache::put('otp:emp-temp:' . (int) $employee->emp_id, (bool) $check['temporary'],
+                        now()->addMinutes(self::otpTtlMinutes + 5));
+
+                    $this->logEmployee((int) $employee->emp_id, 'auth',
+                        'POST /api/auth/emp_login - email OTP required');
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Verification code sent to your Bicol University email.',
+                        'data' => [
+                            'requires_otp' => true,
+                            'purpose'      => 'login',
+                            'challenge'    => ApiToken::challenge($employee, 'login'),
+                            'contact'      => $this->maskEmail((string) $employee->emp_email),
+                            'delivery'     => 'email',
+                            'expires_in'   => self::otpTtlMinutes * 60,
+                        ],
+                    ], 200);
+                }
+
                 try {
                     $token = \App\Support\ApiToken::issue($employee);
                 } catch (\Throwable $e) {
@@ -279,6 +308,21 @@ class SecurityAPI extends Controller
                     'error' => $e->getMessage()
                 ], 500);
             }
+        }
+
+        /** Whether staff sign-in needs the emailed code (see config/otp.php). */
+        protected function staffLoginNeedsOtp(): bool
+        {
+            $setting = config('otp.staff_login', 'auto');
+
+            if (is_bool($setting)) {
+                return $setting;
+            }
+            if (strtolower((string) $setting) !== 'auto') {
+                return filter_var($setting, FILTER_VALIDATE_BOOL);
+            }
+
+            return ! in_array((string) config('mail.default'), ['log', 'array', ''], true);
         }
 
         public function employeeLoginCheck(Request $json)
@@ -806,6 +850,13 @@ class SecurityAPI extends Controller
 
         $token = ApiToken::issue($user);
 
+        $extra = [];
+        if ($isEmployee) {
+            // A temporary (system-issued) password still has to be replaced
+            // right after a two-factor sign-in.
+            $extra['must_change_password'] = (bool) Cache::pull('otp:emp-temp:' . (int) $user->emp_id, false);
+        }
+
         if ($isEmployee) {
             $this->logEmployee((int) $user->emp_id, 'authentication',
                 'POST /api/otp/challenge/verify - ' . $purpose . ' cleared, session opened');
@@ -819,7 +870,7 @@ class SecurityAPI extends Controller
             'message' => $purpose === 'signup'
                 ? 'Phone number verified. Your account is ready.'
                 : 'Code verified.',
-            'data'    => array_merge($user->toArray(), [
+            'data'    => array_merge($user->toArray(), $extra, [
                 'token'   => $token,
                 'purpose' => $purpose,
             ]),
@@ -862,10 +913,17 @@ class SecurityAPI extends Controller
 
             $this->logEmployee((int) $user->emp_id, 'view', 'POST /api/otp/challenge/inbox');
 
-            $code = $notifications
-                ->map(static fn ($row) => preg_match('/\b(\d{6})\b/', (string) $row->empnotif_msg, $m) ? $m[1] : null)
-                ->filter()
-                ->first();
+            // The staff sign-in code is the second factor: it is only ever
+            // read from the employee's email, never handed back here.
+            $code = (string) $json->input('purpose') === 'login'
+                ? null
+                : $notifications
+                    ->map(static fn ($row) => preg_match('/\b(\d{6})\b/', (string) $row->empnotif_msg, $m) ? $m[1] : null)
+                    ->filter()
+                    ->first();
+            if ((string) $json->input('purpose') === 'login') {
+                $notifications = collect();
+            }
 
             return response()->json([
                 'success' => true,

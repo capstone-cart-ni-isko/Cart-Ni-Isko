@@ -2,8 +2,8 @@ import { apiPost, apiPut } from './api.js'
 
 /**
  * The academic category behind a signup role. The new schema stores
- * `cust_categ` ∈ student | alumni | faculty (null for guests); the
- * legacy forms still send `role` = 'Student' | 'Alumni' | 'Faculty' |
+ * `cust_categ` ∈ student | faculty (null for guests); the
+ * legacy forms still send `role` = 'Student' | 'Faculty' |
  * 'Guest'.
  */
 function resolveCateg(details) {
@@ -11,11 +11,11 @@ function resolveCateg(details) {
     ? details.cust_categ || details.categ
     : ''
   const raw = String(explicit || details.role || details.cust_type || '').trim().toLowerCase()
-  if (['student', 'alumni', 'faculty'].includes(raw)) return raw
+  if (['student', 'faculty'].includes(raw)) return raw
   if (raw === 'guest') return null
-  // 'Student' -> 'student', 'Alumni' -> 'alumni', 'Faculty' -> 'faculty'
+  // 'Student' -> 'student', 'Faculty' -> 'faculty'
   const normalized = raw.replace(/[^a-z]/g, '')
-  return ['student', 'alumni', 'faculty'].includes(normalized) ? normalized : null
+  return ['student', 'faculty'].includes(normalized) ? normalized : null
 }
 
 /** True when the signup declares a guest account. */

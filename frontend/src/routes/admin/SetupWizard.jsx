@@ -4,6 +4,7 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { apiGet, apiPost } from '../../services/api.js'
 import { updateSettings } from '../../services/settings.js'
 import { isSuperAdminRow } from '../../components/admin/schema.js'
+import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
 
 /*
     DOMAIN 1: SETUP - FLOW-SETUP-01..05
@@ -52,14 +53,10 @@ function phoneError(value) {
   return ''
 }
 
-/** REQ-SETUP-03: 16+ characters with upper, lower, number and symbol. */
+/** REQ-SETUP-03: the shared password standard (utils/passwordRules.js). */
 function passwordError(value) {
   if (!value) return '' // optional: the backend generates one instead
-  if (value.length < 16) return 'Use at least 16 characters'
-  if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/\d/.test(value) || !/[^A-Za-z0-9]/.test(value)) {
-    return 'Needs an uppercase, a lowercase, a number and a symbol'
-  }
-  return ''
+  return passwordProblem(value)
 }
 
 function Field({ label, hint, error, touched, children }) {
@@ -352,7 +349,7 @@ export default function SetupWizard({ embedded = false }) {
                     <div className="sm:col-span-2">
                       <Field
                         label="Password (optional)"
-                        hint="At least 16 characters with an uppercase letter, lowercase letter, number, and symbol."
+                        hint={PASSWORD_HINT}
                         touched={touched.password}
                         error={errors.account.password}
                       >

@@ -26,17 +26,23 @@ function ContactList({ title, items, inputType, placeholder, onAdd, onRemove, bu
   const [draft, setDraft] = useState('')
   const [localError, setLocalError] = useState('')
 
+  // Checked as the customer types, not only when they press Add.
+  const problemOf = (raw) => {
+    const value = raw.trim()
+    if (!value) return ''
+    const valid = inputType === 'email' ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) : PHONE_RE.test(value)
+    if (!valid) return inputType === 'email' ? 'Enter a valid email address.' : 'Enter a valid phone number.'
+    if (items.includes(value)) return 'That contact is already on the list.'
+    return ''
+  }
+
   const submit = (e) => {
     e.preventDefault()
     const value = draft.trim()
     if (!value) return
-    const valid = inputType === 'email' ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) : PHONE_RE.test(value)
-    if (!valid) {
-      setLocalError(inputType === 'email' ? 'Enter a valid email address.' : 'Enter a valid phone number.')
-      return
-    }
-    if (items.includes(value)) {
-      setLocalError('That contact is already on the list.')
+    const problem = problemOf(value)
+    if (problem) {
+      setLocalError(problem)
       return
     }
     setLocalError('')
@@ -78,8 +84,9 @@ function ContactList({ title, items, inputType, placeholder, onAdd, onRemove, bu
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value)
-              setLocalError('')
+              setLocalError(problemOf(e.target.value))
             }}
+            aria-invalid={localError ? 'true' : undefined}
             placeholder={placeholder}
             className="w-full h-11 px-4 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all placeholder-gray-400"
           />

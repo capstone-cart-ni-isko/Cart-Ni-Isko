@@ -8,6 +8,7 @@ import Modal from '../../components/ui/Modal.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { mapOrderRows } from '../../services/dashboard.js'
+import { findProductsByCode, productMatchesQuery } from '../../services/adminProducts.js'
 import { normalizeProductCategory, PRODUCT_CATEGORIES } from '../../data/productCategories.js'
 
 const CATEGORY_ALL = 'All Items'
@@ -111,10 +112,10 @@ export default function AdminPos() {
       const cat = normalizeProductCategory(p.category, p.name)
       const matchCat =
         selectedCategory === CATEGORY_ALL || cat === selected || cat.includes(selected) || selected.includes(cat)
+      // Name, product code, product ID ("12" / "PROD-12") or a variation SKU.
       const matchSearch =
         !searchQuery ||
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(p.sku || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        productMatchesQuery(p, searchQuery) ||
         cat.includes(searchQuery.toLowerCase())
       return matchCat && matchSearch
     })
@@ -390,23 +391,24 @@ export default function AdminPos() {
       setScanError('')
       if (!value) return
       setSearchQuery(value)
-      const hits = backendProducts.filter(
-        (p) => !p.disabled && String(p.sku || '').toLowerCase() === value.toLowerCase()
+      // The scan may be the product ID, the product code or a variation SKU.
+      const hits = findProductsByCode(
+        backendProducts.filter((p) => !p.disabled),
+        value
       )
       // A pre-order is produced to order: it is priced and paid through the
       // customer pre-order flow, so scanning it at the counter must not ring
       // it up as a walk-in sale.
-      const sellable = hits.filter((p) => !p.preorder)
+      const sellable = hits.filter(({ product, variant }) => !product.preorder && !variant?.preorder)
       if (sellable.length === 1) {
         // FLOW-WALKIN-04: the scanned SKU may be a specific variation's, so
         // the exact prodvar row is rung up instead of the product's default.
-        const scanned = sellable[0].variants.find(
-          (v) => String(v.sku || '').toLowerCase() === value.toLowerCase()
-        ) || sellable[0].variants[0]
-        posAddToCart(sellable[0], scanned?.name || 'Standard', 1, scanned?.prodvarId ?? null, scanned?.price)
-        showToast(`Added ${sellable[0].name} to the sale`)
+        const { product, variant } = sellable[0]
+        const scanned = variant || product.variants.find((v) => v.main) || product.variants[0]
+        posAddToCart(product, scanned?.name || 'Standard', 1, scanned?.prodvarId ?? null, scanned?.price)
+        showToast(`Added ${product.name} to the sale`)
       } else if (sellable.length === 0 && hits.length > 0) {
-        showToast(`"${hits[0].name}" is a pre-order item and cannot be sold at the walk-in register.`, 'error')
+        showToast(`"${hits[0].product.name}" is a pre-order item and cannot be sold at the walk-in register.`, 'error')
       } else if (sellable.length === 0) {
         showToast(`No product matches barcode "${value}".`, 'error')
       }

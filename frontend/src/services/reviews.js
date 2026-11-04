@@ -113,6 +113,9 @@ export function canReviewOrder(status) {
 /** Longest review text the server accepts (rev_msg is a 255-char column). */
 export const REVIEW_MAX_LENGTH = 200
 
+/** Shortest written review accepted when the customer writes one at all. */
+export const REVIEW_MIN_LENGTH = 5
+
 /**
  * GET /reviews/mine - the signed-in customer's own reviews of the products in
  * one order, in every moderation state ('pending' | 'approved' | 'rejected').

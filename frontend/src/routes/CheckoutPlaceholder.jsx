@@ -101,7 +101,7 @@ function estimatedDeliveryLabel(serverEta, tierWindow) {
 
 /** The exact body every checkout endpoint receives for this form. */
 function buildCheckoutPayload(form) {
-  const { dispatchType, tier, deliveryAddress, slot, bagIds } = form
+  const { dispatchType, tier, deliveryAddress, deliveryPin, slot, bagIds } = form
   const payload = { dispatch_type: dispatchType }
   // No bag_ids key = "every live row"; a checked selection is sent explicitly.
   if (bagIds.length > 0) payload.bag_ids = bagIds
@@ -109,6 +109,11 @@ function buildCheckoutPayload(form) {
   if (dispatchType === 'delivery') {
     payload.speed = tier
     payload.deliver_address = deliveryAddress
+    // A map pin beats geocoding the typed text for the courier quote.
+    if (deliveryPin) {
+      payload.deliver_lat = deliveryPin.lat
+      payload.deliver_lng = deliveryPin.lng
+    }
   } else if (slot?.appoint_start) {
     payload.appoint_start = slot.appoint_start
     if (slot.appoint_id) payload.appoint_id = slot.appoint_id
@@ -226,6 +231,11 @@ function CheckoutPlaceholder() {
   )
   const chosenAddress = sortedAddresses[0]
   const deliveryAddress = addressText(chosenAddress)
+  const deliveryPin =
+    chosenAddress && chosenAddress.lat != null && chosenAddress.lng != null
+      ? { lat: chosenAddress.lat, lng: chosenAddress.lng }
+      : null
+  const deliveryPinKey = deliveryPin ? `${deliveryPin.lat},${deliveryPin.lng}` : ''
 
   const tierInfo = DELIVERY_TIERS.find((t) => t.key === tier) || DELIVERY_TIERS[1]
   const serverDue =
@@ -303,6 +313,7 @@ function CheckoutPlaceholder() {
             dispatchType,
             tier,
             deliveryAddress,
+            deliveryPin,
             slot,
             bagIds: bagIdsFromKey,
           })
@@ -315,7 +326,7 @@ function CheckoutPlaceholder() {
     return () => {
       cancelled = true
     }
-  }, [bagIdsKey, dispatchType, tier, deliveryAddress, slot, itemsToCheckout.length])
+  }, [bagIdsKey, dispatchType, tier, deliveryAddress, deliveryPinKey, slot, itemsToCheckout.length])
 
   /* Returning from the PayMongo hosted checkout. The order already exists
      (the intent call created it), so nothing here places anything: the
@@ -610,6 +621,7 @@ function CheckoutPlaceholder() {
       dispatchType,
       tier,
       deliveryAddress,
+      deliveryPin,
       slot,
       bagIds: bagIdsKey ? bagIdsKey.split(',').map(Number) : [],
     })

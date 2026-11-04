@@ -27,7 +27,7 @@ export default function TrackTimeline({ status = 'upcoming', type = 'VISIT' }) {
       {isCancelled || status === 'absent' ? (
         <div className={`rounded-lg border px-3 py-2 ${isCancelled ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
           <p className={`text-xs font-semibold ${isCancelled ? 'text-red-700' : 'text-amber-800'}`}>
-            {isCancelled ? 'Cancelled' : 'No Show'}
+            {isCancelled ? 'Cancelled' : 'No-show'}
           </p>
           <p className={`text-[11px] leading-snug ${isCancelled ? 'text-red-600' : 'text-amber-700'}`}>
             {isCancelled

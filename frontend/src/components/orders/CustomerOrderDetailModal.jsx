@@ -191,6 +191,7 @@ export default function CustomerOrderDetailModal({
   }, [isOpen, orderId, version, reloadTick, loadDetails])
 
   const effectiveRaw = fullOrderData || order?.raw || {}
+  const reviewedAll = Boolean(effectiveRaw.reviewed_all ?? order?.reviewedAll)
   const status = order?.status || 'TO PROCESS'
   const isDelivery = order?.fulfillment?.method === 'Courier Delivery'
   const showQr = Boolean(order && RECEIVING.includes(status))
@@ -614,7 +615,6 @@ export default function CustomerOrderDetailModal({
               <h3 className="text-xs font-bold text-[var(--muted)] uppercase tracking-wider">
                 {isDelivery ? 'Delivery Tracking' : 'Pickup Claim Pass'}
               </h3>
-              <StatusBadge status={status} className="self-start px-2.5 py-0.5 text-xs" />
             </div>
 
             {showQr && qrPayload && (
@@ -632,15 +632,12 @@ export default function CustomerOrderDetailModal({
                 )}
                 <div className="text-xs text-[var(--ink-2)] space-y-2 max-w-md">
                   <p className="font-bold text-[var(--ink)] text-base">
-                    {isDelivery ? 'Courier verification code' : 'Show this QR at the pickup counter'}
+                    {isDelivery ? 'Show this QR to the courier' : 'Show this QR at the pickup counter'}
                   </p>
                   <p className="text-[var(--muted)] leading-relaxed text-xs">
                     {isDelivery
                       ? 'The courier scans this code when your order is handed over.'
                       : 'Present this code together with your student ID to claim your order at Tindahan ni Isko, BU Student Center Ground Floor.'}
-                  </p>
-                  <p className="font-mono text-xs text-[var(--ink-2)] break-all bg-[var(--surface)] px-2.5 py-1.5 rounded-lg border border-[var(--line)] inline-block">
-                    {String(qrPayload)}
                   </p>
                   {isDelivery && ['IN TRANSIT', 'TO RECEIVE'].includes(status) && (
                     <div className="flex flex-col sm:flex-row justify-center gap-2 pt-1.5 w-full">
@@ -714,7 +711,7 @@ export default function CustomerOrderDetailModal({
           <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
               <span className="font-bold text-[var(--ink)] text-sm">Fulfillment Method</span>
-              <span className="self-start inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold uppercase tracking-wider">
+              <span className="self-start text-xs font-medium text-emerald-600 dark:text-emerald-400">
                 Paid at checkout
               </span>
             </div>
@@ -1027,7 +1024,7 @@ export default function CustomerOrderDetailModal({
                 onClick={() => setConfirmCancel(true)}
                 className="w-full sm:w-auto px-4 py-2 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition-colors cursor-pointer disabled:opacity-60"
               >
-                {busy ? <><LoadingSpinner size={13} /> Sending…</> : 'Cancel Order'}
+                {busy ? <LoadingSpinner size={14} /> : 'Cancel Order'}
               </button>
             </div>
             <p className="text-xs text-[var(--muted)]">
@@ -1049,11 +1046,13 @@ export default function CustomerOrderDetailModal({
                 className="w-full sm:w-auto px-4 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-amber-500" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-                Rate &amp; Review items
+                {reviewedAll ? 'View your reviews' : 'Rate & Review items'}
               </button>
             </div>
             <p className="text-xs text-[var(--muted)]">
-              Rate each product in this order and share how it turned out.
+              {reviewedAll
+                ? 'You have reviewed every item in this order. Thank you!'
+                : 'Rate each product in this order and share how it turned out.'}
             </p>
           </div>
         )}
@@ -1071,7 +1070,7 @@ export default function CustomerOrderDetailModal({
                 onClick={handleRequestRefund}
                 className="w-full sm:w-auto px-4 py-2 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-500/20 transition-colors cursor-pointer disabled:opacity-60"
               >
-                {busy ? <><LoadingSpinner size={13} /> Sending…</> : 'Request for Refund'}
+                {busy ? <LoadingSpinner size={14} /> : 'Request for Refund'}
               </button>
             </div>
             <p className="text-xs text-[var(--muted)]">

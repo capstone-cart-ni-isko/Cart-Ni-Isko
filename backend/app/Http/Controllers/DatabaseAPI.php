@@ -365,14 +365,14 @@ class DatabaseAPI extends Controller
         }
 
         $buenoCheck = $this->validateFields($json, [
-            'cust_categ'   => 'required|in:student,alumni,faculty',
+            'cust_categ'   => 'required|in:student,faculty',
             'cust_college' => 'required|string|max:120',
             'cust_dept'    => 'required|string|max:120',
             'address'      => 'sometimes|nullable|string|max:255',
             'email'        => 'required|email:rfc|ends_with:bicol-u.edu.ph',
         ], [
-            'cust_categ.required'   => 'Please choose your category (student, alumni, or faculty).',
-            'cust_categ.in'         => 'Please choose your category (student, alumni, or faculty).',
+            'cust_categ.required'   => 'Please choose your category (student or faculty).',
+            'cust_categ.in'         => 'Please choose your category (student or faculty).',
             'cust_college.required' => 'College or institute is required.',
             'cust_dept.required'    => 'Department or program is required.',
             'email.required'        => 'Bicol University email address is required.',
@@ -423,7 +423,7 @@ class DatabaseAPI extends Controller
 
         if (! $json->filled('cust_categ')) {
             $fromType = preg_replace('/[^a-z]/', '', strtolower((string) $json->input('type')));
-            if (in_array($fromType, ['student', 'alumni', 'faculty'], true)) {
+            if (in_array($fromType, ['student', 'faculty'], true)) {
                 $json->merge(['cust_categ' => $fromType]);
             }
         }
@@ -681,6 +681,16 @@ class DatabaseAPI extends Controller
         ]);
     }
 
+    /** The shared password standard as a validation rule (see EmployeePassword). */
+    protected static function standardPasswordRule(): \Closure
+    {
+        return function (string $attribute, $value, \Closure $fail) {
+            if (is_string($value) && $value !== '' && ! \App\Support\EmployeePassword::meetsStandard($value)) {
+                $fail(\App\Support\EmployeePassword::STANDARD_MESSAGE);
+            }
+        };
+    }
+
     public function password(Request $json)
     {
         return $this->validateFields($json, [
@@ -688,10 +698,11 @@ class DatabaseAPI extends Controller
                 'nullable',
                 'string',
                 'min:8',
-                'regex:/^[^\s\x00-\x1F\x7F]+$/'
+                'regex:/^[^\s\x00-\x1F\x7F]+$/',
+                self::standardPasswordRule(),
             ]
         ], [
-            'password.min'   => 'Password must be at least 8 characters.',
+            'password.min'   => 'Passwords must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a symbol.',
             'password.regex' => 'Password contains invalid control characters.'
         ]);
     }
@@ -1029,12 +1040,12 @@ class DatabaseAPI extends Controller
     {
         return $this->validateFields($json, [
             'challenge'                 => 'required|string',
-            'new_password'              => 'required|string|min:8|regex:/^[^\s\x00-\x1F\x7F]+$/',
+            'new_password'              => ['required', 'string', 'min:8', 'regex:/^[^\s\x00-\x1F\x7F]+$/', self::standardPasswordRule()],
             'new_password_confirmation' => 'nullable|same:new_password',
         ], [
             'challenge.required'             => 'The recovery session expired. Please start again.',
             'new_password.required'          => 'New password is required.',
-            'new_password.min'               => 'New password must be at least 8 characters.',
+            'new_password.min'               => 'Passwords must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a symbol.',
             'new_password.regex'             => 'New password contains invalid characters.',
             'new_password_confirmation.same' => 'New password confirmation does not match.',
         ]);
@@ -1044,12 +1055,12 @@ class DatabaseAPI extends Controller
     {
         $credentials = $this->validateFields($json, [
             'current_password' => 'required|string',
-            'new_password' => 'required|string|min:8|regex:/^[^\s\x00-\x1F\x7F]+$/',
+            'new_password' => ['required', 'string', 'min:8', 'regex:/^[^\s\x00-\x1F\x7F]+$/', self::standardPasswordRule()],
             'new_password_confirmation' => 'nullable|same:new_password',
         ], [
             'current_password.required' => 'Current password is required.',
             'new_password.required' => 'New password is required.',
-            'new_password.min' => 'New password must be at least 8 characters.',
+            'new_password.min' => 'Passwords must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a symbol.',
             'new_password.regex' => 'New password contains invalid characters.',
             'new_password_confirmation.same' => 'New password confirmation does not match.',
         ]);

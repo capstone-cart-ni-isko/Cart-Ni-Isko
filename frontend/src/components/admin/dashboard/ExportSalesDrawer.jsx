@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import DrawerPanel from '../DrawerPanel.jsx'
-import { filterOrdersByRange, summarizeSales, toCsv, downloadText } from '../../../services/dashboard.js'
+import { filterOrdersByRange, summarizeSales } from '../../../services/dashboard.js'
+import { downloadXlsx } from '../../../services/excelExport.js'
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, peso } from '../kit/ui.js'
 
 const RANGES = ['Today', 'Week', 'Month', 'All']
@@ -39,16 +40,33 @@ export default function ExportSalesDrawer({ isOpen, onClose, orders = [], initia
   }, [orders, range, statusSet])
   const totals = summarizeSales(rows)
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const stamp = new Date().toISOString().slice(0, 10)
-    downloadText(`Tindahan_ni_Isko_Sales_${range}_${stamp}.csv`, toCsv(rows, COLUMNS))
+    try {
+      await downloadXlsx(`Tindahan_ni_Isko_Sales_${range}_${stamp}.xlsx`, {
+        title: 'Sales Export',
+        subtitle: `${range} · ${STATUS_SETS[statusSet].label}`,
+        sheetName: 'Sales',
+        summary: [
+          ['Orders', totals.count],
+          ['Gross sales (PHP)', Number(totals.gross.toFixed(2))],
+          ['Average order (PHP)', Number(totals.avg.toFixed(2))],
+        ],
+        sections: [{
+          columns: COLUMNS.map((c) => c.label),
+          rows: rows.map((o) => COLUMNS.map((c) => c.value(o))),
+        }],
+      })
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   return (
     <DrawerPanel
       isOpen={isOpen}
       onClose={onClose}
-      title="Export sales (CSV)"
+      title="Export sales (Excel)"
       subtitle="Opens in Excel or Google Sheets"
       footer={
         <>

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom'
 import { ToastProvider } from './context/ToastContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
@@ -13,11 +14,11 @@ import { AdminProvider } from './context/AdminContext.jsx'
 import RealtimeBridge from './components/realtime/RealtimeBridge.jsx'
 
 import PwaInstallPrompt from './components/ui/PwaInstallPrompt.jsx'
-import SignUp from './routes/SignUp.jsx'
+const SignUp = lazy(() => import('./routes/SignUp.jsx'))
 import SignIn from './routes/SignIn.jsx'
-import VerifyOtp from './routes/VerifyOtp.jsx'
-import ForgotPassword from './routes/ForgotPassword.jsx'
-import ResetPassword from './routes/ResetPassword.jsx'
+const VerifyOtp = lazy(() => import('./routes/VerifyOtp.jsx'))
+const ForgotPassword = lazy(() => import('./routes/ForgotPassword.jsx'))
+const ResetPassword = lazy(() => import('./routes/ResetPassword.jsx'))
 import Home from './routes/Home.jsx'
 import Shop from './routes/Shop.jsx'
 import Search from './routes/Search.jsx'
@@ -28,42 +29,42 @@ import Orders from './routes/Orders.jsx'
 import OrderDetail from './routes/OrderDetail.jsx'
 import Profile from './routes/Profile.jsx'
 import Settings from './routes/Settings.jsx'
-import AccountInfo from './routes/AccountInfo.jsx'
-import ChangePassword from './routes/ChangePassword.jsx'
-import MyAddress from './routes/MyAddress.jsx'
+const AccountInfo = lazy(() => import('./routes/AccountInfo.jsx'))
+const ChangePassword = lazy(() => import('./routes/ChangePassword.jsx'))
+const MyAddress = lazy(() => import('./routes/MyAddress.jsx'))
 import Notifications from './routes/Notifications.jsx'
-import NotificationPreferences from './routes/NotificationPreferences.jsx'
-import BackupContacts from './routes/BackupContacts.jsx'
-import AboutSettings from './routes/AboutSettings.jsx'
-import AboutUs from './routes/AboutUs.jsx'
-import CheckoutPlaceholder from './routes/CheckoutPlaceholder.jsx'
-import Appointments from './routes/Appointments.jsx'
-import BookAppointment from './routes/BookAppointment.jsx'
+const NotificationPreferences = lazy(() => import('./routes/NotificationPreferences.jsx'))
+const BackupContacts = lazy(() => import('./routes/BackupContacts.jsx'))
+const AboutSettings = lazy(() => import('./routes/AboutSettings.jsx'))
+const AboutUs = lazy(() => import('./routes/AboutUs.jsx'))
+const CheckoutPlaceholder = lazy(() => import('./routes/CheckoutPlaceholder.jsx'))
+const Appointments = lazy(() => import('./routes/Appointments.jsx'))
+const BookAppointment = lazy(() => import('./routes/BookAppointment.jsx'))
 
 // Admin Screen Routes
 import AdminLogin from './routes/admin/AdminLogin.jsx'
 import RequireAdmin from './components/admin/RequireAdmin.jsx'
 import RequireRole from './components/admin/RequireRole.jsx'
-import AdminDashboard from './routes/admin/AdminDashboard.jsx'
-import AdminPos from './routes/admin/AdminPos.jsx'
-import AdminOrders from './routes/admin/AdminOrders.jsx'
-import AdminInventory from './routes/admin/AdminInventory.jsx'
-import AdminProductDetail from './routes/admin/AdminProductDetail.jsx'
-import AdminPickup from './routes/admin/AdminPickup.jsx'
-import AdminDelivery from './routes/admin/AdminDelivery.jsx'
-import AdminAnalytics from './routes/admin/AdminAnalytics.jsx'
-import AdminStoreCustomization from './routes/admin/AdminStoreCustomization.jsx'
-import AdminSchedule from './routes/admin/AdminSchedule.jsx'
-import AdminReviews from './routes/admin/AdminReviews.jsx'
-import AdminUsers from './routes/admin/AdminUsers.jsx'
-import AdminEnroll from './routes/admin/AdminEnroll.jsx'
-import AdminAppointments from './routes/admin/AdminAppointments.jsx'
-import AdminAccount from './routes/admin/AdminAccount.jsx'
-import AdminSettings from './routes/admin/AdminSettings.jsx'
-import AdminSearch from './routes/admin/AdminSearch.jsx'
-import AdminQr from './routes/admin/AdminQr.jsx'
-import AdminNotifications from './routes/admin/AdminNotifications.jsx'
-import SetupWizard from './routes/admin/SetupWizard.jsx'
+const AdminDashboard = lazy(() => import('./routes/admin/AdminDashboard.jsx'))
+const AdminPos = lazy(() => import('./routes/admin/AdminPos.jsx'))
+const AdminOrders = lazy(() => import('./routes/admin/AdminOrders.jsx'))
+const AdminInventory = lazy(() => import('./routes/admin/AdminInventory.jsx'))
+const AdminProductDetail = lazy(() => import('./routes/admin/AdminProductDetail.jsx'))
+const AdminPickup = lazy(() => import('./routes/admin/AdminPickup.jsx'))
+const AdminDelivery = lazy(() => import('./routes/admin/AdminDelivery.jsx'))
+const AdminAnalytics = lazy(() => import('./routes/admin/AdminAnalytics.jsx'))
+const AdminStoreCustomization = lazy(() => import('./routes/admin/AdminStoreCustomization.jsx'))
+const AdminSchedule = lazy(() => import('./routes/admin/AdminSchedule.jsx'))
+const AdminReviews = lazy(() => import('./routes/admin/AdminReviews.jsx'))
+const AdminUsers = lazy(() => import('./routes/admin/AdminUsers.jsx'))
+const AdminEnroll = lazy(() => import('./routes/admin/AdminEnroll.jsx'))
+const AdminAppointments = lazy(() => import('./routes/admin/AdminAppointments.jsx'))
+const AdminAccount = lazy(() => import('./routes/admin/AdminAccount.jsx'))
+const AdminSettings = lazy(() => import('./routes/admin/AdminSettings.jsx'))
+const AdminSearch = lazy(() => import('./routes/admin/AdminSearch.jsx'))
+const AdminQr = lazy(() => import('./routes/admin/AdminQr.jsx'))
+const AdminNotifications = lazy(() => import('./routes/admin/AdminNotifications.jsx'))
+const SetupWizard = lazy(() => import('./routes/admin/SetupWizard.jsx'))
 import ScrollToTop from './components/layout/ScrollToTop.jsx'
 import { useAdmin } from './hooks/useAdmin.js'
 import { empHomePath } from './components/admin/schema.js'
@@ -74,6 +75,14 @@ import { latestSessionKind } from './services/session.js'
  * protected link tapped while signed out) gets the sign-in prompt instead of
  * a hard redirect, so "back" still returns to the page they came from.
  */
+function RouteFallback() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center" role="status" aria-label="Loading">
+      <span className="w-8 h-8 rounded-full border-4 border-orange-200 border-t-[var(--color-brand-orange)] animate-spin" />
+    </div>
+  )
+}
+
 function RequireAuth() {
   const { currentUser } = useAuth()
   const navigate = useNavigate()
@@ -119,6 +128,10 @@ function App() {
               <RealtimeBridge />
               <PwaInstallPrompt />
               <ApiErrorBoundary>
+                {/* Route-level code splitting: the admin portal and the less
+                    visited customer pages load on demand, which keeps the first
+                    download small (the main bundle had grown past 2 MB). */}
+                <Suspense fallback={<RouteFallback />}>
                 <Routes>
                 {/* ── Customer Routes ── */}
                 <Route path="/" element={<EntryRoute />} />
@@ -291,6 +304,7 @@ function App() {
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
+                </Suspense>
               </ApiErrorBoundary>
             </WishlistProvider>
           </CartProvider>

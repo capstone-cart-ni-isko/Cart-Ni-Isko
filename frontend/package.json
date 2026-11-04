@@ -12,14 +12,17 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "exceljs": "^4.4.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "laravel-echo": "^2.5.0",
+    "leaflet": "^1.9.4",
     "pusher-js": "^8.6.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.18.2",
     "tailwindcss": "^4.3.3"
   },

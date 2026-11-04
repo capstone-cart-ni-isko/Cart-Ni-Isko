@@ -12,7 +12,44 @@ class ProductCatalogCache
         $category = $category ?: 'all';
         $stock = $stock ?: 'all';
 
-        return 'catalog:products:list:' . strtolower($status) . ':' . strtolower($category) . ':' . strtolower($stock);
+        // The generation is part of every list key: bumping it retires every
+        // filtered variant at once (the file cache store has no tags, so
+        // forgetting only the "all" keys used to leave e.g. a shirts-only
+        // list stale for up to 30 minutes).
+        return 'catalog:products:list:g' . self::generation() . ':' . strtolower($status) . ':' . strtolower($category) . ':' . strtolower($stock);
+    }
+
+    private const GENERATION_KEY = 'catalog:products:generation';
+
+    public static function generation(): int
+    {
+        return (int) Cache::get(self::GENERATION_KEY, 1);
+    }
+
+    /** Retire every cached product list (stock or listing changed). */
+    public static function bumpGeneration(): void
+    {
+        try {
+            Cache::forever(self::GENERATION_KEY, self::generation() + 1);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /**
+     * Stock moved outside the Product model (checkout, POS, cancellations,
+     * claims): every list and that product's detail must be re-read.
+     */
+    public static function invalidateStock(?int $prodvarId = null): void
+    {
+        self::bumpGeneration();
+
+        if ($prodvarId !== null) {
+            try {
+                $prodId = \App\Models\Prodvar::where('prodvar_id', $prodvarId)->value('prod_id');
+                if ($prodId) Cache::forget(self::productDetailKey((int) $prodId));
+            } catch (\Throwable $e) {
+            }
+        }
     }
 
     public static function productDetailKey(int $productId): string
@@ -69,18 +106,12 @@ class ProductCatalogCache
     {
         Cache::forget(self::productDetailKey($productId));
         Cache::forget(self::categoriesKey());
-
-        foreach (['active', 'disabled', 'deleted', 'all'] as $status) {
-            Cache::forget(self::productListKey($status));
-        }
+        self::bumpGeneration();
     }
 
     public static function invalidateCategory(): void
     {
         Cache::forget(self::categoriesKey());
-
-        foreach (['active', 'disabled', 'deleted', 'all'] as $status) {
-            Cache::forget(self::productListKey($status));
-        }
+        self::bumpGeneration();
     }
 }

@@ -187,6 +187,9 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/appoint/search', [AppointmentsAPI::class, 'searchAppointments']);
     Route::get('/appoint/sort', [AppointmentsAPI::class, 'sortAppointments']);
     Route::get('/appoint/slots', [AppointmentsAPI::class, 'displaySlots']);
+    Route::get('/appoint/closed-dates', [AppointmentsAPI::class, 'closedDates']);
+    // Sudden suspension: move every open appointment of one day at once.
+    Route::post('/appoint/bulk-reschedule', [AppointmentsAPI::class, 'bulkReschedule'])->middleware('role:admin');
     Route::put('/appoint/update', [AppointmentsAPI::class, 'updateAppointmentDetails']);
     // FLOW-MANAGE_APP-09: the admin's reschedule-request queue, and the
     // customer/employee action that opens a request on an open booking.

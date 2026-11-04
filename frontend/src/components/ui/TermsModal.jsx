@@ -10,7 +10,7 @@ import Button from './Button.jsx'
 const TERMS = [
   {
     heading: 'Your account',
-    body: 'You must give accurate details when you register. Your phone number and password are your sign-in; keep them private. You are responsible for every order placed from your account. BUeño accounts must belong to a current or former Bicol University student, alumnus, or faculty member.',
+    body: 'You must give accurate details when you register. Your phone number and password are your sign-in; keep them private. You are responsible for every order placed from your account. BUeño accounts must belong to a current Bicol University student or faculty member.',
   },
   {
     heading: 'Orders and payment',

@@ -400,3 +400,45 @@ export function unlistAdminProduct(prodId) {
 export function sellAdminProduct(prodId) {
   return apiPost('/products/sell', { prod_id: prodId })
 }
+
+/**
+ * POS lookup helpers. Staff type or scan any of: the numeric product ID
+ * ("12", "#12", "PROD-12"), the product code (prod_tag) or a variation SKU
+ * ("TAG-M"). All comparisons are case-insensitive.
+ */
+const normalizeCode = (value) => String(value ?? '').trim().toLowerCase()
+
+const productIdFromCode = (value) => {
+  const match = normalizeCode(value).match(/^(?:#|prod-?)?(\d+)$/)
+  return match ? Number(match[1]) : null
+}
+
+/** Loose match used by the POS search boxes. */
+export function productMatchesQuery(product, query) {
+  const q = normalizeCode(query)
+  if (!q) return true
+  if (String(product.name || '').toLowerCase().includes(q)) return true
+  if (normalizeCode(product.sku).includes(q)) return true
+  const id = productIdFromCode(q)
+  if (id != null && Number(product.prodId) === id) return true
+  return (product.variants || []).some((v) => normalizeCode(v.sku).includes(q))
+}
+
+/**
+ * Exact match used by the barcode scanner: returns every product whose ID,
+ * product code or variation SKU equals the scanned value, paired with the
+ * variation that was scanned (or null when the product itself was scanned).
+ */
+export function findProductsByCode(products, code) {
+  const value = normalizeCode(code)
+  if (!value) return []
+  const id = productIdFromCode(value)
+  const hits = []
+  for (const product of products) {
+    const variant = (product.variants || []).find((v) => normalizeCode(v.sku) === value) || null
+    if (variant || normalizeCode(product.sku) === value || (id != null && Number(product.prodId) === id)) {
+      hits.push({ product, variant })
+    }
+  }
+  return hits
+}

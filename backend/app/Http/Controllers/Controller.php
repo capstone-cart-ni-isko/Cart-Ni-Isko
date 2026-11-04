@@ -195,6 +195,15 @@ abstract class Controller
 
     protected function notifyCustomer(int $custId, string $message): void
     {
+        // The same event can reach this from two code paths (a status change
+        // plus its follow-up announcement); one inbox row is enough.
+        if (CustNotif::where('cust_id', $custId)
+            ->where('custnotif_msg', $message)
+            ->where('custnotif_created', '>=', now()->subMinutes(2))
+            ->exists()) {
+            return;
+        }
+
         CustNotif::create([
             'custnotif_id'      => $this->nextId('custnotif', 'custnotif_id'),
             'cust_id'           => $custId,
@@ -280,6 +289,13 @@ abstract class Controller
 
     protected function notifyEmployee(int $empId, string $message): void
     {
+        if (EmpNotif::where('emp_id', $empId)
+            ->where('empnotif_msg', $message)
+            ->where('empnotif_created', '>=', now()->subMinutes(2))
+            ->exists()) {
+            return;
+        }
+
         EmpNotif::create([
             'empnotif_id'      => $this->nextId('empnotif', 'empnotif_id'),
             'emp_id'           => $empId,

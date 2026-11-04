@@ -22,7 +22,7 @@ export async function fetchAppointments(params = {}) {
 export function appointmentStatusLabel(status) {
   const normalized = String(status || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ')
   if (['done', 'complete', 'completed', 'claimed', 'closed'].includes(normalized)) return 'Complete'
-  if (['absent', 'no show'].includes(normalized)) return 'No Show'
+  if (['absent', 'no show'].includes(normalized)) return 'No-show'
   if (['cancelled', 'canceled'].includes(normalized)) return 'Cancelled'
   if (['upcoming', 'open'].includes(normalized)) return 'Upcoming'
   return status || '—'
@@ -52,6 +52,34 @@ export async function closeAppointment(appointId, reason = '') {
 /** PUT /appoint/update - reschedule or amend an appointment. */
 export async function updateAppointment(appointId, changes) {
   const result = await apiPut('/appoint/update', { appoint_id: appointId, ...changes })
+  invalidateCache()
+  return result
+}
+
+/**
+ * GET /appoint/closed-dates - days the store takes no bookings (holidays,
+ * suspensions). Resolves to [{ date: 'YYYY-MM-DD', reason }].
+ */
+export async function fetchClosedDates() {
+  try {
+    const data = await apiGet('/appoint/closed-dates')
+    return Array.isArray(data?.data) ? data.data : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * POST /appoint/bulk-reschedule - move every open appointment of a day at
+ * once after a sudden suspension. `targetDate` is optional (next open day).
+ */
+export async function bulkReschedule({ date, targetDate = '', reason, closeDay = true }) {
+  const result = await apiPost('/appoint/bulk-reschedule', {
+    date,
+    ...(targetDate ? { target_date: targetDate } : {}),
+    reason,
+    close_day: closeDay,
+  })
   invalidateCache()
   return result
 }

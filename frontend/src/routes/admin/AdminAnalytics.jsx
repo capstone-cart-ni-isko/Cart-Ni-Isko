@@ -8,6 +8,7 @@ import { getImageUrl } from '../../utils/imageUtils.js'
 import { jsPDF } from 'jspdf'
 // v5 exports the caller rather than patching the jsPDF prototype.
 import autoTable from 'jspdf-autotable'
+import { downloadXlsx } from '../../services/excelExport.js'
 
 import {
   fetchDashboardSnapshot,
@@ -192,26 +193,22 @@ export default function AdminAnalytics() {
     ],
   })
 
-  const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`
 
-  const exportFile = (extension) => {
+  const exportFile = async (extension) => {
     const filename = `analytics-${timeRange.toLowerCase()}-${isoDay(0)}.${extension}`
-    if (extension === 'csv') {
+    if (extension === 'xlsx') {
       const report = buildReport()
-      const lines = report.meta.map(([label, value]) => `${csvCell(label)},${csvCell(value)}`)
-      report.tables.forEach((table) => {
-        lines.push('')
-        lines.push(csvCell(table.title))
-        lines.push(table.head.map(csvCell).join(','))
-        table.rows.forEach((row) => lines.push(row.map(csvCell).join(',')))
-      })
-      const blob = new Blob([`\uFEFF${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      link.click()
-      URL.revokeObjectURL(url)
+      try {
+        await downloadXlsx(filename, {
+          title: 'Analytics Report',
+          subtitle: rangeLabel,
+          sheetName: 'Analytics',
+          summary: report.meta.filter(([label]) => label !== 'Generated'),
+          sections: report.tables.map((table) => ({ title: table.title, columns: table.head, rows: table.rows })),
+        })
+      } catch (e) {
+        console.error(e)
+      }
       return
     }
 
@@ -301,10 +298,10 @@ export default function AdminAnalytics() {
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => exportFile('csv')}
+                onClick={() => exportFile('xlsx')}
                 className="h-8 px-3 rounded-lg border border-gray-200 bg-white text-xs font-bold text-gray-700 hover:text-brand-orange hover:border-brand-orange transition-all cursor-pointer"
               >
-                Export CSV
+                Export Excel
               </button>
               <button
                 type="button"

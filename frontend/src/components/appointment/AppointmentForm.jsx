@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useToast } from '../../hooks/useToast.js'
 import { useApiChange } from '../../hooks/useApiChange.js'
 import OtpVerifyModal from '../ui/OtpVerifyModal.jsx'
+import BookingCalendar from './BookingCalendar.jsx'
 import {
   createAppointment,
+  fetchClosedDates,
   fetchSlots,
   updateAppointment,
 } from '../../services/appointments.js'
@@ -145,6 +147,16 @@ export default function AppointmentForm({
   const [slots, setSlots] = useState([])
   const [slot, setSlot] = useState('')
   const [slotsError, setSlotsError] = useState('')
+  // Holidays / suspensions the store manager blacked out (GET /appoint/closed-dates)
+  const [closedDates, setClosedDates] = useState([])
+  useEffect(() => {
+    let alive = true
+    fetchClosedDates().then((rows) => alive && setClosedDates(rows))
+    return () => {
+      alive = false
+    }
+  }, [])
+  const closedReason = closedDates.find((row) => row.date === date)?.reason || ''
   const [booking, setBooking] = useState(false)
 
   // FLOW-BOOK_APP-05: the server asks for the phone code only when the
@@ -359,16 +371,21 @@ export default function AppointmentForm({
         </div>
       )}
 
-      <label className="flex items-center gap-2 text-xs text-slate-500">
-        <span>Date</span>
-        <input
-          type="date"
+      <div className="space-y-1.5">
+        <span className="text-xs text-slate-500 block">Date</span>
+        <BookingCalendar
           value={date}
           min={todayISO()}
-          onChange={(e) => setDate(e.target.value)}
-          className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-gray-700 focus:border-brand-orange"
+          closedDates={closedDates}
+          onChange={setDate}
         />
-      </label>
+      </div>
+
+      {date && closedReason && (
+        <p className="text-xs text-slate-700 bg-slate-100 rounded-lg p-2.5">
+          The store is closed on this day ({closedReason}). Please pick another date.
+        </p>
+      )}
 
       {slotsError && (
         <p className="text-xs text-red-500 bg-red-50 rounded-lg p-2">{slotsError}</p>

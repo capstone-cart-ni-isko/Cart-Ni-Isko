@@ -61,7 +61,6 @@ export default function AppointmentDetailsModal({ appointment, onClose, onEdit, 
           <Row label="Time" value={appointment.time} />
           <Row label="Location" value={`${appointment.location} · ${appointment.subLocation}`} />
           {appointment.orderId && <Row label="Order" value={`#${appointment.orderId}`} />}
-          {appointment.qr && <Row label="Reference" value={appointment.qr} />}
           {appointment.desc && <Row label="Details" value={appointment.desc} />}
         </div>
 

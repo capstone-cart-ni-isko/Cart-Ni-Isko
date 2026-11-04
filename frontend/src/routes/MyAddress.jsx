@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
@@ -6,6 +6,8 @@ import Input from '../components/ui/Input.jsx'
 import Button from '../components/ui/Button.jsx'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import { MapPinIcon } from '../components/ui/Icons.jsx'
+// Leaflet only loads when the address form is opened.
+const MapPinPicker = lazy(() => import('../components/ui/MapPinPicker.jsx'))
 
 const EMPTY_FORM = {
   addressLine: '',
@@ -13,7 +15,20 @@ const EMPTY_FORM = {
   city: '',
   province: '',
   postalCode: '',
+  lat: null,
+  lng: null,
   isDefault: false,
+}
+
+/** Live field checks (shown once a field has been touched). */
+function addressErrors(form) {
+  const errors = {}
+  if (!form.addressLine.trim()) errors.addressLine = 'Enter the house no., street or building.'
+  else if (form.addressLine.trim().length < 3) errors.addressLine = 'That address line looks too short.'
+  if (!form.city.trim()) errors.city = 'Enter the city or municipality.'
+  if (!form.province.trim()) errors.province = 'Enter the province.'
+  if (form.postalCode && !/^\d{4}$/.test(form.postalCode.trim())) errors.postalCode = 'Philippine postal codes have 4 digits.'
+  return errors
 }
 
 function AddressCard({ address, defaultName, defaultPhone, onEdit, onDelete, onSetDefault }) {
@@ -53,6 +68,11 @@ function AddressCard({ address, defaultName, defaultPhone, onEdit, onDelete, onS
       <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
         {address.addressLine}, {address.barangay}, {address.city}, {address.province} {address.postalCode}
       </p>
+      {address.lat != null && (
+        <p className="text-[10px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+          <MapPinIcon className="w-3 h-3" /> Pinned on map
+        </p>
+      )}
     </div>
   )
 }
@@ -69,9 +89,13 @@ function MyAddress() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [touched, setTouched] = useState({})
+  const errors = addressErrors(form)
+  const fieldError = (name) => (touched[name] ? errors[name] : undefined)
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
+    setTouched((prev) => ({ ...prev, [name]: true }))
     setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
@@ -80,6 +104,7 @@ function MyAddress() {
 
   const handleAddNew = () => {
     setEditingId(null)
+    setTouched({})
     setForm(EMPTY_FORM)
     setShowForm(true)
   }
@@ -92,8 +117,11 @@ function MyAddress() {
       city: addr.city || '',
       province: addr.province || '',
       postalCode: addr.postalCode || '',
+      lat: addr.lat ?? null,
+      lng: addr.lng ?? null,
       isDefault: Boolean(addr.isDefault),
     })
+    setTouched({})
     setShowForm(true)
   }
 
@@ -105,6 +133,7 @@ function MyAddress() {
 
   const handleSave = async (e) => {
     e.preventDefault()
+    setTouched({ addressLine: true, city: true, province: true, postalCode: true })
     if (!isFormValid) return
 
     const addressPayload = {
@@ -154,7 +183,7 @@ function MyAddress() {
     }
   }
 
-  const isFormValid = form.addressLine?.trim() && form.city?.trim() && form.province?.trim()
+  const isFormValid = Object.keys(errors).length === 0
 
   return (
     <FocusedLayout
@@ -223,13 +252,21 @@ function MyAddress() {
               </div>
 
               <form onSubmit={handleSave} className="space-y-3">
-                <Input label="Address Line" name="addressLine" value={form.addressLine} onChange={handleChange} placeholder="House no., Street, Building" />
+                <Input label="Address Line" name="addressLine" value={form.addressLine} onChange={handleChange} placeholder="House no., Street, Building" error={fieldError('addressLine')} />
                 <Input label="Barangay" name="barangay" value={form.barangay} onChange={handleChange} placeholder="Barangay" />
                 <div className="grid grid-cols-2 gap-3">
-                  <Input label="City / Municipality" name="city" value={form.city} onChange={handleChange} placeholder="City" />
-                  <Input label="Province" name="province" value={form.province} onChange={handleChange} placeholder="Province" />
+                  <Input label="City / Municipality" name="city" value={form.city} onChange={handleChange} placeholder="City" error={fieldError('city')} />
+                  <Input label="Province" name="province" value={form.province} onChange={handleChange} placeholder="Province" error={fieldError('province')} />
                 </div>
-                <Input label="Postal Code" name="postalCode" value={form.postalCode} onChange={handleChange} placeholder="4500" />
+                <Input label="Postal Code" name="postalCode" value={form.postalCode} onChange={handleChange} placeholder="4500" inputMode="numeric" error={fieldError('postalCode')} />
+
+                <Suspense fallback={<div className="h-56 rounded-xl border border-gray-200 bg-gray-50 animate-pulse" />}>
+                  <MapPinPicker
+                    value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
+                    onChange={(spot) => setForm((prev) => ({ ...prev, lat: spot?.lat ?? null, lng: spot?.lng ?? null }))}
+                    query={[form.addressLine, form.barangay, form.city, form.province].filter((p) => p && p.trim()).join(', ')}
+                  />
+                </Suspense>
 
                 <label className="flex items-center gap-2.5 text-sm text-gray-600 font-semibold select-none cursor-pointer pt-1">
                   <input

@@ -5,6 +5,7 @@ import OtpInput from '../components/ui/OtpInput.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import { recoverCredentials, resetCredentials } from '../services/auth.js'
 import { redeemOtpChallenge, startOtpChallenge, readChallengeInbox } from '../services/otp.js'
+import { passwordProblem, meetsPasswordStandard, PASSWORD_HINT } from '../utils/passwordRules.js'
 
 function ForgotPassword() {
   const navigate = useNavigate()
@@ -115,7 +116,7 @@ function ForgotPassword() {
 
   const handleResetSubmit = async (e) => {
     e.preventDefault()
-    if (password.length < 8 || password !== confirmPassword) return
+    if (!meetsPasswordStandard(password) || password !== confirmPassword) return
 
     setIsSubmitting(true)
     const { error, code } = await resetCredentials({
@@ -192,7 +193,7 @@ function ForgotPassword() {
   const isCustomer = userType === 'customer'
 
   const passwordsMatch = password.length > 0 && password === confirmPassword
-  const passwordLengthValid = password.length >= 8
+  const passwordLengthValid = meetsPasswordStandard(password)
   const resetValid = passwordLengthValid && passwordsMatch
 
   // Dedicated Admin layout matching AdminLogin.jsx and Admin theme
@@ -223,7 +224,7 @@ function ForgotPassword() {
                   <span className="font-semibold text-gray-700 dark:text-gray-200">{maskedContact || identifier}</span>
                 </>
               )}
-              {step === 2 && 'Create a new password with at least 8 characters.'}
+              {step === 2 && `Create a new password. ${PASSWORD_HINT}`}
             </p>
           </div>
 
@@ -388,7 +389,7 @@ function ForgotPassword() {
 
               <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-gray-600 dark:text-gray-300 space-y-1">
                 <p className="font-semibold text-gray-700 dark:text-gray-200">Password requirement:</p>
-                <p>Use at least 8 characters. Choose a unique password you do not use elsewhere.</p>
+                <p>{PASSWORD_HINT} Choose a unique password you do not use elsewhere.</p>
               </div>
 
               <button
@@ -443,7 +444,7 @@ function ForgotPassword() {
                 <span className="font-semibold text-gray-700 dark:text-gray-200">{maskedContact || identifier}</span>
               </>
             )}
-            {step === 2 && 'Create a secure password with at least 8 characters.'}
+            {step === 2 && `Create a secure password. ${PASSWORD_HINT}`}
           </p>
         </div>
 
@@ -575,7 +576,7 @@ function ForgotPassword() {
                 </button>
               </div>
               {password.length > 0 && !passwordLengthValid && (
-                <p className="field-error mt-1">Password must be at least 8 characters.</p>
+                <p className="field-error mt-1">{passwordProblem(password)}</p>
               )}
             </div>
 

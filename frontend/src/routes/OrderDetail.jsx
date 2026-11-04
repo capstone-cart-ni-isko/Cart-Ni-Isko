@@ -25,6 +25,7 @@ import { parseDate, paymentSummary } from '../services/dashboard.js'
 import { QrScanModal } from '../components/ui/QRScanner.jsx'
 import { mapServerOrder, STATUS_CONTEXT } from './Orders.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
+import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
 import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
@@ -157,6 +158,12 @@ function OrderDetail() {
 
       const mapped = mapServerOrder(row)
       const switchedOrder = loadedIdRef.current !== mapped.id
+      // Review prompt: the order just became Claimed / Received on screen.
+      if (!switchedOrder && orderRef.current
+        && !canReviewOrder(orderRef.current.status)
+        && canReviewOrder(mapped.status) && !mapped.reviewedAll) {
+        setReviewOpen(true)
+      }
       loadedIdRef.current = mapped.id
       orderRef.current = mapped
       setOrder(mapped)
@@ -394,8 +401,9 @@ function OrderDetail() {
       <div className="pb-16 animate-fade-in w-full">
 
         <div className="space-y-3.5">
-          {/* Order Identity & Status Banner */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3 shadow-2xs">
+          {/* Order Identity & Status Banner - stays pinned under the top bar
+              so the order's status is always in view while scrolling. */}
+          <div className="sticky top-14 z-20 bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3 shadow-2xs">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <div className="flex items-center gap-2">
@@ -437,7 +445,6 @@ function OrderDetail() {
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   {isDelivery ? 'Delivery Tracking' : 'Pickup Claim Pass'}
                 </h3>
-                <StatusBadge status={order.status} className="px-2 py-0.5" />
               </div>
 
               {showQr && qrPayload && (
@@ -456,16 +463,13 @@ function OrderDetail() {
                   <div className="text-xs text-gray-600 space-y-1.5 text-center sm:text-left">
                     <p className="font-semibold text-gray-900 text-sm">
                       {isDelivery
-                        ? 'Courier verification code'
+                        ? 'Show this QR to the courier'
                         : 'Show this QR at the pickup counter'}
                     </p>
                     <p className="text-gray-500 leading-relaxed">
                       {isDelivery
                         ? 'The courier scans this code when your order is handed over.'
                         : 'Present this code together with your student ID to claim your order at Tindahan ni Isko, BU Student Center Ground Floor.'}
-                    </p>
-                    <p className="font-mono text-[11px] text-gray-500 break-all">
-                      {String(qrPayload)}
                     </p>
                     {isDelivery && ['IN TRANSIT', 'TO RECEIVE'].includes(order.status) && (
                       <>
@@ -847,7 +851,7 @@ function OrderDetail() {
                   onClick={() => setConfirmCancel(true)}
                   className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60"
                 >
-                  {busy ? 'Sending…' : 'Cancel Order'}
+                  {busy ? <LoadingSpinner size={14} /> : 'Cancel Order'}
                 </button>
               </div>
               <p className="text-[11px] text-gray-500">
@@ -867,14 +871,18 @@ function OrderDetail() {
                 <button
                   type="button"
                   onClick={() => setReviewOpen(true)}
-                  className="px-4 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className={order.reviewedAll
+                    ? 'px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-1.5'
+                    : 'px-4 py-2 rounded-xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-1.5'}
                 >
                   <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-amber-500" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-                  Rate &amp; Review items
+                  {order.reviewedAll ? 'View your reviews' : 'Rate & Review items'}
                 </button>
               </div>
               <p className="text-[11px] text-gray-500">
-                Rate each product in this order and share how it turned out.
+                {order.reviewedAll
+                  ? 'You have reviewed every item in this order. Thank you!'
+                  : 'Rate each product in this order and share how it turned out.'}
               </p>
             </div>
           )}
@@ -892,7 +900,7 @@ function OrderDetail() {
                   onClick={handleRequestRefund}
                   className="px-4 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-60"
                 >
-                  {busy ? 'Sending…' : 'Request for Refund'}
+                  {busy ? <LoadingSpinner size={14} /> : 'Request for Refund'}
                 </button>
               </div>
               <p className="text-[11px] text-gray-500">
@@ -950,7 +958,10 @@ function OrderDetail() {
       <OrderReviewModal
         isOpen={reviewOpen}
         order={order}
-        onClose={() => setReviewOpen(false)}
+        onClose={() => {
+          setReviewOpen(false)
+          load()
+        }}
       />
     </FocusedLayout>
   )

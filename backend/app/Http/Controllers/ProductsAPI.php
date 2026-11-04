@@ -2152,6 +2152,16 @@ class ProductsAPI extends Controller
 
         protected function reviewTextTooLong(string $text): ?\Illuminate\Http\JsonResponse
         {
+            // Written text is optional, but a started review must say something
+            // (mirrors the live check in OrderReviewModal).
+            $trimmed = trim($text);
+            if ($trimmed !== '' && mb_strlen($trimmed) < 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please write at least 5 characters, or leave the review text blank.',
+                ], 422);
+            }
+
             if (mb_strlen($text) <= self::reviewMaxLength) {
                 return null;
             }

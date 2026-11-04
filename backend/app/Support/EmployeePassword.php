@@ -105,9 +105,19 @@ final class EmployeePassword
         return $candidate;
     }
 
+    /**
+     * One password standard for every account (customer, staff, admin and
+     * super admin), matching the common industry baseline: 8+ characters
+     * with upper, lower, number and symbol. The super admin used to need 16,
+     * which the IT evaluation flagged as non-standard.
+     */
+    public const MIN_LENGTH = 8;
+
+    public const STANDARD_MESSAGE = 'Passwords must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a symbol.';
+
     public static function meetsStandard(string $plain): bool
     {
-        return strlen($plain) >= 16
+        return strlen($plain) >= self::MIN_LENGTH
             && preg_match('/[a-z]/', $plain)
             && preg_match('/[A-Z]/', $plain)
             && preg_match('/[0-9]/', $plain)

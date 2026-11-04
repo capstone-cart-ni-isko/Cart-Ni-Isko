@@ -15,7 +15,10 @@ const selectStyle = {
   backgroundSize: '18px'
 }
 
-const yearLevels = ['1st Year Student', '2nd Year Student', '3rd Year Student', '4th Year Student', '5th Year Student', 'Faculty / Staff', 'Alumni']
+// BUeño accounts are Student or Faculty only (cust_categ). A legacy value
+// (e.g. an old alumni account) still shows, but is never re-sent on save.
+const BUENO_CATEGORIES = ['student', 'faculty']
+const categoryLabel = (value) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value)
 
 /**
  * A stored value can legitimately be absent from the static list ('N/A',
@@ -45,7 +48,7 @@ function AccountInfo() {
     surname: currentUser?.cust_surname || currentUser?.surname || '',
     email: currentUser?.cust_email || currentUser?.email || '',
     phone: currentUser?.cust_phone || currentUser?.phone || '',
-    yearLevel: currentUser?.cust_categ || currentUser?.yearLevel || 'N/A',
+    yearLevel: String(currentUser?.cust_categ || currentUser?.yearLevel || 'N/A').toLowerCase() === 'n/a' ? 'N/A' : String(currentUser?.cust_categ || currentUser?.yearLevel).toLowerCase(),
     campus: currentUser?.campus || 'N/A',
     college: currentUser?.cust_college || currentUser?.college || 'N/A',
     course: currentUser?.cust_dept || currentUser?.course || 'N/A',
@@ -134,7 +137,7 @@ function AccountInfo() {
         cust_campus: form.campus && form.campus !== 'N/A' ? form.campus : null,
         cust_college: form.college && form.college !== 'N/A' ? form.college : null,
         cust_dept: form.course && form.course !== 'N/A' ? form.course : null,
-        cust_categ: form.yearLevel && form.yearLevel !== 'N/A' ? form.yearLevel : null,
+        ...(BUENO_CATEGORIES.includes(form.yearLevel) ? { cust_categ: form.yearLevel } : {}),
         cust_pronoun: form.pronoun,
         cust_bday: form.birthday,
         cust_callcode: form.callcode,
@@ -274,11 +277,11 @@ function AccountInfo() {
               {fieldError('phone')}
             </div>
 
-            {/* Year Level */}
+            {/* BUeño category */}
             <div>
-              <label className={labelClasses}>Year Level</label>
+              <label className={labelClasses}>Category</label>
               <select name="yearLevel" value={form.yearLevel} onChange={handleChange} className={selectClasses} style={selectStyle}>
-                {withValue(yearLevels, form.yearLevel).map((y) => <option key={y} value={y}>{y}</option>)}
+                {withValue(BUENO_CATEGORIES, form.yearLevel).map((y) => <option key={y} value={y}>{categoryLabel(y)}</option>)}
               </select>
             </div>
             {/* Campus */}
@@ -465,9 +468,9 @@ function AccountInfo() {
 
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
-                  <label className={labelClasses}>Year Level <span className="text-red-500">*</span></label>
+                  <label className={labelClasses}>Category <span className="text-red-500">*</span></label>
                   <select name="yearLevel" value={form.yearLevel} onChange={handleChange} className={selectClasses} style={selectStyle}>
-                    {withValue(yearLevels, form.yearLevel).map((y) => <option key={y} value={y}>{y}</option>)}
+                    {withValue(BUENO_CATEGORIES, form.yearLevel).map((y) => <option key={y} value={y}>{categoryLabel(y)}</option>)}
                   </select>
                 </div>
                 <div>

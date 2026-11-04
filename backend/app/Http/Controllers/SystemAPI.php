@@ -109,7 +109,7 @@ class SystemAPI extends Controller
             return response()->json([
                 'success' => false,
                 'code'    => 'WEAK_PASSWORD',
-                'message' => 'Super admin passwords must be at least 16 characters and include an uppercase letter, a lowercase letter, a number and a symbol.',
+                'message' => EmployeePassword::STANDARD_MESSAGE,
             ], 422);
         }
 

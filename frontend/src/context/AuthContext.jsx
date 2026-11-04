@@ -38,8 +38,14 @@ const DEFAULT_ADDRESSES = []
  * The first line of the list is the default address, so `isDefault` never
  * has to be stored - only the order.
  */
+/**
+ * A map pin rides along with the stored line as a trailing "[pin:lat,lng]"
+ * token (cust_addresses holds plain strings, no schema change needed).
+ */
+const PIN_RE = /\s*\[pin:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\]\s*$/
+
 function serializeAddress(address) {
-  return [
+  const line = [
     address.addressLine,
     address.barangay,
     address.city,
@@ -49,12 +55,20 @@ function serializeAddress(address) {
     .map((part) => String(part || '').trim())
     .filter(Boolean)
     .join(', ')
+  if (!line) return ''
+  const lat = Number(address.lat)
+  const lng = Number(address.lng)
+  return Number.isFinite(lat) && Number.isFinite(lng) && address.lat != null && address.lng != null
+    ? `${line} [pin:${lat.toFixed(6)},${lng.toFixed(6)}]`
+    : line
 }
 
 /** Rebuilds one address object from its stored line. */
 function parseAddress(line) {
-  const text = String(line || '').trim()
-  if (!text) return null
+  const raw = String(line || '').trim()
+  if (!raw) return null
+  const pin = raw.match(PIN_RE)
+  const text = raw.replace(PIN_RE, '').trim()
 
   const segments = text.split(',').map((part) => part.trim()).filter(Boolean)
   let postalCode = ''
@@ -67,12 +81,14 @@ function parseAddress(line) {
   const addressLine = segments.join(', ')
 
   return {
-    id: text,
+    id: raw,
     addressLine,
     barangay,
     city,
     province,
     postalCode,
+    lat: pin ? Number(pin[1]) : null,
+    lng: pin ? Number(pin[2]) : null,
     isDefault: false,
   }
 }

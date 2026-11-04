@@ -1989,7 +1989,7 @@ class UserAPI extends Controller
             if ($isSuperAdmin && ! EmployeePassword::meetsStandard((string) $json->input('new_password'))) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Super admin passwords must be at least 16 characters and include an uppercase letter, a lowercase letter, a number and a symbol.',
+                    'message' => EmployeePassword::STANDARD_MESSAGE,
                     'code' => 'WEAK_PASSWORD',
                 ], 422);
             }
@@ -2082,7 +2082,7 @@ class UserAPI extends Controller
         'cust_email' => 'sometimes|nullable|email:rfc',
         'cust_college' => 'sometimes|nullable|string|max:120',
         'cust_dept' => 'sometimes|nullable|string|max:120',
-        'cust_categ' => 'sometimes|nullable|in:student,alumni,faculty',
+        'cust_categ' => 'sometimes|nullable|in:student,faculty',
         'cust_avatar' => 'sometimes|nullable|string',
         'cust_backup_phone' => 'sometimes|nullable|string|max:40',
         'cust_backup_email' => 'sometimes|nullable|email:rfc',
@@ -2314,7 +2314,13 @@ class UserAPI extends Controller
                     }
                 }
 
-                if (!empty($system) && !$this->isSuperAdmin($user)) {
+                // Admins (store managers) own the scheduling keys; every other
+                // system-wide key stays with the super admin.
+                $schedulingOnly = !empty($system)
+                    && array_diff(array_keys($system), \App\Support\SystemSettings::SCHEDULING_KEYS) === [];
+
+                if (!empty($system) && !$this->isSuperAdmin($user)
+                    && !($schedulingOnly && $this->isAdmin($user))) {
                     return response()->json([
                         'success' => false,
                         'message' => 'Only super admin employees may perform this action'

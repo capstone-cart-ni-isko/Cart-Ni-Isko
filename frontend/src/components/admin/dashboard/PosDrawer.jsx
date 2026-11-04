@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import DrawerPanel from '../DrawerPanel.jsx'
 import { useAdmin } from '../../../hooks/useAdmin.js'
 import { useToast } from '../../../hooks/useToast.js'
+import { productMatchesQuery } from '../../../services/adminProducts.js'
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, peso } from '../kit/ui.js'
 
 /*
@@ -28,7 +29,7 @@ export default function PosDrawer({ isOpen, onClose, onCompleted }) {
     // never appears in a walk-in sale (same rule as the full register).
     return products
       .filter((p) => !p.disabled && !p.preOrder && p.totalStock > 0)
-      .filter((p) => !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
+      .filter((p) => productMatchesQuery(p, q))
       .slice(0, 8)
   }, [products, query])
 

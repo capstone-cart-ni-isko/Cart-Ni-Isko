@@ -6,7 +6,7 @@ import { ShirtIcon } from '../ui/Icons.jsx'
 import { useToast } from '../../hooks/useToast.js'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import {
-  REVIEW_MAX_LENGTH,
+  REVIEW_MAX_LENGTH, REVIEW_MIN_LENGTH,
   createReview,
   fetchMyOrderReviews,
   updateReview,
@@ -154,11 +154,22 @@ function ReviewItem({ product, saved, orderId, onSaved }) {
 
   const unchanged = editing && rating === saved.rating && text.trim() === saved.message.trim()
   const ratingMissing = touched && rating === 0
+  // The written part is optional, but once started it must say something:
+  // checked live as the customer types (not only on submit).
+  const trimmedText = text.trim()
+  const textError =
+    text.length > 0 && trimmedText.length === 0
+      ? 'Your review cannot be only spaces.'
+      : trimmedText.length > 0 && trimmedText.length < REVIEW_MIN_LENGTH
+        ? `Please write at least ${REVIEW_MIN_LENGTH} characters, or leave it blank.`
+        : /(.)\1{9,}/.test(trimmedText)
+          ? 'Please avoid repeating the same character over and over.'
+          : ''
   const chip = STATUS_CHIP[status]
 
   const submit = async () => {
     setTouched(true)
-    if (rating === 0) {
+    if (rating === 0 || textError) {
       setError('')
       return
     }
@@ -278,11 +289,17 @@ function ReviewItem({ product, saved, orderId, onSaved }) {
               rows={3}
               maxLength={REVIEW_MAX_LENGTH}
               placeholder="How is the quality, fit and value? Help other students decide."
-              className="w-full text-sm rounded-lg border border-slate-200 px-3 py-2 resize-none focus:border-brand-orange focus:ring-brand-orange/30 disabled:bg-slate-50"
+              aria-invalid={Boolean(textError)}
+              className={`w-full text-sm rounded-lg border px-3 py-2 resize-none focus:border-brand-orange focus:ring-brand-orange/30 disabled:bg-slate-50 ${textError ? 'border-rose-300' : 'border-slate-200'}`}
             />
-            <p className="text-[11px] text-slate-400 text-right mt-0.5">
-              {text.length}/{REVIEW_MAX_LENGTH}
-            </p>
+            <div className="flex items-start justify-between gap-2 mt-0.5">
+              <p className="text-xs font-semibold text-rose-600" role={textError ? 'alert' : undefined}>
+                {textError}
+              </p>
+              <p className={`text-[11px] shrink-0 ${text.length >= REVIEW_MAX_LENGTH ? 'text-rose-600 font-semibold' : 'text-slate-400'}`}>
+                {text.length}/{REVIEW_MAX_LENGTH}
+              </p>
+            </div>
           </div>
 
           {error && (
@@ -298,7 +315,7 @@ function ReviewItem({ product, saved, orderId, onSaved }) {
             <Button
               variant="primary"
               onClick={submit}
-              disabled={busy || unchanged}
+              disabled={busy || unchanged || Boolean(textError)}
               className="h-9 px-4 text-xs shrink-0"
             >
               {busy ? (

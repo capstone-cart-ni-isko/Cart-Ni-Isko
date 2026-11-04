@@ -213,7 +213,10 @@ export default function AdminSettings() {
   const navigate = useNavigate()
   const location = useLocation()
   const { showToast } = useToast()
-  const { isSuperAdmin, logoutAdmin } = useAdmin()
+  const { isSuperAdmin, logoutAdmin, currentAdminUser } = useAdmin()
+  // The store manager (admin) owns the appointment schedule; the super admin
+  // (developers) keeps every other system setting.
+  const canManageSchedule = isSuperAdmin || currentAdminUser?.roleKey === 'ADMIN'
   const { dark, set: setTheme } = useTheme()
 
   // FLOW-ACCESS_LOG-07: `/admin/settings/logs` is the deep link straight to the
@@ -256,6 +259,10 @@ export default function AdminSettings() {
   const [weeklyHours, setWeeklyHours] = useState(3)
   const [reminderMinutes, setReminderMinutes] = useState(10)
   const [followupHours, setFollowupHours] = useState(2)
+  // Holidays / suspensions: no appointments are booked on these days.
+  const [closedDates, setClosedDates] = useState([])
+  const [newClosedDate, setNewClosedDate] = useState('')
+  const [newClosedReason, setNewClosedReason] = useState('')
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
@@ -278,6 +285,7 @@ export default function AdminSettings() {
         setWeeklyHours(Number(data.min_weekly_minutes ?? 180) / 60)
         setReminderMinutes(Number(data.appointment_reminder_minutes ?? 10))
         setFollowupHours(Number(data.notif_followup_hours ?? 2))
+        setClosedDates(Array.isArray(data.closed_dates) ? data.closed_dates : [])
         setHasUnsavedChanges(false)
         setIsLoading(false)
       })
@@ -323,14 +331,51 @@ export default function AdminSettings() {
     setWeeklyHours(Number(settings.min_weekly_minutes ?? 180) / 60)
     setReminderMinutes(Number(settings.appointment_reminder_minutes ?? 10))
     setFollowupHours(Number(settings.notif_followup_hours ?? 2))
+    setClosedDates(Array.isArray(settings.closed_dates) ? settings.closed_dates : [])
     setHasUnsavedChanges(false)
     showToast('Changes discarded.', 'info')
   }
 
   // Persist only this page's keys (maintenance_mode mirrors store_open so the
   // open/closed state round-trips through GET /settings/display).
+  const todayKey = new Date().toLocaleDateString('en-CA')
+  const closedDateError =
+    newClosedDate && newClosedDate < todayKey
+      ? 'Pick today or a later date.'
+      : newClosedDate && closedDates.some((row) => row.date === newClosedDate)
+        ? 'That day is already closed.'
+        : newClosedReason.length > 200
+          ? 'Keep the reason under 200 characters.'
+          : ''
+
+  const addClosedDate = () => {
+    if (!newClosedDate || closedDateError) return
+    setClosedDates((rows) =>
+      [...rows, { date: newClosedDate, reason: newClosedReason.trim() }].sort((a, b) => a.date.localeCompare(b.date))
+    )
+    setNewClosedDate('')
+    setNewClosedReason('')
+    mark()
+  }
+
+  const removeClosedDate = (date) => {
+    setClosedDates((rows) => rows.filter((row) => row.date !== date))
+    mark()
+  }
+
   const handleSave = async () => {
-    const payload = {
+    // An admin may only write the scheduling keys (the API refuses the rest).
+    const schedulingPayload = {
+      slot_minutes: slotMinutes,
+      visit_slot_duration: slotMinutes,
+      pickup_slot_duration: slotMinutes,
+      visit_slot_capacity: visitCapacity,
+      pickup_slot_capacity: pickupCapacity,
+      appointment_reminder_minutes: reminderMinutes,
+      closed_dates: closedDates,
+    }
+    const payload = !isSuperAdmin ? schedulingPayload : {
+      ...schedulingPayload,
       store_open: isStoreOpen,
       maintenance_mode: !isStoreOpen,
       accept_online_orders: acceptOnlineOrders,
@@ -404,6 +449,27 @@ export default function AdminSettings() {
         },
       ],
     },
+    ...(!isSuperAdmin && canManageSchedule
+      ? [
+          {
+            group: 'Store',
+            items: [
+              {
+                id: 'timing',
+                label: 'Appointments & Scheduling',
+                icon: railIcon(
+                  <>
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </>
+                ),
+              },
+            ],
+          },
+        ]
+      : []),
     ...(isSuperAdmin
       ? [
           {
@@ -789,7 +855,7 @@ export default function AdminSettings() {
 
             {/* ── FLOW-EMP_SET-07 — appointment duration, timeslot capacity,
                   minimum weekly hours, notification intervals (super admin) ── */}
-            {isSuperAdmin && activeSection === 'timing' && (
+            {canManageSchedule && activeSection === 'timing' && (
               <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100">
                   <div className="flex items-center gap-3">
@@ -847,6 +913,7 @@ export default function AdminSettings() {
                       mark()
                     }}
                   />
+                  {isSuperAdmin && (
                   <NumberField
                     label="Minimum weekly hours"
                     hint="Minimum scheduled hours required for each employee per week."
@@ -860,6 +927,7 @@ export default function AdminSettings() {
                       mark()
                     }}
                   />
+                  )}
                   <NumberField
                     label="Appointment reminder interval"
                     hint="How many minutes before an appointment the reminder is sent."
@@ -872,6 +940,7 @@ export default function AdminSettings() {
                       mark()
                     }}
                   />
+                  {isSuperAdmin && (
                   <NumberField
                     label="System notification follow-up"
                     hint="How often pending system alerts are re-sent to staff."
@@ -884,6 +953,69 @@ export default function AdminSettings() {
                       mark()
                     }}
                   />
+                  )}
+                </div>
+
+                {/* Closed days: holidays and sudden suspensions. Customers see
+                    them blacked out on the booking calendar. */}
+                <div className="px-6 py-5 border-t border-slate-100 space-y-3">
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-900">Closed days</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      No appointments can be booked on these days. To move appointments that are
+                      already booked, use “Suspend day” on the Appointments page.
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-start">
+                    <input
+                      type="date"
+                      value={newClosedDate}
+                      min={todayKey}
+                      onChange={(e) => setNewClosedDate(e.target.value)}
+                      aria-invalid={Boolean(closedDateError)}
+                      className="px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                    />
+                    <input
+                      type="text"
+                      value={newClosedReason}
+                      maxLength={200}
+                      onChange={(e) => setNewClosedReason(e.target.value)}
+                      placeholder="Reason (e.g. Holiday, Class suspension)"
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={addClosedDate}
+                      disabled={!newClosedDate || Boolean(closedDateError)}
+                      className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      Add closed day
+                    </button>
+                  </div>
+                  {closedDateError && (
+                    <p className="text-xs font-semibold text-rose-600" role="alert">{closedDateError}</p>
+                  )}
+                  {closedDates.length === 0 ? (
+                    <p className="text-xs text-slate-400">No closed days set.</p>
+                  ) : (
+                    <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
+                      {closedDates.map((row) => (
+                        <li key={row.date} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                          <span className="font-semibold text-slate-800">
+                            {new Date(`${row.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                          <span className="flex-1 text-slate-500 truncate">{row.reason || 'Store closed'}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeClosedDate(row.date)}
+                            className="text-rose-600 font-semibold hover:underline cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
             )}
@@ -947,7 +1079,7 @@ export default function AdminSettings() {
       </div>
 
       {/* ── Sticky Bottom Bar (system panes only) ── */}
-      {isSuperAdmin && isSystemPane && (
+      {((isSuperAdmin && isSystemPane) || (canManageSchedule && activeSection === 'timing')) && (
         <div className="fixed bottom-0 right-0 left-0 md:left-72 bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-md border-t border-slate-200 dark:border-[var(--line)] px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-slate-400' : hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />

@@ -1,5 +1,6 @@
 import { apiPost, ApiError, setApiToken } from './api.js'
 import { mapEmployee } from './auth.js'
+import { redeemOtpChallenge } from './otp.js'
 
 /**
  * Login an admin/employee via the backend.
@@ -13,6 +14,19 @@ import { mapEmployee } from './auth.js'
 export async function adminLogin(email, password) {
   try {
     const data = await apiPost('/auth/emp_login', { email, password })
+
+    // Two-factor sign-in: the password was right, but a code was emailed to
+    // the employee and must be entered before any session exists.
+    if (data?.data?.requires_otp) {
+      return {
+        success: false,
+        otpRequired: true,
+        challenge: data.data.challenge,
+        contact: data.data.contact || '',
+        message: data.message || 'Verification code sent to your Bicol University email.',
+      }
+    }
+
     const token = data?.token || data?.data?.token || null
     setApiToken(token, 'staff')
 
@@ -35,6 +49,17 @@ export async function adminLogin(email, password) {
     }
     return { success: false, error: err?.message || 'Login failed' }
   }
+}
+
+/** Redeem the emailed sign-in code; opens the staff session on success. */
+export async function adminVerifyLoginCode(challenge, code) {
+  const { data, error } = await redeemOtpChallenge(challenge, 'login', code)
+  if (error || !data?.token) {
+    return { success: false, error: error || 'That code is not correct.' }
+  }
+  setApiToken(data.token, 'staff')
+  const user = mapEmployee(data)
+  return user ? { success: true, user, token: data.token } : { success: false, error: 'Sign-in failed.' }
 }
 
 export function adminLogout() {

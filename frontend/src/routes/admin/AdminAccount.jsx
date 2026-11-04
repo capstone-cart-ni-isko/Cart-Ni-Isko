@@ -10,6 +10,7 @@ import Button from '../../components/ui/Button.jsx'
 import { fetchAccounts, updateAccount } from '../../services/accounts.js'
 import { updateCredentials, updateBackupCredentials } from '../../services/auth.js'
 import { first, empCateg, empFullName } from '../../components/admin/schema.js'
+import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024 // 2 MB
 const PRONOUNS = ['they/them', 'he/him', 'she/her', 'other']
@@ -183,15 +184,8 @@ export default function AdminAccount({ embedded = false }) {
 
   const validateNewPassword = (pwd) => {
     if (!pwd) return 'Enter a new password.'
-    if (pwd.length < 8) return 'The new password must be at least 8 characters.'
-    if (isSuperAdminUser) {
-      if (pwd.length < 16) return 'Super admin passwords must be at least 16 characters.'
-      if (!/[A-Z]/.test(pwd)) return 'Must include at least one uppercase letter.'
-      if (!/[a-z]/.test(pwd)) return 'Must include at least one lowercase letter.'
-      if (!/[0-9]/.test(pwd)) return 'Must include at least one number.'
-      if (!/[^A-Za-z0-9]/.test(pwd)) return 'Must include at least one special symbol.'
-    }
-    return ''
+    // One standard for every role (see utils/passwordRules.js).
+    return passwordProblem(pwd)
   }
 
   /* Rule 66 — the verdict for every field, recomputed from the live values. */
@@ -925,7 +919,7 @@ export default function AdminAccount({ embedded = false }) {
               <FieldError message={liveError(passwordErrors, 'newPassword', newPassword)} />
               {isSuperAdminUser && (
                 <p className="text-2xs text-slate-400 mt-1">
-                  At least 16 characters with uppercase, lowercase, number, and symbol.
+                  {PASSWORD_HINT}
                 </p>
               )}
             </div>

@@ -13,6 +13,7 @@ import DigitalReceipt from '../../components/ui/DigitalReceipt.jsx'
 import { StatCardsSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 import { searchOrders, sortOrders } from '../../services/orders.js'
 import { getImageUrl } from '../../utils/imageUtils.js'
+import { downloadXlsx } from '../../services/excelExport.js'
 import {
   mapOrderRows,
   isCartRow,
@@ -280,23 +281,24 @@ export default function AdminOrders() {
     if (lastError) showToast(lastError, 'error')
   }, [orders, selectedOrderIds, bulkNewStatus, updateOrderStatus, showToast])
 
-  const handleExportCSV = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      ['Order ID,Batch,Customer,Date,Type,Fulfillment,Status,Total (PHP)']
-        .concat(
-          filteredOrders.map(
-            (o) =>
-              `${o.id},${o.batch || ''},${o.customer},${o.date},${o.type},${o.fulfillment},${o.status},${o.total}`
-          )
-        )
-        .join('\n')
-    const link = document.createElement('a')
-    link.setAttribute('href', encodeURI(csvContent))
-    link.setAttribute('download', `Tindahan_Orders_${Date.now()}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  // Styled .xlsx export of the orders currently shown (filters applied).
+  const handleExportCSV = async () => {
+    try {
+      await downloadXlsx(`Tindahan_Orders_${new Date().toISOString().slice(0, 10)}.xlsx`, {
+        title: 'Orders',
+        subtitle: `${filteredOrders.length} order(s)`,
+        sheetName: 'Orders',
+        sections: [{
+          columns: ['Order ID', 'Batch', 'Customer', 'Date', 'Type', 'Fulfillment', 'Status', 'Total (PHP)'],
+          rows: filteredOrders.map((o) => [
+            o.id, o.batch || '', o.customer, o.date, o.type, o.fulfillment, o.status, Number(o.total) || 0,
+          ]),
+        }],
+      })
+    } catch (e) {
+      console.error(e)
+      showToast('Excel export failed', 'error')
+    }
   }
 
   const columns = [
@@ -452,7 +454,7 @@ export default function AdminOrders() {
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>Export CSV</span>
+              <span>Export Excel</span>
             </button>
 
             {selectedOrderIds.length > 0 && (

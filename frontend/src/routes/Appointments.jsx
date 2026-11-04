@@ -28,7 +28,7 @@ const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'upcoming', label: 'Upcoming' },
   { id: 'done', label: 'Complete' },
-  { id: 'absent', label: 'No Show' },
+  { id: 'absent', label: 'No-show' },
   { id: 'cancelled', label: 'Cancelled' },
 ]
 

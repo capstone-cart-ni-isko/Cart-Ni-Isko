@@ -8,6 +8,7 @@ import {
   fetchAppointments,
   fetchSlots,
   closeAppointment,
+  bulkReschedule,
   SLOT_RULES,
 } from '../../services/appointments.js'
 import { fetchAccounts } from '../../services/accounts.js'
@@ -99,6 +100,12 @@ export default function AdminAppointments() {
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelReason, setCancelReason] = useState('')
   const [isCancelling, setIsCancelling] = useState(false)
+  // Sudden suspension: move the whole day's bookings at once
+  const [showSuspend, setShowSuspend] = useState(false)
+  const [suspendReason, setSuspendReason] = useState('')
+  const [suspendTarget, setSuspendTarget] = useState('')
+  const [isSuspending, setIsSuspending] = useState(false)
+  const [suspendResult, setSuspendResult] = useState(null)
 
   const staffName = currentAdminUser?.name ? currentAdminUser.name.split(' ')[0] : 'Staff'
 
@@ -291,6 +298,43 @@ export default function AdminAppointments() {
     setCancelTarget(appt)
     setCancelReason('')
     setShowDeclineModal(true)
+  }
+
+  const isAdminRole = ['ADMIN', 'SUPER_ADMIN'].includes(currentAdminUser?.roleKey)
+
+  const openSuspend = () => {
+    setSuspendReason('')
+    setSuspendTarget('')
+    setSuspendResult(null)
+    setShowSuspend(true)
+  }
+
+  const suspendError =
+    suspendReason.length > 200
+      ? 'Keep the reason under 200 characters.'
+      : suspendTarget && suspendTarget <= dayKey(selectedDate)
+        ? 'The new date must be after the suspended day.'
+        : ''
+
+  const handleConfirmSuspend = async () => {
+    const reason = suspendReason.trim()
+    if (!reason || suspendError) return
+    setIsSuspending(true)
+    try {
+      const res = await bulkReschedule({
+        date: dayKey(selectedDate),
+        targetDate: suspendTarget,
+        reason,
+      })
+      const data = res?.data || {}
+      setSuspendResult({ moved: data.moved || [], unplaced: data.unplaced || [] })
+      showToast(res?.message || 'Appointments rescheduled.', 'success')
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      showToast(err?.message || 'Could not reschedule this day.', 'error')
+    } finally {
+      setIsSuspending(false)
+    }
   }
 
   const handleBannerCancelClick = () => {
@@ -735,10 +779,21 @@ export default function AdminAppointments() {
                   <h4 className="text-sm font-bold text-gray-900">Need to cancel a booking?</h4>
                   <p className="text-xs text-gray-600 mt-0.5">
                     Canceling an appointment requires a reason and is recorded in the audit log.
+                    For a sudden suspension, “Suspend day” moves every booking of this date at once.
                   </p>
                 </div>
               </div>
 
+              <div className="flex items-center gap-2 self-end sm:self-center">
+              {isAdminRole && (
+                <button
+                  type="button"
+                  onClick={openSuspend}
+                  className="border border-slate-800 text-white bg-slate-800 hover:bg-slate-900 font-bold text-xs h-8 px-3 rounded-md whitespace-nowrap cursor-pointer transition-colors"
+                >
+                  Suspend day
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleBannerCancelClick}
@@ -747,6 +802,7 @@ export default function AdminAppointments() {
               >
                 Cancel Appointment
               </button>
+              </div>
             </div>
           </div>
 
@@ -899,6 +955,85 @@ export default function AdminAppointments() {
             </div>
           </div>
         </div>
+
+        {/* Suspend day - batch reschedule (POST /appoint/bulk-reschedule) */}
+        {showSuspend && (
+          <Modal
+            isOpen={showSuspend}
+            onClose={() => setShowSuspend(false)}
+            title={`Suspend ${fmtBadgeDate(selectedDate)}`}
+            size="wide"
+            footer={
+              suspendResult ? (
+                <Button variant="primary" onClick={() => setShowSuspend(false)} className="px-3.5">
+                  Done
+                </Button>
+              ) : (
+                <>
+                  <Button variant="secondary" onClick={() => setShowSuspend(false)} className="px-3.5">
+                    Keep schedule
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={handleConfirmSuspend}
+                    disabled={!suspendReason.trim() || Boolean(suspendError) || isSuspending}
+                    className="px-3.5"
+                  >
+                    {isSuspending ? 'Rescheduling…' : `Reschedule ${dayBookings.length} booking(s)`}
+                  </Button>
+                </>
+              )
+            }
+          >
+            {suspendResult ? (
+              <div className="space-y-2 text-sm text-gray-700">
+                <p>
+                  <strong>{suspendResult.moved.length}</strong> booking(s) moved. The day is now closed for new bookings and
+                  every customer was notified.
+                </p>
+                {suspendResult.unplaced.length > 0 && (
+                  <p className="text-rose-700">
+                    {suspendResult.unplaced.length} booking(s) could not be placed automatically
+                    (#{suspendResult.unplaced.map((u) => u.appoint_id).join(', #')}). Their customers were told the store
+                    will contact them.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Every open booking on this date is moved, keeping its time of day when possible. The day is
+                  also closed so no new bookings land on it, and each customer gets a notification with the reason.
+                </p>
+                <div>
+                  <label className="field-label" htmlFor="suspend-reason">Reason</label>
+                  <textarea
+                    id="suspend-reason"
+                    rows={2}
+                    maxLength={200}
+                    value={suspendReason}
+                    onChange={(e) => setSuspendReason(e.target.value)}
+                    placeholder="e.g. Class suspension due to typhoon"
+                    className="input w-full"
+                  />
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="suspend-target">Move to (optional)</label>
+                  <input
+                    id="suspend-target"
+                    type="date"
+                    min={dayKey(addDays(selectedDate, 1))}
+                    value={suspendTarget}
+                    onChange={(e) => setSuspendTarget(e.target.value)}
+                    className="input"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Leave blank to use the next open day.</p>
+                </div>
+                {suspendError && <p className="text-xs font-semibold text-rose-600" role="alert">{suspendError}</p>}
+              </div>
+            )}
+          </Modal>
+        )}
 
         {/* Cancel Appointment - shared popup shell (index.css primitives) */}
         {showDeclineModal && (

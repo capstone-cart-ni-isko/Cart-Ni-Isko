@@ -64,14 +64,22 @@ function BottomNav() {
       return undefined
     }
     let alive = true
-    const load = () =>
+    // The ribbon is hidden on desktop (md+), where DesktopHeader owns the
+    // badge - polling here too doubled the notification reads.
+    const desktop = typeof window.matchMedia === 'function'
+      ? window.matchMedia('(min-width: 768px)')
+      : null
+    const load = () => {
+      if (desktop?.matches) return
       fetchNotifications('customer', currentUser.cust_id)
         .then((rows) => {
           if (alive) setUnread(unreadCount(rows))
         })
         .catch(() => {})
+    }
     load()
-    const timer = setInterval(load, 5000)
+    // Realtime pings refresh instantly; the timer is only a fallback.
+    const timer = setInterval(load, 15000)
     window.addEventListener('notifications-changed', load)
     return () => {
       alive = false

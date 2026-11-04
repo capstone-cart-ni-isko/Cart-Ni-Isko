@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\Schedule;
 use App\Support\DayRoster;
+use App\Support\SystemSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,186 @@ class AppointmentsAPI extends Controller
 
         protected const openMinutes = 8 * 60;
         protected const closeMinutes = 18 * 60;
+
+        /**
+         * GET /appoint/closed-dates - the days the store takes no bookings,
+         * so the date picker can black them out before a customer chooses.
+         */
+        public function closedDates(Request $json)
+        {
+            return response()->json([
+                'success' => true,
+                'message' => 'Closed dates retrieved successfully',
+                'data'    => SystemSettings::closedDates(),
+            ], 200);
+        }
+
+        /**
+         * POST /appoint/bulk-reschedule - a sudden suspension (weather, class
+         * or work suspension): move every open appointment of one day in a
+         * single action instead of one by one.
+         *
+         * Body: date (Y-m-d, required), reason (required), target_date
+         * (Y-m-d, optional - defaults to the next open day), close_day
+         * (bool, default true - also black the day out for new bookings).
+         *
+         * Each appointment keeps its time of day when that slot is free on
+         * the target day; otherwise it takes the next free slot, rolling over
+         * to later open days (up to 14). Anything that cannot be placed is
+         * reported back untouched so staff can handle it by hand.
+         */
+        public function bulkReschedule(Request $json)
+        {
+            $date   = (string) $json->input('date', '');
+            $target = (string) $json->input('target_date', '');
+            $reason = trim((string) $json->input('reason', ''));
+            $closeDay = filter_var($json->input('close_day', true), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? true;
+
+            $parse = function (string $value): ?Carbon {
+                if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) return null;
+                try {
+                    $day = Carbon::createFromFormat('!Y-m-d', $value);
+                } catch (\Throwable $e) {
+                    return null;
+                }
+                return $day && $day->format('Y-m-d') === $value ? $day->startOfDay() : null;
+            };
+
+            $day = $parse($date);
+            if (! $day) {
+                return response()->json(['success' => false, 'message' => 'Please provide the affected date (YYYY-MM-DD).'], 422);
+            }
+            if ($reason === '' || mb_strlen($reason) > 200) {
+                return response()->json(['success' => false, 'message' => 'Please give a reason (up to 200 characters) - customers will see it.'], 422);
+            }
+            if ($day->lt(today())) {
+                return response()->json(['success' => false, 'message' => 'Past days cannot be rescheduled.'], 422);
+            }
+
+            $targetDay = null;
+            if ($target !== '') {
+                $targetDay = $parse($target);
+                if (! $targetDay || $targetDay->lte($day)) {
+                    return response()->json(['success' => false, 'message' => 'The new date must be a valid day after the affected date.'], 422);
+                }
+                if ($closed = SystemSettings::closedReason($targetDay)) {
+                    return response()->json(['success' => false, 'message' => 'The store is also closed on the new date (' . $closed . ').'], 422);
+                }
+            }
+
+            try {
+                if ($closeDay) {
+                    $dates = array_values(array_filter(
+                        SystemSettings::closedDates(),
+                        fn ($row) => $row['date'] !== $day->format('Y-m-d')
+                    ));
+                    $dates[] = ['date' => $day->format('Y-m-d'), 'reason' => $reason];
+                    if (! SystemSettings::set('closed_dates', $dates)) {
+                        return response()->json(['success' => false, 'message' => 'The closed day could not be saved. Nothing was moved.'], 500);
+                    }
+                }
+
+                $appointments = Visit::whereNull('appoint_closed')
+                    ->where('appoint_status', 'upcoming')
+                    ->where('appoint_start', '>=', $day->format('Y-m-d H:i:s'))
+                    ->where('appoint_start', '<', $day->copy()->addDay()->format('Y-m-d H:i:s'))
+                    ->orderBy('appoint_start')
+                    ->get();
+
+                $moved = [];
+                $unplaced = [];
+
+                foreach ($appointments as $appointment) {
+                    $type = $this->normalizeType($appointment->appoint_type) ?? 'CLAIM';
+                    $duration = $this->slotDuration($type);
+                    $from = Carbon::parse($appointment->appoint_start);
+                    $slot = $this->firstFreeSlot($type, $duration, $from, $targetDay ?? $day->copy()->addDay(), $targetDay === null, (int) $appointment->appoint_id);
+
+                    if ($slot === null) {
+                        $unplaced[] = ['appoint_id' => (int) $appointment->appoint_id, 'was' => $from->format('Y-m-d H:i')];
+                        $this->notifyCustomer((int) $appointment->cust_id,
+                            '[PRIORITY] Your appointment #' . $appointment->appoint_id . ' on ' . $from->format('M j, Y g:i A')
+                                . ' is affected by a store closure (' . $reason . '). The store will contact you to reschedule.');
+                        continue;
+                    }
+
+                    $appointment->update([
+                        'appoint_start' => $slot,
+                        'appoint_end'   => $slot->copy()->addMinutes($duration),
+                        'appoint_qr'    => $this->uniqueAppointmentQr((int) $appointment->appoint_id),
+                    ]);
+
+                    $this->notifyCustomer((int) $appointment->cust_id,
+                        '[PRIORITY] Your appointment #' . $appointment->appoint_id . ' on ' . $from->format('M j, Y g:i A')
+                            . ' was moved to ' . $slot->format('M j, Y g:i A') . ' because of a store closure ('
+                            . $reason . '). Your claim QR was refreshed on the Appointments page.');
+
+                    $moved[] = [
+                        'appoint_id' => (int) $appointment->appoint_id,
+                        'was'        => $from->format('Y-m-d H:i'),
+                        'now'        => $slot->format('Y-m-d H:i'),
+                    ];
+                }
+
+                $actor = $json->user('api');
+                if ($this->isEmployee($actor)) {
+                    $this->logEmployee((int) $actor->emp_id, 'edit',
+                        'POST /api/appoint/bulk-reschedule - ' . $day->format('Y-m-d')
+                            . ' - moved ' . count($moved) . ', unplaced ' . count($unplaced));
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => count($moved) . ' appointment(s) moved'
+                        . ($unplaced !== [] ? ', ' . count($unplaced) . ' need manual rescheduling.' : '.'),
+                    'data'    => [
+                        'moved'      => $moved,
+                        'unplaced'   => $unplaced,
+                        'closed_day' => $closeDay ? $day->format('Y-m-d') : null,
+                    ],
+                ], 200);
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to reschedule the appointments',
+                    'error'   => $e->getMessage(),
+                ], 500);
+            }
+        }
+
+        /**
+         * The first bookable start for a moved appointment: the same time of
+         * day first, then the rest of that day, then (when rolling) the
+         * following open days.
+         */
+        protected function firstFreeSlot(string $type, int $duration, Carbon $from, Carbon $day, bool $roll, int $excludeId): ?Carbon
+        {
+            $minuteOfDay = $from->hour * 60 + $from->minute;
+
+            for ($i = 0; $i < ($roll ? 14 : 1); $i++) {
+                $candidateDay = $day->copy()->addDays($i)->startOfDay();
+                if (SystemSettings::closedReason($candidateDay) !== null) continue;
+
+                $minutes = [];
+                if ($minuteOfDay >= self::openMinutes && $minuteOfDay + $duration <= self::closeMinutes) {
+                    $minutes[] = $minuteOfDay;
+                }
+                for ($m = self::openMinutes; $m + $duration <= self::closeMinutes; $m += $duration) {
+                    if ($m !== $minuteOfDay) $minutes[] = $m;
+                }
+
+                foreach ($minutes as $m) {
+                    $start = $candidateDay->copy()->addMinutes($m);
+                    if ($start->lte(now())) continue;
+                    $state = $this->slotState($type, $start, $start->copy()->addMinutes($duration), $excludeId);
+                    if ($state['available']) {
+                        return $start;
+                    }
+                }
+            }
+
+            return null;
+        }
 
         public function closeAppointment(Request $json)
         {
@@ -136,6 +317,7 @@ class AppointmentsAPI extends Controller
                 ];
                 $minStaff = ['CLAIM' => 1, 'VISIT' => 1];
                 $pendingReplacements = $this->pendingReplacements();
+                $closedReason = SystemSettings::closedReason($base);
 
                 $slots = [];
                 foreach (['CLAIM' => $this->slotDuration('CLAIM'), 'VISIT' => $this->slotDuration('VISIT')] as $type => $duration) {
@@ -161,7 +343,9 @@ class AppointmentsAPI extends Controller
                         $inStore = $roster ? $roster->headcount($start, $end) : null;
 
                         $reason = null;
-                        if ($booked >= $capacities[$type]) {
+                        if ($closedReason !== null) {
+                            $reason = 'The store is closed on this day (' . $closedReason . ').';
+                        } elseif ($booked >= $capacities[$type]) {
                             $reason = 'Slot fully booked';
                         } elseif ($inStore !== null && $inStore < $minStaff[$type]) {
                             $reason = 'Not enough in-store employees available (minimum ' . $minStaff[$type] . ' required)';
@@ -186,7 +370,9 @@ class AppointmentsAPI extends Controller
                     'success' => true,
                     'message' => 'Appointment slots retrieved successfully',
                     'data' => [
-                        'slots' => $slots
+                        'slots'         => $slots,
+                        'closed'        => $closedReason !== null,
+                        'closed_reason' => $closedReason,
                     ]
                 ], 200);
 
@@ -758,7 +944,7 @@ class AppointmentsAPI extends Controller
                             '[PRIORITY] Employee #'. $updates['emp_id']
                                 . ' will facilitate your appointment #'. $appointment->appoint_id
                                 . ' on ' . ($appointment->appoint_start ?? 'your booked slot')
-                                . '. Present QR code ' . ($appointment->fresh()->appoint_qr ?? '') . ' on arrival.');
+                                . '. Show your claim QR from the Appointments page on arrival.');
                     } catch (\Throwable $e) {
                     }
                 }
@@ -1032,7 +1218,9 @@ class AppointmentsAPI extends Controller
             $inStore = $this->rosterHeadcount($start, $end);
 
             $reason = null;
-            if ($booked >= $capacity) {
+            if ($closed = SystemSettings::closedReason($start)) {
+                $reason = 'The store is closed on this day (' . $closed . ').';
+            } elseif ($booked >= $capacity) {
                 $reason = 'Slot fully booked';
             } elseif ($inStore !== null && $inStore < $minStaff) {
                 $reason = 'Not enough in-store employees available (minimum ' . $minStaff . ' required)';

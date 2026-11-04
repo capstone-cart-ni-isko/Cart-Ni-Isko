@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Models\Bag;
 use App\Models\Customer;
+use App\Models\Item;
 use App\Models\Employee;
 use App\Models\Order;
 use App\Models\Pickup;
 use App\Models\Product;
 use App\Models\Prodvar;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use App\Support\IdAllocator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -269,5 +273,33 @@ class OrderFulfillmentIntegrationTest extends TestCase
         $this->putJson('/api/orders/update', ['ord_id' => $claimed->ord_id, 'ord_status' => 'RETURN REQUESTED'], $this->headers($customer))
             ->assertStatus(403);
         $this->assertSame('claimed', $claimed->fresh()->ord_status);
+    }
+
+    public function test_cancelling_an_unclaimed_order_puts_its_units_back_on_sale()
+    {
+        $admin = $this->makeEmployee('ADMIN');
+        $customer = $this->makeCustomer();
+        $product = $this->makeProduct();
+        $prodvar = Prodvar::where('prod_id', $product->prod_id)->first();
+
+        // Checkout already took 2 units off the shelf (10 -> 8)
+        $prodvar->update(['prodvar_stock' => 8]);
+        $order = $this->makePickupOrder($customer, 'unclaimed');
+        $bag = Bag::create([
+            'bag_id'      => IdAllocator::next('bag', 'bag_id'),
+            'cust_id'     => $customer->getKey(),
+            'prodvar_id'  => $prodvar->prodvar_id,
+            'bag_qty'     => 2,
+            'bag_amount'  => 150,
+            'bag_placed'  => DB::raw('true'),
+            'bag_created' => now(),
+        ]);
+        Item::create(['ord_id' => $order->ord_id, 'bag_id' => $bag->bag_id]);
+
+        $this->putJson('/api/orders/update', ['ord_id' => $order->ord_id, 'ord_status' => 'cancelled'], $this->headers($admin))
+            ->assertStatus(200);
+
+        $this->assertSame('cancelled', $order->fresh()->ord_status);
+        $this->assertSame(10, (int) $prodvar->fresh()->prodvar_stock);
     }
 }

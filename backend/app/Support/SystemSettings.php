@@ -42,6 +42,22 @@ class SystemSettings
         'appointment_reminder_minutes' => 10,
         'email_notifications' => true,
         'maintenance_message' => '',
+        // Days the store takes no appointments (holidays, class/work
+        // suspensions): a list of ['date' => 'Y-m-d', 'reason' => string].
+        'closed_dates' => [],
+    ];
+
+    /**
+     * Scheduling settings the store manager (admin) owns. Super admins are
+     * the developers; day-to-day schedule decisions belong to whoever runs
+     * the store, so an ADMIN may change these keys - and only these.
+     */
+    public const SCHEDULING_KEYS = [
+        'operating_hours', 'slot_minutes', 'booking_lead_minutes',
+        'visit_slot_capacity', 'pickup_slot_capacity',
+        'visit_slot_duration', 'pickup_slot_duration',
+        'max_claiming_slots', 'max_visit_slots',
+        'appointment_reminder_minutes', 'closed_dates',
     ];
 
     private static ?array $cache = null;
@@ -181,6 +197,10 @@ class SystemSettings
      */
     public static function invalid(string $key, $value): ?string
     {
+        if ($key === 'closed_dates') {
+            return self::invalidClosedDates($value);
+        }
+
         if (is_array($value) || is_object($value)) {
             return '"' . $key . '" must be a single value, not a list.';
         }
@@ -226,6 +246,72 @@ class SystemSettings
             length ceiling is imposed: the storefront keeps bounded blobs such
             as `store_slides` here too.
         */
+        return null;
+    }
+
+    /** The configured closed days, normalised and sorted by date. */
+    public static function closedDates(): array
+    {
+        $rows = self::get('closed_dates', []);
+        if (! is_array($rows)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($rows as $row) {
+            $date = is_array($row) ? (string) ($row['date'] ?? '') : (string) $row;
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) continue;
+            $out[$date] = [
+                'date'   => $date,
+                'reason' => is_array($row) ? trim((string) ($row['reason'] ?? '')) : '',
+            ];
+        }
+        ksort($out);
+
+        return array_values($out);
+    }
+
+    /**
+     * Why the store is closed on this day, or null when it is open. An empty
+     * reason still means closed and reads as "Store closed".
+     */
+    public static function closedReason($day): ?string
+    {
+        $date = $day instanceof \DateTimeInterface
+            ? $day->format('Y-m-d')
+            : substr((string) $day, 0, 10);
+
+        foreach (self::closedDates() as $row) {
+            if ($row['date'] === $date) {
+                return $row['reason'] !== '' ? $row['reason'] : 'Store closed';
+            }
+        }
+
+        return null;
+    }
+
+    /** Validation for the closed_dates list (it is the one list-valued key). */
+    private static function invalidClosedDates($value): ?string
+    {
+        if (! is_array($value)) {
+            return '"closed_dates" must be a list of dates.';
+        }
+        if (count($value) > 366) {
+            return '"closed_dates" can hold at most 366 days.';
+        }
+        foreach ($value as $row) {
+            $date   = is_array($row) ? ($row['date'] ?? null) : $row;
+            $reason = is_array($row) ? ($row['reason'] ?? '') : '';
+            $parsed = is_string($date) ? \DateTime::createFromFormat('!Y-m-d', $date) : false;
+            if (! is_string($date) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)
+                || $parsed === false || $parsed->format('Y-m-d') !== $date) {
+                return 'Every closed date must be a real date written as YYYY-MM-DD.';
+            }
+            if (! is_scalar($reason) || mb_strlen((string) $reason) > 200) {
+                return 'A closed-date reason must be 200 characters or fewer.';
+            }
+        }
+
         return null;
     }
 

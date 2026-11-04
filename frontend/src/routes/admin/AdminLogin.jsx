@@ -34,7 +34,11 @@ function readDraft() {
 
 export default function AdminLogin() {
   const navigate = useNavigate()
-  const { loginAdmin, currentAdminUser } = useAdmin()
+  const { loginAdmin, verifyAdminLoginCode, currentAdminUser } = useAdmin()
+  // Two-factor step: set once the password checks out and a code is emailed.
+  const [otpStep, setOtpStep] = useState(null)
+  const [otpCode, setOtpCode] = useState('')
+  const [otpError, setOtpError] = useState('')
 
   const [email, setEmail] = useState(() => readDraft().email)
   const [password, setPassword] = useState(() => readDraft().password)
@@ -96,6 +100,13 @@ export default function AdminLogin() {
     const res = await loginAdmin(target, password)
     setLoading(false)
 
+    if (res.otpRequired) {
+      setOtpStep({ challenge: res.challenge, contact: res.contact, message: res.message })
+      setOtpCode('')
+      setOtpError('')
+      return
+    }
+
     if (res.success) {
       try {
         sessionStorage.removeItem(DRAFT_KEY)
@@ -124,6 +135,31 @@ export default function AdminLogin() {
       // unreachable server - all of them belong on the banner.
       setErrorMsg(res.error || 'Invalid staff credentials. Access denied.')
     }
+  }
+
+  const finishSignIn = (user) => {
+    try {
+      sessionStorage.removeItem(DRAFT_KEY)
+    } catch {
+      /* ignore */
+    }
+    navigate(user?.mustChangePassword ? '/admin/account' : empHomePath(user))
+  }
+
+  const handleVerifyCode = async (e) => {
+    e.preventDefault()
+    if (!/^\d{6}$/.test(otpCode)) {
+      setOtpError('Enter the 6-digit code from your email.')
+      return
+    }
+    setLoading(true)
+    const res = await verifyAdminLoginCode(otpStep.challenge, otpCode)
+    setLoading(false)
+    if (res.success) {
+      finishSignIn(res.user)
+      return
+    }
+    setOtpError(res.error || 'That code is not correct.')
   }
 
   return (
@@ -397,7 +433,50 @@ export default function AdminLogin() {
           </div>
         )}
 
+        {/* Two-factor sign-in: code emailed to the employee's BU address */}
+        {otpStep && (
+          <form onSubmit={handleVerifyCode} className="space-y-4" noValidate>
+            <p className="text-sm text-gray-600 dark:text-[var(--muted)]">
+              {otpStep.message}{otpStep.contact ? ` (${otpStep.contact})` : ''} Enter it below to finish signing in.
+            </p>
+            <div>
+              <label htmlFor="emp-otp" className="field-label">Verification code</label>
+              <input
+                id="emp-otp"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 6)
+                  setOtpCode(digits)
+                  setOtpError(digits.length > 0 && digits.length < 6 ? 'The code has 6 digits.' : '')
+                }}
+                aria-invalid={otpError ? 'true' : undefined}
+                className="field-input field-input--lg rounded-xl font-mono tracking-[0.4em] text-center"
+                autoFocus
+              />
+              {otpError && <p className="field-error" role="alert">{otpError}</p>}
+            </div>
+            <button
+              type="submit"
+              disabled={loading || otpCode.length !== 6}
+              className="btn btn--lg btn--block rounded-xl btn--primary text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Verifying…' : 'Verify and sign in'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOtpStep(null)}
+              className="w-full text-xs font-semibold text-gray-500 hover:text-brand-orange cursor-pointer"
+            >
+              Use a different account
+            </button>
+          </form>
+        )}
+
         {/* Login Form - FLOW-EMP_LOGIN-01 */}
+        {!otpStep && (
         <form onSubmit={handleLogin} className="space-y-4.5" noValidate>
           <div>
             <label htmlFor="emp-email" className="field-label">
@@ -521,6 +600,7 @@ export default function AdminLogin() {
             )}
           </button>
         </form>
+        )}
 
       </div>
     </div>

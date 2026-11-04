@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { adminLogin, adminLogout } from '../services/adminAuth.js'
+import { adminLogin, adminLogout, adminVerifyLoginCode } from '../services/adminAuth.js'
 import { getApiToken, setApiToken } from '../services/api.js'
 import { clearSession, loadSession, saveSession } from '../services/session.js'
 import { useToast } from '../hooks/useToast.js'
@@ -236,6 +236,17 @@ export function AdminProvider({ children }) {
       if (!allowedRoles.includes(result.user.role) && !allowedRoles.includes(result.user.roleKey)) {
         return { success: false, error: 'Your account does not have access to the admin panel.' }
       }
+      setOrdersLoading(true)
+      setProductsLoading(true)
+      setCurrentAdminUser(result.user)
+    }
+    return result
+  }, [])
+
+  // Second step of a two-factor staff sign-in (code from the BU email).
+  const verifyAdminLoginCode = useCallback(async (challenge, code) => {
+    const result = await adminVerifyLoginCode(challenge, code)
+    if (result.success && result.user) {
       setOrdersLoading(true)
       setProductsLoading(true)
       setCurrentAdminUser(result.user)
@@ -908,6 +919,7 @@ export function AdminProvider({ children }) {
         currentAdminUser,
         isSuperAdmin: isSuperAdmin(currentAdminUser),
         loginAdmin,
+        verifyAdminLoginCode,
         logoutAdmin,
         updateCurrentAdminProfile,
         updateOrderStatus,

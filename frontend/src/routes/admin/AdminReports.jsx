@@ -11,7 +11,8 @@ import { empCateg, empIsActive, first, fmtDateTime, productStock, toNumber } fro
 import { normalizeProductCategory } from '../../data/productCategories.js'
 import { appointmentStatusLabel } from '../../services/appointments.js'
 import { jsPDF } from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'
+import { downloadXlsx } from '../../services/excelExport.js'
 
 /*
  * Reports are generated on the fly — the `reports` table is gone, so
@@ -203,32 +204,24 @@ function AdminReports() {
     }
   }
 
-  const handleExportCSV = () => {
+  // Styled .xlsx (title band, coloured headers) - CSV cannot carry formatting.
+  const handleExportExcel = async () => {
     if (!generatedData) return
-    let csvContent = ''
-    let filename = ''
-
-    switch (reportType) {
-      case 'sales':
-        csvContent = generateSalesCSV(generatedData)
-        filename = `sales-report-${new Date().toISOString().split('T')[0]}.csv`
-        break
-      case 'inventory':
-        csvContent = generateInventoryCSV(generatedData)
-        filename = `inventory-report-${new Date().toISOString().split('T')[0]}.csv`
-        break
-      case 'appointments':
-        csvContent = generateAppointmentsCSV(generatedData)
-        filename = `appointments-report-${new Date().toISOString().split('T')[0]}.csv`
-        break
-      case 'staffing':
-        csvContent = generateStaffingCSV(generatedData)
-        filename = `staffing-report-${new Date().toISOString().split('T')[0]}.csv`
-        break
+    const builders = {
+      sales: generateSalesReport,
+      inventory: generateInventoryReport,
+      appointments: generateAppointmentsReport,
+      staffing: generateStaffingReport,
     }
-
-    downloadFile(csvContent, filename, 'text/csv')
-    showToast('CSV exported', 'success')
+    const build = builders[reportType]
+    if (!build) return
+    try {
+      await downloadXlsx(`${reportType}-report-${new Date().toISOString().split('T')[0]}.xlsx`, build(generatedData))
+      showToast('Excel report exported', 'success')
+    } catch (e) {
+      console.error(e)
+      showToast('Excel export failed', 'error')
+    }
   }
 
   const handleExportPDF = () => {
@@ -260,7 +253,7 @@ function AdminReports() {
           if (generatedData.by_date?.length) {
             doc.text('By Date', 14, y)
             y += 6
-            doc.autoTable({
+            autoTable(doc, {
               startY: y,
               head: [['Date', 'Transactions', 'Revenue']],
               body: generatedData.by_date.map(d => [d.date, d.transactions, `₱${toNumber(d.revenue).toLocaleString()}`]),
@@ -272,7 +265,7 @@ function AdminReports() {
           if (generatedData.by_product?.length) {
             doc.text('By Product', 14, y)
             y += 6
-            doc.autoTable({
+            autoTable(doc, {
               startY: y,
               head: [['Product', 'Qty Sold', 'Revenue', 'Orders']],
               body: generatedData.by_product.slice(0, 30).map(p => [p.prod_name, p.total_qty, `₱${toNumber(p.total_revenue).toLocaleString()}`, p.orders_count]),
@@ -285,7 +278,7 @@ function AdminReports() {
           if (generatedData.items?.length) {
             doc.text('Items', 14, y)
             y += 6
-            doc.autoTable({
+            autoTable(doc, {
               startY: y,
               head: [['Name', 'Category', 'Price', 'Qty', 'Stock Value', 'Low Stock']],
               body: generatedData.items.slice(0, 50).map(i => [i.prod_name, normalizeProductCategory(i.prod_categ, i.prod_name), `₱${i.prod_price}`, productStock(i), `₱${toNumber(i.stock_value).toLocaleString()}`, i.is_low_stock ? 'Yes' : 'No']),
@@ -298,7 +291,7 @@ function AdminReports() {
           if (generatedData.items?.length) {
             doc.text('Appointments', 14, y)
             y += 6
-            doc.autoTable({
+            autoTable(doc, {
               startY: y,
               head: [['ID', 'Type', 'Date', 'Status', 'Customer']],
               body: generatedData.items.slice(0, 50).map(a => [a.appoint_id, a.appoint_type, fmtDateTime(reportDate(a)), appointmentStatusLabel(reportStatus(a)), a.customer]),
@@ -311,7 +304,7 @@ function AdminReports() {
           if (generatedData.staff?.length) {
             doc.text('Staff', 14, y)
             y += 6
-            doc.autoTable({
+            autoTable(doc, {
               startY: y,
               head: [['Name', 'Type', 'Email', 'In-Store', 'Shifts', 'Hours']],
               body: generatedData.staff.map(s => [s.name, reportEmpType(s), s.emp_email, reportAvailability(s), `${s.total_shifts} (${s.upcoming_shifts} upcoming)`, `${s.total_hours}h`]),
@@ -331,78 +324,82 @@ function AdminReports() {
     }
   }
 
-  const generateSalesCSV = (data) => {
-    const rows = []
-    // Summary
-    rows.push(['Sales Report Summary'])
-    Object.entries(data.summary || {}).forEach(([k, v]) => rows.push([k, summaryDisplay(v)]))
-    rows.push([])
-    // By Date
-    rows.push(['By Date'])
-    rows.push(['Date', 'Transactions', 'Revenue'])
-    data.by_date?.forEach(d => rows.push([d.date, d.transactions, d.revenue]))
-    rows.push([])
-    // By Product
-    rows.push(['By Product'])
-    rows.push(['Product', 'Total Qty', 'Total Revenue', 'Orders Count'])
-    data.by_product?.forEach(p => rows.push([p.prod_name, p.total_qty, p.total_revenue, p.orders_count]))
-    rows.push([])
-    // By Staff
-    rows.push(['By Staff/Customer'])
-    rows.push(['Customer', 'Orders', 'Total Revenue'])
-    data.by_staff?.forEach(s => rows.push([s.customer, s.orders_count, s.total_revenue]))
+  const summaryRows = (data) =>
+    Object.entries(data.summary || {}).map(([k, v]) => [
+      k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      summaryDisplay(v),
+    ])
 
-    return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-  }
+  const generateSalesReport = (data) => ({
+    title: 'Sales Report',
+    sheetName: 'Sales',
+    summary: summaryRows(data),
+    sections: [
+      {
+        title: 'By Date',
+        columns: ['Date', 'Transactions', 'Revenue'],
+        rows: (data.by_date || []).map((d) => [d.date, d.transactions, d.revenue]),
+      },
+      {
+        title: 'By Product',
+        columns: ['Product', 'Total Qty', 'Total Revenue', 'Orders Count'],
+        rows: (data.by_product || []).map((p) => [p.prod_name, p.total_qty, p.total_revenue, p.orders_count]),
+      },
+      {
+        title: 'By Staff/Customer',
+        columns: ['Customer', 'Orders', 'Total Revenue'],
+        rows: (data.by_staff || []).map((s) => [s.customer, s.orders_count, s.total_revenue]),
+      },
+    ],
+  })
 
-  const generateInventoryCSV = (data) => {
-    const rows = [['Inventory Report Summary']]
-    Object.entries(data.summary || {}).forEach(([k, v]) => rows.push([k, summaryDisplay(v)]))
-    rows.push([])
-    rows.push(['Items'])
-    rows.push(['ID', 'Tag', 'Name', 'Category', 'Price', 'Qty', 'Stock Value', 'Low Stock'])
-    data.items?.forEach(i => rows.push([
-      i.prod_id, i.prod_tag, i.prod_name, normalizeProductCategory(i.prod_categ, i.prod_name),
-      i.prod_price, productStock(i), i.stock_value, i.is_low_stock ? 'Yes' : 'No'
-    ]))
-    return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-  }
+  const generateInventoryReport = (data) => ({
+    title: 'Inventory Report',
+    sheetName: 'Inventory',
+    summary: summaryRows(data),
+    sections: [
+      {
+        title: 'Items',
+        columns: ['ID', 'Tag', 'Name', 'Category', 'Price', 'Qty', 'Stock Value', 'Low Stock'],
+        rows: (data.items || []).map((i) => [
+          i.prod_id, i.prod_tag, i.prod_name, normalizeProductCategory(i.prod_categ, i.prod_name),
+          i.prod_price, productStock(i), i.stock_value, i.is_low_stock ? 'Yes' : 'No',
+        ]),
+      },
+    ],
+  })
 
-  const generateAppointmentsCSV = (data) => {
-    const rows = [['Appointments Report Summary']]
-    Object.entries(data.summary || {}).forEach(([k, v]) => rows.push([k, summaryDisplay(v)]))
-    rows.push([])
-    rows.push(['Appointments'])
-    rows.push(['ID', 'QR', 'Type', 'Date', 'Status', 'Customer', 'Phone'])
-    data.items?.forEach(a => rows.push([
-      a.appoint_id, a.appoint_qr, a.appoint_type, reportDate(a),
-      appointmentStatusLabel(reportStatus(a)), a.customer, a.customer_phone
-    ]))
-    return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-  }
+  const generateAppointmentsReport = (data) => ({
+    title: 'Appointments Report',
+    sheetName: 'Appointments',
+    summary: summaryRows(data),
+    sections: [
+      {
+        title: 'Appointments',
+        columns: ['ID', 'Type', 'Date', 'Status', 'Customer', 'Phone'],
+        rows: (data.items || []).map((a) => [
+          a.appoint_id, a.appoint_type, reportDate(a),
+          appointmentStatusLabel(reportStatus(a)), a.customer, a.customer_phone,
+        ]),
+      },
+    ],
+  })
 
-  const generateStaffingCSV = (data) => {
-    const rows = [['Staffing Report Summary']]
-    Object.entries(data.summary || {}).forEach(([k, v]) => rows.push([k, summaryDisplay(v)]))
-    rows.push([])
-    rows.push(['Staff'])
-    rows.push(['ID', 'Name', 'Type', 'Email', 'Phone', 'In-Store', 'Total Shifts', 'Upcoming', 'Hours'])
-    data.staff?.forEach(s => rows.push([
-      s.emp_id, s.name, reportEmpType(s), s.emp_email, s.emp_phone,
-      reportAvailability(s), s.total_shifts, s.upcoming_shifts, s.total_hours
-    ]))
-    return rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-  }
-
-  const downloadFile = (content, filename, mimeType) => {
-    const blob = new Blob([content], { type: mimeType })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+  const generateStaffingReport = (data) => ({
+    title: 'Staffing Report',
+    sheetName: 'Staffing',
+    summary: summaryRows(data),
+    sections: [
+      {
+        title: 'Staff',
+        columns: ['ID', 'Name', 'Type', 'Email', 'Phone', 'In-Store', 'Total Shifts', 'Upcoming', 'Hours'],
+        rows: (data.staff || []).map((s) => [
+          s.emp_id, s.name, reportEmpType(s), s.emp_email, s.emp_phone,
+          reportAvailability(s), s.total_shifts, s.upcoming_shifts, s.total_hours,
+        ]),
+      },
+    ],
+  })
 
   /** How many filters are set to something other than their default. */
   const activeFilterCount = [dateFrom, dateTo, prodId, empId, appointType, statusFilter, empTypeFilter]
@@ -526,7 +523,7 @@ function AdminReports() {
                     <option value="upcoming">Upcoming</option>
                     <option value="done">Complete</option>
                     <option value="cancelled">Cancelled</option>
-                    <option value="absent">No Show</option>
+                    <option value="absent">No-show</option>
                   </select>
                 </div>
               )}
@@ -551,8 +548,8 @@ function AdminReports() {
             </Button>
             {generatedData && (
               <>
-                <Button variant="outline" onClick={handleExportCSV} className="flex-1 sm:flex-none">
-                  <DownloadIcon className="w-4 h-4 mr-1" /> Export CSV
+                <Button variant="outline" onClick={handleExportExcel} className="flex-1 sm:flex-none">
+                  <DownloadIcon className="w-4 h-4 mr-1" /> Export Excel
                 </Button>
                 <Button variant="outline" onClick={handleExportPDF} className="flex-1 sm:flex-none">
                   <FileTextIcon className="w-4 h-4 mr-1" /> Export PDF

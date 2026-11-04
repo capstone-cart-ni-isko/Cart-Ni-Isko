@@ -47,7 +47,6 @@ export default function ClaimQrModal({ code, orderId, appointmentId, onClose }) 
             Generating QR…
           </div>
         )}
-        <code className="text-xs font-mono font-semibold text-slate-700 break-all">{code}</code>
         <p className="text-xs text-slate-500 leading-relaxed">
           Store staff will scan this code together with your student ID to release your order.
           Turn up your screen brightness if it does not scan right away.
