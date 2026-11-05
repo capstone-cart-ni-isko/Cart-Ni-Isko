@@ -1,26 +1,8 @@
-import { apiGet, apiPost, apiDelete, cacheRead, cacheWrite } from './api.js'
+import { apiGet, apiPost, apiDelete } from './api.js'
 import { normalizeProductCategory } from '../data/productCategories.js'
 
-/* The catalog is public and only changes when an admin edits it, so the last
-   answer per filter set is mirrored for 30 minutes: the storefront paints
-   instantly and the request that follows only refreshes what is on screen. */
-const CACHE_KEY = (params) => `cartniisko:catalog:${JSON.stringify(params)}`
-const PRODUCT_CACHE_KEY = (id) => `cartniisko:product:${String(id)}`
-
-export function readCatalogCache(params) {
-  return cacheRead(CACHE_KEY(params))
-}
-
-export function writeCatalogCache(params, rows) {
-  cacheWrite(CACHE_KEY(params), rows)
-}
-
-export function readProductCache(id) {
-  return cacheRead(PRODUCT_CACHE_KEY(id))
-}
-
-export function writeProductCache(id, row) {
-  cacheWrite(PRODUCT_CACHE_KEY(id), row)
+export function isCatalogProductListed(row) {
+  return Boolean(row) && row.prod_disabled == null && row.prod_deleted == null
 }
 
 const CATEGORY_IMAGES = {
@@ -384,31 +366,31 @@ export function mapProduct(row) {
 }
 
 export async function fetchCatalog(params = {}) {
-  const cached = readCatalogCache(params)
-  if (cached) return cached
-
-  const data = await apiGet('/products/filter', { status: 'active', ...params })
-  const rows = Array.isArray(data.data) ? data.data.map(mapProduct) : []
-  writeCatalogCache(params, rows)
-  return rows
+  const data = await apiGet('/products/filter', { status: 'active', ...params }, { cache: false })
+  return Array.isArray(data.data)
+    ? data.data.filter(isCatalogProductListed).map(mapProduct).filter(Boolean)
+    : []
 }
 
 export async function fetchProduct(id) {
   const key = String(id)
-  const cached = readProductCache(key)
-  if (cached) return cached
 
   const isNumeric = /^\d+$/.test(key)
-  const data = await apiGet('/products/view', isNumeric ? { prod_id: id } : { prod_tag: id })
+  const data = await apiGet(
+    '/products/view',
+    isNumeric ? { prod_id: id } : { prod_tag: id },
+    { cache: false }
+  )
+  if (!isCatalogProductListed(data.data)) return null
   const product = mapProduct(data.data)
-  if (product) writeProductCache(key, product)
   return product
 }
 
 export async function searchProducts(q) {
-  const data = await apiGet('/products/search', { q })
-  const rows = Array.isArray(data.data) ? data.data.map(mapProduct) : []
-  return rows
+  const data = await apiGet('/products/search', { q }, { cache: false })
+  return Array.isArray(data.data)
+    ? data.data.filter(isCatalogProductListed).map(mapProduct).filter(Boolean)
+    : []
 }
 
 export async function fetchSearchHistory() {

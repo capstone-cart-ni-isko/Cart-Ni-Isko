@@ -228,8 +228,10 @@ function withQuery(path, params) {
   return suffix ? `${path}?${suffix}` : path
 }
 
-export async function apiGet(path, params = {}, options = {}) {
+export async function apiGet(path, params = {}, { cache: useCache = true, ...options } = {}) {
   const url = withQuery(path, params)
+  if (!useCache) return apiRequest(url, options)
+
   const kind = activePortal()
   const token = tokens[kind] || null
   const key = getCacheKey(kind, token, url)

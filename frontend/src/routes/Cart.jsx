@@ -323,7 +323,7 @@ function Cart() {
                               <div className="flex items-center gap-2.5 mt-1.5 text-sm text-gray-500 flex-wrap">
                                 {item.size && item.size !== 'One Size' && (
                                   <span>
-                                    Size: <strong className="text-gray-800 font-semibold">{item.size}</strong>
+                                    Size: <strong className="text-gray-600 font-normal">{item.size}</strong>
                                   </span>
                                 )}
                                 {item.size && item.size !== 'One Size' && item.color && (
@@ -332,7 +332,7 @@ function Cart() {
                                 {item.color && (
                                   <span className="flex items-center gap-1.5">
                                     Color:{' '}
-                                    <strong className="text-gray-800 font-semibold">{item.color.name}</strong>
+                                    <strong className="text-gray-600 font-normal">{item.color.name}</strong>
                                   </span>
                                 )}
                               </div>

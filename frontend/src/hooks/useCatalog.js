@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchCatalog, readCatalogCache } from '../services/products.js'
+import { fetchCatalog } from '../services/products.js'
 import { useApiChange } from './useApiChange.js'
 
 /**
  * Active catalog, mapped through mapProduct so the UI sees name/price/images/id/category.
- * On a failure with nothing on screen, `error` is set and the page offers
- * `reload()` (a Retry button).
+ * Each load uses the current server catalog so a newly unlisted product is not
+ * kept visible from a stale browser cache. On failure, `error` is set and the
+ * page offers `reload()` (a Retry button).
  */
 export function useCatalog(params = {}) {
   const [products, setProducts] = useState([])
@@ -22,15 +23,9 @@ export function useCatalog(params = {}) {
   useEffect(() => {
     let cancelled = false
     const wanted = JSON.parse(query)
-
-    // Paint the 60-second mirror first, then let the request below refresh it.
-    const cached = readCatalogCache(wanted)
-    if (cached) {
-      setProducts(cached)
-      setLoading(false)
-    } else {
-      setLoading(true)
-    }
+    setProducts([])
+    setError(null)
+    setLoading(true)
 
     fetchCatalog(wanted)
       .then((rows) => {
@@ -39,8 +34,7 @@ export function useCatalog(params = {}) {
         setError(null)
       })
       .catch((err) => {
-        // A failed refresh must never blank a screen that already has data.
-        if (cancelled || cached) return
+        if (cancelled) return
         setProducts([])
         setError(err?.message || "Can't reach the store server. Please try again.")
       })

@@ -16,15 +16,16 @@ class CacheReads
     private const TTL = 30;
 
     /**
-     * Public catalog answers only change when staff edit a product, and every
-     * such write already bumps `api:version` (which is part of the cache key).
-     * A longer TTL therefore cannot serve stale rows after an edit, while it
-     * removes the ~1.5 s Supabase round trip from most storefront navigations.
+     * Shared answers only change when staff edit a product or review, and every
+     * such write bumps `api:version` (part of the cache key). The longer TTL
+     * removes the Supabase round trip without mixing staff/customer responses.
      */
     private const SHARED_TTL = 300;
 
-    // Public catalog reads: identical for every caller, so no account
-    // scoping and no token lookup are needed for these paths.
+    // Shared reads: identical for every caller, so no account scoping and no
+    // token lookup are needed for these paths. Product filter/search/sort/view
+    // are intentionally excluded: staff can read unlisted products while
+    // customers cannot, so sharing those responses could expose unlisted rows.
     //
     // `api/reviews/display` is deliberately NOT here: the same URL answers
     // the customer wall (approved only) and the employee moderation queue
@@ -33,10 +34,6 @@ class CacheReads
     // and a customer could be handed unmoderated text. It is cached
     // per-account like every other token-dependent read.
     private const SHARED = [
-        'api/products/filter',
-        'api/products/search',
-        'api/products/sort',
-        'api/products/view',
         'api/products/categories',
         'api/reviews/score',
     ];
