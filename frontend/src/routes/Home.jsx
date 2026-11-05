@@ -190,10 +190,10 @@ function Home() {
           className="sticky top-0 z-30 w-screen max-w-none select-none"
           style={{ marginLeft: 'calc((100% - 100vw) / 2)' }}
         >
-          <header className="relative z-40 flex items-center justify-center gap-3 border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-sm transition-all dark:border-[var(--line)] dark:bg-[var(--surface)]/95">
+          <header className={`relative z-40 flex items-center justify-center gap-3 border-b border-gray-100 bg-white/95 px-4 backdrop-blur-sm transition-all dark:border-[var(--line)] dark:bg-[var(--surface)]/95 ${searchFocused ? 'h-14' : 'h-10'}`}>
             {/* Logo centered or hidden when search focused */}
             {!searchFocused && (
-              <img src={logo} alt="Tindahan ni Isko" className="absolute left-1/2 h-7 -translate-x-1/2 object-contain" />
+              <img src={logo} alt="Tindahan ni Isko" className="absolute left-1/2 top-1/2 h-7 -translate-x-1/2 -translate-y-1/2 object-contain" />
             )}
 
             {/* When focused, the search bar fills the ribbon */}

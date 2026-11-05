@@ -300,15 +300,6 @@ function Profile() {
                   <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
                 </div>
               </div>
-
-              {/* Settings Action Button - Rectangular */}
-              <Link
-                to="/settings"
-                className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs text-white hover:bg-white hover:text-gray-800 flex items-center justify-center shadow-2xs active:scale-95 transition-all shrink-0"
-                title="Settings"
-              >
-                <SettingsIcon className="w-5 h-5" />
-              </Link>
             </div>
 
             {/* Action Bar: Edit Profile - Rectangular */}
@@ -411,25 +402,8 @@ function Profile() {
             </div>
           </div>
 
-          {/* 6. Help Center */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-gray-900">Need Help?</h3>
-            </div>
-            <p className="text-xs text-gray-500 leading-relaxed">
-              We're here to assist with your BU merch orders, campus pickups, and sizing queries.
-            </p>
-            {/* A real action (mailto) instead of a non-interactive span, using
-                the same support address the desktop footer links to. */}
-            <a
-              href="mailto:support@tindahanniisko.com"
-              className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 text-[#FF6A00] font-semibold text-xs flex items-center justify-center gap-2 hover:bg-orange-100 transition-colors"
-            >
-              Contact Support
-            </a>
-          </div>
 
-          {/* 7. Account Security */}
+          {/* 6. Account Security */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -450,7 +424,7 @@ function Profile() {
             </div>
           </div>
 
-          {/* 8. Log Out — opens the shared confirmation (FLOW-CUST_LOGOUT-01/02) */}
+          {/* 7. Log Out — opens the shared confirmation (FLOW-CUST_LOGOUT-01/02) */}
           <button
             type="button"
             onClick={() => setShowLogoutConfirm(true)}
