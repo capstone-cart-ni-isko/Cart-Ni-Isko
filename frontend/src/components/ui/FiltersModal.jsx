@@ -8,9 +8,9 @@ const pricePresets = [
   { label: '₱0 – ₱399', min: 0, max: 399 },
   { label: '₱400 – ₱699', min: 400, max: 699 },
   { label: '₱700 – ₱999', min: 700, max: 999 },
-  { label: '₱1,000+', min: 1000, max: null },
+  { label: '₱1,000 – ₱3,000', min: 1000, max: 3000 },
 ]
-const MAX_PRICE = 2000
+const MAX_PRICE = 3000
 
 const emptyFilters = () => ({
   category: 'All',
@@ -83,13 +83,20 @@ function FiltersModal({
   }
   const setMinimum = (value) => {
     setFilters((prev) => {
-      const min = value === '' ? '' : String(Math.min(Number(value), prev.maxPrice ? Number(prev.maxPrice) : MAX_PRICE))
+      const min = value === ''
+        ? ''
+        : String(Math.min(Number(value), MAX_PRICE, prev.maxPrice ? Number(prev.maxPrice) : MAX_PRICE))
       return { ...prev, minPrice: min }
     })
   }
   const setMaximum = (value) => {
     setFilters((prev) => {
-      const max = value === '' ? '' : String(Math.max(Number(value), prev.minPrice ? Number(prev.minPrice) : 0))
+      const max = value === ''
+        ? ''
+        : String(Math.max(
+          prev.minPrice ? Number(prev.minPrice) : 0,
+          Math.min(Number(value), MAX_PRICE)
+        ))
       return { ...prev, maxPrice: max }
     })
   }
@@ -221,33 +228,34 @@ function FiltersModal({
               </span>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2.5">
-              <label className="rounded-lg border border-slate-300 px-3 py-1.5 focus-within:border-orange-500">
+              <label className="rounded-lg border border-slate-300 px-3 py-1.5 focus-within:border-slate-400">
                 <span className="block text-xs text-slate-500">Minimum Price</span>
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-900">
                   <span aria-hidden="true">₱</span>
                   <input
                     type="number"
                     min="0"
-                    max={maxValue}
+                    max={MAX_PRICE}
                     value={filters.minPrice}
                     onChange={(event) => setMinimum(event.target.value)}
                     placeholder="0"
-                    className="w-full bg-transparent text-sm outline-none"
+                    className="w-full bg-transparent text-sm outline-none focus-visible:outline-2 focus-visible:outline-blue-400 focus-visible:outline-offset-1"
                     aria-label="Minimum price"
                   />
                 </span>
               </label>
-              <label className="rounded-lg border border-slate-300 px-3 py-1.5 focus-within:border-orange-500">
+              <label className="rounded-lg border border-slate-300 px-3 py-1.5 focus-within:border-slate-400">
                 <span className="block text-xs text-slate-500">Maximum Price</span>
                 <span className="flex items-center gap-1 text-sm font-bold text-slate-900">
                   <span aria-hidden="true">₱</span>
                   <input
                     type="number"
                     min={minValue}
+                    max={MAX_PRICE}
                     value={filters.maxPrice}
                     onChange={(event) => setMaximum(event.target.value)}
                     placeholder={String(MAX_PRICE)}
-                    className="w-full bg-transparent text-sm outline-none"
+                    className="w-full bg-transparent text-sm outline-none focus-visible:outline-2 focus-visible:outline-blue-400 focus-visible:outline-offset-1"
                     aria-label="Maximum price"
                   />
                 </span>
@@ -261,9 +269,9 @@ function FiltersModal({
               <input
                 type="range"
                 min="0"
-                max={MAX_PRICE}
+                max={filters.maxPrice ? Number(filters.maxPrice) : MAX_PRICE}
                 step="50"
-                value={Math.min(minValue, MAX_PRICE)}
+                value={Math.min(minValue, maxValue, MAX_PRICE)}
                 onChange={(event) => setMinimum(event.target.value === '0' ? '' : event.target.value)}
                 aria-label="Minimum price slider"
               />
@@ -273,7 +281,7 @@ function FiltersModal({
                 max={MAX_PRICE}
                 step="50"
                 value={Math.min(maxValue, MAX_PRICE)}
-                onChange={(event) => setMaximum(event.target.value === String(MAX_PRICE) ? '' : event.target.value)}
+                onChange={(event) => setMaximum(event.target.value)}
                 aria-label="Maximum price slider"
               />
             </div>

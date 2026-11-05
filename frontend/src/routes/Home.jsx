@@ -1,18 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth.js'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import SkeletonCard from '../components/ui/SkeletonCard.jsx'
 import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
-import ConfirmModal from '../components/ui/ConfirmModal.jsx'
-import Avatar from '../components/ui/Avatar.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
 import { PRODUCT_CATEGORIES } from '../data/productCategories.js'
 import { fetchSearchHistory, recordSearchQuery, clearSearchHistory } from '../services/products.js'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import searchIcon from '../assets/icons/common/search.svg'
-import notificationIcon from '../assets/icons/common/notification.svg'
 import carouselImg1 from '../assets/Images/unnamed (1).jpg'
 import carouselImg2 from '../assets/Images/unnamed (51).png'
 import carouselImg3 from '../assets/Images/unnamed (52).jpg'
@@ -26,15 +22,7 @@ import stickerCategoryImg from '../assets/Images/unnamed (10).png'
 import totebagCategoryImg from '../assets/Images/totebag.png'
 import keychainCategoryImg from '../assets/Images/keychain.png'
 
-import {
-  UserIcon,
-  HeartIcon,
-  ShirtIcon,
-  PackageIcon,
-  SettingsIcon,
-  LogOutIcon,
-  LockIcon
-} from '../components/ui/Icons.jsx'
+import { PackageIcon } from '../components/ui/Icons.jsx'
 
 const carouselSlides = [
   {
@@ -86,114 +74,10 @@ const shopCategories = PRODUCT_CATEGORIES.map((name) => ({
   image: categoryImages[name] || null,
 }))
 
-function ProfileMenu({ open, onClose, user, onLogout }) {
-  const navigate = useNavigate()
-  const [showLogoutModal, setShowLogoutModal] = useState(false)
-  if (!open) return null
-
-  // FLOW-CUST_LOGOUT-01/02: logging out from the drawer is confirmed first,
-  // exactly like the Settings screen, so it never signs out on a stray tap.
-  const confirmLogout = () => {
-    onLogout()
-    onClose()
-    navigate('/signin')
-  }
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-50 animate-fade-in" onClick={onClose} />
-      <aside className="fixed top-0 left-0 bottom-0 w-72 bg-white dark:bg-[var(--surface)] z-50 shadow-2xl flex flex-col justify-between rounded-r-2xl overflow-hidden transition-transform duration-300 border-r border-transparent dark:border-[var(--line)]">
-        <div>
-          <div className="gradient-orange-header px-6 pt-12 pb-8 text-white relative">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full border-2 border-white bg-blue-100 overflow-hidden">
-                <Avatar name={user?.fullName} size={56} className="w-full h-full" userId={user?.cust_id} />
-              </div>
-              <div>
-                <p className="font-semibold text-lg">{user ? user.fullName : 'Guest Isko'}</p>
-                <p className="text-white/85 text-xs truncate max-w-[170px]">{user ? user.email : 'Explore campus merch'}</p>
-              </div>
-            </div>
-          </div>
-          <nav className="p-4 space-y-1">
-            <Link to="/home" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              <span>Home</span>
-            </Link>
-            <Link to="/about" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="16" x2="12" y2="12" />
-                <line x1="12" y1="8" x2="12.01" y2="8" />
-              </svg>
-              <span>About Us</span>
-            </Link>
-            <Link to="/shop" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
-              <ShirtIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />
-              <span>Shop Merch</span>
-            </Link>
-            {user ? (
-              <>
-                <Link to="/orders" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
-                  <PackageIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />
-                  <span>My Orders</span>
-                </Link>
-                <Link to="/wishlist" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
-                  <HeartIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />
-                  <span>Wishlist</span>
-                </Link>
-                <Link to="/profile" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
-                  <UserIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />
-                  <span>My Profile</span>
-                </Link>
-                <Link to="/settings" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-[var(--ink-2)] hover:bg-gray-50 dark:hover:bg-[var(--surface-3)] transition-all">
-                  <SettingsIcon className="w-5 h-5 text-gray-450 dark:text-[var(--muted)]" />
-                  <span>Settings</span>
-                </Link>
-                <button
-                  onClick={() => setShowLogoutModal(true)}
-                  className="w-full text-left flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all cursor-pointer"
-                >
-                  <LogOutIcon className="w-5 h-5 text-red-500" />
-                  <span>Log Out</span>
-                </button>
-              </>
-            ) : (
-              <Link to="/signin" onClick={onClose} className="flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-semibold text-brand-orange hover:bg-brand-orange/5 dark:hover:bg-[var(--tint-brand-bg)] transition-all">
-                <LockIcon className="w-5 h-5 text-brand-orange" />
-                <span>Log In</span>
-              </Link>
-            )}
-          </nav>
-        </div>
-        <div className="p-6 border-t border-gray-100 dark:border-[var(--line)] text-center">
-          <p className="text-xs text-gray-400 dark:text-[var(--muted-2)] font-medium">Tindahan ni Isko v1.0.0</p>
-        </div>
-      </aside>
-
-      {/* FLOW-CUST_LOGOUT-01/02: shared logout confirmation, matching Settings. */}
-      <ConfirmModal
-        isOpen={showLogoutModal}
-        onClose={() => setShowLogoutModal(false)}
-        onConfirm={confirmLogout}
-        title="Log Out?"
-        message="Are you sure you want to sign out of your Tindahan ni Isko account?"
-        confirmText="Log Out"
-        isDestructive={true}
-      />
-    </>
-  )
-}
-
 function Home() {
   const navigate = useNavigate()
-  const { currentUser, logout } = useAuth()
 
   const [searchParams] = useSearchParams()
-  const [menuOpen, setMenuOpen] = useState(false)
   const [searchVal, setSearchVal] = useState(searchParams.get('search') || '')
   const [slideIndex, setSlideIndex] = useState(0)
   const categoryMobileRef = useRef(null)
@@ -300,29 +184,16 @@ function Home() {
     <AppShell showSideNav={false} className="home-page-canvas">
       {/* ────────────────── MOBILE HOME PAGE LAYOUT ────────────────── */}
       <div className="md:hidden pb-28">
-        {/* Sidebar menu drawer */}
-        <ProfileMenu open={menuOpen} onClose={() => setMenuOpen(false)} user={currentUser} onLogout={logout} />
-
         {/* Top ribbon bar & expandable search container */}
-        <div ref={mobileSearchContainerRef} className="sticky top-0 z-30 select-none">
-          <header className="bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-sm border-b border-gray-100 dark:border-[var(--line)] px-4 py-3 flex items-center justify-between gap-3 relative z-40 transition-all">
-            {/* Hamburger left — hidden when search is focused */}
-            {!searchFocused && (
-              <button
-                type="button"
-                onClick={() => setMenuOpen(true)}
-                aria-label="Open navigation menu"
-                className="w-10 h-10 rounded-full bg-gray-50 dark:bg-[var(--surface-3)] flex items-center justify-center active:scale-95 transition-transform shrink-0"
-              >
-                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 text-gray-800 dark:text-[var(--ink)]" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
-                </svg>
-              </button>
-            )}
-
+        <div
+          ref={mobileSearchContainerRef}
+          className="sticky top-0 z-30 w-screen max-w-none select-none"
+          style={{ marginLeft: 'calc((100% - 100vw) / 2)' }}
+        >
+          <header className="relative z-40 flex items-center justify-center gap-3 border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-sm transition-all dark:border-[var(--line)] dark:bg-[var(--surface)]/95">
             {/* Logo centered or hidden when search focused */}
             {!searchFocused && (
-              <img src={logo} alt="Tindahan ni Isko" className="h-7 object-contain mx-auto" />
+              <img src={logo} alt="Tindahan ni Isko" className="absolute left-1/2 h-7 -translate-x-1/2 object-contain" />
             )}
 
             {/* When focused, the search bar fills the ribbon */}
@@ -353,16 +224,6 @@ function Home() {
               </form>
             )}
 
-            {/* Bell right — hidden when search is focused */}
-            {!searchFocused && (
-              <Link
-                to="/notifications"
-                aria-label="Notifications"
-                className="w-10 h-10 rounded-full bg-gray-50 dark:bg-[var(--surface-3)] flex items-center justify-center relative active:scale-95 transition-transform shrink-0"
-              >
-                <img src={notificationIcon} alt="" className="w-5 h-5 dark:brightness-125" />
-              </Link>
-            )}
           </header>
 
           {/* Regular stream search input (when not focused) */}

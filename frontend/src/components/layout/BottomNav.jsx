@@ -27,15 +27,14 @@ function CalendarGlyph() {
 }
 
 const TAB_CLASS =
-  'flex flex-col items-center gap-0.5 px-1 py-1 rounded-lg transition-colors ' +
-  'flex-1 min-w-0 max-w-[4.5rem] relative'
+  'flex flex-1 min-w-0 flex-col items-center gap-0.5 px-0.5 py-1 rounded-lg transition-colors relative'
 
 /* The four ribbon destinations that are real routes; Menu is a drawer toggle. */
 const ROUTE_TABS = [
-  { to: '/home', label: 'Home', icon: homeIcon, end: true },
-  { to: '/bag', label: 'Bag', icon: cartIcon, active: ['/bag', '/cart'] },
-  { to: '/appointments', label: 'Appointments', glyph: 'calendar' },
-  { to: '/notifications', label: 'Notifications', icon: bellIcon, badge: true },
+  { to: '/home', label: 'Home', mobileLabel: 'Home', icon: homeIcon, end: true },
+  { to: '/bag', label: 'Bag', mobileLabel: 'Bag', icon: cartIcon, active: ['/bag', '/cart'] },
+  { to: '/appointments', label: 'Appointments', mobileLabel: 'Appointments', glyph: 'calendar' },
+  { to: '/notifications', label: 'Notifications', mobileLabel: 'Notifications', icon: bellIcon, badge: true },
 ]
 
 /**
@@ -102,7 +101,7 @@ function BottomNav() {
         <div className="flex items-center justify-around bg-white dark:bg-[var(--surface)] rounded-lg px-2 py-1.5 border border-slate-200 dark:border-[var(--line)]">
           {currentUser ? (
             <>
-              {ROUTE_TABS.map(({ to, label, icon, end, badge, glyph, active }) => {
+              {ROUTE_TABS.map(({ to, label, mobileLabel, icon, end, badge, glyph, active }) => {
                 // Bag badge = bag quantity; bell badge = unread notifications.
                 const count = to === '/bag' ? bagCount : badge ? unread : 0
                 // FLOW-BAG-03: the ribbon tab is "/bag"; "/cart" stays an alias
@@ -117,6 +116,7 @@ function BottomNav() {
                     key={to}
                     to={to}
                     end={end}
+                    aria-label={label}
                     onClick={(e) => guard(e, to)}
                     className={`${TAB_CLASS} ${isActive ? 'text-brand-orange font-semibold bg-orange-50/50 dark:bg-[var(--tint-brand-bg)]' : 'text-text-muted dark:text-[var(--muted)]'}`}
                   >
@@ -129,7 +129,7 @@ function BottomNav() {
                           </span>
                         )}
                       </span>
-                      <span className="text-[11px] font-medium leading-tight whitespace-nowrap">{label}</span>
+                      <span className="max-w-full truncate whitespace-nowrap text-center text-[9px] font-medium leading-tight">{mobileLabel}</span>
                     </>
                   </NavLink>
                 )
@@ -143,7 +143,7 @@ function BottomNav() {
                 className={`${TAB_CLASS} text-text-muted dark:text-[var(--muted)] cursor-pointer`}
               >
                 <MenuIcon />
-                <span className="text-[11px] font-medium leading-tight whitespace-nowrap">Menu</span>
+                <span className="max-w-full truncate whitespace-nowrap text-center text-[9px] font-medium leading-tight">Menu</span>
               </button>
             </>
           ) : (

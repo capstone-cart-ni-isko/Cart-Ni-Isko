@@ -36,7 +36,7 @@ function AddressCard({ address, defaultName, defaultPhone, onEdit, onDelete, onS
   const phoneNumber = address.phone || defaultPhone
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className="flex flex-col gap-3 rounded-2xl border border-gray-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="flex min-w-0 items-start gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
@@ -68,7 +68,7 @@ function AddressCard({ address, defaultName, defaultPhone, onEdit, onDelete, onS
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-t border-gray-100 pt-2.5 sm:gap-2.5 sm:border-l sm:border-t-0 sm:pl-3.5 sm:pt-0">
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-t border-gray-100 pt-2.5 sm:gap-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
         {!address.isDefault && (
           <button
             type="button"
@@ -221,108 +221,112 @@ function MyAddress() {
       <div className="pb-16 animate-fade-in w-full">
         <div className="space-y-4">
           {!showForm && (
-            <section className="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-3">
+            <section className="overflow-hidden rounded-3xl border border-gray-100/90 bg-white shadow-xs">
+              <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-5 sm:px-7">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                   <MapPinIcon className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-semibold text-gray-900">Saved Addresses</h2>
+                  <h2 className="text-base font-semibold text-gray-900">Saved Addresses</h2>
                   <p className="mt-0.5 text-xs text-gray-500">You can edit or delete your saved addresses anytime.</p>
                 </div>
               </div>
 
-              {addresses.length > 0 ? (
-                <div className="space-y-2.5">
-                  {addresses.map((addr) => (
-                    <AddressCard
-                      key={addr.id}
-                      address={addr}
-                      defaultName={accountName}
-                      defaultPhone={accountPhone}
-                      onEdit={handleEdit}
-                      onDelete={(id) => setDeleteTarget(id)}
-                      onSetDefault={handleSetDefault}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-3.5 py-4">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-gray-400">
-                    <MapPinIcon className="h-4 w-4" />
+              <div className="space-y-4 px-5 py-5 sm:px-7 sm:py-6">
+                {addresses.length > 0 ? (
+                  <div className="space-y-3">
+                    {addresses.map((addr) => (
+                      <AddressCard
+                        key={addr.id}
+                        address={addr}
+                        defaultName={accountName}
+                        defaultPhone={accountPhone}
+                        onEdit={handleEdit}
+                        onDelete={(id) => setDeleteTarget(id)}
+                        onSetDefault={handleSetDefault}
+                      />
+                    ))}
                   </div>
-                  <p className="text-xs font-medium text-gray-500">No addresses saved yet.</p>
-                </div>
-              )}
+                ) : (
+                  <div className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50/60 px-4 py-4">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-gray-400">
+                      <MapPinIcon className="h-4 w-4" />
+                    </div>
+                    <p className="text-xs font-medium text-gray-500">No addresses saved yet.</p>
+                  </div>
+                )}
 
-              <button
-                type="button"
-                onClick={handleAddNew}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-200 bg-blue-50/30 px-3 py-2.5 text-center transition-colors hover:border-blue-400 hover:bg-blue-50/60 cursor-pointer"
-              >
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-sm leading-none text-white">+</span>
-                <span className="text-xs font-semibold text-blue-600">Add New Address</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={handleAddNew}
+                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-brand-orange/40 bg-brand-orange/5 px-3 py-2.5 text-center text-sm font-semibold text-brand-orange transition-colors hover:bg-brand-orange/10 cursor-pointer"
+                >
+                  <span className="text-lg leading-none">+</span>
+                  <span>Add New Address</span>
+                </button>
+              </div>
             </section>
           )}
 
           {/* Add / Edit Form */}
           {showForm && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between">
+            <div className="overflow-hidden rounded-3xl border border-gray-100/90 bg-white shadow-xs animate-fade-in">
+              <div className="border-b border-gray-100 px-5 py-5 sm:px-7">
                 <h3 className="text-sm font-semibold text-gray-900">
                   {editingId ? 'Edit Address' : 'Add New Address'}
                 </h3>
               </div>
 
-              {/* Account Contact Display */}
-              <div className="bg-orange-50/50 rounded-xl p-3 border border-orange-100/80 flex items-center justify-between text-xs">
-                <div>
-                  <p className="font-semibold text-gray-900">{accountName}</p>
-                  <p className="text-gray-500 mt-0.5">{accountPhone}</p>
+              <div className="space-y-5 px-5 py-5 sm:px-7 sm:py-6">
+                {/* Account Contact Display */}
+                <div className="bg-orange-50/50 rounded-xl p-3 border border-orange-100/80 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-semibold text-gray-900">{accountName}</p>
+                    <p className="text-gray-500 mt-0.5">{accountPhone}</p>
+                  </div>
+                  <span className="text-[10px] font-semibold text-brand-orange bg-white px-2.5 py-1 rounded-lg border border-orange-200/80 shadow-2xs">
+                    Account Contact
+                  </span>
                 </div>
-                <span className="text-[10px] font-semibold text-brand-orange bg-white px-2.5 py-1 rounded-lg border border-orange-200/80 shadow-2xs">
-                  Account Contact
-                </span>
+
+                <form onSubmit={handleSave} className="space-y-4">
+                  <Input label="Address Line" name="addressLine" value={form.addressLine} onChange={handleChange} placeholder="House no., Street, Building" error={fieldError('addressLine')} />
+                  <Input label="Barangay" name="barangay" value={form.barangay} onChange={handleChange} placeholder="Barangay" />
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input label="City / Municipality" name="city" value={form.city} onChange={handleChange} placeholder="City" error={fieldError('city')} />
+                    <Input label="Province" name="province" value={form.province} onChange={handleChange} placeholder="Province" error={fieldError('province')} />
+                  </div>
+                  <Input label="Postal Code" name="postalCode" value={form.postalCode} onChange={handleChange} placeholder="4500" inputMode="numeric" error={fieldError('postalCode')} />
+
+                  <Suspense fallback={<div className="h-56 rounded-xl border border-gray-200 bg-gray-50 animate-pulse" />}>
+                    <MapPinPicker
+                      value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
+                      onChange={(spot) => setForm((prev) => ({ ...prev, lat: spot?.lat ?? null, lng: spot?.lng ?? null }))}
+                      query={[form.addressLine, form.barangay, form.city, form.province].filter((p) => p && p.trim()).join(', ')}
+                    />
+                  </Suspense>
+
+                  <label className="flex items-center gap-2.5 text-sm text-gray-600 font-semibold select-none cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      name="isDefault"
+                      checked={form.isDefault}
+                      onChange={handleChange}
+                      className="h-4 w-4 accent-brand-orange rounded cursor-pointer"
+                    />
+                    Set as default address
+                  </label>
+
+                  <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
+                    <Button type="button" variant="secondary" onClick={handleCancel} className="h-11 rounded-xl px-5 font-semibold sm:min-w-32">
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={!isFormValid || saving} loading={saving} className="h-11 rounded-xl px-6 font-semibold shadow-sm sm:min-w-40">
+                      Save Changes
+                    </Button>
+                  </div>
+                </form>
               </div>
-
-              <form onSubmit={handleSave} className="space-y-3">
-                <Input label="Address Line" name="addressLine" value={form.addressLine} onChange={handleChange} placeholder="House no., Street, Building" error={fieldError('addressLine')} />
-                <Input label="Barangay" name="barangay" value={form.barangay} onChange={handleChange} placeholder="Barangay" />
-                <div className="grid grid-cols-2 gap-3">
-                  <Input label="City / Municipality" name="city" value={form.city} onChange={handleChange} placeholder="City" error={fieldError('city')} />
-                  <Input label="Province" name="province" value={form.province} onChange={handleChange} placeholder="Province" error={fieldError('province')} />
-                </div>
-                <Input label="Postal Code" name="postalCode" value={form.postalCode} onChange={handleChange} placeholder="4500" inputMode="numeric" error={fieldError('postalCode')} />
-
-                <Suspense fallback={<div className="h-56 rounded-xl border border-gray-200 bg-gray-50 animate-pulse" />}>
-                  <MapPinPicker
-                    value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
-                    onChange={(spot) => setForm((prev) => ({ ...prev, lat: spot?.lat ?? null, lng: spot?.lng ?? null }))}
-                    query={[form.addressLine, form.barangay, form.city, form.province].filter((p) => p && p.trim()).join(', ')}
-                  />
-                </Suspense>
-
-                <label className="flex items-center gap-2.5 text-sm text-gray-600 font-semibold select-none cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    name="isDefault"
-                    checked={form.isDefault}
-                    onChange={handleChange}
-                    className="h-4 w-4 accent-brand-orange rounded cursor-pointer"
-                  />
-                  Set as default address
-                </label>
-
-                <div className="flex gap-3 pt-2">
-                  <Button type="button" variant="secondary" onClick={handleCancel} className="flex-1 h-11 rounded-xl font-semibold">
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={!isFormValid || saving} loading={saving} className="flex-1 h-11 rounded-xl font-semibold shadow-md">
-                    Save
-                  </Button>
-                </div>
-              </form>
             </div>
           )}
 
