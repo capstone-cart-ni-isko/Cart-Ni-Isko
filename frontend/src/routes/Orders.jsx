@@ -659,13 +659,6 @@ function Orders() {
             <p className="text-sm text-gray-450 mt-1 max-w-[260px] mx-auto">
               Your BU campus merchandise orders will show up here as their status updates.
             </p>
-            <button
-              type="button"
-              onClick={() => selectTab('all')}
-              className="mt-5 text-brand-orange font-semibold text-xs hover:underline cursor-pointer"
-            >
-              View All Orders
-            </button>
           </div>
         ) : (
           filteredOrders.map((order) => {

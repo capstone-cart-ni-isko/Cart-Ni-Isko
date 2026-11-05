@@ -388,20 +388,6 @@ export default function Notifications() {
             )}
           </>
         )}
-
-        {/* Help card */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 flex flex-wrap items-center gap-x-3.5 gap-y-3 shadow-2xs">
-          <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0">
-            <HelpIcon className="w-5 h-5 text-brand-orange" />
-          </div>
-          <div className="flex-1 min-w-[12rem]">
-            <h4 className="text-sm sm:text-base font-semibold text-gray-900 tracking-tight">
-              Need order assistance?
-            </h4>
-            <p className="text-sm text-gray-500 mt-0.5">Contact our student help desk.</p>
-          </div>
-          <span className="text-xs font-semibold text-brand-orange shrink-0">Contact Support</span>
-        </div>
       </div>
 
       {/* Focused Notification Detail Popup */}

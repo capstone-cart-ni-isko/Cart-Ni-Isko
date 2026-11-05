@@ -240,11 +240,6 @@ function Profile() {
         <div className="space-y-4">
           {/* Orange Banner - Mobile Redesign */}
           <div className="rounded-3xl p-5 text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] space-y-4">
-            <div className="absolute inset-0 opacity-[0.05] select-none pointer-events-none flex items-center justify-center">
-              <span className="text-5xl font-semibold tracking-widest rotate-[12deg] whitespace-nowrap text-white">
-                TINDAHAN NI ISKO
-              </span>
-            </div>
 
             {/* Avatar + Info Header with Settings Icon */}
             <div className="flex items-start justify-between gap-3 relative z-10">
@@ -522,11 +517,7 @@ function Profile() {
       <div className="hidden md:block w-full max-w-6xl mx-auto py-2 animate-fade-in space-y-3.5">
         {/* Top Banner - Sleek compact style */}
         <div className="rounded-2xl py-6 px-6 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
-          <div className="absolute inset-0 opacity-[0.04] select-none pointer-events-none flex items-center justify-center">
-            <span className="text-[5rem] font-semibold tracking-widest rotate-[4deg] whitespace-nowrap text-white">
-              TINDAHAN NI ISKO
-            </span>
-          </div>
+
 
           {/* Left: Avatar + Info */}
           <div className="flex items-center gap-4 relative z-10">
@@ -624,7 +615,6 @@ function Profile() {
                 <div className="flex items-center gap-2">
                   <div>
                     <h2 className="text-sm font-semibold text-gray-900">About Me</h2>
-                    <p className="text-[10px] text-gray-400 font-medium">Academic profile &amp; department</p>
                   </div>
                 </div>
                 <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
@@ -661,9 +651,7 @@ function Profile() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-semibold text-gray-900">Contact Information</h2>
-                  <p className="text-[10px] text-gray-400 font-medium">
-                    Phone, pronoun, birthday and delivery addresses
-                  </p>
+
                 </div>
                 <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
                   <PencilIcon className="w-3 h-3" />

@@ -160,9 +160,6 @@ function VerifyOtp() {
           </div>
 
           <h1 className="text-3xl font-semibold text-gray-900 mb-2">Verify Phone</h1>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mt-4 mb-2">
-            Check your notification inbox
-          </h2>
           <p className="text-sm text-gray-500 mb-6 leading-relaxed">
             We&apos;ve sent a 6-digit verification code to{' '}
             <span className="font-semibold text-gray-700">{phone}</span>
