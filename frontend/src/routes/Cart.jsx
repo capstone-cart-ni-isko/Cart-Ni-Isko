@@ -146,7 +146,7 @@ function Cart() {
         }
       />
 
-      <div className="px-4 py-4 pb-44 md:px-0 md:py-2 lg:pb-16 animate-fade-in max-w-5xl mx-auto">
+      <div className="shopping-bag px-4 py-4 pb-44 md:px-0 md:py-2 lg:pb-16 animate-fade-in max-w-5xl mx-auto">
         {cartItems.length === 0 ? (
           /* Empty Bag State */
           <div className="text-center py-12 flex flex-col items-center justify-center bg-white rounded-lg border border-slate-100 p-6">
@@ -211,13 +211,13 @@ function Cart() {
               )}
 
               {/* Selection Bar (Requirement 2 & 3: Select All + Selected Count) */}
-              <div className="bg-white rounded-lg border border-slate-100 px-4 py-3.5 flex items-center justify-between select-none">
+              <div className="rounded-xl border border-[#e7eaf4] bg-white px-4 py-3.5 flex items-center justify-between select-none">
                 <label className="flex items-center gap-3 text-sm font-semibold text-gray-800 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={handleToggleSelectAll}
-                    className="check-plain cursor-pointer"
+                    className="check-plain cart-checkbox cursor-pointer"
                     title="Select or deselect all items in bag"
                     aria-label="Select all bag items"
                   />
@@ -225,16 +225,22 @@ function Cart() {
                 </label>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-gray-600 bg-slate-100 px-3 py-1 rounded-md">
+                  <span className="text-sm font-semibold text-slate-700 bg-[#f0f3fc] px-3 py-1 rounded-md">
                     {selectedItems.length} selected
                   </span>
                   {/* FLOW-BAG-07: clear the entire bag in one action */}
                   <button
                     type="button"
                     onClick={handleClearBag}
-                    className="text-xs font-semibold text-red-500 hover:text-red-600 hover:underline cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-100 cursor-pointer"
                     title="Remove every item from your bag"
                   >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4h8v2" />
+                      <path d="m19 6-1 14H6L5 6" />
+                      <path d="M10 11v5M14 11v5" />
+                    </svg>
                     Clear bag
                   </button>
                 </div>
@@ -260,17 +266,17 @@ function Cart() {
                   return (
                     <article
                       key={item.cartItemId}
-                      className={`rounded-lg border p-4 sm:p-5 transition-colors flex gap-4 select-none bg-white ${
-                        isChecked ? 'border-slate-300' : 'border-slate-100'
+                      className={`rounded-xl border p-4 sm:p-5 transition-colors flex gap-4 select-none bg-white ${
+                        isChecked ? 'border-orange-200' : 'border-[#e7eaf4]'
                       }`}
                     >
                       {/* Item Checkbox (Requirement 1 & 18) */}
-                      <div className="flex items-center pt-2">
+                      <div className="flex items-center">
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggleSelectItem(item.cartItemId)}
-                          className="check-plain cursor-pointer"
+                          className="check-plain cart-checkbox cursor-pointer"
                           title={isChecked ? 'Uncheck item' : 'Check item to include in checkout'}
                           aria-label={`Select ${item.product.name}`}
                         />
@@ -279,7 +285,7 @@ function Cart() {
                       {/* Actual Product / Variant Image (Requirement 11) */}
                       <Link
                         to={`/product/${item.product.id}`}
-                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 overflow-hidden relative group"
+                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-lg bg-[#f5f7fc] flex items-center justify-center shrink-0 overflow-hidden relative group"
                         title={`View ${item.product.name}`}
                       >
                         {resolvedVariantImg ? (
@@ -336,7 +342,7 @@ function Cart() {
                             <button
                               type="button"
                               onClick={() => handleRemoveWithUndo(item)}
-                              className="text-gray-400 hover:text-red-500 transition-colors shrink-0 p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer"
+                              className="text-slate-400 hover:text-red-500 transition-colors shrink-0 p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
                               title="Remove item from bag"
                               aria-label="Remove item"
                             >
@@ -402,12 +408,12 @@ function Cart() {
 
             {/* Right Column: Order Summary (Requirement 5, 6, 7, 15) */}
             <div className="lg:col-span-5 mt-6 lg:mt-0 space-y-4">
-              <div className="bg-white rounded-lg p-6 space-y-4 border border-slate-100">
+              <div className="rounded-xl bg-white p-6 space-y-4 border border-[#e7eaf4]">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
+                  <h3 className="text-sm font-semibold text-gray-900">
                     Order Summary
                   </h3>
-                  <span className="text-xs font-semibold text-gray-500">
+                  <span className="text-xs font-semibold text-slate-500">
                     {selectedItems.length} of {cartItems.length} selected
                   </span>
                 </div>
@@ -415,25 +421,33 @@ function Cart() {
                 <div className="space-y-3 text-sm">
                   {/* Dynamic Subtotal (Requirement 5) */}
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-500 font-medium">Selected Subtotal</span>
+                    <span className="text-gray-500 font-medium">
+                      {selectedItems.length} {selectedItems.length === 1 ? 'item' : 'items'} selected
+                    </span>
                     <span className="font-semibold text-gray-900 text-base">{formatPrice(subtotal)}</span>
                   </div>
 
                   {/* Shipping = Calculated at checkout (Requirement 7) */}
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-500 font-medium">Shipping Estimate</span>
-                    <span className="font-semibold text-gray-700 bg-slate-100 px-2.5 py-1 rounded-md text-xs">
+                    <span className="flex items-center gap-2 text-gray-500 font-medium">
+                      Shipping Estimate
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5 text-slate-400" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 11v5M12 8h.01" />
+                      </svg>
+                    </span>
+                    <span className="font-semibold text-slate-700 bg-[#f0f3fc] px-2.5 py-1 rounded-full text-xs">
                       Calculated at checkout
                     </span>
                   </div>
 
-                  <div className="h-px bg-slate-200 my-2" />
+                  <div className="h-px bg-[#e7eaf4] my-2" />
 
                   {/* Total */}
                   <div className="flex justify-between items-baseline">
                     <div>
                       <span className="text-base font-semibold text-gray-900 block">Total</span>
-                      <span className="text-xs text-gray-400 font-normal">
+                      <span className="text-xs text-slate-400 font-normal">
                         (Excluding final delivery fee)
                       </span>
                     </div>
@@ -472,14 +486,14 @@ function Cart() {
 
       {/* Mobile Sticky Bottom Bar (Requirement 16: Better mobile selection behavior) */}
       {cartItems.length > 0 && (
-        <div className="lg:hidden fixed left-0 right-0 z-40 bg-white border-t border-slate-100 px-4 py-3 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] md:bottom-24">
+        <div className="shopping-bag lg:hidden fixed left-0 right-0 z-40 bg-white border-t border-slate-100 px-4 py-3 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] md:bottom-24">
           <div className="mx-auto max-w-lg flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <input
                 type="checkbox"
                 checked={allSelected}
                 onChange={handleToggleSelectAll}
-                className="check-plain cursor-pointer"
+                className="check-plain cart-checkbox cursor-pointer"
                 title="Select All"
                 aria-label="Select all bag items"
               />
