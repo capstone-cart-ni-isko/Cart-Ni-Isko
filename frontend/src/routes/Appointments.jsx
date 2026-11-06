@@ -17,6 +17,7 @@ import {
   updateAppointment,
 } from '../services/appointments.js'
 import { fetchOrder } from '../services/orders.js'
+import { parseDate as parseDateTime } from '../services/dashboard.js'
 
 const STORE = {
   location: 'Tindahan ni Isko – Main Campus',
@@ -38,6 +39,10 @@ const PAGE_SIZE = 20
 /* ── Slot / date formatting: the live slot is appoint_start → appoint_end ── */
 
 function clockOf(value) {
+  const parsed = parseDateTime(value)
+  if (parsed) {
+    return parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
   const match = String(value || '').match(/(\d{1,2}):(\d{2})/)
   if (!match) return String(value || '')
   const hour = Number(match[1])
@@ -53,6 +58,12 @@ function timeRange(start, end, type) {
   const first = clockOf(start)
   if (!first) return 'To be confirmed'
   if (end) return `${first} – ${clockOf(end)}`
+
+  const parsed = parseDateTime(start)
+  if (parsed) {
+    const length = (SLOT_RULES[type] || SLOT_RULES.VISIT).minutes
+    return `${first} – ${clockOf(new Date(parsed.getTime() + length * 60_000))}`
+  }
 
   const clock = String(start).match(/(\d{1,2}):(\d{2})/)
   if (!clock) return first
@@ -70,11 +81,15 @@ function todayISO() {
 }
 
 function parseDate(value) {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!match) return { iso: '', date: 'To be scheduled', dayOfWeek: '' }
-  const day = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  const dateOnly = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const day = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : parseDateTime(value)
+  if (!day) return { iso: '', date: 'To be scheduled', dayOfWeek: '' }
+  const pad = (part) => String(part).padStart(2, '0')
+  const iso = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
   return {
-    iso: match[0],
+    iso,
     date: day.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
     dayOfWeek: day.toLocaleDateString('en-US', { weekday: 'long' }),
   }
@@ -82,13 +97,21 @@ function parseDate(value) {
 
 /** Last moment the booking is still valid: its start, or end of day. */
 function endMoment(value) {
+  const dateOnly = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (dateOnly) {
+    const endOfDay = new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    endOfDay.setHours(23, 59)
+    return endOfDay
+  }
+  const moment = parseDateTime(value)
+  if (moment) return moment
   const day = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (!day) return null
-  const moment = new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
+  const fallback = new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
   const clock = String(value).match(/(\d{1,2}):(\d{2})/)
-  if (clock) moment.setHours(Number(clock[1]), Number(clock[2]))
-  else moment.setHours(23, 59)
-  return moment
+  if (clock) fallback.setHours(Number(clock[1]), Number(clock[2]))
+  else fallback.setHours(23, 59)
+  return fallback
 }
 
 /**

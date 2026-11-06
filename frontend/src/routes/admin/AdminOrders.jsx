@@ -289,9 +289,9 @@ export default function AdminOrders() {
         subtitle: `${filteredOrders.length} order(s)`,
         sheetName: 'Orders',
         sections: [{
-          columns: ['Order ID', 'Batch', 'Customer', 'Date', 'Type', 'Fulfillment', 'Status', 'Total (PHP)'],
+          columns: ['Order ID', 'Customer', 'Date', 'Type', 'Fulfillment', 'Status', 'Total (PHP)'],
           rows: filteredOrders.map((o) => [
-            o.id, o.batch || '', o.customer, o.date, o.type, o.fulfillment, o.status, Number(o.total) || 0,
+            o.id, o.customer, o.date, o.type, o.fulfillment, o.status, Number(o.total) || 0,
           ]),
         }],
       })
@@ -314,7 +314,6 @@ export default function AdminOrders() {
           >
             {row.id}
           </button>
-          {row.batch && <p className="text-2xs text-gray-400 font-medium">{row.batch}</p>}
         </div>
       ),
     },
@@ -337,27 +336,8 @@ export default function AdminOrders() {
       header: 'FULFILLMENT',
       key: 'fulfillment',
       render: (row) => {
-        const isCourier =
-          row.fulfillment?.toLowerCase().includes('courier') ||
-          row.fulfillment?.toLowerCase().includes('delivery')
         return (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-gray-700 font-medium">{row.fulfillment}</span>
-            {isCourier && (
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className="w-3.5 h-3.5 text-slate-400 shrink-0"
-                title="Delivery fee paid — fulfillment method locked"
-                aria-label="Locked"
-              >
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            )}
-          </div>
+          <span className="text-xs text-gray-700 font-medium">{row.fulfillment}</span>
         )
       },
     },
@@ -565,7 +545,7 @@ export default function AdminOrders() {
               </svg>
               <input
                 type="search"
-                placeholder="Search orders, customers, items, batch..."
+                placeholder="Search orders, customers, or items..."
                 value={searchQuery}
                 onChange={(e) => {
                   const value = e.target.value
@@ -581,7 +561,7 @@ export default function AdminOrders() {
               />
             </div>
 
-            {/* Server-backed sort (/cart/sort) - replaces the old hardcoded Batch filter */}
+            {/* Server-backed order sorting */}
             <select
               value={sortValue}
               onChange={(e) => {
@@ -912,9 +892,6 @@ export default function AdminOrders() {
                   <p className="pt-1"><strong className="text-[var(--ink-2)]">Name:</strong> {activeOrderDetail.customer}</p>
                   {activeOrderDetail.custPhone && (
                     <p className="pt-1.5"><strong className="text-[var(--ink-2)]">Contact:</strong> {activeOrderDetail.custPhone}</p>
-                  )}
-                  {activeOrderDetail.batch && (
-                    <p className="pt-1.5"><strong className="text-[var(--ink-2)]">Batch:</strong> {activeOrderDetail.batch}</p>
                   )}
                 </div>
               </div>

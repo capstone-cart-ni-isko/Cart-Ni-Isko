@@ -265,7 +265,7 @@ function ForgotPassword() {
                     type="email"
                     required
                     autoComplete="email"
-                    placeholder="superadmin@bicol-u.edu.ph"
+                    placeholder="admin@bicol-u.edu.ph"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     className="field-input field-input--lg !pl-10.5 rounded-xl font-medium"

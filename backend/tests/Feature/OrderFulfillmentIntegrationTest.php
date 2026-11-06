@@ -182,6 +182,28 @@ class OrderFulfillmentIntegrationTest extends TestCase
         $this->assertSame([(int) $bob->cust_id], collect($own)->pluck('cust_id')->map(fn ($id) => (int) $id)->unique()->values()->all());
     }
 
+    public function test_staff_can_search_orders_by_customer_full_name_and_order_tag()
+    {
+        $staff = $this->makeEmployee();
+        $customer = $this->makeCustomer();
+        $customer->forceFill([
+            'cust_givname' => 'Kristel Ann',
+            'cust_surname' => 'Baeza Ebuenga',
+        ])->save();
+        $order = $this->makePickupOrder($customer);
+        $order->update(['ord_tag' => 'ORD-SEARCH-185']);
+
+        $byName = $this->json('GET', '/api/cart/search', ['q' => 'Kristel Ann Baeza Ebuenga'], $this->headers($staff))
+            ->assertStatus(200)
+            ->json('data');
+        $this->assertSame([(int) $order->ord_id], collect($byName)->pluck('ord_id')->map(fn ($id) => (int) $id)->all());
+
+        $byTag = $this->json('GET', '/api/cart/search', ['q' => 'ORD-SEARCH-185'], $this->headers($staff))
+            ->assertStatus(200)
+            ->json('data');
+        $this->assertSame([(int) $order->ord_id], collect($byTag)->pluck('ord_id')->map(fn ($id) => (int) $id)->all());
+    }
+
     // ==========================================
     // READ CACHE INVALIDATION
     // ==========================================

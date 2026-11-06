@@ -492,7 +492,7 @@ export default function AdminLogin() {
                 type="text"
                 required
                 autoComplete="username"
-                placeholder="superadmin@bicol-u.edu.ph"
+                placeholder="admin@bicol-u.edu.ph"
                 value={email}
                 onFocus={preconnectApi}
                 onChange={(e) => {

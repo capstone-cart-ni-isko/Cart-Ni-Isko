@@ -289,7 +289,6 @@ export function mapOrderRow(row) {
     completedAt: row.ord_completed || null,
     date: formatDateLabel(row.ord_created),
     timeAgo: timeAgoLabel(row.ord_created),
-    batch: `BAT-${row.ord_id}`,
     raw: row,
   }
 }

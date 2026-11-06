@@ -235,9 +235,24 @@ class UserAPI extends Controller
             if ($q !== '') {
                 $query->where(function ($builder) use ($q) {
                     $builder->where('ord_status', 'like', "%{$q}%")
+                            ->orWhere('ord_tag', 'like', "%{$q}%")
                             ->orWhereHas('items.bag.prodvar.product', function ($pq) use ($q) {
                                 $pq->where('prod_name', 'like', "%{$q}%")
                                    ->orWhere('prod_tag', 'like', "%{$q}%");
+                            })
+                            ->orWhereHas('customer', function ($customer) use ($q) {
+                                $like = "%{$q}%";
+                                $customer->where('cust_email', 'like', $like)
+                                    ->orWhere('cust_phone', 'like', $like)
+                                    ->orWhere(function ($name) use ($q) {
+                                        foreach (preg_split('/\s+/', trim($q)) as $part) {
+                                            $like = "%{$part}%";
+                                            $name->where(function ($token) use ($like) {
+                                                $token->where('cust_givname', 'like', $like)
+                                                    ->orWhere('cust_surname', 'like', $like);
+                                            });
+                                        }
+                                    });
                             });
 
                     if (ctype_digit($q)) {
