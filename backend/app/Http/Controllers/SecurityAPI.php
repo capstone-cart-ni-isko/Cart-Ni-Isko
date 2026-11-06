@@ -439,16 +439,18 @@ class SecurityAPI extends Controller
                     $user = null;
                 }
             } else {
-                if (str_contains($rawIdentifier, '@')) {
-                    $user = Customer::where('cust_email', strtolower($rawIdentifier))->first();
-                } else {
-                    $phone = preg_replace('/[^0-9]/', '', $rawIdentifier) ?: $rawIdentifier;
-                    if (strlen($phone) >= 12 && str_starts_with($phone, '63')) {
-                        $phone = '0' . substr($phone, 2);
-                    }
-                    $user = Customer::where('cust_phone', $phone)->first();
+                $phone = preg_replace('/[^0-9]/', '', $rawIdentifier) ?: '';
+                if (strlen($phone) >= 12 && str_starts_with($phone, '63')) {
+                    $phone = '0' . substr($phone, 2);
+                }
+                if (! preg_match('/^\d{10,11}$/', $phone)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Enter the mobile number registered to your customer account.',
+                    ], 422);
                 }
 
+                $user = Customer::where('cust_phone', $phone)->first();
                 if ($user && ($user->cust_deleted !== null || $user->cust_suspended !== null || (isset($user->cust_disabled) && $user->cust_disabled !== null))) {
                     $user = null;
                 }
