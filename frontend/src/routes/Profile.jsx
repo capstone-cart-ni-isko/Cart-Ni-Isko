@@ -146,6 +146,9 @@ function Profile() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   const baseUser = currentUser || {}
+  const isGuest = String(
+    baseUser.cust_type || baseUser.type || baseUser.role || ''
+  ).trim().toLowerCase() === 'guest'
 
   const rawEmail = baseUser.cust_email || baseUser.email || ''
   const rawPhone = baseUser.cust_phone || baseUser.phone || ''
@@ -297,7 +300,7 @@ function Profile() {
                 <div className="min-w-0 text-white">
                   <h1 className="text-lg font-semibold tracking-tight leading-tight truncate">{fullName}</h1>
                   <p className="text-white/90 text-xs font-normal mt-0.5 truncate">{email}</p>
-                  <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
+                  {!isGuest && <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>}
                 </div>
               </div>
             </div>
@@ -318,36 +321,37 @@ function Profile() {
 
           <OrderStatusOverview overview={overview} />
 
-         {/* About Me - 2 Columns on mobile */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-gray-900">About Me</h2>
+          {!isGuest && (
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold text-gray-900">About Me</h2>
+                </div>
+                <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
+                  <PencilIcon className="w-3.5 h-3.5" />
+                </Link>
               </div>
-              <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                <PencilIcon className="w-3.5 h-3.5" />
-              </Link>
+              <p className="text-sm text-gray-600 leading-relaxed font-normal">{college}{course ? ` – ${course}` : ''}</p>
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Year Level</p>
+                  <p className="text-sm font-semibold text-gray-900">{yearLevel}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Campus</p>
+                  <p className="text-sm font-semibold text-gray-900">{campus}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Course</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-snug">{course}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-0.5">College</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-snug">{college}</p>
+                </div>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 leading-relaxed font-normal">{college}{course ? ` – ${course}` : ''}</p>
-            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">Year Level</p>
-                <p className="text-sm font-semibold text-gray-900">{yearLevel}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">Campus</p>
-                <p className="text-sm font-semibold text-gray-900">{campus}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">Course</p>
-                <p className="text-sm font-semibold text-gray-900 leading-snug">{course}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">College</p>
-                <p className="text-sm font-semibold text-gray-900 leading-snug">{college}</p>
-              </div>
-            </div>
-          </div>
+          )}
           {/* 4. Contact Information */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
@@ -453,7 +457,7 @@ function Profile() {
             <div className="text-white">
               <h1 className="text-xl md:text-2xl font-semibold tracking-tight leading-tight">{fullName}</h1>
               <p className="text-white/90 text-xs font-normal mt-0.5">{email}</p>
-              <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
+              {!isGuest && <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>}
             </div>
           </div>
 
@@ -482,42 +486,41 @@ function Profile() {
 
             <OrderStatusOverview overview={overview} />
 
-            {/* 2. About Me Card */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div>
+            {!isGuest && (
+              <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
                     <h2 className="text-sm font-semibold text-gray-900">About Me</h2>
                   </div>
+                  <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
+                    <PencilIcon className="w-3 h-3" />
+                  </Link>
                 </div>
-                <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                  <PencilIcon className="w-3 h-3" />
-                </Link>
-              </div>
 
-              <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-normal">
-                {college} {course && `– ${course}`}
-              </p>
+                <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-normal">
+                  {college} {course && `– ${course}`}
+                </p>
 
-              <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Year Level</p>
-                  <p className="font-semibold text-gray-900 mt-0.5">{yearLevel}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Course</p>
-                  <p className="font-semibold text-gray-900 mt-0.5 truncate">{course}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Campus</p>
-                  <p className="font-semibold text-gray-900 mt-0.5">{campus}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">College</p>
-                  <p className="font-semibold text-gray-900 mt-0.5 truncate">{college}</p>
+                <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Year Level</p>
+                    <p className="font-semibold text-gray-900 mt-0.5">{yearLevel}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Course</p>
+                    <p className="font-semibold text-gray-900 mt-0.5 truncate">{course}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Campus</p>
+                    <p className="font-semibold text-gray-900 mt-0.5">{campus}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase">College</p>
+                    <p className="font-semibold text-gray-900 mt-0.5 truncate">{college}</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* 3. Contact Information Card */}
             <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-3">

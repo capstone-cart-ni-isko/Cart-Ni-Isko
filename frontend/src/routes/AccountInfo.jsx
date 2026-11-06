@@ -43,6 +43,9 @@ function AccountInfo() {
   const navigate = useNavigate()
   const { currentUser, setCurrentUser } = useAuth()
   const { showToast } = useToast()
+  const isGuest = String(
+    currentUser?.cust_type || currentUser?.type || currentUser?.role || ''
+  ).trim().toLowerCase() === 'guest'
   const [form, setForm] = useState({
     givname: currentUser?.cust_givname || currentUser?.givname || '',
     surname: currentUser?.cust_surname || currentUser?.surname || '',
@@ -134,10 +137,12 @@ function AccountInfo() {
         // save, so it travels only to keep the read-only field round-tripping.
         cust_email: form.email,
         cust_phone: form.phone,
-        cust_campus: form.campus && form.campus !== 'N/A' ? form.campus : null,
-        cust_college: form.college && form.college !== 'N/A' ? form.college : null,
-        cust_dept: form.course && form.course !== 'N/A' ? form.course : null,
-        ...(BUENO_CATEGORIES.includes(form.yearLevel) ? { cust_categ: form.yearLevel } : {}),
+        ...(!isGuest ? {
+          cust_campus: form.campus && form.campus !== 'N/A' ? form.campus : null,
+          cust_college: form.college && form.college !== 'N/A' ? form.college : null,
+          cust_dept: form.course && form.course !== 'N/A' ? form.course : null,
+          ...(BUENO_CATEGORIES.includes(form.yearLevel) ? { cust_categ: form.yearLevel } : {}),
+        } : {}),
         cust_pronoun: form.pronoun,
         cust_bday: form.birthday,
         cust_callcode: form.callcode,
@@ -156,13 +161,15 @@ function AccountInfo() {
         cust_email: form.email,
         phone: form.phone,
         cust_phone: form.phone,
-        yearLevel: form.yearLevel,
-        campus: form.campus,
-        cust_campus: form.campus,
-        college: form.college,
-        cust_college: form.college,
-        course: form.course,
-        cust_dept: form.course,
+        ...(!isGuest ? {
+          yearLevel: form.yearLevel,
+          campus: form.campus,
+          cust_campus: form.campus,
+          college: form.college,
+          cust_college: form.college,
+          course: form.course,
+          cust_dept: form.course,
+        } : {}),
         pronoun: form.pronoun,
         cust_pronoun: form.pronoun,
         birthday: form.birthday,
@@ -184,10 +191,12 @@ function AccountInfo() {
               cust_photo: photo,
               cust_givname: form.givname.trim(),
               cust_surname: form.surname.trim(),
-              yearLevel: form.yearLevel,
-              campus: form.campus,
-              college: form.college,
-              course: form.course,
+              ...(!isGuest ? {
+                yearLevel: form.yearLevel,
+                campus: form.campus,
+                college: form.college,
+                course: form.course,
+              } : {}),
             }
           }))
         }
@@ -277,6 +286,8 @@ function AccountInfo() {
               {fieldError('phone')}
             </div>
 
+            {!isGuest && (
+              <>
             {/* BUeño category */}
             <div>
               <label className={labelClasses}>Category</label>
@@ -308,6 +319,8 @@ function AccountInfo() {
                 {withValue(availableDepartments, form.course).map((dept) => <option key={dept} value={dept}>{dept}</option>)}
               </select>
             </div>
+              </>
+            )}
           </div>
 
           {/* Additional Information Section */}
@@ -462,40 +475,40 @@ function AccountInfo() {
               </p>
             </div>
 
-            {/* Academic Information Section */}
-            <div className="px-7 py-6 border-b border-gray-100 space-y-5">
-              <h2 className="text-base font-semibold text-gray-900">Academic Information</h2>
-
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                <div>
-                  <label className={labelClasses}>Category <span className="text-red-500">*</span></label>
-                  <select name="yearLevel" value={form.yearLevel} onChange={handleChange} className={selectClasses} style={selectStyle}>
-                    {withValue(BUENO_CATEGORIES, form.yearLevel).map((y) => <option key={y} value={y}>{categoryLabel(y)}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelClasses}>Campus <span className="text-red-500">*</span></label>
-                  <select name="campus" value={form.campus} onChange={handleChange} className={selectClasses} style={selectStyle}>
-                    <option value="">Select Campus</option>
-                    {withValue(collegesData.map((c) => c.name), form.campus).map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelClasses}>College <span className="text-red-500">*</span></label>
-                  <select name="college" value={form.college} onChange={handleChange} disabled={!form.campus} className={`${selectClasses} disabled:opacity-50`} style={selectStyle}>
-                    <option value="">Select College</option>
-                    {withValue(availableColleges.map((col) => col.name), form.college).map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelClasses}>Department / Course <span className="text-red-500">*</span></label>
-                  <select name="course" value={form.course} onChange={handleChange} disabled={!form.college} className={`${selectClasses} disabled:opacity-50`} style={selectStyle}>
-                    <option value="">Select Department / Course</option>
-                    {withValue(availableDepartments, form.course).map((dept) => <option key={dept} value={dept}>{dept}</option>)}
-                  </select>
+            {!isGuest && (
+              <div className="px-7 py-6 border-b border-gray-100 space-y-5">
+                <h2 className="text-base font-semibold text-gray-900">Academic Information</h2>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                  <div>
+                    <label className={labelClasses}>Category <span className="text-red-500">*</span></label>
+                    <select name="yearLevel" value={form.yearLevel} onChange={handleChange} className={selectClasses} style={selectStyle}>
+                      {withValue(BUENO_CATEGORIES, form.yearLevel).map((y) => <option key={y} value={y}>{categoryLabel(y)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClasses}>Campus <span className="text-red-500">*</span></label>
+                    <select name="campus" value={form.campus} onChange={handleChange} className={selectClasses} style={selectStyle}>
+                      <option value="">Select Campus</option>
+                      {withValue(collegesData.map((c) => c.name), form.campus).map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClasses}>College <span className="text-red-500">*</span></label>
+                    <select name="college" value={form.college} onChange={handleChange} disabled={!form.campus} className={`${selectClasses} disabled:opacity-50`} style={selectStyle}>
+                      <option value="">Select College</option>
+                      {withValue(availableColleges.map((col) => col.name), form.college).map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClasses}>Department / Course <span className="text-red-500">*</span></label>
+                    <select name="course" value={form.course} onChange={handleChange} disabled={!form.college} className={`${selectClasses} disabled:opacity-50`} style={selectStyle}>
+                      <option value="">Select Department / Course</option>
+                      {withValue(availableDepartments, form.course).map((dept) => <option key={dept} value={dept}>{dept}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Action Buttons - Rectangular */}
             <div className="px-7 py-5 flex items-center justify-end gap-3">
