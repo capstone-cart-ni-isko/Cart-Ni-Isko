@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { appointmentStatusLabel } from '../../services/appointments.js'
+import { parseDate } from '../../services/dashboard.js'
 import { ShirtIcon } from '../ui/Icons.jsx'
 import TrackTimeline from './TrackTimeline.jsx'
 
@@ -11,26 +12,10 @@ const STATUS_STYLE = {
   absent: 'bg-amber-50 text-amber-700 border-amber-200',
 }
 
-/** "9:00 AM – 9:10 AM" for a 10-minute slot. */
-function clockOf(value) {
-  const match = String(value || '').match(/(\d{1,2}):(\d{2})/)
-  if (!match) return String(value || '')
-  const hour = Number(match[1])
-  return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? 'PM' : 'AM'}`
-}
-
-function timeRange(start, end) {
-  const first = clockOf(start)
-  const second = clockOf(end)
-  if (!first) return 'To be confirmed'
-  return second ? `${first} – ${second}` : first
-}
-
 /** The slot is still cancellable while its end is in the future. */
 function endIsFuture(end) {
-  const stamp = String(end || '').replace(' ', 'T')
-  const moment = new Date(stamp)
-  return !Number.isNaN(moment.getTime()) && moment.getTime() > Date.now()
+  const moment = parseDate(end)
+  return Boolean(moment && moment.getTime() > Date.now())
 }
 
 /**
@@ -75,7 +60,7 @@ export default function AppointmentCard({ appointment, onView, onCancel, onShowQ
           </p>
           <p className="text-[11px] text-slate-500">{appointment.dayOfWeek}</p>
           <p className="text-[11px] font-semibold text-brand-orange mt-0.5">
-            {timeRange(appointment.startISO, appointment.endISO)}
+            {appointment.time || 'To be confirmed'}
           </p>
         </div>
       </header>

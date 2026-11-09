@@ -94,6 +94,7 @@ export default function AdminAppointments() {
   const [loadError, setLoadError] = useState('')
   const [slotsUnavailable, setSlotsUnavailable] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [showPurpose, setShowPurpose] = useState(false)
 
   // Cancel-appointment flow (required reason — REQ-SC-04)
   const [showDeclineModal, setShowDeclineModal] = useState(false)
@@ -441,81 +442,91 @@ export default function AdminAppointments() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Left Column (8 cols) */}
           <div className="lg:col-span-8 space-y-4">
-            {/* 1. Assigned Shift Card */}
-            <div className="bg-[#FFF9F5] border border-[#FFE7D6] rounded-lg p-4 relative overflow-hidden">
-              <div className="flex flex-col md:flex-row items-start justify-between gap-4">
-                {/* Shift Info */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-md bg-[#FFE8D6] text-[#FF6A00] flex items-center justify-center shrink-0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                    </svg>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="inline-block bg-[#FFEDE1] text-[#E65100] text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
-                      Master Calendar
-                    </span>
-                    <h2 className="text-base font-bold text-slate-900">{fmtBadgeDate(selectedDate)}</h2>
-                    <div className="space-y-0.5 text-xs text-slate-600 font-medium">
-                      <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                        <span>Campus Merch Shop · Student Help Desk</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        <span className="font-bold text-slate-800 whitespace-nowrap">
-                          {slotsUnavailable ? 'Unavailable' : `${availableSlotCount} open`}
+            {/* 1. Selected-day summary */}
+            <div className="bg-gradient-to-br from-[#FFF9F5] to-[#FFF1E5] border border-[#FFE7D6] rounded-lg p-4 relative overflow-hidden">
+              <div className="absolute -right-8 -top-10 w-32 h-32 rounded-full bg-white/40 pointer-events-none" />
+              <div className="relative">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-[#FFE8D6] text-[#FF6A00] flex items-center justify-center shrink-0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                        <rect x="3" y="4" width="18" height="18" rx="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="inline-block bg-[#FFEDE1] text-[#E65100] text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+                        Appointments
+                      </span>
+                      <h2 className="text-base font-bold text-slate-900 mt-1">{fmtBadgeDate(selectedDate)}</h2>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 font-medium mt-1">
+                        <span className="inline-flex items-center gap-1.5">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                            <circle cx="12" cy="10" r="3" />
+                          </svg>
+                          Campus Merch Shop · Student Help Desk
                         </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        <span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
                           In-store staff: {inStoreStaff == null ? '—' : inStoreStaff}
                         </span>
                       </div>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowPurpose(true)}
+                    aria-label="About the appointments page"
+                    title="About this page"
+                    className="w-8 h-8 rounded-full border border-orange-200 bg-white/80 text-[#E65100] hover:bg-white flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="11" x2="12" y2="16" />
+                      <circle cx="12" cy="7" r="0.8" fill="currentColor" />
+                    </svg>
+                  </button>
                 </div>
 
-                {/* Day Summary Bullets */}
-                <div className="space-y-1 text-xs text-slate-600 border-t md:border-t-0 md:border-l border-orange-100 pt-2.5 md:pt-0 md:pl-4">
-                  <p className="font-semibold text-slate-900 mb-0.5">Day Summary</p>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    <span>{dayTotals.claims} claim booking{dayTotals.claims === 1 ? '' : 's'} (30 min, capacity 10)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    <span>{dayTotals.visits} visit booking{dayTotals.visits === 1 ? '' : 's'} (10 min, capacity 1)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    <span>{dayTotals.cancelled} closed appointment{dayTotals.cancelled === 1 ? '' : 's'}</span>
-                  </div>
+                <div className="grid grid-cols-3 divide-x divide-orange-200/80 mt-4 rounded-lg border border-orange-100 bg-white/70">
+                  {[
+                    {
+                      label: 'Bookings',
+                      value: dayTotals.claims + dayTotals.visits,
+                      detail: `${dayTotals.claims} claim · ${dayTotals.visits} visit`,
+                      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>,
+                    },
+                    {
+                      label: 'Available slots',
+                      value: slotsUnavailable ? '—' : availableSlotCount,
+                      detail: slotsUnavailable ? 'Availability unavailable' : 'Open for booking',
+                      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>,
+                    },
+                    {
+                      label: 'Closed appointments',
+                      value: dayTotals.cancelled,
+                      detail: 'Cancelled or closed',
+                      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="9" y1="14" x2="15" y2="14" /></svg>,
+                    },
+                  ].map((stat) => (
+                    <div key={stat.label} className="min-w-0 px-2.5 py-2 flex items-center gap-2">
+                      <span className="w-7 h-7 rounded-lg bg-orange-50 text-[#FF6A00] flex items-center justify-center shrink-0">
+                        {stat.icon}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold text-slate-900 leading-tight">{stat.value}</span>
+                        <span className="block text-[10px] font-semibold text-slate-700 truncate">{stat.label}</span>
+                        <span className="block text-[9px] text-slate-500 truncate">{stat.detail}</span>
+                      </span>
+                    </div>
+                  ))}
                 </div>
-
-                {/* Reload Button */}
-                <button
-                  type="button"
-                  onClick={reload}
-                  className="self-start md:self-center border border-[#FF6A00] text-[#FF6A00] bg-white hover:bg-orange-50 text-xs font-semibold h-8 px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  <span>Refresh</span>
-                </button>
               </div>
             </div>
 
@@ -534,7 +545,7 @@ export default function AdminAppointments() {
                   </div>
                   <div>
                     <h2 className="text-lg font-black text-gray-900">Appointments Timeline</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Bookings and time slots in chronological order.</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{fmtBadgeDate(selectedDate)} · Chronological order</p>
                   </div>
                 </div>
 
@@ -582,7 +593,6 @@ export default function AdminAppointments() {
                       const m = start.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i)
                       if (!m) return 'Other'
                       let hh = parseInt(m[1], 10)
-                      const mm = m[2]
                       const ampm = (m[3] || '').toUpperCase()
                       if (ampm === 'PM' && hh !== 12) hh += 12
                       if (ampm === 'AM' && hh === 12) hh = 0
@@ -609,57 +619,51 @@ export default function AdminAppointments() {
                       const bookingCount = Math.max(directBookings, slotOccupied)
                       const hasBookings = bookingCount > 0
                       const openSlots = hourItems.filter((i) => i.type === 'free').length
+                      const unavailableSlots = hourItems.filter((i) => i.type === 'class').length
+                      const stateLabel = openSlots > 0
+                        ? hasBookings ? 'Partially booked' : 'Available'
+                        : hasBookings ? 'Booked' : 'Closed'
+                      const stateStyle = openSlots > 0
+                        ? hasBookings
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-emerald-100 text-emerald-700'
+                        : hasBookings
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-slate-100 text-slate-600'
                       return (
                         <details
                           key={hourKey}
-                          className={`group rounded-lg overflow-hidden transition-all ${
-                            hasBookings
-                              ? 'border-2 border-brand-orange bg-white shadow-2xs'
-                              : 'border border-slate-200 bg-white'
-                          }`}
+                          className="group rounded-xl overflow-hidden border border-[#E5EAF5] bg-white transition-colors hover:border-[#D7DFEF]"
                         >
                           <summary
-                            className={`flex items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none transition-colors ${
-                              hasBookings
-                                ? 'bg-orange-50/70 hover:bg-orange-50'
-                                : 'bg-slate-50/70 hover:bg-slate-50'
-                            }`}
+                            className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gradient-to-r from-slate-50/80 to-[#F8FAFF] hover:from-slate-50 hover:to-[#F1F5FF] cursor-pointer select-none transition-colors"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <div className="w-20 text-left whitespace-nowrap">
-                                <span className={`text-sm font-bold ${hasBookings ? 'text-brand-orange-dark' : 'text-gray-900'}`}>
-                                  {displayHour}
-                                </span>
+                              <div className="relative w-5 self-stretch flex justify-center shrink-0">
+                                <span className={`absolute top-0.5 bottom-0.5 left-1/2 -translate-x-1/2 w-px ${hasBookings ? 'bg-orange-200' : 'bg-slate-200'}`} />
+                                <span className={`relative mt-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${hasBookings ? 'bg-[#FF8A00]' : openSlots > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                               </div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {hasBookings ? (
-                                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#FFE2D1] text-[#E65100] border border-[#FFD0B5]">
-                                    <span className="w-2 h-2 rounded-full bg-[#FF6A00]" />
-                                    <span>{bookingCount} {bookingCount === 1 ? 'Booking' : 'Bookings'}</span>
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1.5 text-2xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                                    <span>No bookings</span>
-                                  </span>
-                                )}
-                                {openSlots > 0 && (
-                                  <span className="text-2xs text-gray-400 font-medium">
-                                    · {openSlots} open slot{openSlots === 1 ? '' : 's'}
-                                  </span>
-                                )}
+                              <div className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold text-slate-900">{displayHour}</span>
+                                <span className="block text-[11px] text-slate-500">
+                                  {hasBookings
+                                    ? `${bookingCount} appointment${bookingCount === 1 ? '' : 's'}`
+                                    : openSlots > 0 ? `${openSlots} available slot${openSlots === 1 ? '' : 's'}` : 'Unavailable for bookings'}
+                                  {openSlots > 0 && hasBookings ? ` · ${openSlots} open` : ''}
+                                </span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-2xs font-semibold text-brand-orange group-open:hidden">
-                                {hasBookings ? 'View details' : ''}
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${stateStyle}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${stateLabel === 'Available' ? 'bg-emerald-500' : stateLabel === 'Closed' ? 'bg-slate-400' : 'bg-orange-500'}`} />
+                                {stateLabel}
                               </span>
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 transition-transform duration-200 group-open:rotate-180">
                                 <polyline points="6 9 12 15 18 9" />
                               </svg>
                             </div>
                           </summary>
-                          <div className="p-3 space-y-2">
+                          <div className="p-3 space-y-2 border-t border-slate-100 bg-white">
                             {hourItems.map((item) => {
                               const isShift = item.type === 'shift'
                               const isFree = item.type === 'free'
@@ -760,6 +764,11 @@ export default function AdminAppointments() {
                                 </div>
                               )
                             })}
+                            {unavailableSlots > 0 && (
+                              <p className="text-[10px] text-slate-400 text-right">
+                                {unavailableSlots} unavailable slot{unavailableSlots === 1 ? '' : 's'}
+                              </p>
+                            )}
                           </div>
                         </details>
                       )
@@ -955,6 +964,33 @@ export default function AdminAppointments() {
             </div>
           </div>
         </div>
+
+        <Modal
+          isOpen={showPurpose}
+          onClose={() => setShowPurpose(false)}
+          title="About the Appointments Page"
+          subtitle="Daily bookings and store-slot availability"
+          footer={
+            <Button variant="primary" onClick={() => setShowPurpose(false)} className="px-4">
+              Got it
+            </Button>
+          }
+        >
+          <div className="space-y-3 text-sm text-slate-600">
+            <p>
+              Use this page to review customer store visits and order-pickup appointments,
+              together with the slots available for the selected date.
+            </p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>Change the date to review another day, or select a day in the weekly overview.</li>
+              <li>Expand a timeline hour to see its bookings and individual slot availability.</li>
+              <li>Admins can cancel a booking with a customer-facing reason or suspend a day to reschedule its bookings.</li>
+            </ul>
+            <p className="text-xs text-slate-500">
+              The summary counts show active claim and visit bookings, open slots, and closed appointments for the selected day.
+            </p>
+          </div>
+        </Modal>
 
         {/* Suspend day - batch reschedule (POST /appoint/bulk-reschedule) */}
         {showSuspend && (
