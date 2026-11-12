@@ -7,11 +7,11 @@ import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
 import { PRODUCT_CATEGORIES } from '../data/productCategories.js'
 import { fetchSearchHistory, recordSearchQuery, clearSearchHistory } from '../services/products.js'
+import { fetchSettings } from '../services/settings.js'
+import { DEFAULT_STORE_SLIDES, parseStoreSlides } from '../data/storeSlides.js'
+import { getImageUrl } from '../utils/imageUtils.js'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import searchIcon from '../assets/icons/common/search.svg'
-import carouselImg1 from '../assets/Images/unnamed (1).jpg'
-import carouselImg2 from '../assets/Images/unnamed (51).png'
-import carouselImg3 from '../assets/Images/unnamed (52).jpg'
 import shirtCategoryImg from '../assets/Images/unnamed (11).png'
 import hoodieCategoryImg from '../assets/Images/unnamed (5).png'
 import jacketCategoryImg from '../assets/Images/unnamed (12).png'
@@ -23,39 +23,6 @@ import totebagCategoryImg from '../assets/Images/totebag.png'
 import keychainCategoryImg from '../assets/Images/keychain.png'
 
 import { PackageIcon } from '../components/ui/Icons.jsx'
-
-const carouselSlides = [
-  {
-    id: 1,
-    title: 'New BUnique Collection',
-    pillText: 'Pre-order Now',
-    subtitle: 'Until August 20',
-    ctaText: 'Shop the Collection',
-    ctaLink: '/shop?collection=BUnique Collection',
-    isLimitedStock: false,
-    image: carouselImg1,
-  },
-  {
-    id: 2,
-    title: 'Iskolar Pride Varsity',
-    pillText: 'Limited Stock',
-    subtitle: 'Official BU Varsity Edition',
-    ctaText: 'Shop Jackets',
-    ctaLink: '/shop?category=Jackets',
-    isLimitedStock: true,
-    image: carouselImg2,
-  },
-  {
-    id: 3,
-    title: 'BU Polo Classics',
-    pillText: 'Best Sellers',
-    subtitle: 'Back in stock',
-    ctaText: 'Shop Classics',
-    ctaLink: '/shop?category=Shirts',
-    isLimitedStock: false,
-    image: carouselImg3,
-  },
-]
 
 const categoryImages = {
   Shirts: shirtCategoryImg,
@@ -80,8 +47,34 @@ function Home() {
   const [searchParams] = useSearchParams()
   const [searchVal, setSearchVal] = useState(searchParams.get('search') || '')
   const [slideIndex, setSlideIndex] = useState(0)
+  const [storeSlides, setStoreSlides] = useState(null)
   const categoryMobileRef = useRef(null)
   const categoryDesktopRef = useRef(null)
+  const carouselSlides = (storeSlides ?? DEFAULT_STORE_SLIDES).map((slide) => ({
+    id: slide.id,
+    title: slide.title,
+    pillText: slide.pillText,
+    subtitle: slide.subtext || slide.subtitle,
+    ctaText: slide.ctaLabel || slide.ctaText,
+    ctaLink: slide.ctaLink,
+    isLimitedStock: slide.isLimitedStock,
+    image: getImageUrl(slide.bannerImage || slide.imagePreview || slide.image),
+  }))
+  const slideCount = carouselSlides.length
+
+  useEffect(() => {
+    let cancelled = false
+    fetchSettings()
+      .then((settings) => {
+        if (!cancelled) setStoreSlides(parseStoreSlides(settings.store_slides))
+      })
+      .catch((err) => {
+        console.error('Unable to load storefront banners.', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const q = searchParams.get('search')
@@ -92,11 +85,14 @@ function Home() {
 
   // Auto rotate banner carousel
   useEffect(() => {
+    if (slideCount === 0) return undefined
     const timer = setInterval(() => {
-      setSlideIndex((prev) => (prev + 1) % carouselSlides.length)
+      setSlideIndex((prev) => (prev + 1) % slideCount)
     }, 4500)
     return () => clearInterval(timer)
-  }, [])
+  }, [slideCount])
+
+  const activeSlideIndex = carouselSlides.length ? slideIndex % carouselSlides.length : 0
 
   const [searchFocused, setSearchFocused] = useState(false)
   const [history, setHistory] = useState([])
@@ -345,7 +341,7 @@ function Home() {
               <div
                 key={slide.id}
                 className={`absolute inset-0 transition-opacity duration-700 ${
-                  idx === slideIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'
+                  idx === activeSlideIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'
                 }`}
               >
                 {/* Slide background image */}
@@ -384,7 +380,7 @@ function Home() {
                           key={dotIdx}
                           onClick={() => setSlideIndex(dotIdx)}
                           className={`h-1.5 rounded-full transition-all duration-300 ${
-                            dotIdx === slideIndex ? 'w-4.5 bg-brand-orange' : 'w-1.5 bg-white/40'
+                            dotIdx === activeSlideIndex ? 'w-4.5 bg-brand-orange' : 'w-1.5 bg-white/40'
                           }`}
                         />
                       ))}
@@ -525,7 +521,7 @@ function Home() {
               <div
                 key={slide.id}
                 className={`absolute inset-0 transition-opacity duration-700 ${
-                  idx === slideIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'
+                  idx === activeSlideIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'
                 }`}
               >
                 {/* Slide background image */}
@@ -572,7 +568,7 @@ function Home() {
                   key={dotIdx}
                   onClick={() => setSlideIndex(dotIdx)}
                   className={`h-1.5 rounded-full transition-all duration-300 ${
-                    dotIdx === slideIndex ? 'w-5 bg-brand-orange' : 'w-1.5 bg-white/40 hover:bg-white'
+                    dotIdx === activeSlideIndex ? 'w-5 bg-brand-orange' : 'w-1.5 bg-white/40 hover:bg-white'
                   }`}
                 />
               ))}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { GRID_MINUTES, fmtTime, minutesOf } from './scheduleTime.js'
+import { fmtLongDate, GRID_MINUTES, fmtTime, humanMinutes, minutesOf } from './scheduleTime.js'
 import Modal from '../ui/Modal.jsx'
 import Button from '../ui/Button.jsx'
 
@@ -26,7 +26,6 @@ import Button from '../ui/Button.jsx'
  */
 export default function ScheduleBlockModal({
   shift,
-  dateLabel = '',
   locked = false,
   lockMessage = '',
   isSaving = false,
@@ -88,14 +87,17 @@ export default function ScheduleBlockModal({
     })
   }
 
+  const displayDate = date ? fmtLongDate(new Date(`${date}T00:00:00`)) : shift.shift_date
+  const statusLabel = shift.status === 'PENDING REPLACEMENT' ? 'Needs cover' : shift.status
+
   return (
     <Modal
       isOpen
       onClose={onClose}
-      title={`Block #${shift.shift_id} · ${shift.employee_name || `Employee #${shift.emp_id}`}`}
-      subtitle={`${dateLabel || shift.shift_date} · ${shift.status}`}
+      title={shift.employee_name || `Employee #${shift.emp_id}`}
+      subtitle={`${displayDate} · ${statusLabel}`}
       size="wide"
-      bodyClassName="modal-scroll space-y-2.5 text-xs font-medium"
+      bodyClassName="modal-scroll"
       footer={
         <>
           {onCancelBlock && (
@@ -105,14 +107,14 @@ export default function ScheduleBlockModal({
               onClick={() => onCancelBlock(shift)}
               className="text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-600 hover:text-white mr-auto"
             >
-              {isSaving ? 'Working…' : 'Cancel block'}
+              {isSaving ? 'Working…' : 'Cancel shift'}
             </Button>
           )}
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
           <Button variant="primary" type="submit" form="schedule-block-form" disabled={isSaving || locked} className="px-3.5">
-            {isSaving ? 'Saving…' : 'Save block'}
+            {isSaving ? 'Saving…' : 'Save changes'}
           </Button>
         </>
       }
@@ -120,102 +122,110 @@ export default function ScheduleBlockModal({
       <form
         id="schedule-block-form"
         onSubmit={submit}
-        className="space-y-2.5 text-xs font-medium"
+        className="space-y-4 text-xs font-medium"
       >
-        <div className="grid grid-cols-3 gap-2.5">
-            <div className="col-span-3 sm:col-span-1">
-              <label htmlFor="block-date" className="block font-semibold text-slate-700 mb-1">
-                Date
-              </label>
-              <input
-                id="block-date"
-                type="date"
-                value={date}
-                disabled={locked}
-                onChange={(event) => {
-                  setDate(event.target.value)
-                  setFormError('')
-                }}
-                className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60"
-              />
-            </div>
-            <div>
-              <label htmlFor="block-start" className="block font-semibold text-slate-700 mb-1">
-                Start
-              </label>
-              <input
-                id="block-start"
-                type="time"
-                step={GRID_MINUTES * 60}
-                value={startTime}
-                disabled={locked}
-                onChange={(event) => {
-                  setStartTime(event.target.value)
-                  setFormError('')
-                }}
-                className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60"
-              />
-            </div>
-            <div>
-              <label htmlFor="block-end" className="block font-semibold text-slate-700 mb-1">
-                End
-              </label>
-              <input
-                id="block-end"
-                type="time"
-                step={GRID_MINUTES * 60}
-                value={endTime}
-                disabled={locked}
-                onChange={(event) => {
-                  setEndTime(event.target.value)
-                  setFormError('')
-                }}
-                className="w-full h-8 px-2 bg-slate-50 border border-slate-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60"
-              />
-            </div>
-          </div>
-          <p className="text-2xs text-slate-400 font-normal">
-            {fmtTime(startTime)} – {fmtTime(endTime)} · blocks land on {GRID_MINUTES}-minute steps and
-            may not overlap another block for the same employee.
-          </p>
-
-          <label className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 cursor-pointer">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label htmlFor="block-date" className="block font-semibold text-slate-700 mb-1.5">
+              Date
+            </label>
             <input
-              type="checkbox"
-              checked={unavailable}
+              id="block-date"
+              type="date"
+              value={date}
               disabled={locked}
               onChange={(event) => {
-                setUnavailable(event.target.checked)
+                setDate(event.target.value)
                 setFormError('')
               }}
-              className="w-3.5 h-3.5 mt-0.5 accent-[#F97316] cursor-pointer disabled:opacity-50"
+              className="w-full h-10 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60"
             />
-            <span>
-              <span className="block font-semibold text-slate-700">
-                {unavailable ? 'Unavailable' : 'Available'} on this block
-              </span>
-              <span className="block text-2xs text-slate-400 font-normal">
-                Their class or personal conflict. Marking it
-                unavailable stops the block from covering the shop, tells affected customers to
-                reschedule, and alerts the admins to find a substitute.
-              </span>
+          </div>
+          <div>
+            <label htmlFor="block-start" className="block font-semibold text-slate-700 mb-1.5">
+              Start time
+            </label>
+            <input
+              id="block-start"
+              type="time"
+              step={GRID_MINUTES * 60}
+              value={startTime}
+              disabled={locked}
+              onChange={(event) => {
+                setStartTime(event.target.value)
+                setFormError('')
+              }}
+              className="w-full h-10 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60"
+            />
+          </div>
+          <div>
+            <label htmlFor="block-end" className="block font-semibold text-slate-700 mb-1.5">
+              End time
+            </label>
+            <input
+              id="block-end"
+              type="time"
+              step={GRID_MINUTES * 60}
+              value={endTime}
+              disabled={locked}
+              onChange={(event) => {
+                setEndTime(event.target.value)
+                setFormError('')
+              }}
+              className="w-full h-10 px-2.5 bg-slate-50 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2.5">
+          <p className="font-semibold text-slate-800">
+            {fmtTime(startTime)} – {fmtTime(endTime)}
+            <span className="ml-2 font-medium text-slate-600">
+              ({humanMinutes(Math.max(0, (minutesOf(endTime) ?? 0) - (minutesOf(startTime) ?? 0)))})
             </span>
-          </label>
+          </p>
+          <p className="mt-1 text-2xs text-slate-600 font-normal">
+            Shifts use {GRID_MINUTES}-minute steps and cannot overlap another shift for this employee.
+          </p>
+        </div>
 
-          {locked ? (
-            <p className="text-2xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-              {lockMessage} A super admin may still override this change.
-            </p>
-          ) : null}
+        <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={unavailable}
+            disabled={locked}
+            onChange={(event) => {
+              setUnavailable(event.target.checked)
+              setFormError('')
+            }}
+            className="w-4 h-4 mt-0.5 accent-[#F97316] cursor-pointer disabled:opacity-50"
+          />
+          <span>
+            <span className="block font-semibold text-slate-800">
+              Mark employee unavailable for this shift
+            </span>
+            <span className="block mt-1 text-2xs leading-relaxed text-slate-500 font-normal">
+              Use this for a class or personal conflict. The shift will no longer count toward
+              coverage, affected customers will be asked to reschedule, and admins will be alerted
+              to arrange a substitute.
+            </span>
+          </span>
+        </label>
 
-          {formError && (
-            <p
-              role="alert"
-              className="text-2xs font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-2 py-1.5"
-            >
-              {formError}
-            </p>
-          )}
+        {locked ? (
+          <p className="text-2xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            {lockMessage} A super admin may still override this change.
+          </p>
+        ) : null}
+
+        {formError && (
+          <p
+            role="alert"
+            className="text-2xs font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-2 py-1.5"
+          >
+            {formError}
+          </p>
+        )}
       </form>
     </Modal>
   )

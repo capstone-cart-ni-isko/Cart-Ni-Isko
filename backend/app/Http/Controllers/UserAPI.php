@@ -1600,7 +1600,21 @@ class UserAPI extends Controller
             }
 
             $email = strtolower(trim((string) $json->input('email')));
-            $temporaryPassword = EmployeePassword::generateTemporary(20);
+            $requestedPassword = $json->input('password');
+            if ($requestedPassword !== null && $requestedPassword !== '') {
+                if (! is_string($requestedPassword)
+                    || strlen($requestedPassword) > 72
+                    || preg_match('/\s/', $requestedPassword)
+                    || ! EmployeePassword::meetsStandard($requestedPassword)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => EmployeePassword::STANDARD_MESSAGE . ' Spaces are not allowed, and passwords may not exceed 72 bytes.',
+                    ], 422);
+                }
+                $temporaryPassword = $requestedPassword;
+            } else {
+                $temporaryPassword = EmployeePassword::generateTemporary(20);
+            }
             $type = $this->employeeCategory($json);
 
             if (Employee::where('emp_email', $email)->exists()) {

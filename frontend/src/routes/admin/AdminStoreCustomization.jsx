@@ -6,22 +6,13 @@ import DrawerPanel from '../../components/admin/DrawerPanel.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { fetchSettings, updateSettings } from '../../services/settings.js'
 import { uploadImage } from '../../services/upload.js'
+import { DEFAULT_STORE_SLIDES, parseStoreSlides } from '../../data/storeSlides.js'
+import SkeletonBlock from '../../components/ui/SkeletonBlock.jsx'
 
 const MAX_BANNER_BYTES = 2 * 1024 * 1024 // 2 MB (mirrors POST /uploads limit)
 const BANNER_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
-/** Slides are persisted as a JSON string in settings.store_slides. */
-function parseSlides(raw) {
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-export default function AdminStoreCustomization() {
+export default function AdminStoreCustomization({ embedded = false }) {
   const { currentAdminUser } = useAdmin() || {}
   const { showToast } = useToast()
 
@@ -34,6 +25,8 @@ export default function AdminStoreCustomization() {
 
   const [slides, setSlides] = useState([])
   const [editingSlideId, setEditingSlideId] = useState(null)
+  const [draggingSlideId, setDraggingSlideId] = useState(null)
+  const [dropTargetSlideId, setDropTargetSlideId] = useState(null)
   const [isSavedToast, setIsSavedToast] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showPreviewDrawer, setShowPreviewDrawer] = useState(false)
@@ -52,7 +45,7 @@ export default function AdminStoreCustomization() {
         if (cancelled) return
         const data = s || {}
         setSettings(data)
-        setSlides(parseSlides(data.store_slides))
+        setSlides(parseStoreSlides(data.store_slides) ?? DEFAULT_STORE_SLIDES)
         setHasUnsavedChanges(false)
         setIsLoading(false)
       })
@@ -73,6 +66,10 @@ export default function AdminStoreCustomization() {
   const lastEditBy = settings?.banner_last_edit_by ? `by ${settings.banner_last_edit_by}` : '—'
   const bannerCount = `${slides.length} image${slides.length === 1 ? '' : 's'} uploaded`
   const bannerType = '(Hero Banner & Slideshow)'
+  const previewSlide = slides[0]
+  const previewImage = previewSlide
+    ? getImageUrl(previewSlide.bannerImage || previewSlide.imagePreview || previewSlide.image)
+    : ''
 
   const handleSlideChange = (slideId, field, value) => {
     setSlides((prev) =>
@@ -88,8 +85,8 @@ export default function AdminStoreCustomization() {
       subtext: 'Add a subtitle here',
       ctaLabel: 'Shop Now',
       ctaLink: '/shop',
-      bannerImage: 'banner-new.jpg',
-      imagePreview: '/src/assets/Images/unnamed (1).png',
+      bannerImage: DEFAULT_STORE_SLIDES[0].bannerImage,
+      imagePreview: DEFAULT_STORE_SLIDES[0].imagePreview,
     }
     setSlides([...slides, newSlide])
     setEditingSlideId(newSlide.id)
@@ -102,19 +99,29 @@ export default function AdminStoreCustomization() {
     setHasUnsavedChanges(true)
   }
 
-  const handleMoveSlide = (index, direction) => {
-    const nextIdx = index + direction
-    if (nextIdx < 0 || nextIdx >= slides.length) return
+  const handleSlideDrop = (event, targetSlideId) => {
+    event.preventDefault()
+    const sourceIndex = slides.findIndex((slide) => slide.id === draggingSlideId)
+    const targetIndex = slides.findIndex((slide) => slide.id === targetSlideId)
+    if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+      setDropTargetSlideId(null)
+      return
+    }
+
+    const targetRow = event.currentTarget.getBoundingClientRect()
+    const insertAfter = event.clientY >= targetRow.top + targetRow.height / 2
     const updated = [...slides]
-    const temp = updated[index]
-    updated[index] = updated[nextIdx]
-    updated[nextIdx] = temp
+    const [draggedSlide] = updated.splice(sourceIndex, 1)
+    let insertIndex = targetIndex + (insertAfter ? 1 : 0)
+    if (sourceIndex < insertIndex) insertIndex -= 1
+    updated.splice(insertIndex, 0, draggedSlide)
     setSlides(updated)
     setHasUnsavedChanges(true)
+    setDropTargetSlideId(null)
   }
 
   const handleDiscard = () => {
-    setSlides(parseSlides(settings?.store_slides))
+    setSlides(parseStoreSlides(settings?.store_slides) ?? DEFAULT_STORE_SLIDES)
     setHasUnsavedChanges(false)
     setEditingSlideId(null)
   }
@@ -147,9 +154,8 @@ export default function AdminStoreCustomization() {
       handleSlideChange(slideId, 'bannerImage', url)
       setHasUnsavedChanges(true)
       showToast('Banner image replaced. Click Save Changes to publish it.', 'success')
-    } catch {
-      // Uploads can fail for non-super-admin sessions — surface, don't crash.
-      showToast('Unable to upload the image.', 'error')
+    } catch (err) {
+      showToast(err?.message || 'Unable to upload the image.', 'error')
     } finally {
       setUploadingSlideId(null)
     }
@@ -182,30 +188,29 @@ export default function AdminStoreCustomization() {
       setHasUnsavedChanges(false)
       setIsSavedToast(true)
       setTimeout(() => setIsSavedToast(false), 3500)
-    } catch {
-      showToast('Failed to save the slideshow.', 'error')
+    } catch (err) {
+      showToast(err?.message || 'Failed to save the slideshow.', 'error')
     } finally {
       setIsSaving(false)
     }
   }
 
-  return (
-    <AdminLayout>
+  const content = (
+    <>
       <div className="relative pb-24">
         {/* Page Header */}
         <div className="mb-5">
-          <h1 className="text-2xl font-black text-gray-900">Store Customization</h1>
+          <h1 className="text-2xl font-black text-gray-900">
+            {embedded ? 'Storefront Banners' : 'Store Customization'}
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Update your store's appearance and manage what your customers see on the storefront.
+            {embedded
+              ? 'Change the banner images and action buttons customers see on the storefront.'
+              : 'Update your store’s appearance and manage what your customers see on the storefront.'}
           </p>
         </div>
 
         {/* Load states */}
-        {isLoading && (
-          <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
-            <span className="spinner-circle !w-3.5 !h-3.5" /> Loading store customization…
-          </div>
-        )}
         {loadError && (
           <div className="mb-4 flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
             <p className="text-xs font-semibold text-red-700">{loadError}</p>
@@ -221,6 +226,16 @@ export default function AdminStoreCustomization() {
 
         {/* Top 3 Info Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          {isLoading ? (
+            Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm" aria-hidden="true">
+                <SkeletonBlock className="h-3 w-24 rounded" />
+                <SkeletonBlock className="mt-3 h-4 w-32 rounded" />
+                <SkeletonBlock className="mt-2 h-3 w-24 rounded" />
+              </div>
+            ))
+          ) : (
+            <>
           {/* Store Status Card */}
           <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
             <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
@@ -273,6 +288,8 @@ export default function AdminStoreCustomization() {
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
 
         {/* Two-Column Layout */}
@@ -324,14 +341,56 @@ export default function AdminStoreCustomization() {
 
             {/* Slide Rows */}
             <div className="divide-y divide-gray-100">
-              {slides.map((slide, idx) => {
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="flex items-center gap-3 px-4 py-4" aria-hidden="true">
+                    <SkeletonBlock className="h-4 w-4 rounded-sm" />
+                    <SkeletonBlock className="h-14 w-20 shrink-0 rounded-lg" />
+                    <SkeletonBlock className="h-5 w-14 shrink-0 rounded-full" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <SkeletonBlock className="h-3 w-2/3 rounded" />
+                      <SkeletonBlock className="h-3 w-1/2 rounded" />
+                    </div>
+                    <SkeletonBlock className="h-8 w-16 shrink-0 rounded-lg" />
+                  </div>
+                ))
+              ) : slides.map((slide, idx) => {
                 const isEditing = editingSlideId === slide.id
                 return (
-                  <div key={slide.id} className="px-4 py-3">
+                  <div
+                    key={slide.id}
+                    className={`px-4 py-3 transition-colors ${
+                      draggingSlideId === slide.id
+                        ? 'opacity-50'
+                        : dropTargetSlideId === slide.id
+                          ? 'bg-orange-50'
+                          : ''
+                    }`}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      if (draggingSlideId !== slide.id) setDropTargetSlideId(slide.id)
+                    }}
+                    onDrop={(event) => handleSlideDrop(event, slide.id)}
+                  >
                     {/* Main Row */}
                     <div className="flex items-center gap-3">
                       {/* Drag Handle */}
-                      <div className="flex flex-col gap-0.5 text-gray-300 flex-shrink-0 cursor-grab active:cursor-grabbing">
+                      <button
+                        type="button"
+                        draggable
+                        aria-label={`Drag to reorder slide ${idx + 1}`}
+                        title="Drag to reorder"
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = 'move'
+                          event.dataTransfer.setData('text/plain', slide.id)
+                          setDraggingSlideId(slide.id)
+                        }}
+                        onDragEnd={() => {
+                          setDraggingSlideId(null)
+                          setDropTargetSlideId(null)
+                        }}
+                        className="flex flex-col gap-0.5 text-gray-300 flex-shrink-0 cursor-grab active:cursor-grabbing hover:text-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-orange"
+                      >
                         <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                           <circle cx="9" cy="7" r="1.2" />
                           <circle cx="15" cy="7" r="1.2" />
@@ -340,7 +399,7 @@ export default function AdminStoreCustomization() {
                           <circle cx="9" cy="17" r="1.2" />
                           <circle cx="15" cy="17" r="1.2" />
                         </svg>
-                      </div>
+                      </button>
 
                       {/* Thumbnail */}
                       <div className="w-20 h-14 rounded-lg overflow-hidden flex-shrink-0 border border-gray-100 bg-gray-50">
@@ -484,47 +543,16 @@ export default function AdminStoreCustomization() {
                             </button>
                           </div>
                         </div>
-                        {/* Reorder buttons */}
-                        <div className="flex items-center gap-2 pt-1">
-                          <span className="text-2xs font-semibold text-gray-400">Reorder:</span>
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => handleMoveSlide(idx, -1)}
-                            className="p-1 rounded border border-gray-200 text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
-                              <polyline points="18 15 12 9 6 15" />
-                            </svg>
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === slides.length - 1}
-                            onClick={() => handleMoveSlide(idx, 1)}
-                            className="p-1 rounded border border-gray-200 text-gray-500 hover:text-gray-900 disabled:opacity-30 transition-colors"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
-                              <polyline points="6 9 12 15 18 9" />
-                            </svg>
-                          </button>
-                        </div>
                       </div>
                     )}
                   </div>
                 )
               })}
 
-              {isLoading ? (
-                <div className="px-6 py-10 text-center flex items-center justify-center gap-2">
-                  <span className="spinner-circle !w-3.5 !h-3.5" />
-                  <p className="text-sm text-gray-400 font-medium">Loading slides…</p>
+              {!isLoading && slides.length === 0 && (
+                <div className="px-6 py-10 text-center">
+                  <p className="text-sm text-gray-400 font-medium">No slides yet. Add a new slide to get started.</p>
                 </div>
-              ) : (
-                slides.length === 0 && (
-                  <div className="px-6 py-10 text-center">
-                    <p className="text-sm text-gray-400 font-medium">No slides yet. Add a new slide to get started.</p>
-                  </div>
-                )
               )}
             </div>
           </div>
@@ -546,7 +574,7 @@ export default function AdminStoreCustomization() {
                       </svg>
                       Edit
                     </span>{' '}
-                    on a slide to change the image, title, or subtitle.
+                    on a slide to change its image, text, or action button.
                   </p>
                 </li>
                 <li className="flex gap-3">
@@ -562,11 +590,11 @@ export default function AdminStoreCustomization() {
                 <li className="flex gap-3">
                   <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-2xs font-black flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
                   <p className="text-xs text-gray-600 leading-relaxed">
-                    Open a slide's edit panel and use its{' '}
-                    <span className="inline-flex items-center gap-0.5 bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
-                      Reorder
+                    Hold the{' '}
+                    <span className="inline-flex items-center bg-gray-100 border border-gray-200 rounded px-1 py-0.5 font-semibold text-gray-700">
+                      six-dot handle
                     </span>{' '}
-                    buttons to move the slide up or down.
+                    at the left of a slide and drag it to its new position.
                   </p>
                 </li>
                 <li className="flex gap-3">
@@ -605,7 +633,7 @@ export default function AdminStoreCustomization() {
         </div>
 
         {/* Sticky Bottom Bar */}
-        <div className="fixed bottom-0 right-0 left-0 md:left-60 bg-white/95 backdrop-blur-md border-t border-gray-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
+        <div className={`fixed bottom-0 right-0 ${embedded ? 'left-0 md:left-72' : 'left-0 md:left-60'} bg-white/95 backdrop-blur-md border-t border-gray-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg`}>
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -663,29 +691,49 @@ export default function AdminStoreCustomization() {
         width="max-w-md"
       >
         <div className="space-y-4">
-          {slides.length > 0 && (
-            <div className="rounded-xl overflow-hidden bg-slate-900 relative h-48 border border-slate-200 text-white p-4 flex flex-col justify-end">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-60"
-                style={{ backgroundImage: `url(${getImageUrl(slides[0].imagePreview)})` }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              <div className="relative z-10 space-y-1">
-                <span className="inline-block bg-brand-orange text-white text-2xs font-bold uppercase px-2 py-0.5 rounded-md">
-                  {slides[0].subtext}
-                </span>
-                <h3 className="text-xl font-black">{slides[0].title}</h3>
-                <button type="button" className="mt-2 inline-flex items-center gap-1 px-3 py-1 bg-white text-gray-900 text-xs font-black rounded-lg">
-                  <span>{slides[0].ctaLabel}</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
+          {previewSlide && (
+            <div className="relative h-60 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 text-white">
+              {previewImage && (
+                <img
+                  src={previewImage}
+                  alt=""
+                  className="absolute inset-0 z-0 h-full w-full object-cover object-center"
+                />
+              )}
+              <div className="absolute inset-0 z-10 bg-gradient-to-r from-black/70 via-black/20 to-transparent opacity-35" />
+              <div className="relative z-20 flex h-full flex-col justify-end p-5 sm:p-6">
+                <div className="max-w-xl">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    {previewSlide.isLimitedStock ? (
+                      <span className="inline-block rounded-md bg-red-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">
+                        Limited Stock
+                      </span>
+                    ) : (
+                      <span className="inline-block rounded-md bg-brand-orange px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">
+                        {previewSlide.pillText}
+                      </span>
+                    )}
+                    <span className="inline-block rounded-md bg-white/90 px-2.5 py-1 text-[10px] font-semibold text-slate-900 backdrop-blur-xs">
+                      {previewSlide.subtext}
+                    </span>
+                  </div>
+                  <h3 className="mb-3 text-2xl font-semibold leading-tight">
+                    {previewSlide.title}
+                  </h3>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center rounded-md bg-brand-orange px-4 text-xs font-semibold text-white"
+                  >
+                    <span>{previewSlide.ctaLabel}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
       </DrawerPanel>
-    </AdminLayout>
+    </>
   )
+
+  return embedded ? content : <AdminLayout>{content}</AdminLayout>
 }

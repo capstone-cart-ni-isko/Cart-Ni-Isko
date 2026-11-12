@@ -26,7 +26,6 @@ export default function ScheduleWeekGrid({
   weekStart,
   officers = [],
   canEdit = true,
-  onAssignOfficer,
   onEditBlock,
 }) {
   const [shifts, setShifts] = useState([])
@@ -89,18 +88,9 @@ export default function ScheduleWeekGrid({
         <div>
           <h2 className="text-sm font-bold text-slate-900">Weekly Preschedule</h2>
           <p className="text-2xs text-slate-400 font-normal mt-0.5">
-            {weekLabel} · employee prescheduled availability
+            {weekLabel} · assigned shift blocks and planned hours
           </p>
         </div>
-        {onAssignOfficer && (
-          <button
-            type="button"
-            onClick={() => onAssignOfficer(null)}
-            className="h-8 px-3 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-xs rounded-md transition-colors cursor-pointer"
-          >
-            Schedule this week
-          </button>
-        )}
       </div>
 
       {error ? (
@@ -181,6 +171,8 @@ export default function ScheduleWeekGrid({
                                   // REQ-EMP_SCHED-01: an unavailable block no
                                   // longer counts toward the weekly floor.
                                   const minutes = minutesBetween(block.shift_start, block.shift_end)
+                                  const needsCover =
+                                    block.unavailable || block.status === 'PENDING REPLACEMENT'
                                   if (!block.unavailable) weekMinutes += minutes
 
                                   return (
@@ -190,11 +182,11 @@ export default function ScheduleWeekGrid({
                                       disabled={!canEdit || !onEditBlock}
                                       onClick={() => onEditBlock(block)}
                                       title={`${block.status} · ${block.shift_start}–${block.shift_end}${
-                                        block.unavailable ? ' · unavailable' : ''
+                                        needsCover ? ' · needs cover' : ''
                                       }${canEdit ? ' · click to edit' : ''}`}
                                       className={`block w-full text-left px-1.5 py-0.5 rounded border text-2xs font-semibold whitespace-nowrap transition-colors disabled:cursor-default ${
-                                        block.unavailable
-                                          ? 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
+                                        needsCover
+                                          ? 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
                                           : 'bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100'
                                       }`}
                                     >
@@ -202,7 +194,7 @@ export default function ScheduleWeekGrid({
                                         {block.shift_start}–{block.shift_end}
                                       </span>
                                       <span className="ml-1 font-normal opacity-70">
-                                        {block.unavailable ? 'off' : `${minutes}m`}
+                                        {needsCover ? 'needs cover' : `${minutes}m`}
                                       </span>
                                     </button>
                                   )

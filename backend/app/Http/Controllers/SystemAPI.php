@@ -664,18 +664,17 @@ class SystemAPI extends Controller
             return 'PENDING REPLACEMENT';
         }
 
-        if ($shift->employee === null || ! $shift->employee->inStore()) {
-            return 'PENDING REPLACEMENT';
-        }
-
         if (! $shift->sched_time_start || ! $shift->sched_time_end) {
             return 'SCHEDULED';
         }
 
-        if (now()->between($shift->sched_time_start, $shift->sched_time_end)) return 'ACTIVE';
         if (now()->greaterThan($shift->sched_time_end)) return 'COMPLETED';
+        if (now()->lessThan($shift->sched_time_start)) return 'SCHEDULED';
+        if ($shift->employee === null || ! $shift->employee->inStore()) {
+            return 'PENDING REPLACEMENT';
+        }
 
-        return 'SCHEDULED';
+        return 'ACTIVE';
     }
 
     private function changeAvailability(Schedule $shift, bool $inStore): void

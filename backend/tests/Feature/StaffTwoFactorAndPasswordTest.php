@@ -100,6 +100,40 @@ class StaffTwoFactorAndPasswordTest extends TestCase
         ])->assertStatus(200)->assertJsonStructure(['data' => ['token']]);
     }
 
+    public function test_temporary_staff_password_expires_after_48_hours()
+    {
+        config(['otp.staff_login' => false]);
+        \App\Support\SystemSettings::putMany([
+            'store_name' => 'Tindahan ni Isko',
+            'store_location' => 'BU',
+            'store_contact' => 'store@bicol-u.edu.ph',
+            'operating_hours' => '08:00 - 18:00',
+        ]);
+
+        $validEmployee = $this->makeEmployee();
+        $validEmployee->emp_created = now()->subHours(47);
+        $validEmployee->emp_password = EmployeePassword::makeTemporary('Temporary#2026');
+        $validEmployee->save();
+
+        $this->postJson('/api/auth/emp_login', [
+            'email' => $validEmployee->emp_email,
+            'password' => 'Temporary#2026',
+        ])->assertStatus(200)
+            ->assertJsonPath('data.must_change_password', true);
+
+        $expiredEmployee = $this->makeEmployee();
+        $expiredEmployee->emp_created = now()->subHours(49);
+        $expiredEmployee->emp_password = EmployeePassword::makeTemporary('Temporary#2026');
+        $expiredEmployee->save();
+
+        $this->postJson('/api/auth/emp_login', [
+            'email' => $expiredEmployee->emp_email,
+            'password' => 'Temporary#2026',
+        ])->assertStatus(403)
+            ->assertJsonPath('code', 'TEMP_PASSWORD_EXPIRED')
+            ->assertJsonPath('message', 'The temporary password has expired. Use Forgot Password to reset it, or contact a super admin if you cannot access your university email.');
+    }
+
     public function test_one_password_standard_for_every_role()
     {
         // 8+ with upper, lower, number and symbol - no longer 16 for super admin

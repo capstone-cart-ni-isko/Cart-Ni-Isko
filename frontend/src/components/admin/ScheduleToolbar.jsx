@@ -13,6 +13,8 @@ export default function ScheduleToolbar({
   onViewChange,
   onShiftDate,
   onToday,
+  onAddShift,
+  canAddShift = false,
 }) {
   const isWeek = viewMode === 'Week'
   const isMonth = viewMode === 'Month'
@@ -36,7 +38,7 @@ export default function ScheduleToolbar({
         ))}
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={() => onShiftDate(-1)}
@@ -68,6 +70,15 @@ export default function ScheduleToolbar({
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>
+        {canAddShift && (
+          <button
+            type="button"
+            onClick={onAddShift}
+            className="ml-1 h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold transition-colors cursor-pointer"
+          >
+            + Add shift
+          </button>
+        )}
       </div>
     </div>
   )

@@ -76,6 +76,36 @@ function sortClientSide(rows, sortValue) {
   })
 }
 
+function localDateKey(value) {
+  const date = parseDate(value)
+  if (!date) return ''
+  const pad = (part) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function orderSearchText(order) {
+  const customer = order.raw?.customer || {}
+  return [
+    order.id,
+    order.tag,
+    order.customer,
+    order.custNickname,
+    order.custEmail,
+    order.custPhone,
+    customer.cust_givname,
+    customer.cust_surname,
+    customer.cust_nickname,
+    customer.cust_email,
+    customer.cust_phone,
+    order.raw?.cust_givname,
+    order.raw?.cust_surname,
+    ...(order.items || []).map((item) => item?.name),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
 export default function AdminOrders() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -95,6 +125,8 @@ export default function AdminOrders() {
   const [filterFulfillment, setFilterFulfillment] = useState('All')
   const [filterStatus, setFilterStatus] = useState('All')
   const [filterItem, setFilterItem] = useState('All')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
   const [selectedOrderIds, setSelectedOrderIds] = useState([])
 
   const [activeOrderDetail, setActiveOrderDetail] = useState(null)
@@ -114,6 +146,23 @@ export default function AdminOrders() {
   const [sortedRows, setSortedRows] = useState(null)
 
   const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
+  const paymentStatus = String(
+    activeOrderDetail?.rawStatus || activeOrderDetail?.status || ''
+  ).trim().toLowerCase()
+  const awaitingPayment = ['to pay', 'awaiting payment'].includes(paymentStatus)
+  const receivedAmount = Number(activeOrderDetail?.payGiven)
+  const amountReceivedLabel = awaitingPayment
+    ? 'Not received — awaiting payment'
+    : receivedAmount > 0
+      ? `₱${receivedAmount.toFixed(2)}`
+      : activeOrderDetail && !activeOrderDetail.isPos
+        ? `₱${(Number(activeOrderDetail.payDue || activeOrderDetail.total) || 0).toFixed(2)} (Paid Upfront)`
+        : 'Not paid yet'
+  const changeLabel = awaitingPayment
+    ? 'Not applicable yet'
+    : activeOrderDetail?.payChange != null
+      ? `₱${Number(activeOrderDetail.payChange).toFixed(2)}`
+      : '—'
 
   // Mount refresh; AdminContext owns the single 30s orders poll.
   useEffect(() => {
@@ -202,12 +251,38 @@ export default function AdminOrders() {
     if (filterFulfillment !== 'All') chips.push({ key: 'fulfillment', label: `Fulfillment: ${filterFulfillment}`, reset: () => setFilterFulfillment('All') })
     if (filterStatus !== 'All') chips.push({ key: 'status', label: `Status: ${filterStatus}`, reset: () => setFilterStatus('All') })
     if (filterItem !== 'All') chips.push({ key: 'item', label: `Item: ${filterItem}`, reset: () => setFilterItem('All') })
+    if (filterDateFrom || filterDateTo) {
+      chips.push({
+        key: 'date',
+        label: `Date: ${filterDateFrom || 'Any'} – ${filterDateTo || 'Any'}`,
+        reset: () => {
+          setFilterDateFrom('')
+          setFilterDateTo('')
+        },
+      })
+    }
     return chips
-  }, [filterType, filterFulfillment, filterStatus, filterItem])
+  }, [filterType, filterFulfillment, filterStatus, filterItem, filterDateFrom, filterDateTo])
 
   const filteredOrders = useMemo(() => {
-    const base = searchRows ?? sortedRows ?? orders
+    const query = searchQuery.trim().toLowerCase()
+    const base = query
+      ? Array.from(
+          new Map(
+            [...(searchRows || []), ...orders].map((order) => [
+              String(order.ordId ?? order.id),
+              order,
+            ])
+          ).values()
+        )
+      : sortedRows ?? orders
     const rows = base.filter((order) => {
+      const orderDate = localDateKey(order.createdAt)
+      const matchSearch =
+        !query || query.split(/\s+/).every((term) => orderSearchText(order).includes(term))
+      const matchDate =
+        (!filterDateFrom || (orderDate && orderDate >= filterDateFrom)) &&
+        (!filterDateTo || (orderDate && orderDate <= filterDateTo))
       const matchType =
         filterType === 'All' ||
         (filterType === 'Pre-order' && order.type?.toLowerCase().includes('pre-order')) ||
@@ -226,12 +301,24 @@ export default function AdminOrders() {
         filterItem === 'All' ||
         (order.items || []).some((i) => i?.name?.toLowerCase() === filterItem.toLowerCase())
 
-      return matchType && matchFulfillment && matchStatus && matchItem
+      return matchSearch && matchDate && matchType && matchFulfillment && matchStatus && matchItem
     })
 
-    // Server search always returns newest-first; honour the sort select there.
-    return searchRows ? sortClientSide(rows, sortValue) : rows
-  }, [orders, searchRows, sortedRows, sortValue, filterType, filterFulfillment, filterStatus, filterItem])
+    // Search combines server matches and locally loaded orders, then applies the selected sort.
+    return query ? sortClientSide(rows, sortValue) : rows
+  }, [
+    orders,
+    searchRows,
+    searchQuery,
+    sortedRows,
+    sortValue,
+    filterType,
+    filterFulfillment,
+    filterStatus,
+    filterItem,
+    filterDateFrom,
+    filterDateTo,
+  ])
 
   // "Refunds" subtab (admin "Orders" tab): only return/refund rows.
   const visibleOrders = useMemo(() => {
@@ -550,9 +637,9 @@ export default function AdminOrders() {
                 onChange={(e) => {
                   const value = e.target.value
                   setSearchQuery(value)
+                  setSearchRows(null)
                   if (!value.trim()) {
                     // Clearing the search falls back to the sorted/default list.
-                    setSearchRows(null)
                     const option = SORT_OPTIONS.find((o) => o.value === sortValue) || SORT_OPTIONS[0]
                     if (option.sortBy === 'date' && option.dir === 'desc') setSortedRows(null)
                   }
@@ -597,15 +684,25 @@ export default function AdminOrders() {
               onClick={() => setShowMoreFilters((open) => !open)}
               aria-expanded={showMoreFilters}
               className={`h-8 px-2.5 rounded-md border text-xs font-semibold cursor-pointer focus:outline-none ${
-                showMoreFilters || filterType !== 'All' || filterFulfillment !== 'All' || filterItem !== 'All'
+                showMoreFilters ||
+                filterType !== 'All' ||
+                filterFulfillment !== 'All' ||
+                filterItem !== 'All' ||
+                filterDateFrom ||
+                filterDateTo
                   ? 'bg-brand-orange text-white border-brand-orange'
                   : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
               }`}
             >
               Filters
-              {filterType !== 'All' || filterFulfillment !== 'All' || filterItem !== 'All'
+              {filterType !== 'All' ||
+              filterFulfillment !== 'All' ||
+              filterItem !== 'All' ||
+              filterDateFrom ||
+              filterDateTo
                 ? ` · ${
-                    [filterType, filterFulfillment, filterItem].filter((v) => v !== 'All').length
+                    [filterType, filterFulfillment, filterItem].filter((v) => v !== 'All').length +
+                    (filterDateFrom || filterDateTo ? 1 : 0)
                   }`
                 : ''}
             </button>
@@ -620,6 +717,8 @@ export default function AdminOrders() {
                   setFilterFulfillment('All')
                   setFilterStatus('All')
                   setFilterItem('All')
+                  setFilterDateFrom('')
+                  setFilterDateTo('')
                 }}
                 className="text-xs font-semibold text-rose-600 hover:underline px-2 cursor-pointer"
               >
@@ -665,6 +764,29 @@ export default function AdminOrders() {
                   </option>
                 ))}
               </select>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-500">Order date</span>
+                <input
+                  id="orders-date-from"
+                  type="date"
+                  value={filterDateFrom}
+                  max={filterDateTo || undefined}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                  aria-label="Order date from"
+                  className="h-8 px-2 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                />
+                <span className="text-xs text-slate-400">to</span>
+                <input
+                  id="orders-date-to"
+                  type="date"
+                  value={filterDateTo}
+                  min={filterDateFrom || undefined}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
+                  aria-label="Order date to"
+                  className="h-8 px-2 rounded-md bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                />
+              </div>
             </div>
           )}
 
@@ -734,14 +856,6 @@ export default function AdminOrders() {
             <div className="relative overflow-hidden p-4 rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/5 to-transparent border border-orange-500/20">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-white dark:bg-[var(--surface)] text-[var(--ink)] shadow-2xs border border-[var(--line)]">
-                      {activeOrderDetail.id}
-                    </span>
-                    <span className="text-2xs text-[var(--muted)]">
-                      Placed {activeOrderDetail.date}
-                    </span>
-                  </div>
                   <h3 className="text-base font-bold text-[var(--ink)] tracking-tight">
                     {activeOrderDetail.customer}
                   </h3>
@@ -936,19 +1050,13 @@ export default function AdminOrders() {
                   <div className="flex justify-between">
                     <span className="text-[var(--muted)]">Amount received</span>
                     <span className="font-semibold text-[var(--ink)] text-sm">
-                      {activeOrderDetail.payGiven != null && Number(activeOrderDetail.payGiven) > 0
-                        ? `₱${Number(activeOrderDetail.payGiven).toFixed(2)}`
-                        : !activeOrderDetail.isPos
-                          ? `₱${(Number(activeOrderDetail.payDue || activeOrderDetail.total) || 0).toFixed(2)} (Paid Upfront)`
-                          : 'Not paid yet'}
+                      {amountReceivedLabel}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[var(--muted)]">Change</span>
                     <span className="font-semibold text-[var(--ink)] text-sm">
-                      {activeOrderDetail.payChange != null
-                        ? `₱${Number(activeOrderDetail.payChange).toFixed(2)}`
-                        : '—'}
+                      {changeLabel}
                     </span>
                   </div>
                   <div className="pt-2 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">

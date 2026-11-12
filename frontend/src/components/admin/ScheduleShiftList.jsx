@@ -66,7 +66,7 @@ export default function ScheduleShiftList({
   if (shifts.length === 0) {
     return (
       <p className="py-8 text-center text-xs text-slate-400">
-        No duty blocks assigned for this date yet.
+        No shifts scheduled for this date.
       </p>
     )
   }
@@ -84,14 +84,15 @@ export default function ScheduleShiftList({
             </p>
             <p className="text-2xs text-slate-500">
               {fmtTime(shift.shift_start)} – {fmtTime(shift.shift_end)}
-              {' · block #'}
-              {shift.shift_id}
               {shift.unavailable ? ' · marked unavailable' : ''}
             </p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <StatusPill status={shift.status} variant={STATUS_VARIANT[shift.status]} />
+            <StatusPill
+              status={shift.status === 'PENDING REPLACEMENT' ? 'Needs cover' : shift.status}
+              variant={STATUS_VARIANT[shift.status]}
+            />
 
             {onEdit && (
               <button

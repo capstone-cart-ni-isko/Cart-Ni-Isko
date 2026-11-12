@@ -437,9 +437,6 @@ function ForgotPassword() {
         {/* Rule 69: Top-left back button */}
         <div className="flex justify-between items-center">
           <BackButton onClick={prevStep} />
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-50 text-brand-orange">
-            Customer Account
-          </span>
         </div>
 
         {/* Customer Header */}

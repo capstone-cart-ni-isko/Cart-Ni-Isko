@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ConfirmModal from '../../components/ui/ConfirmModal.jsx'
 import Segmented from '../../components/admin/kit/Segmented.jsx'
+import { TableSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 import { useToast } from '../../hooks/useToast.js'
 import { deleteOldAccessLogs, fetchAccessLogs } from '../../services/access.js'
 
@@ -297,12 +298,7 @@ export default function AdminAccessLogs({ embedded = false }) {
 
         {/* The list itself */}
         {loading && rows.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 flex items-center justify-center">
-            <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-              <span className="spinner-circle" style={{ '--spinner-size': '14px' }} />
-              Loading access log…
-            </span>
-          </div>
+          <TableSkeleton rows={6} columns={5} />
         ) : error ? (
           <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-700">
             {error}

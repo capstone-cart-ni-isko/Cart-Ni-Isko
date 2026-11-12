@@ -31,7 +31,7 @@ const roleLabel = (empType) => {
   return ROLE_LABEL[type] || 'Staff'
 }
 
-const isOnDuty = (value) => value === true || value === 1 || value === '1' || value === 'true'
+const isInStore = (value) => value === true || value === 1 || value === '1' || value === 'true'
 
 // Maps one employee row into the shape every schedule component expects
 const toOfficer = (row, index) => {
@@ -39,7 +39,7 @@ const toOfficer = (row, index) => {
     `${row.emp_givname || ''} ${row.emp_surname || ''}`.trim() ||
     row.emp_email ||
     `Employee #${row.emp_id}`
-  const inStore = isOnDuty(row.emp_instore)
+  const inStore = isInStore(row.emp_instore)
 
   return {
     id: row.emp_id,
@@ -48,7 +48,7 @@ const toOfficer = (row, index) => {
     avatarColor: AVATAR_COLORS[index % AVATAR_COLORS.length],
     available: inStore,
     // NB: avoid the word "available" — StatusPill matches it as green.
-    availability: inStore ? 'On Duty' : 'Off Duty',
+    availability: inStore ? 'In Store' : 'Out of Store',
     roleLabel: roleLabel(row.emp_categ || row.emp_type),
     empType: row.emp_categ || row.emp_type,
     raw: row,
@@ -56,9 +56,8 @@ const toOfficer = (row, index) => {
 }
 
 /**
- * Staff roster for the schedule page (REQ-SS-01). Availability lives on
- * emp_instore, and the API is the only source of truth: the row is refetched
- * after every change so a page reload always shows the stored value.
+ * Staff roster for current in-store status. The API is the only source of
+ * truth: the row is refetched after every change so a reload shows stored data.
  */
 export function useScheduleRoster() {
   const [officers, setOfficers] = useState([])
@@ -120,7 +119,7 @@ export function useScheduleRoster() {
     [reload]
   )
 
-  const onDutyCount = useMemo(
+  const inStoreCount = useMemo(
     () => officers.filter((officer) => officer.available).length,
     [officers]
   )
@@ -132,7 +131,7 @@ export function useScheduleRoster() {
     savingId,
     reload,
     setDuty,
-    onDutyCount,
-    offDutyCount: officers.length - onDutyCount,
+    inStoreCount,
+    outOfStoreCount: officers.length - inStoreCount,
   }
 }

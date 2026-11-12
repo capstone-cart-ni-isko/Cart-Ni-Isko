@@ -101,6 +101,7 @@ export default function AdminAppointments() {
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelReason, setCancelReason] = useState('')
   const [isCancelling, setIsCancelling] = useState(false)
+  const [viewingBooking, setViewingBooking] = useState(null)
   // Sudden suspension: move the whole day's bookings at once
   const [showSuspend, setShowSuspend] = useState(false)
   const [suspendReason, setSuspendReason] = useState('')
@@ -214,13 +215,6 @@ export default function AdminAppointments() {
         location: a.appoint_desc || (a.appoint_qr ? `QR ${a.appoint_qr}` : 'Campus Merch Shop'),
         subtext: `Customer #${a.cust_id} · ${rules.minutes} min slot`,
         icon: 'desk',
-        action: 'Cancel',
-        actionKind: 'cancel',
-        onAction: () => {
-          setCancelTarget(a)
-          setCancelReason('')
-          setShowDeclineModal(true)
-        },
         raw: a,
       })
     })
@@ -301,7 +295,23 @@ export default function AdminAppointments() {
     setShowDeclineModal(true)
   }
 
+  const handleViewBooking = (appt) => setViewingBooking(appt)
+
   const isAdminRole = ['ADMIN', 'SUPER_ADMIN'].includes(currentAdminUser?.roleKey)
+  const viewingType =
+    String(viewingBooking?.appoint_type || '').toUpperCase() === 'CLAIM' ? 'Claim' : 'Visit'
+  const viewingStart = parseDateish(viewingBooking?.appoint_date)
+  const viewingDuration = SLOT_RULES[viewingType.toUpperCase()].minutes
+  const viewingEnd = viewingStart
+    ? new Date(viewingStart.getTime() + viewingDuration * 60000)
+    : null
+  const viewingCustomerName = [
+    viewingBooking?.cust_givname,
+    viewingBooking?.cust_surname,
+  ].filter(Boolean).join(' ') || viewingBooking?.customer_name || viewingBooking?.cust_name
+  const viewingStatus = viewingBooking?.appoint_closed
+    ? 'Closed'
+    : viewingBooking?.appoint_status || 'Upcoming'
 
   const openSuspend = () => {
     setSuspendReason('')
@@ -336,14 +346,6 @@ export default function AdminAppointments() {
     } finally {
       setIsSuspending(false)
     }
-  }
-
-  const handleBannerCancelClick = () => {
-    if (dayBookings.length === 0) {
-      showToast('No bookings to cancel on this date.', 'info')
-      return
-    }
-    handleOpenCancel(dayBookings[0])
   }
 
   const handleConfirmCancel = async () => {
@@ -399,7 +401,7 @@ export default function AdminAppointments() {
                 <span>{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, {staffName}!</span>
               </h1>
               <p className="text-xs text-slate-500 font-normal mt-0.5">
-                Here's your assigned shift and today's schedule at a glance.
+                Here's your today's schedule at a glance.
               </p>
             </div>
           </div>
@@ -444,55 +446,7 @@ export default function AdminAppointments() {
           <div className="lg:col-span-8 space-y-4">
             {/* 1. Selected-day summary */}
             <div className="bg-gradient-to-br from-[#FFF9F5] to-[#FFF1E5] border border-[#FFE7D6] rounded-lg p-4 relative overflow-hidden">
-              <div className="absolute -right-8 -top-10 w-32 h-32 rounded-full bg-white/40 pointer-events-none" />
               <div className="relative">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-[#FFE8D6] text-[#FF6A00] flex items-center justify-center shrink-0">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                        <rect x="3" y="4" width="18" height="18" rx="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="inline-block bg-[#FFEDE1] text-[#E65100] text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
-                        Appointments
-                      </span>
-                      <h2 className="text-base font-bold text-slate-900 mt-1">{fmtBadgeDate(selectedDate)}</h2>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 font-medium mt-1">
-                        <span className="inline-flex items-center gap-1.5">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                            <circle cx="12" cy="10" r="3" />
-                          </svg>
-                          Campus Merch Shop · Student Help Desk
-                        </span>
-                        <span className="inline-flex items-center gap-1.5">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                            <circle cx="12" cy="7" r="4" />
-                          </svg>
-                          In-store staff: {inStoreStaff == null ? '—' : inStoreStaff}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPurpose(true)}
-                    aria-label="About the appointments page"
-                    title="About this page"
-                    className="w-8 h-8 rounded-full border border-orange-200 bg-white/80 text-[#E65100] hover:bg-white flex items-center justify-center shrink-0 transition-colors cursor-pointer"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="11" x2="12" y2="16" />
-                      <circle cx="12" cy="7" r="0.8" fill="currentColor" />
-                    </svg>
-                  </button>
-                </div>
 
                 <div className="grid grid-cols-3 divide-x divide-orange-200/80 mt-4 rounded-lg border border-orange-100 bg-white/70">
                   {[
@@ -535,17 +489,9 @@ export default function AdminAppointments() {
               {/* Timeline Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shrink-0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-5 h-5">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
-                  </div>
                   <div>
                     <h2 className="text-lg font-black text-gray-900">Appointments Timeline</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">{fmtBadgeDate(selectedDate)} · Chronological order</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{fmtBadgeDate(selectedDate)}</p>
                   </div>
                 </div>
 
@@ -667,6 +613,54 @@ export default function AdminAppointments() {
                             {hourItems.map((item) => {
                               const isShift = item.type === 'shift'
                               const isFree = item.type === 'free'
+                              const cardClass = `flex-1 rounded-lg p-3 flex items-center justify-between gap-3 transition-colors ${
+                                isShift
+                                  ? 'bg-[#FFF5ED] border border-[#FFE2D1] hover:bg-orange-100/70 hover:border-orange-300'
+                                  : isFree
+                                  ? 'bg-[#F0FDF4] border border-[#DCFCE7]'
+                                  : 'bg-slate-50 border border-slate-200'
+                              }`
+                              const cardContents = (
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div
+                                    className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
+                                      isShift
+                                        ? 'bg-[#FFE8D6] text-[#FF6A00]'
+                                        : isFree
+                                        ? 'bg-emerald-100 text-[#10B981]'
+                                        : 'bg-white text-slate-500 border border-slate-200'
+                                    }`}
+                                  >
+                                    {item.icon === 'desk' ? (
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                        <rect x="3" y="4" width="18" height="12" rx="2" />
+                                        <line x1="7" y1="20" x2="7" y2="16" />
+                                        <line x1="17" y1="20" x2="17" y2="16" />
+                                      </svg>
+                                    ) : item.icon === 'clock' ? (
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <polyline points="12 6 12 12 16 14" />
+                                      </svg>
+                                    ) : (
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-gray-900 truncate">{item.title}</p>
+                                    {item.location && (
+                                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                        <span>{item.location}</span>
+                                        {item.subtext && <span>• {item.subtext}</span>}
+                                      </p>
+                                    )}
+                                    {item.subtitle && <p className="text-xs text-gray-500 mt-0.5">{item.subtitle}</p>}
+                                  </div>
+                                </div>
+                              )
                               return (
                                 <div key={item.key} className="flex items-start gap-4">
                                   <div className="w-20 text-left shrink-0 pt-1">
@@ -698,67 +692,22 @@ export default function AdminAppointments() {
                                     }`}
                                   />
                                   <div
-                                    className={`flex-1 rounded-lg p-3 flex items-center justify-between gap-3 ${
-                                      isShift
-                                        ? 'bg-[#FFF5ED] border border-[#FFE2D1]'
-                                        : isFree
-                                        ? 'bg-[#F0FDF4] border border-[#DCFCE7]'
-                                        : 'bg-slate-50 border border-slate-200 hover:bg-slate-100/60 transition-colors'
-                                    }`}
+                                    className={cardClass}
                                   >
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <div
-                                        className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
-                                          isShift
-                                            ? 'bg-[#FFE8D6] text-[#FF6A00]'
-                                            : isFree
-                                            ? 'bg-emerald-100 text-[#10B981]'
-                                            : 'bg-white text-slate-500 border border-slate-200'
-                                        }`}
-                                      >
-                                        {item.icon === 'desk' ? (
-                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                            <rect x="3" y="4" width="18" height="12" rx="2" />
-                                            <line x1="7" y1="20" x2="7" y2="16" />
-                                            <line x1="17" y1="20" x2="17" y2="16" />
-                                          </svg>
-                                        ) : item.icon === 'clock' ? (
-                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                            <circle cx="12" cy="12" r="10" />
-                                            <polyline points="12 6 12 12 16 14" />
-                                          </svg>
-                                        ) : (
-                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                                          </svg>
-                                        )}
-                                      </div>
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-bold text-gray-900 truncate">{item.title}</p>
-                                        {item.location && (
-                                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                            <span>{item.location}</span>
-                                            {item.subtext && <span>• {item.subtext}</span>}
-                                          </p>
-                                        )}
-                                        {item.subtitle && <p className="text-xs text-gray-500 mt-0.5">{item.subtitle}</p>}
-                                      </div>
-                                    </div>
-                                    {item.action ? (
+                                    {isShift ? (
                                       <button
                                         type="button"
-                                        onClick={item.onAction}
-                                        className={`text-xs font-bold px-3 py-1.5 rounded-xl border active:scale-95 transition-all shadow-2xs whitespace-nowrap cursor-pointer ${
-                                          item.actionKind === 'cancel'
-                                            ? 'border-red-300 text-red-700 bg-white hover:bg-red-50'
-                                            : 'border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50'
-                                        }`}
+                                        onClick={() => handleViewBooking(item.raw)}
+                                        aria-label={`View details for ${item.title}`}
+                                        className="flex-1 flex items-center justify-between gap-3 min-w-0 text-left rounded-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange"
                                       >
-                                        {item.action}
+                                        {cardContents}
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-slate-400 shrink-0">
+                                          <polyline points="9 18 15 12 9 6" />
+                                        </svg>
                                       </button>
                                     ) : (
-                                      <span className="text-gray-300 text-lg">›</span>
+                                      cardContents
                                     )}
                                   </div>
                                 </div>
@@ -787,8 +736,8 @@ export default function AdminAppointments() {
                 <div>
                   <h4 className="text-sm font-bold text-gray-900">Need to cancel a booking?</h4>
                   <p className="text-xs text-gray-600 mt-0.5">
-                    Canceling an appointment requires a reason and is recorded in the audit log.
-                    For a sudden suspension, “Suspend day” moves every booking of this date at once.
+                    Open a booking for its details and cancellation options. For a sudden suspension,
+                    “Suspend day” moves every booking of this date at once.
                   </p>
                 </div>
               </div>
@@ -803,14 +752,6 @@ export default function AdminAppointments() {
                   Suspend day
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleBannerCancelClick}
-                disabled={dayBookings.length === 0}
-                className="border border-brand-orange text-brand-orange bg-white hover:bg-orange-50 font-bold text-xs h-8 px-3 rounded-md whitespace-nowrap cursor-pointer self-end sm:self-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel Appointment
-              </button>
               </div>
             </div>
           </div>
@@ -940,28 +881,6 @@ export default function AdminAppointments() {
                 </button>
               </div>
             </div>
-
-            {/* 4. Reminder — opens the notifications screen */}
-            <div
-              onClick={() => navigate('/admin/notifications')}
-              className="bg-white rounded-3xl p-5 border border-gray-100/90 shadow-xs flex items-center justify-between gap-3 hover:border-gray-200 transition-colors cursor-pointer group"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-gray-900">Reminder</h4>
-                  <p className="text-xs text-gray-500 font-medium mt-0.5 leading-relaxed">
-                    Always communicate early if you're unable to take your assigned shift. It helps the team stay on track!
-                  </p>
-                </div>
-              </div>
-              <span className="text-gray-300 text-lg group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all">›</span>
-            </div>
           </div>
         </div>
 
@@ -1068,6 +987,81 @@ export default function AdminAppointments() {
                 {suspendError && <p className="text-xs font-semibold text-rose-600" role="alert">{suspendError}</p>}
               </div>
             )}
+          </Modal>
+        )}
+
+        {viewingBooking && (
+          <Modal
+            isOpen
+            onClose={() => setViewingBooking(null)}
+            title={`${viewingType} Booking`}
+            subtitle={`Booking #${viewingBooking.appoint_id}`}
+            size="wide"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setViewingBooking(null)}>
+                  Close
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    handleOpenCancel(viewingBooking)
+                    setViewingBooking(null)
+                  }}
+                  className="px-3.5"
+                >
+                  Cancel Appointment
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Date and time</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {viewingStart
+                      ? `${viewingStart.toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })} · ${fmtTime(viewingStart)}${viewingEnd ? ` – ${fmtTime(viewingEnd)}` : ''}`
+                      : 'Not available'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">{viewingDuration}-minute {viewingType.toLowerCase()} slot</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Customer</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {viewingCustomerName || `Customer #${viewingBooking.cust_id}`}
+                  </p>
+                  {viewingCustomerName && (
+                    <p className="mt-1 text-xs text-slate-500">Customer #{viewingBooking.cust_id}</p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                  <p className="mt-1 text-sm font-bold capitalize text-slate-900">{viewingStatus}</p>
+                </div>
+                {viewingBooking.appoint_qr && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Booking reference</p>
+                    <p className="mt-1 break-all text-sm font-semibold text-slate-900">
+                      {viewingBooking.appoint_qr}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {viewingBooking.appoint_desc && (
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Booking details</p>
+                  <p className="mt-1 text-sm text-slate-700">{viewingBooking.appoint_desc}</p>
+                </div>
+              )}
+              <p className="text-xs text-slate-500">
+                Cancelling requires a reason. The customer will be notified after the cancellation is confirmed.
+              </p>
+            </div>
           </Modal>
         )}
 

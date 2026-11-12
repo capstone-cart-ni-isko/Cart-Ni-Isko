@@ -6,6 +6,7 @@ use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Setting;
+use App\Support\EmployeePassword;
 use App\Http\Controllers\AppointmentsAPI;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -316,16 +317,22 @@ class ShiftApiTest extends TestCase
         $admin = $this->makeSuperAdmin();
         $onDuty = $this->makeEmployee();
         $offDuty = $this->makeEmployee(['emp_instore' => 0]);
-        $this->makeShift($onDuty, ['shift_date' => '2026-10-05']);
-        $this->makeShift($offDuty, ['shift_date' => '2026-10-05']);
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00:00'));
+        $this->makeShift($onDuty, ['shift_date' => '2026-10-05', 'shift_start' => '08:00', 'shift_end' => '18:00']);
+        $this->makeShift($offDuty, ['shift_date' => '2026-10-05', 'shift_start' => '08:00', 'shift_end' => '18:00']);
+        $this->makeShift($offDuty, ['shift_date' => '2026-10-06', 'shift_start' => '08:00', 'shift_end' => '18:00']);
 
         $byDate = $this->getJson('/api/shifts?date=2026-10-05', $this->headers($admin));
         $byDate->assertStatus(200);
         $this->assertCount(2, $byDate->json('data'));
 
-        // The off-duty assignee puts its block in PENDING REPLACEMENT (REQ-SS-03)
+        // Current attendance matters during an active block, but not for a future block.
         $byStatus = $this->getJson('/api/shifts?status=PENDING REPLACEMENT', $this->headers($admin));
         $byStatus->assertStatus(200)->assertJsonPath('data.0.emp_id', $offDuty->getKey());
+        $this->getJson('/api/shifts?date=2026-10-06', $this->headers($admin))
+            ->assertJsonPath('data.0.status', 'SCHEDULED');
+
+        Carbon::setTestNow();
     }
 
     public function test_derived_status_tracks_the_shift_window()
@@ -441,7 +448,7 @@ class ShiftApiTest extends TestCase
         $superAdmin = $this->makeSuperAdmin();
         $otherSuperAdmin = $this->makeSuperAdmin();
         $officer = $this->makeEmployee(['emp_instore' => 1, 'emp_type' => 'ADMIN']);
-        Carbon::setTestNow(Carbon::parse('2026-10-05 07:30:00'));
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00:00'));
 
         $shift = $this->makeShift($officer, [
             'shift_date'  => '2026-10-05',
@@ -464,7 +471,7 @@ class ShiftApiTest extends TestCase
         $this->assertNotNull($alert, 'The super admin alert was not created.');
         $this->assertStringContainsString('PENDING REPLACEMENT', $alert->empnotif_msg);
         $this->assertStringContainsString('Juan Dela Cruz', $alert->empnotif_msg);
-        $this->assertStringContainsString('2026-10-05 07:30:00', $alert->empnotif_msg);
+        $this->assertStringContainsString('2026-10-05 12:00:00', $alert->empnotif_msg);
 
         // Every super admin is alerted exactly once, and nobody else is. The
         // assertion counts the super admins present rather than a fixed number,
@@ -482,15 +489,16 @@ class ShiftApiTest extends TestCase
         Carbon::setTestNow();
     }
 
-    public function test_slot_state_reports_pending_replacements()
+    public function test_slot_state_does_not_count_future_out_of_store_employees_as_pending_replacements()
     {
         $admin = $this->makeSuperAdmin();
         $officer = $this->makeEmployee(['emp_instore' => 0]);
-        $this->makeShift($officer);
-        $this->makeShift($officer, ['shift_start' => '18:00', 'shift_end' => '20:00']);
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00:00'));
+        $this->makeShift($officer, ['shift_date' => '2026-10-06']);
+        $this->makeShift($officer, ['shift_date' => '2026-10-06', 'shift_start' => '18:00', 'shift_end' => '20:00']);
 
         $response = $this->getJson(
-            '/api/appoint/slots?date=' . now()->addDay()->format('Y-m-d'),
+            '/api/appoint/slots?date=2026-10-06',
             $this->headers($admin)
         );
         $response->assertStatus(200);
@@ -498,9 +506,10 @@ class ShiftApiTest extends TestCase
         $slots = $response->json('data.slots');
         $this->assertNotEmpty($slots);
         foreach ($slots as $slot) {
-            // Both blocks lost their assignee, so both read as needing cover
-            $this->assertSame(2, $slot['pending_replacements']);
+            $this->assertSame(0, $slot['pending_replacements']);
         }
+
+        Carbon::setTestNow();
     }
 
     // ==========================================
@@ -560,6 +569,47 @@ class ShiftApiTest extends TestCase
      * preschedules the new employee (FLOW-EMP_ENROLL-06 / REQ-EMP_ENROLL-06),
      * and that write has to name its key too or the whole enrollment fails.
      */
+    public function test_enrollment_accepts_an_admin_set_temporary_password()
+    {
+        $admin = $this->makeSuperAdmin();
+        $password = 'Isko#2026';
+        $email = 'custompassword' . uniqid() . '@bicol-u.edu.ph';
+
+        $response = $this->postJson('/api/auth/emp_signup', [
+            'givname' => 'Custom',
+            'surname' => 'Password',
+            'email'   => $email,
+            'phone'   => '0951' . random_int(1000000, 9999999),
+            'categ'   => 'STAFF',
+            'password' => $password,
+        ], $this->headers($admin))->assertStatus(201)
+            ->assertJsonPath('data.temporary_password', $password)
+            ->assertJsonPath('data.must_change_password', true);
+
+        $employee = Employee::where('emp_email', $email)->firstOrFail();
+        $verification = EmployeePassword::verify($password, (string) $employee->emp_password);
+        $this->assertTrue($verification['valid']);
+        $this->assertTrue($verification['temporary']);
+        $this->assertArrayNotHasKey('emp_password', $response->json('data'));
+    }
+
+    public function test_enrollment_rejects_a_weak_admin_set_password()
+    {
+        $admin = $this->makeSuperAdmin();
+        $email = 'weakpassword' . uniqid() . '@bicol-u.edu.ph';
+
+        $this->postJson('/api/auth/emp_signup', [
+            'givname' => 'Weak',
+            'surname' => 'Password',
+            'email'   => $email,
+            'phone'   => '0951' . random_int(1000000, 9999999),
+            'categ'   => 'STAFF',
+            'password' => 'weak',
+        ], $this->headers($admin))->assertStatus(422);
+
+        $this->assertDatabaseMissing('employee', ['emp_email' => $email]);
+    }
+
     public function test_prescheduling_a_new_employee_writes_a_keyed_block()
     {
         $admin = $this->makeSuperAdmin();

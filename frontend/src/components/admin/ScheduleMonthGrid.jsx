@@ -11,20 +11,14 @@ import {
 } from './scheduleTime.js'
 
 /**
- * REQ-SS-03 staffing overview for one month.
- *
- * The toolbar has always offered Day / Week / Month, but only the first two
- * had a screen, so choosing Month silently did nothing. This is that screen:
- * the whole month at a glance, with the in-store headcount the schedule
- * calendar gates on (a VISIT slot needs two, a CLAIM one) and the weekly floor
- * of FLOW-EMP_SCHED-05 per week, so a roster that is about to be refused by
- * the server is visible before anyone tries to save it.
+ * REQ-SS-03 staffing overview for one month: assigned employees per day and
+ * the weekly floor of FLOW-EMP_SCHED-05, so a roster that is about to be
+ * refused by the server is visible before anyone tries to save it.
  *
  * Every figure comes from GET /shifts over the month's date range.
  */
 export default function ScheduleMonthGrid({
   monthStart,
-  officers = [],
   canEdit = true,
   onPickDay,
 }) {
@@ -100,15 +94,11 @@ export default function ScheduleMonthGrid({
         <div>
           <h2 className="text-sm font-bold text-slate-900">Monthly Staffing Overview</h2>
           <p className="text-2xs text-slate-400 font-normal mt-0.5">
-            {monthLabel} · in-store headcount per day and the {MIN_WEEKLY_MINUTES}-minute
+            {monthLabel} · scheduled employees per day and the {MIN_WEEKLY_MINUTES}-minute
             weekly minimum
           </p>
         </div>
-        {/* No write action lives here: this is the month's staffing overview.
-            A duty date/time is added or removed from the employee list on the
-            Day view (the officer card's "+ Assign Shift" and each block's
-            editor), which is the one place the SRS points at
-            (FLOW-EMP_SCHED-03/04). */}
+        <p className="text-2xs text-slate-400">Choose a day to open its schedule.</p>
       </div>
 
       {error ? (
@@ -136,16 +126,16 @@ export default function ScheduleMonthGrid({
             {days.map((day) => {
               const key = dayKey(day)
               const blocks = byDay.get(key) || []
-              const staffed = blocks.filter((block) => !block.unavailable)
-              const offDuty = blocks.length - staffed.length
-              // REQ-AB-03 headcount is people, not blocks: one employee with
-              // two blocks on a day is still one body in the store.
-              const headcount = new Set(staffed.map((block) => String(block.emp_id))).size
+              const scheduled = blocks.filter((block) => !block.unavailable)
+              const needsCover = blocks.filter(
+                (block) => block.unavailable || block.status === 'PENDING REPLACEMENT'
+              ).length
+              const employeeCount = new Set(scheduled.map((block) => String(block.emp_id))).size
               const locked = isLockedDay(day)
               const tone =
-                headcount >= 2
+                employeeCount >= 2
                   ? 'border-emerald-200 bg-emerald-50/60'
-                  : headcount === 1
+                  : employeeCount === 1
                     ? 'border-amber-200 bg-amber-50/60'
                     : 'border-slate-200 bg-slate-50/60'
 
@@ -158,7 +148,7 @@ export default function ScheduleMonthGrid({
                     month: 'long',
                     day: 'numeric',
                     year: 'numeric',
-                  })} · ${headcount} in store of ${officers.length} employees${
+                  })} · ${employeeCount} employees scheduled${
                     locked && !canEdit ? ' · locked' : ''
                   }`}
                   className={`min-h-[74px] rounded-md border p-1.5 text-left transition-colors ${
@@ -169,8 +159,8 @@ export default function ScheduleMonthGrid({
                 >
                   <span className="flex items-center justify-between">
                     <span className="text-2xs font-bold text-slate-700">{day.getDate()}</span>
-                    {headcount > 0 && (
-                      <span className="text-2xs font-bold text-slate-500">{headcount} in</span>
+                    {employeeCount > 0 && (
+                      <span className="text-2xs font-bold text-slate-500">{employeeCount} scheduled</span>
                     )}
                   </span>
 
@@ -179,16 +169,16 @@ export default function ScheduleMonthGrid({
                   )}
 
                   <span className="mt-1 flex flex-wrap gap-0.5">
-                    {staffed.slice(0, 4).map((block) => (
+                    {scheduled.slice(0, 4).map((block) => (
                       <span
                         key={block.shift_id}
                         className="w-1.5 h-1.5 rounded-full bg-blue-400"
                         title={`${block.employee_name || `#${block.emp_id}`} ${block.shift_start}–${block.shift_end}`}
                       />
                     ))}
-                    {offDuty > 0 && (
+                    {needsCover > 0 && (
                       <span className="text-2xs font-bold text-slate-400">
-                        +{offDuty} off
+                        +{needsCover} cover
                       </span>
                     )}
                   </span>

@@ -11,6 +11,7 @@ import { fetchAccounts, updateAccount } from '../../services/accounts.js'
 import { updateCredentials, updateBackupCredentials } from '../../services/auth.js'
 import { first, empCateg, empFullName } from '../../components/admin/schema.js'
 import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
+import { FormSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024 // 2 MB
 const PRONOUNS = ['they/them', 'he/him', 'she/her', 'other']
@@ -501,12 +502,7 @@ export default function AdminAccount({ embedded = false }) {
         )}
 
         {isLoadingRecord ? (
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-8 flex items-center justify-center">
-            <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-              <span className="spinner-circle !w-3.5 !h-3.5" />
-              Loading profile…
-            </span>
-          </div>
+          <FormSkeleton sections={2} fields={4} className="mx-auto max-w-4xl" />
         ) : viewingOther ? (
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-8 text-center space-y-3">
             <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-500">

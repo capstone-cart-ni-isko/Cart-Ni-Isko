@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
-import { useNavigate, Navigate } from 'react-router-dom'
+import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { apiPost } from '../../services/api.js'
 import { empCateg, empHomePath } from '../../components/admin/schema.js'
+import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
 
 const BICOL_DOMAIN = '@bicol-u.edu.ph'
 
@@ -224,6 +225,9 @@ function AdminEnrollForm() {
   const [givname, setGivname] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [password, setPassword] = useState('')
+  const [passwordConfirmation, setPasswordConfirmation] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [category, setCategory] = useState('staff')
   // FLOW-EMP_ENROLL-02: the schedule of the employee being enrolled is part of
   // the enrollment form itself. Adding or removing their dates and times later
@@ -239,6 +243,12 @@ function AdminEnrollForm() {
     [emailValue]
   )
   const emailTouched = emailValue.length > 0
+  const passwordError = password
+    ? passwordProblem(password) || (new TextEncoder().encode(password).length > 72 ? 'Use no more than 72 bytes.' : '')
+    : ''
+  const passwordConfirmationError = passwordConfirmation && passwordConfirmation !== password
+    ? 'Passwords do not match.'
+    : ''
 
   // Realtime validation of every duty row: 10-minute intervals, store hours,
   // end after start, and no overlapping timeslots on the same weekday.
@@ -337,6 +347,10 @@ function AdminEnrollForm() {
     givname.trim().length > 0 &&
     emailValid &&
     phone.trim().length > 0 &&
+    !passwordError &&
+    password.length > 0 &&
+    !passwordConfirmationError &&
+    passwordConfirmation.length > 0 &&
     shifts.length > 0 &&
     !hasShiftErrors &&
     !isUnderWeeklyMinimum &&
@@ -354,6 +368,7 @@ function AdminEnrollForm() {
         givname: givname.trim(),
         email: emailValue,
         phone: phone.trim(),
+        password,
         callcode: '+63',
         pronoun: 'they/them',
         categ: category,
@@ -376,6 +391,8 @@ function AdminEnrollForm() {
         category,
         shifts: shifts.map((row) => ({ ...row })),
       })
+      setPassword('')
+      setPasswordConfirmation('')
       showToast(
         `Employee enrolled${tempPassword ? ' — temporary password generated' : ''} with ${shifts.length} weekly recurring shift${shifts.length === 1 ? '' : 's'}.`,
         'success'
@@ -398,6 +415,9 @@ function AdminEnrollForm() {
     setGivname('')
     setEmail('')
     setPhone('')
+    setPassword('')
+    setPasswordConfirmation('')
+    setShowPassword(false)
     setCategory('staff')
     setShifts([emptyShift()])
     setResult(null)
@@ -405,17 +425,59 @@ function AdminEnrollForm() {
 
   return (
     <AdminLayout>
-      <div className="max-w-2xl mx-auto space-y-5">
-        <div>
-          <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">
-            Enroll Staff
-          </h1>
-          <p className="text-sm text-slate-500 font-normal mt-1">
-            Create a new employee account with a Bicol University email.
-          </p>
+      <div className="w-full space-y-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <Link
+              to="/admin/staff"
+              className="mb-3 inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition-colors hover:text-brand-orange"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                <path d="M19 12H5" />
+                <path d="m12 19-7-7 7-7" />
+              </svg>
+              Staff directory
+            </Link>
+            <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">
+              Enroll Staff
+            </h1>
+            <p className="text-sm text-slate-500 font-normal mt-1">
+              Create an employee account and assign their recurring weekly duty schedule.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white p-1.5 sm:self-auto">
+            <a
+              href="#staff-details"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-orange-50 hover:text-brand-orange"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[10px] font-bold text-brand-orange">1</span>
+              Staff details
+            </a>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5 text-slate-300">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+            <a
+              href="#weekly-schedule"
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-orange-50 hover:text-brand-orange"
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[10px] font-bold text-brand-orange">2</span>
+              Weekly schedule
+            </a>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 sm:p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 items-start gap-5 xl:grid-cols-12">
+          <section
+            id="staff-details"
+            className="scroll-mt-5 space-y-5 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs sm:p-6 xl:col-span-8"
+          >
+            <div className="flex items-start gap-3 border-b border-slate-100 pb-4">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-sm font-bold text-brand-orange">1</span>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Staff details</h2>
+                <p className="mt-1 text-xs text-slate-500">Enter the employee’s identity and initial access category.</p>
+              </div>
+            </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-2xs font-semibold text-slate-700 mb-1">
@@ -501,19 +563,91 @@ function AdminEnrollForm() {
             </div>
           </div>
 
-          {/* ── Weekly recurring duty schedule ── */}
-          <div className="pt-2 border-t border-slate-100 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="space-y-3 border-t border-slate-100 pt-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-800">Temporary password</h3>
+              <p className="mt-1 text-2xs text-slate-500">
+                Set the password to share with the employee. It expires after 48 hours and must be changed at first sign-in.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <h2 className="text-2xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <label htmlFor="enroll-password" className="mb-1 block text-2xs font-semibold text-slate-700">
+                  Temporary password <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="enroll-password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    aria-invalid={Boolean(passwordError)}
+                    aria-describedby="enroll-password-hint"
+                    className={`w-full rounded-xl border bg-white px-3 py-2.5 pr-16 text-sm text-slate-900 transition-all focus:outline-none focus:ring-1 ${
+                      passwordError
+                        ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500'
+                        : 'border-slate-200 focus:border-brand-orange focus:ring-brand-orange'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    className="absolute inset-y-0 right-3 text-xs font-semibold text-slate-500 hover:text-brand-orange"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p id="enroll-password-hint" className={`mt-1 text-2xs ${passwordError ? 'font-medium text-rose-600' : 'text-slate-400'}`}>
+                  {passwordError || `${PASSWORD_HINT} No spaces; maximum 72 bytes.`}
+                </p>
+              </div>
+              <div>
+                <label htmlFor="enroll-password-confirmation" className="mb-1 block text-2xs font-semibold text-slate-700">
+                  Confirm password <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="enroll-password-confirmation"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="new-password"
+                  value={passwordConfirmation}
+                  onChange={(e) => setPasswordConfirmation(e.target.value)}
+                  aria-invalid={Boolean(passwordConfirmationError)}
+                  className={`w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-slate-900 transition-all focus:outline-none focus:ring-1 ${
+                    passwordConfirmationError
+                      ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500'
+                      : 'border-slate-200 focus:border-brand-orange focus:ring-brand-orange'
+                  }`}
+                />
+                <p className={`mt-1 text-2xs ${passwordConfirmationError ? 'font-medium text-rose-600' : 'text-transparent'}`}>
+                  {passwordConfirmationError || 'Passwords match.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          </section>
+
+          {/* ── Weekly recurring duty schedule ── */}
+          <section
+            id="weekly-schedule"
+            className="scroll-mt-5 space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-2xs sm:p-6 xl:col-span-8"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-sm font-bold text-blue-600">2</span>
+                <div>
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
                   <span>Weekly Recurring Duty Schedule</span>
-                  <span className="text-3xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold normal-case">
-                    Repeats Weekly
-                  </span>
+
                 </h2>
-                <p className="text-2xs text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-500 mt-1">
                   Assigned timeslots repeat every week on the selected weekday (minimum 180 minutes / 3 hours per week).
                 </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -578,7 +712,7 @@ function AdminEnrollForm() {
 
                     {/* Quick Timeslot Presets */}
                     <div>
-                      <span className="block text-3xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+                      <span className="block text-2xs font-semibold text-slate-700 mb-1">
                         Quick Timeslot Presets
                       </span>
                       <div className="flex flex-wrap gap-1.5">
@@ -714,20 +848,68 @@ function AdminEnrollForm() {
               {shifts.length} weekly recurring shift{shifts.length === 1 ? '' : 's'}. You can always adjust or add further shifts later from the{' '}
               <span className="font-semibold text-slate-500">Schedules</span> screen.
             </p>
-          </div>
+          </section>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <aside className="space-y-4 xl:sticky xl:top-5 xl:col-span-4 xl:col-start-9 xl:row-start-1 xl:row-span-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+              <h2 className="text-sm font-bold text-slate-900">Enrollment progress</h2>
+              <p className="mt-1 text-xs text-slate-500">Complete each section, then enroll the employee.</p>
+              <nav aria-label="Enrollment sections" className="mt-4 space-y-2">
+                <a href="#staff-details" className="flex items-center gap-3 rounded-xl bg-orange-50 px-3 py-3 text-xs font-semibold text-orange-800 transition-colors hover:bg-orange-100">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-brand-orange">1</span>
+                  Staff details
+                </a>
+                <a href="#weekly-schedule" className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-500">2</span>
+                  Weekly duty schedule
+                </a>
+              </nav>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+              <h2 className="text-sm font-bold text-slate-900">Schedule summary</h2>
+              <div className="mt-4 divide-y divide-slate-100">
+                <div className="flex items-center justify-between gap-3 py-3">
+                  <span className="text-xs text-slate-500">Assigned shifts</span>
+                  <span className="text-sm font-bold text-slate-900">{shifts.length}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-3">
+                  <span className="text-xs text-slate-500">Weekly hours</span>
+                  <span className="text-sm font-bold text-slate-900">
+                    {(totalShiftMinutes / 60).toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-3">
+                  <span className="text-xs text-slate-500">Weekly minimum</span>
+                  <span className={`text-xs font-bold ${isUnderWeeklyMinimum ? 'text-amber-700' : 'text-emerald-700'}`}>
+                    {isUnderWeeklyMinimum ? `${MIN_WEEKLY_MINUTES - totalShiftMinutes} min needed` : 'Requirement met'}
+                  </span>
+                </div>
+              </div>
+              <p className="mt-2 rounded-xl bg-slate-50 px-3 py-2.5 text-2xs leading-relaxed text-slate-500">
+                Shifts must be at least 3 hours per week, fall within 7:00 AM–8:00 PM, and not overlap on the same day.
+              </p>
+            </div>
+          </aside>
+
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs sm:justify-end sm:p-5 xl:col-span-8">
+            <Link
+              to="/admin/staff"
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+            >
+              Cancel
+            </Link>
             <button
               type="button"
               onClick={resetForm}
-              className="h-9 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer transition-colors"
+              className="h-10 rounded-xl bg-slate-100 px-4 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-200 cursor-pointer"
             >
               Clear
             </button>
             <button
               type="submit"
               disabled={!canSubmit}
-              className="h-9 px-4 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-10 rounded-xl bg-[#F97316] px-5 text-xs font-semibold text-white transition-colors hover:bg-[#EA580C] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Enrolling…' : 'Enroll employee'}
             </button>

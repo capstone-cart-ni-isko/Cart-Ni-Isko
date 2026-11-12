@@ -218,10 +218,10 @@ class SecurityAPI extends Controller
                 }
 
                 if ($check['temporary'] && $employee->emp_created
-                    && $employee->emp_created->copy()->addHours(24)->isPast()) {
+                    && $employee->emp_created->copy()->addHours(48)->isPast()) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'The temporary password has expired. Contact a super admin.',
+                        'message' => 'The temporary password has expired. Use Forgot Password to reset it, or contact a super admin if you cannot access your university email.',
                         'code' => 'TEMP_PASSWORD_EXPIRED',
                     ], 403);
                 }

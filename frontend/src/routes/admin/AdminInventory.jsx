@@ -978,13 +978,13 @@ export default function AdminInventory() {
         ) : (
           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700 border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/50 text-2xs font-bold text-slate-400 uppercase tracking-wider">
+            <table className="w-full min-w-[1120px] text-left text-xs text-slate-700 border-collapse">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-slate-200 bg-slate-50 text-2xs font-bold text-slate-500 uppercase tracking-wider">
                   <th className="py-2.5 px-3 w-10">
                     <input
                       type="checkbox"
-                      className="rounded text-brand-orange focus:ring-0"
+                      className="w-4 h-4 rounded border-slate-300 accent-isko-blue focus:ring-0"
                       onChange={(e) => {
                         if (e.target.checked) {
                           setSelectedProductIds((prev) => Array.from(new Set([...prev, ...visibleProductIds])))
@@ -998,16 +998,16 @@ export default function AdminInventory() {
                       }
                     />
                   </th>
-                  <th className="p-4">PRODUCT</th>
-                  <th className="p-4">AVAILABILITY</th>
-                  <th className="p-4">STOCK (TOTAL UNITS)</th>
-                  <th className="p-4">PRICE</th>
-                  <th className="p-4">ORDERS</th>
-                  <th className="p-4">STATUS</th>
-                  <th className="p-4 text-right">ACTIONS</th>
+                  <th className="py-2.5 px-3">PRODUCT</th>
+                  <th className="py-2.5 px-3">AVAILABILITY</th>
+                  <th className="py-2.5 px-3">STOCK (TOTAL UNITS)</th>
+                  <th className="py-2.5 px-3">PRICE</th>
+                  <th className="py-2.5 px-3">ORDERS</th>
+                  <th className="py-2.5 px-3">STATUS</th>
+                  <th className="py-2.5 px-3 text-right">ACTIONS</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100 text-xs">
                 {pagedProducts.map((prod) => {
                   const isExpanded = !!expandedRows[prod.id]
                   const hasVariants = prod.variants && prod.variants.length > 0
@@ -1017,9 +1017,9 @@ export default function AdminInventory() {
                       {/* Product Main Row — clickable to open complete product details page */}
                       <tr
                         onClick={() => navigate(`/admin/inventory/${prod.prodId ?? prod.id}`)}
-                        className="hover:bg-gray-50/70 transition-colors group cursor-pointer"
+                        className="hover:bg-slate-50/60 transition-colors group cursor-pointer"
                       >
-                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                        <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             checked={selectedProductIds.includes(prod.id)}
@@ -1030,13 +1030,13 @@ export default function AdminInventory() {
                                   : [...prev, prod.id]
                               )
                             }}
-                            className="rounded text-brand-orange focus:ring-0"
+                            className="w-4 h-4 rounded border-slate-300 accent-isko-blue focus:ring-0"
                           />
                         </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-2.5">
                             {/* Product Thumbnail */}
-                            <div className="w-11 h-11 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center p-1 shrink-0">
+                            <div className="w-9 h-9 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-center p-1 shrink-0">
                               <img
                                 src={getImageUrl(prod.image)}
                                 alt={prod.name}
@@ -1046,10 +1046,10 @@ export default function AdminInventory() {
 
                             {/* Info */}
                             <div>
-                              <h4 className="font-extrabold text-gray-900 text-xs leading-tight group-hover:text-brand-orange transition-colors">
+                              <h4 className="font-semibold text-slate-900 text-xs leading-tight group-hover:text-brand-orange transition-colors">
                                 {prod.name}
                               </h4>
-                              <p className="text-2xs text-gray-400 font-semibold mt-0.5">
+                              <p className="text-2xs text-slate-500 font-medium mt-0.5">
                                 SKU: {prod.sku}
                               </p>
                             </div>
@@ -1057,9 +1057,9 @@ export default function AdminInventory() {
                         </td>
 
                         {/* Availability Column - Rectangular Badge */}
-                        <td className="p-4">
+                        <td className="py-2 px-3">
                           <span
-                            className={`inline-block px-2.5 py-1 rounded-md text-2xs font-semibold ${
+                            className={`inline-flex items-center h-6 px-2 rounded-md text-2xs font-semibold ${
                               prod.availability === 'Pre-order'
                                 ? 'bg-orange-50 text-brand-orange border border-orange-200/60'
                                 : prod.availability === 'Out of Stock'
@@ -1072,7 +1072,7 @@ export default function AdminInventory() {
                         </td>
 
                         {/* Stock (Total Units) */}
-                        <td className="p-4">
+                        <td className="py-2 px-3">
                           {prod.availability === 'Pre-order' ? (
                             <div className="flex items-center gap-1.5 text-brand-orange font-bold text-xs">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
@@ -1102,20 +1102,20 @@ export default function AdminInventory() {
                         </td>
 
                         {/* Price */}
-                        <td className="p-4 font-extrabold text-gray-900 text-xs">
+                        <td className="py-2 px-3 font-semibold text-slate-900 text-xs">
                           ₱{prod.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
 
                         {/* Orders */}
-                        <td className="p-4 font-semibold text-gray-600 text-xs">
+                        <td className="py-2 px-3 font-medium text-slate-600 text-xs">
                           {prod.orders}
                         </td>
 
                         {/* Status */}
-                        <td className="p-4">
+                        <td className="py-2 px-3">
                           <span
-                            className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
-                              prod.disabled ? 'text-amber-600' : 'text-emerald-600'
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                              prod.disabled ? 'text-amber-700' : 'text-emerald-700'
                             }`}
                           >
                             <span
@@ -1128,11 +1128,11 @@ export default function AdminInventory() {
                         </td>
 
                         {/* Actions - Rectangular Buttons */}
-                        <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                        <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="inline-flex items-center gap-1 whitespace-nowrap">
                             {hasVariants && (
                               <span
-                                className="h-8 px-2.5 inline-flex items-center justify-center rounded-md bg-gray-100 text-gray-700 text-xs font-semibold whitespace-nowrap select-none"
+                                className="h-7 px-2.5 inline-flex items-center justify-center rounded-md bg-slate-100 text-slate-700 text-xs font-medium whitespace-nowrap select-none"
                               >
                                 {prod.variants.length} {prod.variants.length === 1 ? 'Variant' : 'Variants'}
                               </span>
@@ -1153,10 +1153,10 @@ export default function AdminInventory() {
                                       ? 'Switch this product back to In Stock'
                                       : 'Mark this product as a pre-order (no stock needed)'
                                   }
-                                  className={`h-8 px-3 inline-flex items-center justify-center rounded-md border text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                                  className={`h-7 px-2.5 inline-flex items-center justify-center rounded-md border text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                                     prod.preorder
                                       ? 'border-orange-200 bg-orange-50 text-brand-orange hover:bg-orange-100'
-                                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                                   }`}
                                 >
                                   {prod.preorder ? 'Mark In Stock' : 'Mark Pre-order'}
@@ -1169,7 +1169,7 @@ export default function AdminInventory() {
                                     else unlistProduct(prod.id)
                                   }}
                                   title={prod.disabled ? 'Sell (relist in catalog)' : 'Unlist from customer catalog'}
-                                  className="h-8 px-3 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs whitespace-nowrap cursor-pointer"
+                                  className="h-7 px-2.5 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 font-medium hover:bg-slate-50 transition-colors text-xs whitespace-nowrap cursor-pointer"
                                 >
                                   {prod.disabled ? 'Sell' : 'Unlist'}
                                 </button>
@@ -1179,7 +1179,7 @@ export default function AdminInventory() {
                                     e.stopPropagation()
                                     navigate(`/admin/inventory/${prod.prodId ?? prod.id}?edit=1`)
                                   }}
-                                  className="h-8 px-3 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-xs whitespace-nowrap cursor-pointer"
+                                  className="h-7 px-2.5 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 font-medium hover:bg-slate-50 transition-colors text-xs whitespace-nowrap cursor-pointer"
                                 >
                                   Edit
                                 </button>
@@ -1190,7 +1190,7 @@ export default function AdminInventory() {
                                     setDeleteTarget(prod)
                                   }}
                                   title="Delete product"
-                                  className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-gray-200 bg-white text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                                 >
                                   ···
                                 </button>

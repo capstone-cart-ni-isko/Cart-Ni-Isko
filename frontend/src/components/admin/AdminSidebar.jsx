@@ -347,6 +347,7 @@ export default function AdminSidebar({ onCloseMobile }) {
           ))}
         </nav>
 
+
         {/* Clock In / Clock Out — directly above Logout, so the signed-in
             employee can always see whether they are scheduled to be in store
             right now and can request to time out ahead of their scheduled end
@@ -354,6 +355,18 @@ export default function AdminSidebar({ onCloseMobile }) {
         <div className="shrink-0 px-2 pt-1.5 pb-1.5 border-t border-slate-100 dark:border-[var(--line)] space-y-1">
           <ClockInOut />
         </div>
+
+        {/*
+        <div className="shrink-0 px-3 py-2 flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center text-2xs font-bold shrink-0" aria-hidden="true">
+            {currentAdminUser?.avatar || currentAdminUser?.name?.slice(0, 1)?.toUpperCase() || 'U'}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-xs font-bold text-slate-700 dark:text-[var(--ink)]" title={currentAdminUser?.name || currentAdminUser?.email || 'Current account'}>
+              {currentAdminUser?.name || currentAdminUser?.email || 'Current account'}
+            </span>
+          </span>
+        </div>*/}
 
         {/* Logout — last entry, pinned to the foot of the card so it is
             always reachable, with a confirmation (DOMAIN 16). */}

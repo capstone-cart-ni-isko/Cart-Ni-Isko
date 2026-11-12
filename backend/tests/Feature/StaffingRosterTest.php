@@ -512,15 +512,16 @@ class StaffingRosterTest extends TestCase
      * PUT /api/accounts/update, and it used to only notify customers about a
      * staff shortage: the super admins were never told to find a substitute,
      * so the primary roster control of DOMAIN 7 raised no cover request at
-     * all. Only the block editor (PUT /api/shifts/{id}) reached them.
+     * all. The roster now alerts for a missing assignee only while a block is
+     * in progress; future planned blocks remain scheduled.
      */
-    public function test_the_duty_toggle_alerts_the_super_admins_about_every_block_that_lost_its_assignee()
+    public function test_the_duty_toggle_alerts_super_admins_only_about_the_in_progress_block()
     {
         Carbon::setTestNow(Carbon::parse('2026-10-05 07:00:00'));
         $superAdmin = $this->makeSuperAdmin();
         $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
 
-        $today = $this->makeShift($officer, ['shift_start' => '09:00', 'shift_end' => '18:00']);
+        $today = $this->makeShift($officer, ['shift_start' => '06:00', 'shift_end' => '18:00']);
         $tomorrow = $this->makeShift($officer, ['shift_date' => '2026-10-06', 'shift_start' => '09:00', 'shift_end' => '18:00']);
         // Already over: it needs no substitute, so it must never be announced.
         $past = $this->makeShift($officer, ['shift_date' => '2026-10-01', 'shift_start' => '09:00', 'shift_end' => '18:00']);
@@ -535,17 +536,12 @@ class StaffingRosterTest extends TestCase
         $superAdmins = Employee::whereRaw('UPPER(emp_categ) = ?', ['SUPER ADMIN'])->count()
             + Employee::whereNull('emp_categ')->whereRaw('UPPER(emp_type) = ?', ['SUPER ADMIN'])->count();
 
-        // One alert per block that still needs cover, to every super admin.
-        $this->assertSame(2 * $superAdmins, $alerts->count(), 'One alert per block per super admin.');
+        // Only the in-progress block needs cover, with one alert per super admin.
+        $this->assertSame($superAdmins, $alerts->count(), 'Only the in-progress block needs cover.');
         $this->assertGreaterThan(0, $superAdmins);
 
-        foreach ([$today, $tomorrow] as $block) {
-            $this->assertSame(
-                $superAdmins,
-                $this->alertsFor($block->sched_id)->count(),
-                'Block #' . $block->sched_id . ' was not announced to every super admin.'
-            );
-        }
+        $this->assertSame($superAdmins, $this->alertsFor($today->sched_id)->count());
+        $this->assertSame(0, $this->alertsFor($tomorrow->sched_id)->count());
 
         $this->assertSame(0, $this->alertsFor($past->sched_id)->count(), 'A block that ended needs no substitute.');
 
@@ -591,11 +587,10 @@ class StaffingRosterTest extends TestCase
             'The same block was announced more than once in one request.'
         );
 
-        // Off duty also strips the employee's other block, so it is announced
-        // too - exactly once.
+        // The future block remains scheduled because attendance is separate.
         $other = Schedule::where('emp_id', $officer->getKey())
             ->where('sched_id', '!=', $block->sched_id)->first();
-        $this->assertSame($superAdmins, $this->alertsFor($other->sched_id)->count());
+        $this->assertSame(0, $this->alertsFor($other->sched_id)->count());
     }
 
     /** Alerts naming one specific block, past any other block id. */

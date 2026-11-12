@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import AdminAccount from './AdminAccount.jsx'
 import AdminAccessLogs from './AdminAccessLogs.jsx'
+import AdminStoreCustomization from './AdminStoreCustomization.jsx'
 import SetupWizard from './SetupWizard.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
@@ -9,6 +10,8 @@ import { useTheme } from '../../context/ThemeContext.jsx'
 import { fetchSettings, updateSettings, fetchMyPreferences, updateMyPreferences } from '../../services/settings.js'
 import UiToggle from '../../components/ui/Toggle.jsx'
 import BackButton from '../../components/ui/BackButton.jsx'
+import SkeletonBlock from '../../components/ui/SkeletonBlock.jsx'
+import { FormSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 
 // ── Reusable inline toggle ──────────────────────────────────────────────────
 // The shared Toggle from the UI kit: one switch look for the admin portal and
@@ -245,6 +248,7 @@ export default function AdminSettings() {
 
   // Personal preferences (the caller's own `emp_*` columns)
   const [prefs, setPrefs] = useState({})
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(true)
 
   // Store Operations
   const [isStoreOpen, setIsStoreOpen] = useState(true)
@@ -306,11 +310,16 @@ export default function AdminSettings() {
       .then((data) => {
         if (!cancelled) setPrefs(data || {})
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (!cancelled) showToast(err?.message || 'Unable to load preferences.', 'error')
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingPrefs(false)
+      })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [showToast])
 
   const mark = () => setHasUnsavedChanges(true)
 
@@ -578,7 +587,7 @@ export default function AdminSettings() {
           : activeSection === 'access-log'
             ? 'A complete record of every sign-in, view and change made by customers and staff, newest first.'
             : activeSection === 'store-setup'
-              ? 'The store name, location, contact and operating hours that both portals read.'
+                ? 'Manage store details, operating hours and the banners shown on your storefront.'
               : 'Your account, your password and your backup contacts.'
 
   return (
@@ -672,11 +681,6 @@ export default function AdminSettings() {
             </div>
 
             {/* ── Load states ── */}
-            {isLoading && isSystemPane && (
-              <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
-                <span className="spinner-circle !w-3.5 !h-3.5" /> Loading settings…
-              </div>
-            )}
             {loadError && (
               <div className="mb-4 flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                 <p className="text-xs font-semibold text-red-700">{loadError}</p>
@@ -702,7 +706,12 @@ export default function AdminSettings() {
             {/* ── DOMAIN 1 / FLOW-SETUP-01/02 — the setup wizard renders inside
                   the settings shell for super admins, so store configuration
                   never leaves this page. ── */}
-            {isSuperAdmin && activeSection === 'store-setup' && <SetupWizard embedded />}
+            {isSuperAdmin && activeSection === 'store-setup' && (
+              <>
+                <SetupWizard embedded />
+                <AdminStoreCustomization embedded />
+              </>
+            )}
 
             {/* ── FLOW-EMP_SET-04 / FLOW-EMP_SET-05 — personal preferences ── */}
             {activeSection === 'preferences' && (
@@ -724,6 +733,19 @@ export default function AdminSettings() {
                   </div>
                 </div>
 
+                {isLoadingPrefs ? (
+                  <div className="px-6 py-4 space-y-4" aria-hidden="true">
+                    {[0, 1, 2].map((row) => (
+                      <div key={row} className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-b-0">
+                        <div className="flex-1 space-y-2">
+                          <SkeletonBlock className="h-3 w-36 rounded" />
+                          <SkeletonBlock className="h-3 w-2/3 rounded" />
+                        </div>
+                        <SkeletonBlock className="h-6 w-11 shrink-0 rounded-full" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                 <div className="px-6 py-4">
                   <NumberField
                     label="Appointment reminder"
@@ -759,11 +781,15 @@ export default function AdminSettings() {
                     <Toggle checked={dark} onChange={handleDarkMode} size="md" />
                   </div>
                 </div>
+                )}
               </div>
             )}
 
             {/* ── FLOW-EMP_SET-06 — store-wide operations (super admin) ── */}
             {isSuperAdmin && activeSection === 'store-operations' && (
+              isLoading ? (
+                <FormSkeleton sections={1} fields={3} />
+              ) : (
               <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100">
                   <div className="flex items-center gap-3">
@@ -851,11 +877,15 @@ export default function AdminSettings() {
                   </div>
                 </div>
               </div>
+              )
             )}
 
             {/* ── FLOW-EMP_SET-07 — appointment duration, timeslot capacity,
                   minimum weekly hours, notification intervals (super admin) ── */}
             {canManageSchedule && activeSection === 'timing' && (
+              isLoading ? (
+                <FormSkeleton sections={2} fields={3} />
+              ) : (
               <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100">
                   <div className="flex items-center gap-3">
@@ -1018,10 +1048,11 @@ export default function AdminSettings() {
                   )}
                 </div>
               </div>
+              )
             )}
 
             {/* ── Preview Cards (super admin overview) ── */}
-            {isSuperAdmin && (activeSection === 'store-operations' || activeSection === 'timing') && (
+            {isSuperAdmin && !isLoading && (activeSection === 'store-operations' || activeSection === 'timing') && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <PreviewCard
                   title="Order Preferences"

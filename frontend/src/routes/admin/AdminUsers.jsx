@@ -528,7 +528,7 @@ export default function AdminUsers() {
                                 value={emp.category}
                                 disabled={updatingCategoryEmpId === emp.emp_id || String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)}
                                 onChange={(e) => handleCategoryChange(emp, e.target.value)}
-                                className={`inline-flex items-center h-6 pl-2 pr-5 rounded-md border text-2xs font-medium cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60 disabled:cursor-not-allowed appearance-none ${
+                                className={`inline-flex items-center !h-6 !text-2xs !leading-none pl-2 pr-5 rounded-md border text-2xs font-medium cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60 disabled:cursor-not-allowed appearance-none ${
                                   emp.category === 'super admin'
                                     ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                                     : emp.category === 'admin'

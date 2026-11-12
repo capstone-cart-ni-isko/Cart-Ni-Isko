@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { preconnectApi } from '../../services/api.js'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import signInBackground from '../../assets/Branding/Copy of Tindahan ni Isko BG with Elements.jpg'
 import merchStoreIcon from '../../assets/Branding/Copy of store.png'
 import merchShirtIcon from '../../assets/Branding/Copy of shirt.png'
 import merchCapIcon from '../../assets/Branding/Copy of cap.png'
@@ -10,7 +11,6 @@ import merchJacketIcon from '../../assets/Branding/Copy of jacket.png'
 import merchBadgeIcon from '../../assets/Branding/Copy of badge.png'
 import sparkIcon from '../../assets/Branding/Copy of sparkle(1).png'
 import starIcon from '../../assets/Branding/Copy of star(1).png'
-import BackButton from '../../components/ui/BackButton.jsx'
 import { empHomePath } from '../../components/admin/schema.js'
 
 /* REQ-EMP_LOGIN-06: whatever is typed stays on screen - the draft lives in
@@ -163,9 +163,21 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="h-screen w-full overflow-hidden flex flex-col justify-center items-center p-4 font-sans bg-slate-50/70 dark:bg-[var(--surface-2)] relative select-none">
+    <div className="h-screen w-full overflow-hidden flex flex-col justify-center items-center p-4 font-sans bg-sky-100 relative isolate select-none">
+      <img src={signInBackground} alt="" className="absolute inset-0 h-full w-full object-cover object-center" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-300/10 via-white/5 to-orange-300/15 pointer-events-none" aria-hidden="true" />
+      <div className="absolute left-5 top-5 sm:left-8 sm:top-7 z-10 flex items-center gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-lg shadow-sky-950/10 backdrop-blur-md">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-sky-700 text-sm font-black tracking-tight text-white shadow-sm">BU</span>
+        <span className="leading-tight">
+          <span className="block text-xs font-extrabold tracking-wide text-slate-900 sm:text-sm">BICOL UNIVERSITY</span>
+          <span className="block text-[10px] font-semibold text-slate-600 sm:text-xs">University Student Council</span>
+        </span>
+      </div>
+      <div className="absolute right-5 top-6 z-10 hidden rounded-full border border-white/60 bg-white/65 px-4 py-2 text-[10px] font-extrabold tracking-[0.18em] text-sky-900 shadow-sm backdrop-blur-md sm:block">
+        STAFF &amp; ADMIN ACCESS
+      </div>
       {/* Subtle Campus-Themed Background Elements with Festive Isko/Iska Characters & Confetti */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden">
         {/* Gentle brand aura radial glows */}
         <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-brand-orange/10 blur-3xl" />
         <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-orange-400/10 blur-3xl" />
@@ -406,11 +418,11 @@ export default function AdminLogin() {
         <div className="w-full max-w-md bg-white dark:bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border border-slate-200/90 dark:border-[var(--line)] shadow-lg space-y-3.5 relative z-10">
           {/* Brand Header */}
           <div className="text-center space-y-1.5">
-            <div className="inline-flex p-2.5 rounded-2xl bg-gradient-to-b from-orange-50 to-transparent border border-orange-100/60 shadow-2xs mx-auto">
+            <div className="inline-flex mb-5">
               <img
                 src={brandLogo}
                 alt="Tindahan ni Isko"
-                className="h-11 w-auto object-contain drop-shadow-xs"
+                className="h-16 w-auto object-contain drop-shadow-xs"
               />
             </div>
             <div>

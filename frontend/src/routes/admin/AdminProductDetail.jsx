@@ -1055,7 +1055,7 @@ export default function AdminProductDetail() {
                     <p className="text-xs font-bold text-slate-800 mt-0.5">{row.availability}</p>
                   </div>
                   <div>
-                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Total Sold (All-time)</p>
+                    <p className="text-2xs font-bold uppercase tracking-wider text-slate-400">Total Sold</p>
                     <p className="text-xs font-bold text-slate-800 mt-0.5">{row.orders} {row.orders === 1 ? 'unit' : 'units'}</p>
                   </div>
                   <div>

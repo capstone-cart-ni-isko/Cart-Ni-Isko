@@ -5,6 +5,7 @@ import { apiGet, apiPost } from '../../services/api.js'
 import { updateSettings } from '../../services/settings.js'
 import { isSuperAdminRow } from '../../components/admin/schema.js'
 import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
+import { FormSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 
 /*
     DOMAIN 1: SETUP - FLOW-SETUP-01..05
@@ -217,12 +218,7 @@ export default function SetupWizard({ embedded = false }) {
           )}
 
           {loading ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 flex items-center justify-center">
-              <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-                <span className="spinner-circle !w-3.5 !h-3.5" />
-                Reading setup status…
-              </span>
-            </div>
+            <FormSkeleton sections={1} fields={4} />
           ) : done ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
               <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto mb-3">

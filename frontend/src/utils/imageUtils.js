@@ -12,6 +12,9 @@ import unnamed10 from '../assets/Images/unnamed (10).png'
 import unnamed11 from '../assets/Images/unnamed (11).png'
 import unnamed12 from '../assets/Images/unnamed (12).png'
 import unnamedJpg from '../assets/Images/unnamed.jpg'
+import carouselImage1 from '../assets/Images/unnamed (1).jpg'
+import carouselImage2 from '../assets/Images/unnamed (51).png'
+import carouselImage3 from '../assets/Images/unnamed (52).jpg'
 
 import brandShirt from '../assets/Branding/Copy of shirt.png'
 import brandJacket from '../assets/Branding/Copy of jacket.png'
@@ -35,6 +38,9 @@ const imageMap = {
   '/src/assets/Images/unnamed (11).png': unnamed11,
   '/src/assets/Images/unnamed (12).png': unnamed12,
   '/src/assets/Images/unnamed.jpg': unnamedJpg,
+  '/src/assets/Images/unnamed (1).jpg': carouselImage1,
+  '/src/assets/Images/unnamed (51).png': carouselImage2,
+  '/src/assets/Images/unnamed (52).jpg': carouselImage3,
 
   // Branding images
   '/src/assets/Branding/Copy of shirt.png': brandShirt,

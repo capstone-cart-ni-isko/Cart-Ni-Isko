@@ -250,6 +250,7 @@ abstract class Controller
     {
         return Schedule::where('emp_id', $employee->getKey())
             ->whereNull('sched_disabled')
+            ->where('sched_time_start', '<=', now())
             ->where('sched_time_end', '>=', now())
             ->orderBy('sched_time_start')
             ->get();

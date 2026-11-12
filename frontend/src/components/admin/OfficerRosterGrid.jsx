@@ -1,27 +1,22 @@
 import StatusPill from './StatusPill.jsx'
 import Avatar from '../ui/Avatar.jsx'
 import SkeletonBlock from '../ui/SkeletonBlock.jsx'
-import { fmtTime } from './scheduleTime.js'
 
 /**
- * Officer availability cards (REQ-SS-01). On Duty / Off Duty writes emp_instore
- * through the parent, which talks to the API — the card holds no shift state;
- * the blocks it lists for the day come straight from GET /shifts.
+ * Live employee attendance cards. These show current emp_instore state, not
+ * whether a shift exists on the selected schedule date.
  */
 export default function OfficerRosterGrid({
   officers = [],
-  shifts = [],
   isLoading = false,
   error = '',
   savingId = null,
   canEdit = true,
   // Rule 38: only admins and super admins change ANOTHER employee's
   // availability; everyone else keeps their own card (FLOW-EMP_SCHED-04).
-  canAssign = true,
+  canManageOthers = true,
   selfEmpId = null,
   onRetry,
-  onAssign,
-  onEditShift,
   onToggleDuty,
 }) {
   if (isLoading) {
@@ -46,7 +41,6 @@ export default function OfficerRosterGrid({
 
             <div className="space-y-1.5 pt-2">
               <SkeletonBlock className="h-8 w-full rounded-md" />
-              <SkeletonBlock className="h-6 w-full rounded-md" />
             </div>
           </div>
         ))}
@@ -80,15 +74,7 @@ export default function OfficerRosterGrid({
         // Rule 38 / FLOW-EMP_SCHED-04: an admin may change anyone's
         // availability, everybody else only their own card.
         const canToggleOfficer =
-          canAssign || (selfEmpId != null && String(officer.id) === String(selfEmpId))
-
-        const blocks = shifts
-          .filter(
-            (shift) =>
-              String(shift.emp_id) === String(officer.id) &&
-              (shift.status === 'SCHEDULED' || shift.status === 'ACTIVE' || shift.status === 'PENDING REPLACEMENT')
-          )
-          .sort((a, b) => String(a.shift_start).localeCompare(String(b.shift_start)))
+          canManageOthers || (selfEmpId != null && String(officer.id) === String(selfEmpId))
 
         return (
           <div
@@ -106,84 +92,30 @@ export default function OfficerRosterGrid({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <StatusPill status={officer.availability} />
-              {!officer.available && (
-                <span className="text-2xs font-semibold text-slate-400">
-                  Needs a substitute
-                </span>
-              )}
+              <StatusPill
+                status={officer.available ? 'In Store' : 'Out of Store'}
+                variant={officer.available ? 'green' : undefined}
+              />
             </div>
 
-            {blocks.length > 0 && (
-              <ul className="space-y-1">
-                {blocks.map((block) => (
-                  <li key={block.shift_id}>
-                    <button
-                      type="button"
-                      onClick={() => canEdit && onEditShift && onEditShift(block)}
-                      disabled={!canEdit || !onEditShift}
-                      className={`w-full text-left rounded-md border px-2 py-1 text-2xs font-semibold transition-colors disabled:cursor-default ${
-                        block.unavailable
-                          ? 'bg-slate-50 border-slate-200 text-slate-400'
-                          : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
-                      }`}
-                    >
-                      <span className={block.unavailable ? 'line-through' : undefined}>
-                        {fmtTime(block.shift_start)} – {fmtTime(block.shift_end)}
-                      </span>
-                      <span className="ml-1 font-normal opacity-70">
-                        {block.unavailable ? 'unavailable' : `#${block.shift_id}`}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
             <div className="space-y-1.5">
-              {canAssign ? (
+              {canToggleOfficer ? (
                 <button
                   type="button"
-                  onClick={() => onAssign(officer)}
+                  onClick={() => onToggleDuty(officer, !officer.available)}
                   disabled={isSaving || !canEdit}
-                  className="w-full py-2 bg-white hover:bg-brand-orange hover:text-white text-slate-700 font-bold text-xs rounded-md border border-slate-200 transition-all disabled:opacity-50 cursor-pointer"
+                  className={`w-full py-2 font-bold text-xs rounded-md border transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
+                    officer.available
+                      ? 'bg-white hover:bg-brand-orange hover:text-white text-slate-700 border-slate-200'
+                      : 'bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 border-emerald-200'
+                  }`}
                 >
-                  + Assign Shift
+                  {isSaving ? 'Saving…' : officer.available ? 'Mark Out of Store' : 'Mark In Store'}
                 </button>
               ) : (
-                <p className="text-2xs text-slate-400 font-semibold text-center py-2">
-                  Only an admin can schedule this employee.
+                <p className="text-2xs text-slate-400 font-semibold text-center">
+                  Only this employee or an admin can change this status.
                 </p>
-              )}
-
-              {officer.available ? (
-                <button
-                  type="button"
-                  onClick={() => onToggleDuty(officer, false)}
-                  disabled={isSaving || !canEdit || !canToggleOfficer}
-                  title={
-                    canToggleOfficer
-                      ? 'Mark this employee out of the store. Their shifts will need a substitute.'
-                      : 'Only this employee or an admin can change their availability.'
-                  }
-                  className="w-full py-1 text-2xs font-semibold text-slate-500 hover:text-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {isSaving ? 'Saving…' : 'Mark Off Duty'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => onToggleDuty(officer, true)}
-                  disabled={isSaving || !canEdit || !canToggleOfficer}
-                  title={
-                    canToggleOfficer
-                      ? 'Mark this employee back in the store.'
-                      : 'Only this employee or an admin can change their availability.'
-                  }
-                  className="w-full py-2 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 font-bold text-xs rounded-md border border-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {isSaving ? 'Saving…' : 'Mark On Duty'}
-                </button>
               )}
             </div>
           </div>
