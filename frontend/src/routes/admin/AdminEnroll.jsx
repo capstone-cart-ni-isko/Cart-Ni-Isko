@@ -4,7 +4,7 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import { apiPost } from '../../services/api.js'
-import { empCateg, empHomePath } from '../../components/admin/schema.js'
+import { empCanManageStore, empHomePath } from '../../components/admin/schema.js'
 import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
 
 const BICOL_DOMAIN = '@bicol-u.edu.ph'
@@ -14,24 +14,6 @@ const CATEGORY_OPTIONS = [
   { value: 'admin', label: 'Admin' },
   { value: 'super admin', label: 'Super Admin' },
 ]
-
-/** 'YYYY-MM-DD' local date key for today (the date input's floor). */
-const todayKey = () => {
-  const now = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-}
-
-/** Monday-based week key, so a short week is visible before the server says so. */
-const weekKeyOf = (dateKey) => {
-  const [year, month, day] = String(dateKey).split('-').map(Number)
-  if (!year || !month || !day) return null
-  const date = new Date(year, month - 1, day)
-  const monday = new Date(date)
-  monday.setDate(date.getDate() - ((date.getDay() + 6) % 7))
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`
-}
 
 const minutesOf = (hhmm) => {
   const [hours, minutes] = String(hhmm || '').split(':').map(Number)
@@ -212,7 +194,7 @@ const emptyShift = () => ({
 })
 
 /**
- * DOMAIN 6 — Employee enrollment (super admin only).
+ * DOMAIN 6 — Employee enrollment (admins and super admins).
  * The Bicol University email domain is validated in realtime; on
  * success the generated temporary password is shown with a
  * confirmation, and a duplicate email surfaces a clear error.
@@ -220,6 +202,12 @@ const emptyShift = () => ({
 function AdminEnrollForm() {
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const { isSuperAdmin } = useAdmin()
+  // Only a super admin may enroll another super admin; an admin enrolls
+  // staff and admin accounts.
+  const categoryOptions = isSuperAdmin
+    ? CATEGORY_OPTIONS
+    : CATEGORY_OPTIONS.filter((option) => option.value !== 'super admin')
 
   const [surname, setSurname] = useState('')
   const [givname, setGivname] = useState('')
@@ -554,7 +542,7 @@ function AdminEnrollForm() {
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all cursor-pointer"
               >
-                {CATEGORY_OPTIONS.map((option) => (
+                {categoryOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -990,12 +978,11 @@ function AdminEnrollForm() {
   )
 }
 
-/** Super admins only (D5/D6). The route itself is guarded in App.jsx too. */
+/** Admins and super admins (D5/D6). The route itself is guarded in App.jsx too. */
 export default function AdminEnroll() {
   const { currentAdminUser } = useAdmin()
-  const categ = empCateg(currentAdminUser || {})
-  const roleKey = currentAdminUser?.roleKey
-  if (roleKey && roleKey !== 'SUPER_ADMIN') return <Navigate to={empHomePath(currentAdminUser)} replace />
-  if (!roleKey && categ !== 'super admin') return <Navigate to={empHomePath(currentAdminUser)} replace />
+  if (!empCanManageStore(currentAdminUser)) {
+    return <Navigate to={empHomePath(currentAdminUser)} replace />
+  }
   return <AdminEnrollForm />
 }

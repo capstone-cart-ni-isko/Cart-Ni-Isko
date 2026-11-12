@@ -628,7 +628,7 @@ class StaffingRosterTest extends TestCase
         $this->assertNotNull($log, 'REQ-UM-04: registrations must be logged.');
         $this->assertSame('REGISTER', $log->emplog_action);
         $this->assertStringContainsString('Rhea Bautista', $log->emplog_desc);
-        $this->assertStringContainsString('super admin ' . $superAdmin->getKey(), $log->emplog_desc);
+        $this->assertStringContainsString('super admin #' . $superAdmin->getKey(), $log->emplog_desc);
         $this->assertNotNull($log->emplog_created);
     }
 

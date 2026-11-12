@@ -965,9 +965,10 @@ class SrsRequirementsTest extends TestCase
 
     public function test_settings_are_persisted_and_consumed_by_the_slot_calendar()
     {
-        // D1: system-wide values are super-admin only
+        // D1: store managers (admin and super admin) own the system-wide values
         $super     = $this->makeEmployee(['emp_type' => 'SUPER ADMIN']);
         $admin     = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        $staff     = $this->makeEmployee(['emp_type' => 'STAFF']);
         $date      = now()->addDays(4)->format('Y-m-d');
 
         // Built-in defaults before anything has been stored
@@ -980,13 +981,20 @@ class SrsRequirementsTest extends TestCase
                 'maintenance_mode'   => false,
             ]]);
 
-        // An ordinary administrator may not touch the system-wide document
+        // An admin runs the store and may write the system-wide document
+        $this->json('PUT', '/api/settings/update', [
+            'settings' => ['store_name' => 'Admin Store'],
+        ], $this->headers($admin))
+            ->assertStatus(200);
+        $this->assertSame('Admin Store', Setting::getValue('store_name'));
+
+        // Ordinary staff may not
         $this->json('PUT', '/api/settings/update', [
             'settings' => ['store_name' => 'Not Allowed'],
-        ], $this->headers($admin))
+        ], $this->headers($staff))
             ->assertStatus(403)
-            ->assertJson(['message' => 'Only super admin employees may perform this action']);
-        $this->assertSame('Tindahan ni Isko', Setting::getValue('store_name'));
+            ->assertJson(['message' => 'Only admin or super admin employees may change system settings']);
+        $this->assertSame('Admin Store', Setting::getValue('store_name'));
 
         // Update persists every submitted key
         $this->json('PUT', '/api/settings/update', [

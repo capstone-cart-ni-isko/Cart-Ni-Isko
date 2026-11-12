@@ -113,6 +113,43 @@ abstract class Controller
         return null;
     }
 
+    /**
+     * Store-management actions: Admin and Super Admin accounts.
+     *
+     * `isAdmin()` already answers true for a super admin, so one check covers
+     * both ranks. This is the guard every roster, enrollment and store-setting
+     * write uses now that an Admin runs the store alongside the Super Admin.
+     */
+    protected function requireStoreManager(Request $json)
+    {
+        if (!$this->isAdmin($json->user('api'))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Admin or super admin access is required.'
+            ], 403);
+        }
+
+        return null;
+    }
+
+    /**
+     * The super-admin safety rail for account management: an Admin may manage
+     * staff and other admins, but never a Super Admin account.
+     */
+    protected function requireSuperAdminTarget(Request $json, ?Employee $target, string $action = 'manage')
+    {
+        if ($target instanceof Employee
+            && $target->isSuperAdmin()
+            && !$this->isSuperAdmin($json->user('api'))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only a super admin may ' . $action . ' a super admin account.',
+            ], 403);
+        }
+
+        return null;
+    }
+
     protected function credentialChangeBlocked($stamp)
     {
         if ($stamp && $stamp->copy()->addDays(30)->isFuture()) {
@@ -141,7 +178,7 @@ abstract class Controller
 
     protected function availabilityDeadlineBlocked(Request $json, int $empId)
     {
-        if ($this->isSuperAdmin($json->user('api'))) {
+        if ($this->isAdmin($json->user('api'))) {
             return null;
         }
 
@@ -154,7 +191,7 @@ abstract class Controller
             'success' => false,
             'message' => 'Availability is locked for block #' . $block->sched_id
                 . ' started at ' . $block->sched_time_start->toDateTimeString()
-                . '. A super admin must override this change.',
+                . '. An admin or super admin must override this change.',
             'code'    => 'ALR_AVAIL_AFTER_BLOCK_START',
         ], 403);
     }

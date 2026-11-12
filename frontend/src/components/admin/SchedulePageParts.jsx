@@ -43,7 +43,7 @@ export function ScheduleHeader({
           Employee Scheduling
         </h1>
         <p className="text-xs text-slate-500 font-normal mt-0.5">
-          Tindahan ni Isko · plan shifts, review coverage, and check current in-store status
+          Plan shifts, review coverage, and check current in-store status
         </p>
       </div>
 

@@ -221,7 +221,7 @@ class SecurityAPI extends Controller
                     && $employee->emp_created->copy()->addHours(48)->isPast()) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'The temporary password has expired. Use Forgot Password to reset it, or contact a super admin if you cannot access your university email.',
+                        'message' => 'The temporary password has expired. Use Forgot Password to reset it, or contact an admin if you cannot access your university email.',
                         'code' => 'TEMP_PASSWORD_EXPIRED',
                     ], 403);
                 }
@@ -231,13 +231,13 @@ class SecurityAPI extends Controller
                 }
 
                 $missingSetup = SystemSettings::missingCritical();
-                if ($missingSetup && ! $this->isSuperAdmin($employee)) {
+                if ($missingSetup && ! $this->isAdmin($employee)) {
                     $this->logEmployee((int) $employee->emp_id, 'auth',
                         'POST /api/auth/emp_login - blocked, setup incomplete');
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'Store setup is incomplete. A super admin must finish the setup wizard first.',
+                        'message' => 'Store setup is incomplete. An admin must finish the setup wizard first.',
                         'code'    => 'SETUP_INCOMPLETE',
                         'data'    => ['missing_critical' => $missingSetup],
                     ], 503);

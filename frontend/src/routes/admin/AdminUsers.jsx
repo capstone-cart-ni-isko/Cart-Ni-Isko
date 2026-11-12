@@ -22,6 +22,8 @@ import { logAction } from '../../services/access.js'
 import {
   first,
   empCateg,
+  empCanManageStore,
+  empCanManageSuperAdmins,
   empFullName,
   empStatus,
   fmtDateTime,
@@ -65,8 +67,19 @@ function mapEmployee(row) {
 }
 
 export default function AdminUsers() {
-  const { currentAdminUser, isSuperAdmin } = useAdmin()
+  const { currentAdminUser } = useAdmin()
   const { showToast } = useToast()
+
+  // Both Admin and Super Admin accounts manage the roster. The one thing an
+  // Admin may not touch is a Super Admin account: that stays with the Super
+  // Admin (the API enforces the same rule).
+  const canManageStaff = empCanManageStore(currentAdminUser)
+  const canManageSuperAdmins = empCanManageSuperAdmins(currentAdminUser)
+  const canManageEmployee = (emp) =>
+    canManageStaff && (canManageSuperAdmins || emp?.category !== 'super admin')
+  const categoryOptions = canManageSuperAdmins
+    ? CATEGORIES
+    : CATEGORIES.filter((categ) => categ !== 'super admin')
 
   const [employees, setEmployees] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -190,8 +203,13 @@ export default function AdminUsers() {
   }
 
   const handleSuspend = async (emp) => {
-    if (!isSuperAdmin) {
-      showToast('Only the Super Admin may suspend accounts.', 'error')
+    if (!canManageEmployee(emp)) {
+      showToast(
+        canManageStaff
+          ? 'Only a Super Admin may suspend a Super Admin account.'
+          : 'Only admin and super admin accounts may manage staff.',
+        'error'
+      )
       return
     }
     // UAT-018: Super admin cannot deactivate/suspend their own account
@@ -211,8 +229,13 @@ export default function AdminUsers() {
   }
 
   const handleRecover = async (emp) => {
-    if (!isSuperAdmin) {
-      showToast('Only the Super Admin may recover accounts.', 'error')
+    if (!canManageEmployee(emp)) {
+      showToast(
+        canManageStaff
+          ? 'Only a Super Admin may recover a Super Admin account.'
+          : 'Only admin and super admin accounts may manage staff.',
+        'error'
+      )
       return
     }
     try {
@@ -228,11 +251,20 @@ export default function AdminUsers() {
   const [updatingCategoryEmpId, setUpdatingCategoryEmpId] = useState(null)
 
   const handleCategoryChange = async (emp, newCategory) => {
-    if (!isSuperAdmin) {
-      showToast('Only Super Admin may change employee category.', 'error')
+    if (!canManageEmployee(emp)) {
+      showToast(
+        canManageStaff
+          ? 'Only a Super Admin may change a Super Admin account.'
+          : 'Only admin and super admin accounts may manage staff.',
+        'error'
+      )
       return
     }
     if (emp.category === newCategory) return
+    if (newCategory === 'super admin' && !canManageSuperAdmins) {
+      showToast('Only a Super Admin may promote an account to Super Admin.', 'error')
+      return
+    }
 
     // UAT-018: The only superadmin account is protected (block demoting your own account)
     if (String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)) {
@@ -255,8 +287,17 @@ export default function AdminUsers() {
 
   // REQ-UM-03: deleting an employee is permanent and irreversible, so it is
   // behind its own confirmation dialog and never offered for the signed-in
-  // super admin's own account (the API refuses it with 409 anyway).
+  // account (the API refuses it with 409 anyway).
   const handleDelete = async (emp) => {
+    if (!canManageEmployee(emp)) {
+      showToast(
+        canManageStaff
+          ? 'Only a Super Admin may delete a Super Admin account.'
+          : 'Only admin and super admin accounts may manage staff.',
+        'error'
+      )
+      return
+    }
     try {
       await deleteAccount('employee', emp.emp_id)
       recordLog('DELETE ACCOUNT', `Permanently deleted ${emp.name} (#${emp.emp_id})`)
@@ -522,7 +563,7 @@ export default function AdminUsers() {
                           />
                         </td>
                         <td className="py-4 px-4">
-                          {isSuperAdmin && !emp.deleted ? (
+                          {canManageEmployee(emp) && !emp.deleted ? (
                             <div className="relative inline-flex items-center">
                               <select
                                 value={emp.category}
@@ -537,7 +578,7 @@ export default function AdminUsers() {
                                 }`}
                                 title={String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id) ? 'You cannot change your own category' : 'Change employee category'}
                               >
-                                {CATEGORIES.map((c) => (
+                                {categoryOptions.map((c) => (
                                   <option key={c} value={c}>
                                     {CATEGORY_LABEL[c] || c}
                                   </option>
@@ -574,7 +615,7 @@ export default function AdminUsers() {
                         </td>
                         <td className="py-4 px-4 text-slate-500">{fmtDateTime(emp.created)}</td>
                         <td className="py-4 px-5 text-right whitespace-nowrap">
-                          {!emp.deleted && (
+                          {canManageEmployee(emp) && !emp.deleted && (
                             <>
                               {emp.status === 'active' ? (
                                 <button

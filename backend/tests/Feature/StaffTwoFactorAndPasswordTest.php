@@ -131,7 +131,7 @@ class StaffTwoFactorAndPasswordTest extends TestCase
             'password' => 'Temporary#2026',
         ])->assertStatus(403)
             ->assertJsonPath('code', 'TEMP_PASSWORD_EXPIRED')
-            ->assertJsonPath('message', 'The temporary password has expired. Use Forgot Password to reset it, or contact a super admin if you cannot access your university email.');
+            ->assertJsonPath('message', 'The temporary password has expired. Use Forgot Password to reset it, or contact an admin if you cannot access your university email.');
     }
 
     public function test_one_password_standard_for_every_role()

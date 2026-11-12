@@ -151,11 +151,10 @@ const NAV_GROUPS = [
       {
         to: '/admin/staff',
         label: 'Staff',
-        // REQ-EMP_HOME-01: the Staff entry is admin/super-admin territory, and
-        // App.jsx locks /admin/staff (and /admin/users) to SUPER_ADMIN only, so
-        // the entry mirrors the route guard exactly - showing it to a plain
-        // ADMIN would only bounce them back to their home page.
-        roles: ['SUPER_ADMIN'],
+        // REQ-EMP_HOME-01: the Staff entry is store-management territory, so
+        // Admin and Super Admin accounts both see it. App.jsx guards
+        // /admin/staff (and /admin/users) with the same pair of roles.
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -169,8 +168,10 @@ const NAV_GROUPS = [
         to: '/admin/schedules',
         label: 'Schedules',
         // FLOW-EMP_SCHED-01/04: the scheduling screen is reachable by every
-        // employee - super admins preschedule the roster and each employee can
-        // review their own availability - so this entry stays visible to all.
+        // employee - admins and super admins preschedule the roster and each
+        // employee can review their own availability - so this entry stays
+        // visible to all.
+        roles: ['ADMIN', 'SUPER_ADMIN', 'STAFF'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />

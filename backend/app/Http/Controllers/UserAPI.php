@@ -1594,7 +1594,8 @@ class UserAPI extends Controller
 
             $validator = (new DatabaseAPI())->employeeSignup($json);
             if ($validator) {
-                $this->logEnrollment($json, 'FAILED', $validator->getData()['message'] ?? 'rejected');
+                $payload = $validator->getData(true);
+                $this->logEnrollment($json, 'FAILED', $payload['message'] ?? 'rejected');
 
                 return $validator;
             }
@@ -1616,6 +1617,17 @@ class UserAPI extends Controller
                 $temporaryPassword = EmployeePassword::generateTemporary(20);
             }
             $type = $this->employeeCategory($json);
+
+            // Enrolling employees is a store-manager action, but creating a
+            // Super Admin stays a Super Admin's own privilege.
+            if ($type === 'super admin' && !$this->isSuperAdmin($json->user('api'))) {
+                $this->logEnrollment($json, 'FAILED', 'only a super admin may enroll a super admin');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only a super admin may create another super admin account.',
+                ], 403);
+            }
 
             if (Employee::where('emp_email', $email)->exists()) {
                 $this->logEnrollment($json, 'FAILED', 'duplicate email ' . $email);
@@ -1693,8 +1705,10 @@ class UserAPI extends Controller
                         'emplog_action'  => 'REGISTER',
                         'emplog_desc'    => 'Registered employee ' . $employee->emp_id . ' ('
                             . $employee->emp_givname . ' ' . $employee->emp_surname . ') as '
-                            . $type . ' by super admin '
-                            . ($by instanceof Employee ? $by->emp_id : 'unknown')
+                            . $type . ' by '
+                            . ($by instanceof Employee
+                                ? strtolower($by->category()) . ' #' . $by->emp_id
+                                : 'an unknown account')
                             . '. Reason: new employee onboarding.',
                     ])
                 );
@@ -2343,16 +2357,12 @@ class UserAPI extends Controller
                     }
                 }
 
-                // Admins (store managers) own the scheduling keys; every other
-                // system-wide key stays with the super admin.
-                $schedulingOnly = !empty($system)
-                    && array_diff(array_keys($system), \App\Support\SystemSettings::SCHEDULING_KEYS) === [];
-
-                if (!empty($system) && !$this->isSuperAdmin($user)
-                    && !($schedulingOnly && $this->isAdmin($user))) {
+                // Store managers (admin and super admin) own every system-wide
+                // key; customers and staff only ever write their own preferences.
+                if (!empty($system) && !$this->isAdmin($user)) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Only super admin employees may perform this action'
+                        'message' => 'Only admin or super admin employees may change system settings'
                     ], 403);
                 }
 

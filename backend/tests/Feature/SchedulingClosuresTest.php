@@ -102,7 +102,7 @@ class SchedulingClosuresTest extends TestCase
         ]);
     }
 
-    public function test_admin_manages_schedule_settings_but_not_system_settings()
+    public function test_admin_manages_schedule_and_system_settings()
     {
         $admin = $this->makeEmployee('ADMIN');
         $staff = $this->makeEmployee('STAFF');
@@ -119,10 +119,14 @@ class SchedulingClosuresTest extends TestCase
         $this->assertSame(4, (int) SystemSettings::get('pickup_slot_capacity'));
         $this->assertSame('Typhoon suspension', SystemSettings::closedReason($day));
 
-        // A non-scheduling key still needs the super admin
+        // A store manager (admin) also owns the system-wide keys
         $this->json('PUT', '/api/settings/update', [
-            'settings' => ['store_name' => 'Nope', 'pickup_slot_capacity' => 3],
-        ], $this->headers($admin))->assertStatus(403);
+            'settings' => ['store_name' => 'Admin Central', 'pickup_slot_capacity' => 3],
+        ], $this->headers($admin))->assertStatus(200);
+
+        SystemSettings::flush();
+        $this->assertSame('Admin Central', SystemSettings::get('store_name'));
+        $this->assertSame(3, (int) SystemSettings::get('pickup_slot_capacity'));
 
         // Staff below admin cannot change the schedule
         $this->json('PUT', '/api/settings/update', [

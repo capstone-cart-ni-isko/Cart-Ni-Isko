@@ -17,7 +17,7 @@ import {
   ScheduleCoverageSummary,
   ShiftBlocksSection,
 } from '../../components/admin/SchedulePageParts.jsx'
-import { empRoleKey } from '../../components/admin/schema.js'
+import { empCanManageStore } from '../../components/admin/schema.js'
 import { logAction } from '../../services/access.js'
 import {
   addDays,
@@ -34,9 +34,10 @@ import {
 /**
  * DOMAIN 7 (EMPLOYEE SCHEDULING).
  *
- * FLOW-EMP_SCHED-01: super admins open this screen at `/admin/schedules`;
- * the Staff tab of the employee portal embeds the very same screen
- * (`embedded`), so every scheduling operation is reachable from there too.
+ * FLOW-EMP_SCHED-01: admins and super admins open this screen at
+ * `/admin/schedules`; the Staff tab of the employee portal embeds the very
+ * same screen (`embedded`), so every scheduling operation is reachable from
+ * there too.
  * With `embedded` the AdminLayout is supplied by the host page instead.
  *
  * The three calendar layouts the SRS asks for all read the same API: the day
@@ -46,7 +47,7 @@ import {
  * always repaints from the server.
  */
 export default function AdminSchedule({ embedded = false }) {
-  const { currentAdminUser, isSuperAdmin } = useAdmin() || {}
+  const { currentAdminUser } = useAdmin() || {}
   const { showToast } = useToast()
 
   const [viewMode, setViewMode] = useState('Day')
@@ -61,11 +62,11 @@ export default function AdminSchedule({ embedded = false }) {
   const roster = useScheduleRoster()
   const duty = useScheduleShifts(dateKey)
 
-  // Rule 38: only super admins (and, as the API allows, admins) preschedule
-  // somebody else. Everyone else keeps their own availability half
-  // (FLOW-EMP_SCHED-04) and never sees a button that would 403.
-  const roleKey = empRoleKey(currentAdminUser)
-  const canPreschedule = roleKey === 'SUPER_ADMIN' || roleKey === 'ADMIN'
+  // Rule 38: admins and super admins preschedule somebody else. Everyone
+  // else keeps their own availability half (FLOW-EMP_SCHED-04) and never sees
+  // a button that would 403.
+  const canManageStore = empCanManageStore(currentAdminUser)
+  const canPreschedule = canManageStore
 
   const isWeek = viewMode === 'Week'
   const isMonth = viewMode === 'Month'
@@ -85,13 +86,14 @@ export default function AdminSchedule({ embedded = false }) {
       : fmtLongDate(selectedDate)
 
   // REQ-SS-02: a past day, or today once the shop has opened, is locked for
-  // everybody except a super admin. The server enforces the same rule on the
-  // block itself, so this only decides what the UI offers.
+  // staff. An admin or super admin may still correct the roster; the server
+  // enforces the same rule on the block itself, so this only decides what the
+  // UI offers.
   const lockedDay = isLockedDay(selectedDate)
-  const canEditAvailability = isSuperAdmin || !lockedDay
-  const canEditAttendance = isSuperAdmin || !isLockedDay(new Date())
+  const canEditAvailability = canManageStore || !lockedDay
+  const canEditAttendance = canManageStore || !isLockedDay(new Date())
   const lockMessage =
-    'This date is locked and can no longer be changed. Only a super admin can override it.'
+    'This date is locked and can no longer be changed. An admin or super admin can override it.'
 
   const filteredOfficers = useMemo(
     () =>
@@ -127,7 +129,7 @@ export default function AdminSchedule({ embedded = false }) {
   // On Duty / Off Duty. A REQ-SS-02 rejection arrives as the API error message.
   const handleToggleDuty = async (officer, inStore) => {
     if (!canEditAttendance) {
-      showToast('Live attendance can no longer be changed after the store opens. A super admin can override this.', 'error')
+      showToast('Live attendance can no longer be changed after the store opens. An admin or super admin can override this.', 'error')
       return
     }
 

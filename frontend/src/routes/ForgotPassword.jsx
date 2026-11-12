@@ -419,12 +419,6 @@ function ForgotPassword() {
             </form>
           )}
 
-          {/* Footer security note */}
-          <div className="text-center pt-2 border-t border-slate-100 dark:border-[var(--line)]">
-            <p className="text-xs text-gray-400 dark:text-[var(--muted)]">
-              Protected by Bicol University Student Council IAM System
-            </p>
-          </div>
         </div>
       </div>
     )
