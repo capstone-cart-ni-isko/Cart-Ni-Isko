@@ -2,13 +2,19 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useApiChange } from '../hooks/useApiChange.js'
-import AccountLayout from '../components/layout/AccountLayout.jsx'
-import PageTitle from '../components/ui/PageTitle.jsx'
+import AppShell from '../components/layout/AppShell.jsx'
+import PageHeader from '../components/ui/PageHeader.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import Modal from '../components/ui/Modal.jsx'
 import { HelpIcon } from '../components/ui/Icons.jsx'
 import NotificationCard, { inferNotificationDetails, NotifIcon } from '../components/ui/NotificationCard.jsx'
-import { fetchNotifications, markRead, readNotificationsCache } from '../services/notifications.js'
+import {
+  fetchNotifications,
+  markAllRead,
+  markRead,
+  markReadInCache,
+  readNotificationsCache,
+} from '../services/notifications.js'
 
 /** REQ-OT-01: "to claim"/"to receive" notifications are handled by QR scanning, not regular notifications. */
 function isExemptNotification(message) {
@@ -190,6 +196,7 @@ export default function Notifications() {
     setSelectedNotif((prev) => (
       prev && prev.id === notif.id ? { ...prev, unread: false } : prev
     ))
+    markReadInCache('customer', custId, [notif.id])
     markRead(notif.id, 'customer')
       .catch(() => {})
       .finally(() => window.dispatchEvent(new Event('notifications-changed')))
@@ -201,7 +208,12 @@ export default function Notifications() {
     setItems((prev) => prev.map((n) => ({ ...n, unread: false })))
     setSelectedNotif((prev) => (prev ? { ...prev, unread: false } : prev))
     try {
-      await Promise.all(unreadItems.map((n) => markRead(n.id, 'customer').catch(() => {})))
+      // One request for the whole inbox; one per row timed out part way.
+      await markAllRead('customer')
+      markReadInCache('customer', custId)
+    } catch {
+      // Never pretend: put the server's real state back on screen.
+      load()
     } finally {
       window.dispatchEvent(new Event('notifications-changed'))
     }
@@ -240,34 +252,53 @@ export default function Notifications() {
   ]
 
   return (
-    <AccountLayout>
-      <div className="flex items-start gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/home')}
-          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-gray-700 transition-colors hover:border-brand-orange hover:text-brand-orange"
-          aria-label="Back to home"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
-        <div className="min-w-0 flex-1">
-          <PageTitle
-            title="Notifications"
-            subtitle="Stay updated with your orders, production, and important announcements."
-          />
-        </div>
-      </div>
+    <AppShell>
+      <PageHeader
+        title="Notifications"
+        subtitle="Stay updated with your orders, production, and important announcements."
+        backTo="/home"
+      />
 
-      {/* Single vertical column - same width and rhythm as My Orders */}
-      <div className="px-4 pb-32 animate-fade-in max-w-3xl mx-auto space-y-4">
-        {/* Category tabs: plain underline tabs on the page itself. The strip
-            blends into the page background so it can stay pinned while the
-            list scrolls underneath without drawing a box. */}
+      <div className="max-w-6xl mx-auto w-full px-4 md:px-0 py-4 md:py-2 pb-32 lg:pb-16 animate-fade-in lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-6 lg:items-start">
+        {/* Categories + Mark All as Read: a card on the right on wide
+            screens, kept in view while the list scrolls. */}
+        <aside className="hidden lg:block lg:col-start-2 lg:row-start-1 lg:sticky lg:top-6 rounded-2xl border border-slate-200/80 bg-white shadow-2xs p-5 md:p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900">Categories</h2>
+          <div role="tablist" aria-orientation="vertical" className="space-y-1">
+            {tabs.map(({ label, count }) => {
+              const active = activeTab === label
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveTab(label)}
+                  className={`w-full h-11 px-4 rounded-xl flex items-center justify-between text-sm font-semibold transition-colors cursor-pointer ${
+                    active ? 'bg-orange-50 text-brand-orange' : 'text-gray-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{label}</span>
+                  <span className={`text-sm tabular-nums ${active ? 'text-brand-orange' : 'text-gray-400'}`}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={markAllAsRead}
+            className="w-full h-11 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-brand-orange hover:bg-orange-50 transition-colors cursor-pointer"
+          >
+            Mark All as Read
+          </button>
+        </aside>
+
+      <div className="lg:col-start-1 lg:row-start-1 min-w-0 space-y-4">
+        {/* Category tabs (phones and tablets): plain underline tabs on the
+            page itself, pinned while the list scrolls underneath. */}
         <nav
           aria-label="Notification categories"
-          className="sticky top-14 md:top-0 z-20 -mx-4 px-4 pt-3 bg-[#F8F9FA]/90 dark:bg-[var(--surface)]/90 backdrop-blur-sm"
+          className="lg:hidden sticky top-14 md:top-0 z-20 -mx-4 px-4 pt-3 bg-[#F8F9FA]/90 dark:bg-[var(--surface)]/90 backdrop-blur-sm"
         >
           <div className="flex items-center justify-between gap-3 mb-2">
             <div
@@ -304,7 +335,7 @@ export default function Notifications() {
             <button
               type="button"
               onClick={markAllAsRead}
-              className="shrink-0 mb-2 px-3 py-1.5 text-xs font-semibold text-brand-orange hover:text-brand-orange-dark hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
+              className="shrink-0 mb-2 px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-brand-orange hover:text-brand-orange-dark hover:bg-orange-50 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
             >
               Mark All as Read
             </button>
@@ -344,15 +375,15 @@ export default function Notifications() {
         ) : (
           <>
             {unreadTotal === 0 && (
-              <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-5 py-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
                     <path d="M20 6 9 17l-5-5" />
                   </svg>
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-emerald-900">You're all caught up!</p>
-                  <p className="text-xs text-emerald-700">No unread notifications.</p>
+                  <p className="text-base font-semibold text-emerald-900">You're all caught up!</p>
+                  <p className="text-sm text-emerald-700">No unread notifications.</p>
                 </div>
               </div>
             )}
@@ -362,10 +393,10 @@ export default function Notifications() {
                 <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-3 text-slate-400">
                   <NotifIcon icon="bell" className="w-6 h-6" />
                 </div>
-                <p className="text-sm font-semibold text-gray-900">
+                <p className="text-base font-semibold text-gray-900">
                   No notifications in this category
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-sm text-gray-500 mt-1">
                   Updates about your orders, appointments and the campus store will appear here.
                 </p>
               </div>
@@ -382,12 +413,13 @@ export default function Notifications() {
             )}
 
             {filteredItems.length > 0 && (
-              <p className="text-xs text-gray-400 font-medium text-center">
+              <p className="text-sm text-gray-400 font-medium text-center">
                 Showing {filteredItems.length} notification{filteredItems.length !== 1 ? 's' : ''}
               </p>
             )}
           </>
         )}
+      </div>
       </div>
 
       {/* Focused Notification Detail Popup */}
@@ -407,7 +439,7 @@ export default function Notifications() {
                   setSelectedNotif(null)
                   navigate(target)
                 }}
-                className="px-3.5 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-colors cursor-pointer"
+                className="h-10 px-4 rounded-xl bg-brand-orange text-white text-sm font-semibold hover:bg-brand-orange-dark transition-colors cursor-pointer"
               >
                 {selectedNotif?.orderNumber || String(selectedNotif?.targetUrl || '').startsWith('/orders')
                   ? 'View Order Details'
@@ -417,7 +449,7 @@ export default function Notifications() {
             <button
               type="button"
               onClick={() => setSelectedNotif(null)}
-              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-[var(--line)] text-xs font-semibold text-slate-600 dark:text-[var(--muted)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] transition-colors cursor-pointer"
+              className="h-10 px-4 rounded-xl border border-slate-200 dark:border-[var(--line)] text-sm font-semibold text-slate-600 dark:text-[var(--muted)] hover:bg-slate-50 dark:hover:bg-[var(--surface-3)] transition-colors cursor-pointer"
             >
               Close
             </button>
@@ -440,6 +472,6 @@ export default function Notifications() {
           </div>
         )}
       </Modal>
-    </AccountLayout>
+    </AppShell>
   )
 }

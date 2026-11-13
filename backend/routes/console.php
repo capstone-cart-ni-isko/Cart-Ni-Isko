@@ -152,6 +152,37 @@ Artisan::command('lalamove:sync', function () {
 })->purpose('Read every live LalaMove booking back and apply status changes');
 
 /*
+    One-off repair: switching an order to delivery used to save the claiming
+    method as 'deliver', which the courier booking never recognised. This
+    rewrites those rows to the 'delivery' value every other path uses.
+*/
+Artisan::command('orders:normalize-claiming {--dry-run}', function () {
+    $ids = \Illuminate\Support\Facades\DB::table('orders')
+        ->where('ord_claiming', 'deliver')
+        ->orderBy('ord_id')
+        ->pluck('ord_id')
+        ->all();
+
+    if ($ids === []) {
+        $this->info('No orders use the old "deliver" value.');
+        return;
+    }
+
+    $this->line('Orders to fix: #' . implode(', #', $ids));
+
+    if ($this->option('dry-run')) {
+        $this->info('Dry run - nothing changed.');
+        return;
+    }
+
+    $count = \Illuminate\Support\Facades\DB::table('orders')
+        ->where('ord_claiming', 'deliver')
+        ->update(['ord_claiming' => 'delivery']);
+
+    $this->info($count . ' order(s) set to "delivery".');
+})->purpose('Rewrite orders saved with claiming method "deliver" to "delivery"');
+
+/*
     Registers the webhook URL with LalaMove. Without an argument it uses
     LALAMOVE_WEBHOOK_URL, else the public URL Render gives the service
     (RENDER_EXTERNAL_URL) - docker-start.sh runs it on every boot, so the
@@ -177,3 +208,28 @@ Artisan::command('lalamove:webhook {url?}', function (?string $url = null) {
         return 1;
     }
 })->purpose('Register the LalaMove status webhook URL');
+
+// One-time data repair: a combination is named by its axis values
+// ("Cream / Medium"). Renames every live variation whose stored name
+// differs from that label; variations without axes keep their name.
+Artisan::command('variations:rename-from-options {--dry-run}', function () {
+    $changed = 0;
+    \Illuminate\Support\Facades\DB::transaction(function () use (&$changed) {
+        \App\Models\Prodvar::whereNull('prodvar_deleted')->get()->each(function ($variation) use (&$changed) {
+            $options = \App\Http\Controllers\ProductsAPI::decodeOptions($variation->prodvar_options);
+            if ($options === []) {
+                return;
+            }
+            $label = \App\Http\Controllers\ProductsAPI::optionLabel($options);
+            if ($label === '' || $label === (string) $variation->prodvar_name) {
+                return;
+            }
+            $this->line('#' . $variation->prodvar_id . ': "' . $variation->prodvar_name . '" -> "' . $label . '"');
+            if (! $this->option('dry-run')) {
+                $variation->update(['prodvar_name' => $label]);
+            }
+            $changed++;
+        });
+    });
+    $this->info(($this->option('dry-run') ? 'Would rename ' : 'Renamed ') . $changed . ' variation(s).');
+})->purpose('Name every variation after its axis values');

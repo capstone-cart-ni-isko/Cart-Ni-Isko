@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import DefaultAvatar from '../../components/ui/Avatar.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
@@ -16,14 +17,17 @@ import Button from '../../components/ui/Button.jsx'
 //              "TO RECEIVE" orders whose delivery track is TRANSIT.
 // Completed  = "CLAIMED" / "RECEIVED" orders that own a delivery/parcel track.
 // Issues     = "RETURNED" / "CANCELLED" orders that own a delivery track.
-// Dispatch   = PUT /tracking/update {track_id: deliver_id, status: TRANSIT}.
-// Close      = PUT /tracking/close {track_id: parcel_id} (marks DELIVERED).
+// Booking    = POST /delivery/book | /delivery/cancel (LalaMove). A paid order
+//              is booked by itself when it is marked Ready to Ship; staff only
+//              re-book here when that booking failed or was cancelled.
+// Dispatch   = PUT /tracking/update {status: TRANSIT} - manual hand-off, only
+//              offered when no LalaMove booking is live.
 
 const HISTORY_STATUSES = new Set(['CLAIMED', 'RECEIVED', 'RETURNED', 'CANCELLED'])
 const ACTIVE_STATUSES = new Set(['READY TO SHIP', 'IN TRANSIT', 'TO RECEIVE'])
 
 const ISSUE_REASONS = {
-  CANCELLED: 'Delivery booking was cancelled.',
+  CANCELLED: 'The order was cancelled.',
   RETURNED: 'Parcel was returned to the store by the courier.',
 }
 
@@ -58,17 +62,44 @@ function etaLabel(value) {
   return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${time}`
 }
 
-/**
- * Fee Status pill copy from the parcel payment (pay_due already includes the
- * dispatch fee: total_due = subtotal + dispatch fee, CheckoutAPI).
- */
-function feeLabel(payment) {
-  if (!payment) return '—'
-  const due = Number(payment.pay_due) || 0
-  const given = Number(payment.pay_given) || 0
-  if (due <= 0) return '—'
-  return given >= due ? `₱${due} Paid` : `₱${due} Due`
+/** LalaMove booking states, in the store's own words. */
+const COURIER_STATE_LABELS = {
+  ASSIGNING_DRIVER: 'Finding a rider',
+  ON_GOING: 'Rider on the way',
+  PICKED_UP: 'Picked up',
+  COMPLETED: 'Delivered',
 }
+
+const FAILED_COURIER_STATES = new Set(['CANCELED', 'REJECTED', 'EXPIRED'])
+
+/**
+ * Where a queued delivery stands with the courier, and so what staff can do:
+ *   fee      - the customer still owes the delivery fee (nothing to do yet)
+ *   booked   - a LalaMove rider is booked (track or cancel)
+ *   failed   - LalaMove cancelled/rejected the booking (book again)
+ *   unbooked - Ready to Ship but the booking never went through (book)
+ *   manual   - LalaMove has no keys: hand the parcel over and mark it
+ */
+function courierStateOf(row) {
+  if (row.feePending) return { key: 'fee', label: 'Awaiting delivery fee', tone: 'amber' }
+  const status = String(row.courier?.status || '').toUpperCase()
+  if (row.courier?.booked) {
+    return { key: 'booked', label: COURIER_STATE_LABELS[status] || 'Courier booked', tone: 'blue' }
+  }
+  if (row.lalamoveConfigured === false) return { key: 'manual', label: 'Manual hand-off', tone: 'slate' }
+  if (FAILED_COURIER_STATES.has(status)) return { key: 'failed', label: 'Booking failed', tone: 'rose' }
+  return { key: 'unbooked', label: 'Not booked yet', tone: 'rose' }
+}
+
+const TONE_CLASSES = {
+  amber: 'bg-amber-50 text-amber-700 border-amber-200/60',
+  blue: 'bg-blue-50 text-blue-700 border-blue-200/60',
+  rose: 'bg-rose-50 text-rose-700 border-rose-200/60',
+  slate: 'bg-slate-50 text-slate-600 border-slate-200',
+  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200/60',
+}
+
+const peso = (value) => `₱${Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 function initialsOf(name) {
   const parts = String(name || '')
@@ -95,11 +126,14 @@ const trackStatusOf = (track) =>
 /** Merge a mapped order row with its probed delivery/parcel track. */
 function enrichDelivery(order, track) {
   const delivery = track?.delivery || null
-  const parcel = track?.parcel || null
-  const payment = parcel?.payment || null
+  // The order payload carries the same delivery columns, so a row is right
+  // even before its track probe has answered.
+  const raw = order.raw || {}
+  const hasDelivery = Boolean(delivery) || raw.deliver_id != null
+  const feeCharged = delivery?.deliver_fee_charged ?? raw.deliver_fee_charged ?? null
+  const courier = delivery?.courier || raw.courier || null
   const trackStatus = trackStatusOf(track)
   const items = itemsInfo(order)
-  const fee = feeLabel(payment)
   return {
     ordId: order.ordId,
     id: order.id,
@@ -112,17 +146,17 @@ function enrichDelivery(order, track) {
     readyAt: timeOfDay(order.createdAt),
     createdAt: order.createdAt,
     completedAt: order.completedAt,
-    ref: delivery?.delivery_ref || '—',
-    eta: delivery?.deliver_date || null,
+    // The LalaMove order number - never the customer's receipt QR code.
+    ref: courier?.order_id || '—',
+    eta: delivery?.deliver_date || raw.deliver_expect || null,
     trackStatus,
     statusLabel: order.rawStatus === 'IN TRANSIT' || trackStatus === 'TRANSIT' ? 'In transit' : 'Ready to ship',
-    fee,
-    deliveryPayment: fee.endsWith('Paid') ? fee : null,
-    // Courier booking (POST /delivery/book|cancel): the LalaMove envelope the
-    // admin delivery payload carries, the fee actually charged to the customer
-    // and whether LalaMove has keys yet (false = book manually).
-    courier: delivery?.courier || null,
-    feeCharged: delivery?.deliver_fee_charged ?? null,
+    // Courier booking (POST /delivery/book|cancel): the LalaMove envelope,
+    // the delivery fee the customer paid (null = still owed) and whether
+    // LalaMove has keys yet (false = hand the parcel over by hand).
+    courier,
+    feeCharged,
+    feePending: hasDelivery && feeCharged == null,
     lalamoveConfigured: delivery?.lalamove_configured,
     deliverId: delivery?.deliver_id ?? order.raw?.deliver_id ?? null,
   }
@@ -139,7 +173,7 @@ function DispatchConfirmModal({ order, onClose, onConfirm }) {
     <Modal
       isOpen
       onClose={onClose}
-      title="Dispatch this order?"
+      title="Mark as handed to a rider?"
       subtitle={`${order?.customer} · ${order?.id}`}
       footer={
         <>
@@ -147,14 +181,14 @@ function DispatchConfirmModal({ order, onClose, onConfirm }) {
             Cancel
           </Button>
           <Button variant="primary" onClick={onConfirm} className="px-3.5">
-            Confirm dispatch
+            Mark In Transit
           </Button>
         </>
       }
     >
       <p className="text-sm text-gray-600 leading-relaxed">
-        The delivery track moves to In Transit so the order leaves the dispatch queue.
-        The courier booking reference stays attached to the tracking record.
+        Use this only when the parcel was given to a rider without a LalaMove booking.
+        The order moves to In Transit and the customer is told it is on the way.
       </p>
       <p className="field-hint truncate">Deliver to: {order?.address}</p>
     </Modal>
@@ -232,7 +266,7 @@ function OverviewTab({ kpis, queuePreview, transitPreview, onGoToQueue, onGoToTr
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-2xs font-semibold text-slate-700">{o.items}</p>
-                  <p className="text-2xs text-slate-400">Ready {o.readyAt}</p>
+                  <p className="text-2xs text-slate-400">{courierStateOf(o).label}</p>
                 </div>
               </div>
             ))}
@@ -276,43 +310,27 @@ function OverviewTab({ kpis, queuePreview, transitPreview, onGoToQueue, onGoToTr
 }
 
 // ─── Tab: Queue (Ready for Dispatch) ──────────────────────────────────────
-function QueueTab({ queue, onDispatch, dispatching, onOpenOrder }) {
+function QueueTable({ rows, empty, actions, onOpenOrder }) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-3 bg-amber-50 border border-amber-200/60 rounded-lg px-4 py-3">
-        <div className="flex items-start gap-2.5">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-amber-600 shrink-0 mt-0.5">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-          </svg>
-          <p className="text-xs font-medium text-amber-800">
-            These orders are packed and ready for courier dispatch. Dispatch to begin third-party courier delivery.
-          </p>
-        </div>
-        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-2xs font-bold border border-amber-200/60">
-          {queue.length} orders
-        </span>
-      </div>
-
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/60 border-b border-slate-200 text-2xs font-bold uppercase tracking-wider text-slate-400">
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Order #</th>
-                <th className="px-4 py-3">Delivery Address</th>
-                <th className="px-4 py-3">Items</th>
-                <th className="px-4 py-3">Fee Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {queue.map((order) => (
-                <tr
-                  key={order.id}
-                  onClick={() => onOpenOrder(order)}
-                  className="hover:bg-slate-50/50 transition-colors cursor-pointer"
-                >
+    <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs text-left border-collapse">
+          <thead>
+            <tr className="bg-slate-50/60 border-b border-slate-200 text-2xs font-bold uppercase tracking-wider text-slate-400">
+              <th className="px-4 py-3">Customer</th>
+              <th className="px-4 py-3">Order #</th>
+              <th className="px-4 py-3">Delivery Address</th>
+              <th className="px-4 py-3">Items</th>
+              <th className="px-4 py-3">Delivery Fee</th>
+              <th className="px-4 py-3">Courier</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((order) => {
+              const state = courierStateOf(order)
+              return (
+                <tr key={order.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <Avatar initials={order.avatar} />
@@ -325,12 +343,12 @@ function QueueTab({ queue, onDispatch, dispatching, onOpenOrder }) {
                   <td className="px-4 py-3">
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); onOpenOrder(order) }}
+                      onClick={() => onOpenOrder(order)}
                       className="font-extrabold text-slate-800 hover:underline cursor-pointer"
                     >
                       {order.id}
                     </button>
-                    <p className="text-2xs text-slate-400 font-normal mt-0.5">Ready at {order.readyAt}</p>
+                    <p className="text-2xs text-slate-400 font-normal mt-0.5">Placed {order.readyAt}</p>
                   </td>
                   <td className="px-4 py-3 max-w-[180px]">
                     <p className="text-slate-700 font-medium truncate">{order.address}</p>
@@ -340,35 +358,134 @@ function QueueTab({ queue, onDispatch, dispatching, onOpenOrder }) {
                     <p className="text-2xs text-slate-400 mt-0.5 max-w-[140px] truncate">{order.itemLabel}</p>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-2xs font-bold">
-                      {order.fee}
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-2xs font-bold ${
+                      order.feePending ? TONE_CLASSES.amber : TONE_CLASSES.emerald
+                    }`}>
+                      {order.feePending ? 'Not paid yet' : `${peso(order.feeCharged)} paid`}
                     </span>
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-2xs font-semibold ${TONE_CLASSES[state.tone]}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                      {state.label}
+                    </span>
+                    {order.courier?.order_id && state.key === 'booked' && (
+                      <p className="text-2xs text-slate-400 font-mono mt-0.5">{order.courier.order_id}</p>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end">
-                      <button
-                        type="button"
-                        disabled={dispatching === order.id}
-                        onClick={(e) => { e.stopPropagation(); onDispatch(order) }}
-                        className="h-8 px-3 bg-brand-orange hover:bg-orange-600 disabled:opacity-70 disabled:cursor-wait text-white text-xs font-bold rounded-md transition-colors cursor-pointer"
-                      >
-                        {dispatching === order.id ? 'Dispatching' : 'Dispatch'}
-                      </button>
-                    </div>
+                    <div className="flex items-center justify-end gap-1.5">{actions(order, state)}</div>
                   </td>
                 </tr>
-              ))}
-              {queue.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                    No orders waiting for dispatch.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              )
+            })}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">{empty}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
+    </div>
+  )
+}
+
+const actionBtn =
+  'h-7 px-2.5 inline-flex items-center rounded-md text-xs font-semibold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed'
+
+function QueueTab({ queue, onDispatch, dispatching, onOpenOrder, onBook, onCancelBooking, bookingBusyId, notice }) {
+  const ready = queue.filter((o) => !o.feePending)
+  const waiting = queue.filter((o) => o.feePending)
+  const busy = bookingBusyId != null
+
+  const actions = (order, state) => {
+    if (state.key === 'fee') {
+      return <span className="text-2xs text-slate-400">Waiting on customer</span>
+    }
+    return (
+      <>
+        {state.key === 'booked' && order.courier?.share_url && (
+          <a
+            href={order.courier.share_url}
+            target="_blank"
+            rel="noreferrer"
+            className={`${actionBtn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
+          >
+            Track
+          </a>
+        )}
+        {state.key === 'booked' && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onCancelBooking(order)}
+            className={`${actionBtn} border border-slate-200 bg-white text-rose-600 hover:bg-rose-50`}
+          >
+            {bookingBusyId === order.id ? 'Cancelling…' : 'Cancel booking'}
+          </button>
+        )}
+        {(state.key === 'failed' || state.key === 'unbooked') && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onBook(order)}
+            className={`${actionBtn} bg-brand-orange text-white hover:bg-orange-600`}
+          >
+            {bookingBusyId === order.id ? 'Booking…' : state.key === 'failed' ? 'Book again' : 'Book courier'}
+          </button>
+        )}
+        {state.key !== 'booked' && (
+          <button
+            type="button"
+            disabled={dispatching === order.id}
+            onClick={() => onDispatch(order)}
+            className={`${actionBtn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}
+          >
+            {dispatching === order.id ? 'Saving…' : 'Mark handed over'}
+          </button>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3 bg-amber-50 border border-amber-200/60 rounded-lg px-4 py-3">
+        <p className="text-xs font-medium text-amber-800">
+          A paid order gets a LalaMove rider by itself once it is marked Ready to Ship, and moves to
+          In Transit when the rider picks it up. Book again here if a booking failed; use
+          “Mark handed over” only for a hand-off without LalaMove.
+        </p>
+        <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-2xs font-bold border border-amber-200/60">
+          {ready.length} ready
+        </span>
+      </div>
+
+      {notice && (
+        <div className="flex items-start gap-2.5 bg-sky-50 border border-sky-200 rounded-lg px-4 py-2.5 text-xs text-sky-900">
+          <p className="font-medium min-w-0">{notice.text}</p>
+          {notice.href && (
+            <a href={notice.href} target="_blank" rel="noreferrer" className="shrink-0 font-bold text-brand-orange hover:underline">
+              Open tracking link →
+            </a>
+          )}
+        </div>
+      )}
+
+      <QueueTable rows={ready} empty="No orders waiting for dispatch." actions={actions} onOpenOrder={onOpenOrder} />
+
+      {waiting.length > 0 && (
+        <div className="space-y-2 pt-1">
+          <div>
+            <p className="text-sm font-bold text-slate-900">Waiting on the customer</p>
+            <p className="text-2xs text-slate-400">
+              Packed, but the customer has not paid the delivery fee yet. The courier is booked as soon as they do.
+            </p>
+          </div>
+          <QueueTable rows={waiting} empty="" actions={actions} onOpenOrder={onOpenOrder} />
+        </div>
+      )}
     </div>
   )
 }
@@ -406,7 +523,7 @@ function InTransitTab({ orders, onOpenOrder }) {
               <div className="text-right space-y-0.5 max-w-[45%] min-w-0">
                 <p className="text-2xs font-semibold text-slate-700 truncate">{order.items} · {order.itemLabel}</p>
                 <div className="flex items-center justify-end gap-2">
-                  <span className="text-2xs text-slate-400">Courier ref: <span className="font-semibold text-slate-600">{order.ref}</span></span>
+                  <span className="text-2xs text-slate-400">Courier order: <span className="font-semibold text-slate-600">{order.ref}</span></span>
                   <span className="text-2xs text-slate-300">·</span>
                   <span className="text-2xs text-slate-400">ETA <span className="font-semibold text-slate-600">{etaLabel(order.eta)}</span></span>
                 </div>
@@ -416,6 +533,16 @@ function InTransitTab({ orders, onOpenOrder }) {
                 {order.statusLabel}
               </span>
               <div className="flex items-center gap-1.5 shrink-0">
+                {order.courier?.share_url && (
+                  <a
+                    href={order.courier.share_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="h-7 px-2.5 inline-flex items-center border border-slate-200 bg-white hover:bg-slate-50 text-2xs font-semibold text-slate-700 rounded-md cursor-pointer"
+                  >
+                    Track
+                  </a>
+                )}
                 <button
                   type="button"
                   onClick={() => onOpenOrder(order)}
@@ -423,7 +550,6 @@ function InTransitTab({ orders, onOpenOrder }) {
                 >
                   View Order
                 </button>
-                <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer text-sm font-bold">⋯</button>
               </div>
             </div>
           ))}
@@ -523,7 +649,7 @@ function CompletedTab({ orders, total }) {
 }
 
 // ─── Tab: Issues ───────────────────────────────────────────────────────────
-function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bookingBusyId, notice }) {
+function IssuesTab({ issueOrders, onCancelBooking, onContact, bookingBusyId, notice }) {
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-3 bg-rose-50 border border-rose-200/60 rounded-lg px-4 py-3">
@@ -531,7 +657,8 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
         <p className="text-xs font-medium text-rose-800">
-          These deliveries encountered issues. Resolve them through the freight forwarder or contact the customer.
+          Cancelled or returned deliveries. Refunds and returns are settled from Orders; a courier
+          booking still live here should be cancelled.
         </p>
       </div>
 
@@ -601,15 +728,11 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
                   <td className="px-4 py-3 font-extrabold text-slate-800">{row.id}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-2xs font-bold border ${
-                      row.issue === 'Booking Failed'
-                        ? 'bg-rose-100 text-rose-800 border-rose-300'
-                        : row.issue === 'Returned'
+                      row.issue === 'Returned'
                         ? 'bg-amber-50 text-amber-700 border-amber-200/60'
                         : 'bg-rose-50 text-rose-700 border-rose-200/60'
                     }`}>
-                      {row.issue === 'Booking Failed' ? (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3 h-3"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      ) : row.issue === 'Returned' ? (
+                      {row.issue === 'Returned' ? (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
                       ) : (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
@@ -619,16 +742,9 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
                   </td>
                   <td className="px-4 py-3 text-slate-600 max-w-[220px]">
                     <p className="font-bold text-slate-900 leading-tight">{row.reason}</p>
-                    {row.deliveryPayment ? (
-                      <p className="text-2xs text-emerald-600 font-bold mt-0.5">
-                        Delivery payment: {row.deliveryPayment}
-                      </p>
-                    ) : (
-                      <p className="text-2xs text-slate-400 mt-0.5">Courier ref: {row.ref}</p>
-                    )}
                     {Number(row.feeCharged) > 0 && (
                       <p className="text-2xs text-slate-500 font-semibold mt-0.5">
-                        Fee charged: ₱{Number(row.feeCharged).toFixed(2)} · paid online
+                        Delivery fee paid: {peso(row.feeCharged)}
                       </p>
                     )}
                     {row.courier?.order_id && (
@@ -650,28 +766,6 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
                   <td className="px-4 py-3">
                     <div className="flex flex-col items-end gap-1.5">
                       <div className="flex items-center justify-end gap-2">
-                        {row.issue === 'Booking Failed' ? (
-                          <button
-                            type="button"
-                            disabled={row.lalamoveConfigured === false || bookingBusyId != null}
-                            onClick={() => onRetryBooking(row)}
-                            className="h-8 px-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-md transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs flex items-center gap-1.5"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5">
-                              <path d="M23 4v6h-6" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                            </svg>
-                            {bookingBusyId === row.id ? 'Booking…' : 'Retry Booking'}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={row.lalamoveConfigured === false || bookingBusyId != null}
-                            onClick={() => onRetryBooking(row)}
-                            className="h-8 px-3 bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold rounded-md transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            {bookingBusyId === row.id ? 'Booking…' : 'Retry Delivery'}
-                          </button>
-                        )}
                         {row.courier?.booked && (
                           <button
                             type="button"
@@ -689,14 +783,7 @@ function IssuesTab({ issueOrders, onRetryBooking, onCancelBooking, onContact, bo
                         >
                           Contact
                         </button>
-                        <button type="button" className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer text-sm font-bold">⋯</button>
                       </div>
-                      {row.lalamoveConfigured === false && (
-                        <p className="text-2xs text-slate-400 text-right max-w-[230px]">
-                          LalaMove is not configured yet — book the courier by hand and pass the
-                          parcel straight to the rider.
-                        </p>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -724,6 +811,7 @@ const TABS = ['Overview', 'Queue', 'In Transit', 'Completed', 'Issues']
 
 export default function AdminDelivery() {
   const { orders: rawOrders = [], refreshOrders } = useAdmin()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('Overview')
   const [confirmOrder, setConfirmOrder] = useState(null)
   const [dispatchingId, setDispatchingId] = useState(null)
@@ -840,7 +928,7 @@ export default function AdminDelivery() {
         .map((o) => ({
           ...enrichDelivery(o, tracks[o.ordId]),
           date: dateLabel(o.completedAt || o.createdAt),
-          issue: o.rawStatus === 'CANCELLED' ? 'Booking Failed' : 'Returned',
+          issue: o.rawStatus === 'CANCELLED' ? 'Cancelled' : 'Returned',
           reason: ISSUE_REASONS[o.rawStatus] || 'Delivery needs resolution.',
         })),
     [orders, tracks]
@@ -853,7 +941,7 @@ export default function AdminDelivery() {
       return Boolean(d) && d.toDateString() === now.toDateString()
     }
     return {
-      ready: queue.length,
+      ready: queue.filter((r) => !r.feePending).length,
       transit: transit.length,
       deliveredToday: completed.filter(
         (r) => isToday(r.completedAt) || isToday(r.createdAt)
@@ -863,8 +951,10 @@ export default function AdminDelivery() {
   }, [queue, transit, completed, issues])
 
   // ── Actions ──
-  // Order # / row click opens the order detail (toast placeholder until a detail drawer exists)
-  const handleOpenOrder = (order) => showToast(order ? `Opening order ${order.id}` : 'Select an order first')
+  // Order # / View Order open the order detail on the Orders page.
+  const handleOpenOrder = (order) => {
+    if (order?.ordId != null) navigate(`/admin/orders?orderId=${order.ordId}`)
+  }
 
   // Dispatch click asks for confirmation first, then advances the delivery
   // track to TRANSIT (PUT /tracking/update, track_id = deliver_id).
@@ -882,7 +972,7 @@ export default function AdminDelivery() {
         throw new Error(res?.message || 'No delivery/parcel record found for this order')
       }
       await updateTrack(delivery.deliver_id, 'delivery', 'TRANSIT')
-      showToast(`${order.id} dispatched — courier ref ${delivery.delivery_ref || '—'}`)
+      showToast(`${order.id} marked In Transit.`)
       probe([order.ordId])
       refreshOrders()
     } catch (e) {
@@ -1098,7 +1188,7 @@ export default function AdminDelivery() {
           {activeTab === 'Overview'   && (
             <OverviewTab
               kpis={kpis}
-              queuePreview={queue.slice(0, 3)}
+              queuePreview={queue.filter((r) => !r.feePending).slice(0, 3)}
               transitPreview={transit.slice(0, 3)}
               onGoToQueue={() => setActiveTab('Queue')}
               onGoToTransit={() => setActiveTab('In Transit')}
@@ -1110,6 +1200,10 @@ export default function AdminDelivery() {
               onDispatch={handleDispatchClick}
               dispatching={dispatchingId}
               onOpenOrder={handleOpenOrder}
+              onBook={handleRetryBooking}
+              onCancelBooking={(row) => setCancelTarget(row)}
+              bookingBusyId={bookingBusyId}
+              notice={bookingNotice}
             />
           )}
           {activeTab === 'In Transit' && <InTransitTab orders={transit} onOpenOrder={handleOpenOrder} />}
@@ -1117,7 +1211,6 @@ export default function AdminDelivery() {
           {activeTab === 'Issues'     && (
             <IssuesTab
               issueOrders={issues}
-              onRetryBooking={handleRetryBooking}
               onCancelBooking={(row) => setCancelTarget(row)}
               onContact={handleContact}
               bookingBusyId={bookingBusyId}

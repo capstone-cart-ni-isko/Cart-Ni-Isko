@@ -191,19 +191,23 @@ function App() {
                     <Route path="/admin/dashboard" element={<AdminDashboard />} />
                   </Route>
                   <Route path="/admin/orders" element={<AdminOrders />} />
-                  {/* Rule 41 / REQ-MANAGE_INV-01: inventory is an admin and
-                      super-admin surface. The backend already refuses staff on
-                      every /products write (role:admin); leaving the route open
-                      made the sidebar entry and its screen reachable by a
-                      'staff' employee that the spec says never sees Products. */}
-                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                  {/* REQ-EMP_HOME-01 keeps "Products" in a staff employee's
+                      sidebar (only Dashboard, Walk-in, Reviews and Sales are
+                      hidden), so staff may open the inventory READ-ONLY: the
+                      pages hide every management control for them, and the
+                      backend refuses staff on every /products write
+                      (role:admin, rule 41 / REQ-MANAGE_INV-01). */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN', 'STAFF']} />}>
                     <Route path="/admin/inventory" element={<AdminInventory />} />
-                    {/* FLOW-ADD_PROD-01 names the "/admin/add-product" page; it
-                        opens the same create form the inventory page hosts. */}
-                    <Route path="/admin/add-product" element={<AdminInventory />} />
                     {/* FLOW-MANAGE_INV-05: one product's detail page (variations,
                         prices, stock levels, metrics and its sales history). */}
                     <Route path="/admin/inventory/:prodId" element={<AdminProductDetail />} />
+                  </Route>
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                    {/* FLOW-ADD_PROD-01 names the "/admin/add-product" page; it
+                        opens the same create form the inventory page hosts.
+                        Adding products stays admin-only (REQ-ADD_PROD-01). */}
+                    <Route path="/admin/add-product" element={<AdminInventory />} />
                   </Route>
                   {/* /admin/fulfillment → redirect to the new Pickup module */}
                   <Route path="/admin/fulfillment" element={<Navigate to="/admin/pickup" replace />} />
@@ -278,12 +282,15 @@ function App() {
                     <Route path="/admin/settings/logs" element={<AdminSettings />} />
                   </Route>
 
-                  {/* POS is walked through by admins and super admins (rule 44).
-                      FLOW-EMP_HOME-05 lists "Walk-in Orders" as its own sidebar
-                      entry: it is the same register screen under the spec's URL.
-                      Without this route the link fell through the "*" rule and
-                      dropped the employee into the CUSTOMER portal. */}
-                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                  {/* POS / walk-in orders are run by every employee: staff were
+                      given full register access by the store owner (this
+                      overrides rule 44 / FLOW-WALKIN-01; the /pos/* API is
+                      role:staff to match). FLOW-EMP_HOME-05 lists "Walk-in
+                      Orders" as its own sidebar entry: it is the same register
+                      screen under the spec's URL. Without this route the link
+                      fell through the "*" rule and dropped the employee into
+                      the CUSTOMER portal. */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN', 'STAFF']} />}>
                     <Route path="/admin/pos" element={<AdminPos />} />
                     <Route path="/admin/walkin" element={<AdminPos />} />
                   </Route>

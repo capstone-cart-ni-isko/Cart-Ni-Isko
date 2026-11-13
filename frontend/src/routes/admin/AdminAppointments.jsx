@@ -401,7 +401,7 @@ export default function AdminAppointments() {
                 <span>{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, {staffName}!</span>
               </h1>
               <p className="text-xs text-slate-500 font-normal mt-0.5">
-                Here's your today's schedule at a glance.
+                Here's the store's appointments at a glance.
               </p>
             </div>
           </div>
@@ -445,43 +445,44 @@ export default function AdminAppointments() {
           {/* Left Column (8 cols) */}
           <div className="lg:col-span-8 space-y-4">
             {/* 1. Selected-day summary */}
-            <div className="bg-gradient-to-br from-[#FFF9F5] to-[#FFF1E5] border border-[#FFE7D6] rounded-lg p-4 relative overflow-hidden">
-              <div className="relative">
-
-                <div className="grid grid-cols-3 divide-x divide-orange-200/80 mt-4 rounded-lg border border-orange-100 bg-white/70">
-                  {[
-                    {
-                      label: 'Bookings',
-                      value: dayTotals.claims + dayTotals.visits,
-                      detail: `${dayTotals.claims} claim · ${dayTotals.visits} visit`,
-                      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>,
-                    },
-                    {
-                      label: 'Available slots',
-                      value: slotsUnavailable ? '—' : availableSlotCount,
-                      detail: slotsUnavailable ? 'Availability unavailable' : 'Open for booking',
-                      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>,
-                    },
-                    {
-                      label: 'Closed appointments',
-                      value: dayTotals.cancelled,
-                      detail: 'Cancelled or closed',
-                      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="9" y1="14" x2="15" y2="14" /></svg>,
-                    },
-                  ].map((stat) => (
-                    <div key={stat.label} className="min-w-0 px-2.5 py-2 flex items-center gap-2">
-                      <span className="w-7 h-7 rounded-lg bg-orange-50 text-[#FF6A00] flex items-center justify-center shrink-0">
-                        {stat.icon}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-bold text-slate-900 leading-tight">{stat.value}</span>
-                        <span className="block text-[10px] font-semibold text-slate-700 truncate">{stat.label}</span>
-                        <span className="block text-[9px] text-slate-500 truncate">{stat.detail}</span>
-                      </span>
-                    </div>
-                  ))}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                {
+                  label: 'Bookings',
+                  value: dayTotals.claims + dayTotals.visits,
+                  detail: `${dayTotals.claims} claim · ${dayTotals.visits} visit`,
+                  tone: 'bg-[var(--tint-info-bg)] text-[var(--tint-info-fg)]',
+                  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><polyline points="9 16 11 18 15 14" /></svg>,
+                },
+                {
+                  label: 'Available Slots',
+                  value: slotsUnavailable ? '—' : availableSlotCount,
+                  detail: slotsUnavailable ? 'Availability unavailable' : 'Open for booking',
+                  tone: 'bg-[var(--tint-ok-bg)] text-[var(--tint-ok-fg)]',
+                  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></svg>,
+                },
+                {
+                  label: 'Closed Appointments',
+                  value: dayTotals.cancelled,
+                  detail: 'Cancelled or closed',
+                  tone: 'bg-[var(--tint-brand-bg)] text-[var(--tint-brand-fg)]',
+                  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="10" y1="14" x2="14" y2="18" /><line x1="14" y1="14" x2="10" y2="18" /></svg>,
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4 min-w-0"
+                >
+                  <span className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${stat.tone}`} aria-hidden="true">
+                    {stat.icon}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xl font-bold text-slate-900 leading-tight tabular-nums">{stat.value}</p>
+                    <p className="text-sm font-semibold text-slate-800 truncate">{stat.label}</p>
+                    <p className="text-xs text-slate-500 truncate">{stat.detail}</p>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
 
             {/* 2. Today's Timeline */}
@@ -491,7 +492,6 @@ export default function AdminAppointments() {
                 <div className="flex items-center gap-3">
                   <div>
                     <h2 className="text-lg font-black text-gray-900">Appointments Timeline</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">{fmtBadgeDate(selectedDate)}</p>
                   </div>
                 </div>
 

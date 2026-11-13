@@ -1425,11 +1425,15 @@ class DatabaseAPI extends Controller
 
     public function updateNotificationStatus(Request $json)
     {
+        // `all: true` marks every unread notification of the caller at once,
+        // so no single notif_id is needed then.
         return $this->validateFields($json, [
-            'notif_id'       => 'required',
+            'notif_id'       => 'required_unless:all,true,1',
+            'all'            => 'sometimes|boolean',
             'recipient_type' => 'required|in:customer,employee',
         ], [
-            'notif_id.required'       => 'Notification ID is required.',
+            'notif_id.required_unless' => 'Notification ID is required.',
+            'all.boolean'             => 'The "all" flag must be true or false.',
             'recipient_type.required' => 'Recipient type is required.',
             'recipient_type.in'       => 'Recipient type must be either customer or employee.',
         ]);

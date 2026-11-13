@@ -22,6 +22,7 @@ import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
 import { canReviewOrder } from '../services/reviews.js'
 import { fetchOrders, requestCancel, confirmDeliveryFeePayment, resumePayment } from '../services/orders.js'
 import { parseDate } from '../services/dashboard.js'
+import { variationParts } from '../utils/variation.js'
 
 const FULFILLMENT_OPTIONS = [
   { key: 'pickup', label: 'Pickup' },
@@ -131,7 +132,7 @@ export const STATUS_CONTEXT = {
   'AWAITING PAYMENT': 'Waiting for your online payment to go through.',
   'TO PROCESS': 'Your order is being prepared by the store.',
   'TO CLAIM': 'Ready for pickup — show your claim QR at the counter.',
-  'READY TO SHIP': 'Packed and handed to the courier — a rider is on the way to collect it.',
+  'READY TO SHIP': 'Packed and ready to ship — the store is booking a courier to collect it.',
   'IN TRANSIT': 'Your parcel is on its way to you.',
   'TO RECEIVE': 'Out for courier delivery to your address.',
   CLAIMED: 'Picked up and claimed. Thank you!',
@@ -202,6 +203,19 @@ export function isPreOrderRow(row) {
   )
 }
 
+/**
+ * The variation of an order line as [{ axis, value }]. Older local rows that
+ * only carry picker labels (size / color.name) keep those two axes.
+ */
+function legacyAwareParts(line) {
+  const parts = variationParts(line)
+  if (parts.length > 0 || !line) return parts
+  const legacy = []
+  if (line.color?.name) legacy.push({ axis: 'Color', value: String(line.color.name) })
+  if (line.size) legacy.push({ axis: 'Size', value: String(line.size) })
+  return legacy
+}
+
 /** Convert a `GET /cart/display` order row into the shape this page renders. */
 export function mapServerOrder(row) {
   const items = row.items || []
@@ -254,6 +268,9 @@ export function mapServerOrder(row) {
             image: prodvar.prodvar_pic,
           }
         : first?.color ?? null,
+    // Each axis under its own name (Color: Cream · Size: Small) - never the
+    // whole combination repeated under both "Size" and "Color".
+    variation: legacyAwareParts(first),
     preOrder: isPreOrderRow(row),
     subtotal: lineTotal,
     total: amount,
@@ -376,7 +393,13 @@ function Orders() {
       window.history.replaceState({}, document.title, window.location.pathname)
       confirmDeliveryFeePayment(Number(orderParam))
         .then((res) => {
-          showToast(res?.message || 'Delivery fee confirmed! Order is out for delivery.', 'success')
+          // A still-pending answer only means PayMongo has not reported back
+          // yet; its webhook settles the fee and the list refresh shows it.
+          if (res?.data?.paid) {
+            showToast('Delivery fee confirmed. The store is booking your courier.', 'success')
+          } else {
+            showToast('Payment received — confirming it with PayMongo. Your order updates shortly.', 'info')
+          }
           load({ silent: true })
         })
         .catch(() => {
@@ -740,17 +763,11 @@ function Orders() {
 
                       {/* Explicit Variant Details */}
                       <div className="flex items-center gap-2 mt-1 text-xs text-gray-600 flex-wrap">
-                        {order.size && (
-                          <span>
-                            Size: <strong className="text-gray-900">{order.size}</strong>
+                        {(order.variation || []).map((part) => (
+                          <span key={part.axis}>
+                            {part.axis}: <strong className="text-gray-900">{part.value}</strong>
                           </span>
-                        )}
-                        {order.color && (
-                          <span className="flex items-center gap-1.5">
-                            Color:{' '}
-                            <strong className="text-gray-900">{order.color.name}</strong>
-                          </span>
-                        )}
+                        ))}
                         <span>
                           Qty: <strong className="text-gray-900">{order.qty}</strong>
                         </span>

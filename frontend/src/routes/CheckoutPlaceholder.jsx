@@ -10,10 +10,24 @@ import Modal from '../components/ui/Modal.jsx'
 import LoadingSpinner from '../components/ui/LoadingSpinner.jsx'
 import { ApiErrorText } from '../components/ui/ApiErrorBoundary.jsx'
 import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
-import BackButton from '../components/ui/BackButton.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import paymongoLogo from '../assets/icons/brand/paymongo-logo.png'
+import gcashLogo from '../assets/icons/brand/gcash-logo.webp'
+import mayaLogo from '../assets/icons/brand/maya-logo.webp'
+import grabpayLogo from '../assets/icons/brand/grabpay-logo.webp'
+import visaLogo from '../assets/icons/brand/visa-logo.webp'
+import mastercardLogo from '../assets/icons/brand/mastercard-logo.png'
+
+/* Tenders PayMongo accepts. Heights even out the logos' own padding. */
+const PAYMENT_TENDERS = [
+  { name: 'GCash', src: gcashLogo, h: 'h-4' },
+  { name: 'Maya', src: mayaLogo, h: 'h-3.5' },
+  { name: 'GrabPay', src: grabpayLogo, h: 'h-6' },
+  { name: 'Visa', src: visaLogo, h: 'h-3' },
+  { name: 'Mastercard', src: mastercardLogo, h: 'h-5' },
+]
 import { getImageUrl } from '../utils/imageUtils.js'
+import { variationParts } from '../utils/variation.js'
 import OrderPlacedView from '../components/orders/OrderPlacedView.jsx'
 import { fetchOrder } from '../services/orders.js'
 import {
@@ -165,7 +179,11 @@ function CheckoutPlaceholder() {
   const { currentUser, addresses } = useAuth()
   const { showToast } = useToast()
 
-  const [dispatchType, setDispatchType] = useState('pickup')
+  // Back from adding an address (?dispatch=delivery) the delivery choice is kept.
+  const [methodPickerOpen, setMethodPickerOpen] = useState(false)
+  const [dispatchType, setDispatchType] = useState(() =>
+    new URLSearchParams(window.location.search).get('dispatch') === 'delivery' ? 'delivery' : 'pickup'
+  )
 
   // Pickup: the slot is COLLECTED on /book (FLOW-CHECKOUT-04) and parked in
   // sessionStorage; no appointment row exists client-side (FLOW-CHECKOUT-06).
@@ -180,6 +198,7 @@ function CheckoutPlaceholder() {
 
   // Server quote state
   const [serverPreview, setServerPreview] = useState(null)
+  const [quoteError, setQuoteError] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -236,6 +255,8 @@ function CheckoutPlaceholder() {
       ? { lat: chosenAddress.lat, lng: chosenAddress.lng }
       : null
   const deliveryPinKey = deliveryPin ? `${deliveryPin.lat},${deliveryPin.lng}` : ''
+  const hasDeliveryAddress = deliveryAddress.trim() !== ''
+  const ADDRESS_PAGE = `/settings/address?return=${encodeURIComponent('/checkout?dispatch=delivery')}`
 
   const tierInfo = DELIVERY_TIERS.find((t) => t.key === tier) || DELIVERY_TIERS[1]
   const serverDue =
@@ -291,6 +312,10 @@ function CheckoutPlaceholder() {
   if (dispatchType === 'pickup') {
     if (!slot?.appoint_start) errors.slot = 'Book a pickup slot to continue.'
   }
+  // FLOW-CHECKOUT-07: delivery needs a saved address to quote and ship to.
+  if (dispatchType === 'delivery' && !hasDeliveryAddress) {
+    errors.address = 'Add a delivery address to continue.'
+  }
 
   const showError = (key) => (submitted || touched[key] ? errors[key] : undefined)
 
@@ -302,6 +327,12 @@ function CheckoutPlaceholder() {
   useEffect(() => {
     if (itemsToCheckout.length === 0) {
       setServerPreview(null)
+      return undefined
+    }
+    // No address = nothing to quote; the delivery card asks for one instead.
+    if (dispatchType === 'delivery' && !deliveryAddress.trim()) {
+      setServerPreview(null)
+      setQuoteError('')
       return undefined
     }
     const bagIdsFromKey = bagIdsKey ? bagIdsKey.split(',').map(Number) : []
@@ -318,9 +349,15 @@ function CheckoutPlaceholder() {
             bagIds: bagIdsFromKey,
           })
         )
-        if (!cancelled) setServerPreview(res?.data || null)
-      } catch {
-        if (!cancelled) setServerPreview(null)
+        if (!cancelled) {
+          setServerPreview(res?.data || null)
+          setQuoteError('')
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setServerPreview(null)
+          setQuoteError(err?.message || 'The delivery fee could not be calculated.')
+        }
       }
     })()
     return () => {
@@ -683,7 +720,15 @@ function CheckoutPlaceholder() {
     }
     if (Object.keys(errors).length > 0) {
       setSubmitted(true)
-      setError('Please complete your payment and claiming details before placing the order.')
+      setError(
+        errors.address
+          ? 'Add a delivery address before placing a delivery order.'
+          : 'Please complete your payment and claiming details before placing the order.'
+      )
+      return
+    }
+    if (dispatchType === 'delivery' && deliveryFee == null) {
+      setError(quoteError || 'The delivery fee is still being calculated. Please wait a moment.')
       return
     }
 
@@ -718,11 +763,12 @@ function CheckoutPlaceholder() {
   const chooseModality = (type) => {
     setDispatchType(type)
     setSubmitted(false)
+    setMethodPickerOpen(false)
   }
 
   if (placedOrder || confirmingReturn) {
     return (
-      <AppShell showNav={false}>
+      <AppShell showNav={false} className="md:max-w-2xl! lg:max-w-6xl! lg:overflow-visible!">
         <div className="min-h-dvh flex flex-col items-center justify-center p-4 pb-28 md:p-8 animate-fade-in bg-slate-50/60">
           {placedOrder ? (
             <OrderPlacedView
@@ -748,87 +794,236 @@ function CheckoutPlaceholder() {
     )
   }
 
+  /* Shared look of the checkout cards (white card on the soft page). */
+  const card = 'rounded-2xl border border-slate-200/80 bg-white p-5 md:p-6 shadow-2xs'
+  const pillButton =
+    'shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sm font-semibold text-gray-800 transition-colors cursor-pointer'
+  const itemCount = itemsToCheckout.length
+  const lineVariation = (item) => {
+    const parts = variationParts({ prodvar_options: item.options, prodvar_name: item.prodvarName })
+      .filter((part) => part.value.toLowerCase() !== 'one size')
+    if (parts.length > 0) return parts.map((part) => `${part.axis}: ${part.value}`).join(' · ')
+    return [item.size, item.color?.name].filter(Boolean).join(' • ')
+  }
+  const pickupSlotLabel = (() => {
+    if (!slot?.appoint_start) return ''
+    const d = new Date(String(slot.appoint_start).replace(' ', 'T'))
+    if (Number.isNaN(d.getTime())) return String(slot.appoint_start).replace('T', ' ')
+    const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+    const month = d.toLocaleDateString('en-US', { month: 'short' })
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    return `${weekday}, ${month} ${d.getDate()} · ${time}`
+  })()
+  const feeValue =
+    dispatchType === 'delivery'
+      ? deliveryFee != null
+        ? `₱${deliveryFee.toFixed(2)}`
+        : !hasDeliveryAddress
+        ? 'Add an address'
+        : quoteError
+        ? 'Unavailable'
+        : 'Calculating…'
+      : 'FREE (Pickup)'
+
   return (
     <AppShell showNav={false} className="md:max-w-2xl! lg:max-w-6xl! lg:overflow-visible! md:-mt-8">
-      <div className="min-h-dvh md:min-h-0 flex flex-col items-center justify-center p-4 pb-28 md:p-6 md:pb-16 animate-fade-in bg-slate-50/60">
-        <div className="w-full max-w-xl md:max-w-none bg-white rounded-xl p-6 md:p-8 border border-slate-100 space-y-6">
-          {/* Back to the previous view of this step-by-step process */}
-          <BackButton to="/bag" />
-
-          {/* Header */}
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900 leading-tight">
-                  Review &amp; Confirm Order
-                </h1>
-                <p className="text-sm text-gray-500">
-                  Please review your order details before paying
-                </p>
-              </div>
+      <div className="min-h-dvh md:min-h-0 p-4 pb-28 md:p-6 md:pb-16 animate-fade-in bg-slate-50/60">
+        {/* Header: back to the bag (rule 69, top left), title and step */}
+        <div className="flex items-start justify-between gap-4 mb-5 md:mb-6">
+          <div className="flex items-start gap-2 md:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => navigate('/bag')}
+              aria-label="Back to bag"
+              className="group mt-0.5 w-9 h-9 rounded-full hover:bg-slate-100 flex items-center justify-center shrink-0 text-slate-500 hover:text-slate-900 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/50"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 transition-transform group-hover:-translate-x-0.5">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-2xl font-semibold text-gray-900 tracking-tight leading-tight">
+                Review &amp; Confirm Order
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Please review your order details before confirming.
+              </p>
             </div>
-            <span className="text-xs font-semibold px-3 py-1 bg-orange-50 text-brand-orange rounded-full">
-              Step 2 of 2
-            </span>
           </div>
+          <span className="shrink-0 mt-1 text-xs font-semibold px-3 py-1 bg-orange-50 text-brand-orange rounded-full">
+            Step 2 of 2
+          </span>
+        </div>
 
-          {/* Desktop: details on the left, a sticky order summary + payment on
-              the right. Below lg it stacks in the original mobile order. */}
-          <div className="space-y-6 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_25rem] lg:gap-8 lg:items-start">
-            <div className="space-y-6 min-w-0">
-              {/* Customer & Fulfillment Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div className="p-3.5 bg-slate-50 rounded-lg space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                    Customer Details
+        {/* Details on the left, a sticky order summary on the right (lg).
+            Below lg everything stacks, the summary last. */}
+        <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-6 lg:items-start">
+          <div className="space-y-4 min-w-0">
+            {/* Customer Details */}
+            <section className={card}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1.5">
+                  <h2 className="text-base font-semibold text-gray-900">Customer Details</h2>
+                  <p className="font-semibold text-gray-900 uppercase tracking-wide text-sm">
+                    {currentUser?.fullName || 'Customer'}
                   </p>
-                  <p className="font-semibold text-gray-900">{currentUser?.fullName || 'Customer'}</p>
-                  <p className="text-gray-500 truncate">{currentUser?.email || currentUser?.phone}</p>
-                  <p className="text-gray-500 font-mono">
-                    ID: {currentUser?.studentId || custId || '—'}
+                  <p className="text-sm text-gray-500 break-words">
+                    {currentUser?.email || currentUser?.phone}
+                    <span className="hidden sm:inline text-gray-300 mx-2">•</span>
+                    <span className="block sm:inline font-mono whitespace-nowrap">ID: {currentUser?.studentId || custId || '—'}</span>
                   </p>
                 </div>
-
-                <div className="p-3.5 bg-slate-50 rounded-lg space-y-1.5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-                    Claiming Details
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => chooseModality('pickup')}
-                      className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
-                        dispatchType === 'pickup'
-                          ? 'bg-brand-orange text-white border-brand-orange'
-                          : 'bg-white text-gray-600 border-slate-200'
-                      }`}
-                    >
-                      Store Pickup
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => chooseModality('delivery')}
-                      className={`flex-1 py-1.5 px-2 rounded-md font-semibold text-xs border transition-colors cursor-pointer ${
-                        dispatchType === 'delivery'
-                          ? 'bg-brand-orange text-white border-brand-orange'
-                          : 'bg-white text-gray-600 border-slate-200'
-                      }`}
-                    >
-                      Courier Delivery
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 pt-0.5">
-                    {dispatchType === 'pickup'
-                      ? 'Pickup at BU Main Campus Student Center — choose a claim slot below'
-                      : 'Courier delivery to your chosen address'}
-                  </p>
-                </div>
+                <button type="button" onClick={() => navigate('/account')} className={pillButton}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                    <path d="m15 5 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16z" />
+                  </svg>
+                  Edit
+                </button>
               </div>
+            </section>
+
+            {/* Order Items */}
+            <section className={card}>
+              <div className="flex items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                <h2 className="text-base font-semibold text-gray-900">Order Items ({itemCount})</h2>
+                <button
+                  type="button"
+                  onClick={() => navigate('/bag')}
+                  className="text-brand-orange text-sm font-semibold hover:underline cursor-pointer"
+                >
+                  Edit Items
+                </button>
+              </div>
+              <div className="divide-y divide-slate-100 lg:max-h-[28rem] lg:overflow-y-auto scrollbar-none">
+                {itemsToCheckout.map((item) => {
+                  const product = item.product || {}
+                  const itemPrice = Number(item.amount ?? product.price ?? 0)
+                  const itemQty = Number(item.qty || 1)
+                  const variantText = lineVariation(item)
+                  const isPreorder = item.preOrder ?? product.preOrder
+                  // Only show "Change" when the product has more than one active variation
+                  const activeVariations = (product.variations || []).filter(
+                    (v) => !v.prodvar_disabled && !v.prodvar_deleted
+                  )
+                  const hasMultipleVariations = activeVariations.length > 1
+                  return (
+                    <div key={item.cartItemId} className="py-4 flex items-start sm:items-center gap-3 sm:gap-4">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-xl border border-slate-200/80 bg-white flex items-center justify-center shrink-0 overflow-hidden">
+                        <img
+                          src={getImageUrl(item.color?.image || product.images?.[0] || product.image)}
+                          alt={product.name}
+                          className="w-full h-full object-contain p-2"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-gray-900 text-base truncate">{product.name}</p>
+                          {isPreorder && (
+                            <span className="px-1.5 py-0.5 rounded text-2xs font-bold uppercase tracking-wider bg-orange-50 text-brand-orange border border-orange-200/60">
+                              Pre-order
+                            </span>
+                          )}
+                        </div>
+                        {variantText && <p className="text-sm text-gray-500">{variantText}</p>}
+                        {/* Phones: the line total sits under the name */}
+                        <p className="sm:hidden text-base font-semibold text-brand-orange">
+                          ₱{(itemPrice * itemQty).toFixed(2)}
+                        </p>
+                        <div className="flex items-center gap-3 flex-wrap pt-1">
+                          <span className="inline-flex items-center h-8 px-3 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-800">
+                            Qty: {itemQty}
+                          </span>
+                          <span className="text-xs text-gray-400">₱{itemPrice.toFixed(2)} each</span>
+                          {/* Issue 3: Change variation without leaving checkout */}
+                          {hasMultipleVariations && (
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
+                              onClick={() => {
+                                setVariationModal({
+                                  cartItemId: item.cartItemId,
+                                  bagId: item.bagId,
+                                  product,
+                                  currentProdvarId: item.prodvarId ?? null,
+                                })
+                                setSelectedProdvarId(item.prodvarId ?? null)
+                              }}
+                            >
+                              Change variation
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="hidden sm:block shrink-0 text-lg md:text-xl font-semibold text-brand-orange">
+                        ₱{(itemPrice * itemQty).toFixed(2)}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+
+            {/* Fulfilment Method (claiming details) */}
+            <section className={card}>
+              <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                <h2 className="text-base font-semibold text-gray-900">Fulfilment Method</h2>
+                <button
+                  type="button"
+                  onClick={() => setMethodPickerOpen((open) => !open)}
+                  aria-expanded={methodPickerOpen}
+                  className={pillButton}
+                >
+                  {methodPickerOpen ? 'Done' : 'Change'}
+                </button>
+              </div>
+
+              {methodPickerOpen ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4" role="radiogroup" aria-label="Fulfilment method">
+                  {[
+                    { key: 'pickup', title: 'Store Pickup', text: 'Pick up at BU Main Campus Student Center' },
+                    { key: 'delivery', title: 'Courier Delivery', text: 'LalaMove delivery to your saved address' },
+                  ].map((option) => {
+                    const active = dispatchType === option.key
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => chooseModality(option.key)}
+                        className={`text-left p-4 rounded-xl border transition-colors cursor-pointer flex items-start gap-3 ${
+                          active ? 'border-brand-orange bg-orange-50/60' : 'border-slate-200 bg-white hover:border-orange-200'
+                        }`}
+                      >
+                        <span className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${active ? 'border-brand-orange' : 'border-slate-300'}`}>
+                          {active && <span className="w-2 h-2 rounded-full bg-brand-orange" />}
+                        </span>
+                        <span>
+                          <span className="block text-sm font-semibold text-gray-900">{option.title}</span>
+                          <span className="block text-xs text-gray-500 mt-0.5">{option.text}</span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="pt-4">
+                  <p className="text-base font-semibold text-gray-900">
+                    {dispatchType === 'pickup' ? 'Store Pickup' : 'Courier Delivery'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {dispatchType === 'pickup'
+                      ? 'Pick up at BU Main Campus Student Center — choose a claim slot below.'
+                      : 'Courier delivery to your chosen address.'}
+                  </p>
+                </div>
+              )}
 
               {/* FLOW-CHECKOUT-04/05: pickup slot comes from /book and is only
                   held here until the order (and appointment) are created. */}
               {dispatchType === 'pickup' && (
-                <div className="space-y-2">
+                <div className="space-y-2 pt-4">
                   {slot ? (
                     <div className="p-3.5 rounded-xl border border-orange-200 bg-orange-50/70 flex items-center justify-between gap-3">
                       <div className="min-w-0 flex items-start gap-2.5">
@@ -842,17 +1037,7 @@ function CheckoutPlaceholder() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-slate-900 leading-tight">Pickup slot selected</p>
-                          <p className="text-xs text-brand-orange font-medium mt-0.5">
-                            {(() => {
-                              const d = new Date(String(slot.appoint_start).replace(' ', 'T'))
-                              if (Number.isNaN(d.getTime())) return String(slot.appoint_start).replace('T', ' ')
-                              const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
-                              const month   = d.toLocaleDateString('en-US', { month: 'short' })
-                              const day     = d.getDate()
-                              const time    = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-                              return `${weekday}, ${month} ${day} · ${time}`
-                            })()}
-                          </p>
+                          <p className="text-xs text-brand-orange font-medium mt-0.5">{pickupSlotLabel}</p>
                           <p className="text-[11px] text-slate-400 mt-0.5">Claimed with your order at checkout</p>
                         </div>
                       </div>
@@ -871,7 +1056,7 @@ function CheckoutPlaceholder() {
                         touch('slot')
                         bookPickupSlot()
                       }}
-                      className="w-full h-11 rounded-lg border-2 border-dashed border-brand-orange text-brand-orange text-sm font-semibold hover:bg-orange-50 transition-colors cursor-pointer"
+                      className="w-full h-11 rounded-xl border-2 border-dashed border-brand-orange text-brand-orange text-sm font-semibold hover:bg-orange-50 transition-colors cursor-pointer"
                     >
                       Book your in-store pickup slot
                     </button>
@@ -882,10 +1067,10 @@ function CheckoutPlaceholder() {
                 </div>
               )}
 
-              {/* FLOW-CHECKOUT-07: delivery details and fee are deferred until items are ready */}
+              {/* FLOW-CHECKOUT-07: delivery address, fee and estimate */}
               {dispatchType === 'delivery' && (
-                <div className="space-y-3 text-sm p-4 rounded-xl border border-blue-200 bg-blue-50/60">
-                  <div className="flex items-start gap-3">
+                <div className="space-y-3 text-sm pt-4">
+                  <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/60 flex items-start gap-3">
                     <div className="p-2 rounded-lg bg-blue-100 text-blue-700 shrink-0">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
                         <rect x="1" y="3" width="15" height="13" />
@@ -894,25 +1079,62 @@ function CheckoutPlaceholder() {
                         <circle cx="18.5" cy="18.5" r="2.5" />
                       </svg>
                     </div>
-                    <div className="space-y-1">
-                      <p className="font-bold text-blue-950 text-sm">
-                        Courier Delivery
-                      </p>
-                      <p className="text-xs text-blue-900 leading-relaxed">
-                        Delivering to <strong>{deliveryAddress || 'your default address'}</strong>.
-                      </p>
-                      <p className="text-xs text-blue-800 leading-relaxed pt-1">
+                    <div className="space-y-1 min-w-0">
+                      {hasDeliveryAddress ? (
+                        <p className="text-xs text-blue-900 leading-relaxed">
+                          Delivering to <strong>{deliveryAddress}</strong>.{' '}
+                          <button
+                            type="button"
+                            onClick={() => navigate(ADDRESS_PAGE)}
+                            className="font-semibold text-brand-orange hover:underline cursor-pointer"
+                          >
+                            Change
+                          </button>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-blue-900 leading-relaxed">
+                          You have no saved delivery address yet.
+                        </p>
+                      )}
+                      <p className="text-xs text-blue-800 leading-relaxed">
                         The delivery fee is included in your total. A LalaMove rider is booked as soon as
                         your items are packed, and you can follow the parcel from your order page.
                       </p>
+                      {/* The estimate, for an order that can have one. */}
+                      {!orderHasPreorder && estimateAvailable && (
+                        <p className="text-xs text-blue-900 pt-1">
+                          Estimated delivery:{' '}
+                          <strong>{estimatedDeliveryLabel(serverEta, tierInfo.eta)}</strong>
+                          {feeSource === 'lalamove' ? ' (live courier quote)' : ''}
+                        </p>
+                      )}
                     </div>
                   </div>
+
+                  {!hasDeliveryAddress && (
+                    <div className="flex flex-col gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 sm:flex-row sm:items-center sm:justify-between">
+                      <p className={`text-xs font-semibold ${showError('address') ? 'text-red-600' : 'text-amber-800'}`}>
+                        Add a delivery address first — the delivery fee is quoted for it.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`${ADDRESS_PAGE}&add=1`)}
+                        className="shrink-0 h-8 px-3 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-xs font-semibold cursor-pointer"
+                      >
+                        Add delivery address
+                      </button>
+                    </div>
+                  )}
+
+                  {hasDeliveryAddress && quoteError && deliveryFee == null && (
+                    <p className="text-xs font-semibold text-red-600">{quoteError}</p>
+                  )}
 
                   {/* Pre-order: an item that is produced to order has no date
                       to be estimated against, so no estimate is offered at
                       all - neither by the server nor by the local tier table. */}
                   {orderHasPreorder && (
-                    <div className="flex items-start gap-2.5 p-3 rounded-lg border border-orange-200 bg-orange-50">
+                    <div className="flex items-start gap-2.5 p-3 rounded-xl border border-orange-200 bg-orange-50">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-brand-orange shrink-0 mt-0.5">
                         <circle cx="12" cy="12" r="10" />
                         <polyline points="12 6 12 12 16 14" />
@@ -927,221 +1149,182 @@ function CheckoutPlaceholder() {
                       </div>
                     </div>
                   )}
-
-                  {/* The estimate, for an order that can have one. */}
-                  {!orderHasPreorder && estimateAvailable && (
-                    <p className="text-xs text-blue-900">
-                      Estimated delivery:{' '}
-                      <strong>{estimatedDeliveryLabel(serverEta, tierInfo.eta)}</strong>
-                      {feeSource === 'lalamove' ? ' (live courier quote)' : ''}
-                    </p>
-                  )}
                 </div>
               )}
+            </section>
+
+            {/* Payment Method: preorders settle online (rule 55) - pickup AND
+                delivery, delivery fee included. PayMongo is the only gateway,
+                so it is shown selected rather than offered as a choice. */}
+            <section className={card}>
+              <h2 className="text-base font-semibold text-gray-900 pb-4">Payment Method</h2>
+              <div className="flex flex-wrap items-center gap-3 p-3.5 md:p-4 rounded-xl border border-blue-200 bg-blue-50/50">
+                <span className="w-5 h-5 rounded-full border-2 border-blue-600 flex items-center justify-center shrink-0" aria-hidden="true">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                </span>
+                <div className="bg-white px-2 py-1 rounded-md border border-slate-200/90 flex items-center shrink-0">
+                  <img src={paymongoLogo} alt="PayMongo" className="h-5 w-auto object-contain" />
+                </div>
+                <p className="text-sm font-semibold text-gray-900 flex-1 min-w-0">PayMongo Gateway</p>
+                {/* Accepted tenders, on white tiles so every logo keeps its
+                    contrast in both themes. Own line on phones. */}
+                <ul className="basis-full sm:basis-auto pl-8 sm:pl-0 flex items-center gap-1.5 flex-wrap sm:justify-end" aria-label="Accepted payment methods">
+                  {PAYMENT_TENDERS.map((tender) => (
+                    <li
+                      key={tender.name}
+                      title={tender.name}
+                      className="h-7 w-14 rounded-md bg-[#ffffff] border border-slate-200 flex items-center justify-center px-1.5 dark:border-transparent"
+                    >
+                      <img src={tender.src} alt={tender.name} className={`${tender.h} w-auto max-w-full object-contain`} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p className="flex items-start gap-2 text-xs text-gray-500 pt-3">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-400 shrink-0">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <span>
+                  <strong className="text-gray-700">Upfront Payment Required:</strong> Both in-stock and pre-order merchandise are paid upfront to guarantee item allocation and production scheduling.
+                </span>
+              </p>
+
+              <details className="group pt-3">
+                <summary className="text-xs font-semibold text-brand-orange cursor-pointer list-none flex items-center gap-1 select-none">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-3.5 h-3.5 transition-transform group-open:rotate-90">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  How your payment works
+                </summary>
+                <ul className="space-y-1.5 pl-5 pt-2 list-disc text-xs text-gray-600 leading-relaxed">
+                  <li>
+                    <strong className="text-gray-800">Redirect to PayMongo:</strong> You will be temporarily redirected to PayMongo's secure payment page.
+                  </li>
+                  <li>
+                    <strong className="text-gray-800">Multiple tender options:</strong> Pay conveniently using <strong>GCash, Maya, GrabPay, Visa, Mastercard,</strong> or online bank transfers.
+                  </li>
+                  <li>
+                    <strong className="text-gray-800">Immediate confirmation:</strong> Once completed, you will be automatically returned to Tindahan ni Isko with your confirmed order receipt and QR code.
+                  </li>
+                </ul>
+              </details>
+            </section>
+          </div>
+
+          {/* Order Summary */}
+          <aside className={`${card} min-w-0 lg:sticky lg:top-6 space-y-5`}>
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+              <div className="w-11 h-11 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center shrink-0">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="8" y1="13" x2="16" y2="13" />
+                  <line x1="8" y1="17" x2="13" y2="17" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900">Order Summary</h2>
             </div>
 
-            <aside className="space-y-6 min-w-0 lg:sticky lg:top-6 lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-slate-50/60 lg:p-6">
-              <h2 className="hidden lg:block text-base font-semibold text-gray-900 tracking-tight">
-                Order Summary
-              </h2>
-              {/* Itemized Order Review List */}
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-gray-900 flex items-center justify-between">
-                  <span>Order Items ({itemsToCheckout.length})</span>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/bag')}
-                    className="text-brand-orange text-xs font-semibold hover:underline cursor-pointer"
-                  >
-                    Edit Items
-                  </button>
-                </p>
-                <div className="max-h-48 lg:max-h-72 overflow-y-auto divide-y divide-slate-100 rounded-lg px-3 py-1 bg-slate-50 lg:bg-white lg:dark:bg-[var(--surface)] lg:border lg:border-slate-100 scrollbar-none">
-                  {itemsToCheckout.map((item) => {
-                    const product = item.product || {}
-                    const itemPrice = Number(item.amount ?? product.price ?? 0)
-                    const itemQty = Number(item.qty || 1)
-                    const variantText = [item.size, item.color?.name].filter(Boolean).join(' • ')
-                    const isPreorder = item.preOrder ?? product.preOrder
-                    // Only show "Change" when the product has more than one active variation
-                    const activeVariations = (product.variations || []).filter(
-                      (v) => !v.prodvar_disabled && !v.prodvar_deleted
-                    )
-                    const hasMultipleVariations = activeVariations.length > 1
-                    return (
-                      <div
-                        key={item.cartItemId}
-                        className="py-2.5 flex items-start justify-between gap-3 text-sm"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <img
-                            src={getImageUrl(item.color?.image || product.images?.[0] || product.image)}
-                            alt={product.name}
-                            className="w-10 h-10 rounded-md object-contain bg-white p-1 shrink-0"
-                          />
-                          <div className="min-w-0">
-                            <p className="font-semibold text-gray-900 truncate">{product.name}</p>
-                            <p className="text-xs text-gray-500">
-                              Qty: {itemQty}
-                              {variantText ? ` • ${variantText}` : ''} • ₱{itemPrice.toFixed(2)} each
-                            </p>
-                            {/* Issue 3: Change variation without leaving checkout */}
-                            {hasMultipleVariations && (
-                              <button
-                                type="button"
-                                className="mt-1 text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
-                                onClick={() => {
-                                  setVariationModal({
-                                    cartItemId: item.cartItemId,
-                                    bagId: item.bagId,
-                                    product,
-                                    currentProdvarId: item.prodvarId ?? null,
-                                  })
-                                  setSelectedProdvarId(item.prodvarId ?? null)
-                                }}
-                              >
-                                Change variation
-                              </button>
-                            )}
-                            {isPreorder && (
-                              <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-2xs font-bold uppercase tracking-wider bg-orange-50 text-brand-orange border border-orange-200/60">
-                                Pre-order
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <p className="font-semibold text-gray-900 shrink-0 pt-0.5">
-                          ₱{(itemPrice * itemQty).toFixed(2)}
-                        </p>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Price Breakdown */}
-              <div className="p-4 bg-orange-50/60 rounded-lg space-y-1.5 text-sm">
-                <div className="flex justify-between text-gray-600 font-medium">
-                  <span>Items Subtotal</span>
-                  <span>₱{(serverPreview?.subtotal ?? orderSubtotal).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600 font-medium">
-                  <span>{feeRowLabel}</span>
-                  <span>
-                    {dispatchType === 'delivery'
-                      ? deliveryFee != null
-                        ? `₱${deliveryFee.toFixed(2)}`
-                        : 'Calculating…'
-                      : 'FREE (Pickup)'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Payment: preorders settle online (rule 55) - pickup AND delivery,
-                  delivery fee included. There is no pay-at-store tender left, so
-                  the gateway is not a choice. */}
-              {/* Payment Details with PayMongo Branding & Clear Hierarchy */}
-              <div className="space-y-3 pt-3 border-t border-slate-200">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    Payment Method
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/40 p-3.5 space-y-3 shadow-2xs">
-                  {/* Gateway Logo & Title */}
-                  <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-emerald-100">
-                    <div className="flex items-center gap-2">
-                      <div className="bg-white px-2 py-1 rounded-md border border-slate-200/90 shadow-2xs flex items-center">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-gray-800">
+                {itemCount} {itemCount === 1 ? 'item' : 'items'} selected
+              </p>
+              <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 scrollbar-none">
+                {itemsToCheckout.map((item) => {
+                  const product = item.product || {}
+                  const itemPrice = Number(item.amount ?? product.price ?? 0)
+                  const itemQty = Number(item.qty || 1)
+                  const variantText = lineVariation(item)
+                  return (
+                    <div key={item.cartItemId} className="py-2.5 flex items-start gap-3">
+                      <div className="w-12 h-12 rounded-lg border border-slate-200/80 bg-white flex items-center justify-center shrink-0 overflow-hidden">
                         <img
-                          src={paymongoLogo}
-                          alt="PayMongo"
-                          className="h-5 w-auto object-contain"
+                          src={getImageUrl(item.color?.image || product.images?.[0] || product.image)}
+                          alt=""
+                          className="w-full h-full object-contain p-1"
                         />
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-900 leading-tight">PayMongo Gateway</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{product.name}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {variantText ? `${variantText} • ` : ''}Qty: {itemQty}
+                        </p>
                       </div>
+                      <p className="text-sm font-semibold text-gray-900 shrink-0">
+                        ₱{(itemPrice * itemQty).toFixed(2)}
+                      </p>
                     </div>
-                  </div>
+                  )
+                })}
+              </div>
+            </div>
 
-                  {/* Payment Explanation & Text Hierarchy */}
-                  <div className="space-y-2 text-xs text-gray-700">
-                    <p className="font-semibold text-gray-900 text-xs flex items-center gap-1.5">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600 shrink-0">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                      </svg>
-                      How your payment works:
-                    </p>
-                    <ul className="space-y-1.5 pl-5 list-disc text-2xs text-gray-600 leading-relaxed">
-                      <li>
-                        <strong className="text-gray-800">Redirect to PayMongo:</strong> You will be temporarily redirected to PayMongo's secure payment page.
-                      </li>
-                      <li>
-                        <strong className="text-gray-800">Multiple tender options:</strong> Pay conveniently using <strong>GCash, Maya, GrabPay, Visa, Mastercard,</strong> or online bank transfers.
-                      </li>
-                      <li>
-                        <strong className="text-gray-800">Immediate confirmation:</strong> Once completed, you will be automatically returned to Tindahan ni Isko with your confirmed order receipt and QR code.
-                      </li>
-                    </ul>
-                  </div>
+            {/* Price Breakdown */}
+            <div className="space-y-2.5 text-sm pt-4 border-t border-slate-100">
+              <div className="flex justify-between gap-3">
+                <span className="text-gray-700">Items Subtotal</span>
+                <span className="font-semibold text-gray-900">₱{(serverPreview?.subtotal ?? orderSubtotal).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-gray-700">{feeRowLabel}</span>
+                <span className="font-semibold text-gray-900 text-right">{feeValue}</span>
+              </div>
+            </div>
 
-                  {/* Upfront payment reminder badge */}
-                  <div className="p-2 rounded-lg bg-white/90 border border-emerald-200 text-2xs text-emerald-800 flex items-start gap-2">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="16" x2="12" y2="12" />
-                      <line x1="12" y1="8" x2="12.01" y2="8" />
+            {/* Amount to be charged */}
+            <div className="rounded-xl bg-orange-50/80 px-4 py-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-lg font-semibold text-gray-900">Total</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {dispatchType === 'delivery' && deliveryFee > 0
+                    ? `Includes ₱${deliveryFee.toFixed(2)} delivery fee${feeSource === 'lalamove' ? ' (LalaMove)' : ''}`
+                    : 'Amount to be charged via PayMongo'}
+                </p>
+              </div>
+              <span className="text-2xl font-bold text-brand-orange shrink-0">
+                ₱{totalDue.toFixed(2)}
+              </span>
+            </div>
+
+            {error && <ApiErrorText error={{ message: error }} />}
+
+            {/* Confirmation Decision Buttons */}
+            <div className="space-y-2">
+              <Button
+                onClick={handlePlaceOrder}
+                disabled={busy}
+                className={`w-full !h-12 !rounded-xl !text-base font-semibold transition-all cursor-pointer ${
+                  busy
+                    ? 'bg-slate-200 text-slate-500 cursor-wait'
+                    : 'bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98'
+                }`}
+              >
+                {busy ? (
+                  <>
+                    <LoadingSpinner size={18} /> Processing…
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                      <path d="M20 6 9 17l-5-5" />
                     </svg>
-                    <span>
-                      <strong>Upfront Payment Required:</strong> Both in-stock and pre-order merchandise are paid upfront to guarantee item allocation and production scheduling.
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-gray-500 pt-0.5 px-0.5">
-                  <span>Amount to be charged:</span>
-                  <span className="font-bold text-gray-900 text-sm">₱{totalDue.toFixed(2)}</span>
-                </div>
-                {dispatchType === 'delivery' && deliveryFee > 0 && (
-                  <p className="text-[11px] text-gray-500 text-right px-0.5 -mt-1">
-                    Includes ₱{deliveryFee.toFixed(2)} delivery fee
-                    {feeSource === 'lalamove' ? ' (LalaMove)' : ''}
-                  </p>
+                    Confirm Order
+                  </>
                 )}
-              </div>
-
-              {error && <ApiErrorText error={{ message: error }} />}
-
-              {/* Confirmation Decision Buttons */}
-              <div className="space-y-2 pt-2">
-                <Button
-                  onClick={handlePlaceOrder}
-                  disabled={busy}
-                  className={`w-full py-3.5 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
-                    busy
-                      ? 'bg-slate-200 text-slate-500 cursor-wait'
-                      : 'bg-brand-orange hover:bg-brand-orange-dark text-white active:scale-98'
-                  }`}
-                >
-                  {busy ? (
-                    <>
-                      <LoadingSpinner size={18} /> Processing…
-                    </>
-                  ) : (
-                    `Proceed to PayMongo • ₱${totalDue.toFixed(2)}`
-                  )}
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/bag')}
-                  className="w-full py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
-                >
-                  Back to Bag / Cancel
-                </button>
-              </div>
-            </aside>
-          </div>
+              </Button>
+              <p className="text-2xs text-gray-400 text-center">
+                You will pay ₱{totalDue.toFixed(2)} on PayMongo's secure page next.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/bag')}
+                className="w-full py-2 text-sm font-semibold text-slate-500 hover:text-gray-800 transition-colors cursor-pointer"
+              >
+                Back to Bag
+              </button>
+            </div>
+          </aside>
         </div>
       </div>
 

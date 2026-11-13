@@ -28,6 +28,9 @@ export default function ScheduleBlockModal({
   shift,
   locked = false,
   lockMessage = '',
+  // Staff view: the date and times are set by an admin, so only the
+  // "unavailable" flag (FLOW-EMP_SCHED-04) can be changed here.
+  availabilityOnly = false,
   isSaving = false,
   onClose,
   onSubmit,
@@ -133,7 +136,7 @@ export default function ScheduleBlockModal({
               id="block-date"
               type="date"
               value={date}
-              disabled={locked}
+              disabled={locked || availabilityOnly}
               onChange={(event) => {
                 setDate(event.target.value)
                 setFormError('')
@@ -150,7 +153,7 @@ export default function ScheduleBlockModal({
               type="time"
               step={GRID_MINUTES * 60}
               value={startTime}
-              disabled={locked}
+              disabled={locked || availabilityOnly}
               onChange={(event) => {
                 setStartTime(event.target.value)
                 setFormError('')
@@ -167,7 +170,7 @@ export default function ScheduleBlockModal({
               type="time"
               step={GRID_MINUTES * 60}
               value={endTime}
-              disabled={locked}
+              disabled={locked || availabilityOnly}
               onChange={(event) => {
                 setEndTime(event.target.value)
                 setFormError('')
@@ -202,7 +205,9 @@ export default function ScheduleBlockModal({
           />
           <span>
             <span className="block font-semibold text-slate-800">
-              Mark employee unavailable for this shift
+              {availabilityOnly
+                ? 'I can’t work this shift'
+                : 'Mark employee unavailable for this shift'}
             </span>
             <span className="block mt-1 text-2xs leading-relaxed text-slate-500 font-normal">
               Use this for a class or personal conflict. The shift will no longer count toward

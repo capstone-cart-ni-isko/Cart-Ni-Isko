@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getApiToken, setApiToken } from '../services/api.js'
 import { clearSession, loadSession, saveSession } from '../services/session.js'
@@ -122,6 +122,10 @@ export function AuthProvider({ children }) {
   })
 
   const [addresses, setAddresses] = useState(DEFAULT_ADDRESSES)
+  // True once the saved list has been read from the account. Until then the
+  // empty list on screen is not the real one, so it must never be saved over.
+  const [addressesLoaded, setAddressesLoaded] = useState(false)
+  const addressesLoadedRef = useRef(false)
 
   // Mirror every user change (login, edit, logout) into the shared slot.
   useEffect(() => {
@@ -149,19 +153,35 @@ export function AuthProvider({ children }) {
    * nobody loses an address when the backend becomes the single source.
    */
   useEffect(() => {
+    addressesLoadedRef.current = false
+    setAddressesLoaded(false)
     if (!custId) {
       setAddresses(DEFAULT_ADDRESSES)
       return undefined
     }
     let cancelled = false
+    const markLoaded = () => {
+      addressesLoadedRef.current = true
+      setAddressesLoaded(true)
+    }
 
     fetchMyAccount()
       .then(async (row) => {
         if (cancelled || !row) return
+        // The server says whose bearer this is. When it is not the customer
+        // on screen (a staff bearer, or another customer's), this customer
+        // session ends and the customer signs in again - nothing is saved
+        // against the wrong account.
+        if (row.cust_id == null || String(row.cust_id) !== String(custId)) {
+          setApiToken(null, 'customer')
+          setCurrentUser(null)
+          return
+        }
         const stored = Array.isArray(row.cust_addresses) ? row.cust_addresses : []
 
         if (stored.length > 0) {
           setAddresses(linesToAddresses(stored))
+          markLoaded()
           return
         }
 
@@ -172,12 +192,18 @@ export function AuthProvider({ children }) {
         } catch {
           legacy = []
         }
-        if (legacy.length === 0) return
+        if (legacy.length === 0) {
+          markLoaded()
+          return
+        }
 
         const lines = legacy.map(serializeAddress).filter(Boolean)
         await updateAccount('customer', custId, { cust_addresses: lines })
         localStorage.removeItem('isko_addresses')
-        if (!cancelled) setAddresses(linesToAddresses(lines))
+        if (!cancelled) {
+          setAddresses(linesToAddresses(lines))
+          markLoaded()
+        }
       })
       .catch(() => {
         // A failed read keeps whatever is already on screen.
@@ -382,12 +408,28 @@ export function AuthProvider({ children }) {
     navigate('/login', { replace: true })
   }
 
+  /**
+   * The saved list to build on. If it has not been read from the account yet
+   * (slow or failed first load), it is read now, so adding an address can
+   * never replace addresses that were simply not on screen yet.
+   */
+  const savedAddresses = async () => {
+    if (addressesLoadedRef.current || !custId) return addresses
+    const row = await fetchMyAccount()
+    const stored = Array.isArray(row?.cust_addresses) ? row.cust_addresses : []
+    const list = linesToAddresses(stored)
+    setAddresses(list)
+    addressesLoadedRef.current = true
+    setAddressesLoaded(true)
+    return list
+  }
+
   const addAddress = async (address) => {
     const newAddress = {
       ...address,
       id: address.id || Date.now().toString(),
     }
-    const next = [...addresses]
+    const next = [...(await savedAddresses())]
     // The first slot is the default, so adding "default" swaps the head.
     if (newAddress.isDefault) {
       next.unshift({ ...newAddress, isDefault: true })
@@ -417,6 +459,7 @@ export function AuthProvider({ children }) {
       value={{
         currentUser,
         addresses,
+        addressesLoaded,
         login,
         register,
         verifyOtpChallenge,

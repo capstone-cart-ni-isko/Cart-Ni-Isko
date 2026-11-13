@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
@@ -104,13 +105,20 @@ function AddressCard({ address, defaultName, defaultPhone, onEdit, onDelete, onS
 }
 
 function MyAddress() {
-  const { currentUser, addresses, addAddress, updateAddress, deleteAddress } = useAuth()
+  const { currentUser, addresses, addressesLoaded, addAddress, updateAddress, deleteAddress } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
+  // Checkout sends the customer here with ?return=/checkout when delivery
+  // has no address yet; only same-site paths are followed back.
+  const [searchParams] = useSearchParams()
+  const rawReturn = searchParams.get('return') || ''
+  const returnTo = rawReturn.startsWith('/') && !rawReturn.startsWith('//') ? rawReturn : ''
 
   const accountName = currentUser?.fullName || 'Juan Dela Cruz'
   const accountPhone = currentUser?.phone || '+63 912 345 6789'
 
-  const [showForm, setShowForm] = useState(false)
+  // Checkout's "Add delivery address" (?add=1) opens the form straight away.
+  const [showForm, setShowForm] = useState(() => Boolean(returnTo) && searchParams.get('add') === '1')
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -126,6 +134,21 @@ function MyAddress() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }))
+  }
+
+  /* Fields read from the map pin. The place (barangay, city, province,
+     postal code) follows the pin; a typed street line is kept, because the
+     map rarely knows the house number. */
+  const handleMapAddress = (found) => {
+    setForm((prev) => ({
+      ...prev,
+      addressLine: prev.addressLine.trim() ? prev.addressLine : found.addressLine || prev.addressLine,
+      barangay: found.barangay || prev.barangay,
+      city: found.city || prev.city,
+      province: found.province || prev.province,
+      postalCode: found.postalCode || prev.postalCode,
+    }))
+    setTouched((prev) => ({ ...prev, addressLine: true, city: true, province: true, postalCode: true }))
   }
 
   const handleAddNew = () => {
@@ -160,7 +183,10 @@ function MyAddress() {
   const handleSave = async (e) => {
     e.preventDefault()
     setTouched({ addressLine: true, city: true, province: true, postalCode: true })
-    if (!isFormValid) return
+    if (!isFormValid) {
+      showToast('Fill in the highlighted fields to save this address.', 'error')
+      return
+    }
 
     const addressPayload = {
       ...form,
@@ -183,8 +209,9 @@ function MyAddress() {
       setShowForm(false)
       setEditingId(null)
       setForm(EMPTY_FORM)
-    } catch {
-      showToast('Unable to save that address.', 'error')
+      if (returnTo) navigate(returnTo)
+    } catch (err) {
+      showToast(err?.message ? `Unable to save that address: ${err.message}` : 'Unable to save that address.', 'error')
     } finally {
       setSaving(false)
     }
@@ -215,7 +242,7 @@ function MyAddress() {
     <FocusedLayout
       title="My Addresses"
       subtitle="Manage your delivery and campus shipping destinations"
-      backTo="/settings"
+      backTo={returnTo || '/settings'}
       containerClassName="max-w-4xl"
     >
       <div className="pb-16 animate-fade-in w-full">
@@ -252,7 +279,9 @@ function MyAddress() {
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-gray-400">
                       <MapPinIcon className="h-4 w-4" />
                     </div>
-                    <p className="text-xs font-medium text-gray-500">No addresses saved yet.</p>
+                    <p className="text-xs font-medium text-gray-500">
+                      {addressesLoaded ? 'No addresses saved yet.' : 'Loading your saved addresses…'}
+                    </p>
                   </div>
                 )}
 
@@ -303,6 +332,7 @@ function MyAddress() {
                       value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
                       onChange={(spot) => setForm((prev) => ({ ...prev, lat: spot?.lat ?? null, lng: spot?.lng ?? null }))}
                       query={[form.addressLine, form.barangay, form.city, form.province].filter((p) => p && p.trim()).join(', ')}
+                      onAddress={handleMapAddress}
                     />
                   </Suspense>
 
@@ -321,7 +351,7 @@ function MyAddress() {
                     <Button type="button" variant="secondary" onClick={handleCancel} className="h-11 rounded-xl px-5 font-semibold sm:min-w-32">
                       Cancel
                     </Button>
-                    <Button type="submit" disabled={!isFormValid || saving} loading={saving} className="h-11 rounded-xl px-6 font-semibold shadow-sm sm:min-w-40">
+                    <Button type="submit" disabled={saving} loading={saving} className="h-11 rounded-xl px-6 font-semibold shadow-sm sm:min-w-40">
                       Save Changes
                     </Button>
                   </div>

@@ -18,6 +18,7 @@ import {
 } from '../services/appointments.js'
 import { fetchOrder } from '../services/orders.js'
 import { parseDate as parseDateTime } from '../services/dashboard.js'
+import { variationText } from '../utils/variation.js'
 
 const STORE = {
   location: 'Tindahan ni Isko – Main Campus',
@@ -144,7 +145,7 @@ function mapAppointment(row, order) {
   const orderItems = order?.items || []
   const items = orderItems.map((entry) => {
     const prodvar = entry.prodvar || null
-    const variant = prodvar?.prodvar_name || ''
+    const variant = variationText(entry)
     return {
       name: entry.product?.prod_name || entry.product?.name || entry.prod_name || 'Item',
       details: [`Qty ${entry.qty ?? entry.item_qty ?? 1}`, variant].filter(Boolean).join(' · '),
@@ -334,121 +335,130 @@ function Appointments() {
   return (
     <AppShell>
       <PageHeader title="My Appointments" backTo="/home" />
-      <div className="max-w-3xl mx-auto w-full px-4 md:px-6 py-5 pb-28 space-y-4">
-        {/* Top action: full-width landscape card that mounts <AppointmentForm/> */}
-        <button
-          type="button"
-          onClick={() => (form === 'new' ? closeForm() : startAdd())}
-          aria-expanded={form === 'new'}
-          className="add-appointment-cta w-full h-24 px-5 flex items-center justify-between gap-4 rounded-xl bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] text-white text-left cursor-pointer transition-transform active:scale-[0.99]"
-        >
-          <span className="min-w-0">
-            <span className="block text-base font-semibold">Add Appointment</span>
-            <span className="block text-xs font-medium text-white/85 leading-snug mt-0.5">
-              Reserve a 10-minute store visit or an order pickup slot.
+      {/* Same frame as the bag and checkout: the list on the left, the
+          "Add Appointment" action kept in view on the right (lg). Below lg
+          the action comes first, as before. */}
+      <div className="max-w-6xl mx-auto w-full px-4 md:px-0 py-4 md:py-2 pb-28 lg:pb-16 animate-fade-in space-y-4 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-6 lg:items-start">
+        {/* The booking side: the action, and the form it opens right under it.
+            Not sticky while the form is open - it is taller than the screen. */}
+        <aside className={`lg:col-start-2 lg:row-start-1 space-y-4 min-w-0 ${form ? '' : 'lg:sticky lg:top-6'}`}>
+          {/* Top action: mounts <AppointmentForm/> */}
+          <button
+            type="button"
+            onClick={() => (form === 'new' ? closeForm() : startAdd())}
+            aria-expanded={form === 'new'}
+            className="add-appointment-cta w-full min-h-24 lg:min-h-40 px-5 py-5 lg:px-6 lg:py-6 flex items-center lg:items-start lg:flex-col-reverse justify-between gap-4 rounded-2xl bg-gradient-to-r lg:bg-gradient-to-br from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] text-white text-left cursor-pointer transition-transform active:scale-[0.99] shadow-2xs"
+          >
+            <span className="min-w-0">
+              <span className="block text-lg font-semibold">Add Appointment</span>
+              <span className="block text-sm font-medium text-white/85 leading-snug mt-1">
+                Reserve a 10-minute store visit or an order pickup slot.
+              </span>
             </span>
-          </span>
-          <span className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-5 h-5">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </span>
-        </button>
+            <span className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={`w-5 h-5 transition-transform ${form ? 'rotate-45' : ''}`}>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </span>
+          </button>
 
-        {/* Filter row: the list follows the selected appointment status. */}
-        <div className="bg-white rounded-xl p-4 border border-slate-200">
-          <h1 className="text-base font-semibold text-slate-900 tracking-tight">My Appointments</h1>
-          <p className="text-xs text-slate-500 leading-relaxed mt-0.5 mb-3">
-            Your pickup schedule and store visits. Arrive at the campus store at your designated slot.
-          </p>
-          <div className="flex gap-2 overflow-x-auto scrollbar-none">
-            {FILTERS.map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => selectFilter(id)}
-                aria-pressed={filter === id}
-                className={`h-8 px-4 rounded-full text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
-                  filter === id
-                    ? 'bg-brand-orange text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          {/* This page always books a VISIT; Checkout is the only CLAIM caller. */}
+          {form && (
+            <AppointmentForm
+              key={form === 'new' ? 'new' : `edit-${form.id}`}
+              type={APPOINT_TYPE.VISIT}
+              custId={custId}
+              reschedule={form === 'new' ? null : form}
+              onSuccess={() => {
+                closeForm()
+                refresh()
+              }}
+              onCancel={closeForm}
+            />
+          )}
+        </aside>
+
+        <div className="lg:col-start-1 lg:row-start-1 space-y-4 min-w-0">
+          {/* Filter row: the list follows the selected appointment status. */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs p-5 md:p-6">
+            <h1 className="text-lg font-semibold text-slate-900 tracking-tight">My Appointments</h1>
+            <p className="text-sm text-slate-500 leading-relaxed mt-1 mb-4">
+              Your pickup schedule and store visits. Arrive at the campus store at your designated slot.
+            </p>
+            <div className="flex gap-2 overflow-x-auto scrollbar-none">
+              {FILTERS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => selectFilter(id)}
+                  aria-pressed={filter === id}
+                  className={`h-9 px-4 rounded-full text-sm font-semibold shrink-0 transition-colors cursor-pointer ${
+                    filter === id
+                      ? 'bg-brand-orange text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* A failed refresh keeps the last good list on screen under this note */}
+          {error && list.length > 0 && (
+            <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+              {error}
+            </p>
+          )}
+
+          {/* Data list */}
+          {loading ? (
+            <Skeleton />
+          ) : switching ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200/80 bg-white shadow-2xs px-4 py-10 text-sm font-semibold text-slate-500" role="status">
+              <span className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-brand-orange animate-spin" />
+              Loading appointments…
+            </div>
+          ) : error && list.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs p-8 text-center space-y-3">
+              <p className="text-sm font-semibold text-red-500">{error}</p>
+              <button
+                type="button"
+                onClick={refresh}
+                className="h-9 px-4 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Try again
+              </button>
+            </div>
+          ) : list.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs p-10 text-center">
+              <p className="text-sm font-semibold text-slate-500">No appointments found</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {cards.map((appt) => (
+                <AppointmentCard
+                  key={appt.id}
+                  appointment={appt}
+                  onView={() => setViewing(appt)}
+                  onEdit={() => startEdit(appt)}
+                  onCancel={handleCancel}
+                  onShowQr={setQrTarget}
+                />
+              ))}
+
+              {list.length > cards.length && (
+                <button
+                  type="button"
+                  onClick={() => setLimit(limit + PAGE_SIZE)}
+                  className="w-full h-10 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  Load more ({list.length - cards.length} left)
+                </button>
+              )}
+            </div>
+          )}
         </div>
-
-        {/* A failed refresh keeps the last good list on screen under this note */}
-        {error && list.length > 0 && (
-          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-semibold text-red-600">
-            {error}
-          </p>
-        )}
-
-        {/* This page always books a VISIT; Checkout is the only CLAIM caller. */}
-        {form && (
-          <AppointmentForm
-            key={form === 'new' ? 'new' : `edit-${form.id}`}
-            type={APPOINT_TYPE.VISIT}
-            custId={custId}
-            reschedule={form === 'new' ? null : form}
-            onSuccess={() => {
-              closeForm()
-              refresh()
-            }}
-            onCancel={closeForm}
-          />
-        )}
-
-        {/* Data list */}
-        {loading ? (
-          <Skeleton />
-        ) : switching ? (
-          <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-8 text-xs font-semibold text-slate-500" role="status">
-            <span className="w-4 h-4 rounded-full border-2 border-slate-300 border-t-brand-orange animate-spin" />
-            Loading appointments…
-          </div>
-        ) : error && list.length === 0 ? (
-          <div className="bg-white rounded-xl p-8 text-center border border-slate-200 space-y-3">
-            <p className="text-sm font-semibold text-red-500">{error}</p>
-            <button
-              type="button"
-              onClick={refresh}
-              className="h-8 px-4 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-            >
-              Try again
-            </button>
-          </div>
-        ) : list.length === 0 ? (
-          <div className="bg-white rounded-xl p-8 text-center border border-slate-200">
-            <p className="text-sm font-semibold text-slate-500">No appointments found</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {cards.map((appt) => (
-              <AppointmentCard
-                key={appt.id}
-                appointment={appt}
-                onView={() => setViewing(appt)}
-                onEdit={() => startEdit(appt)}
-                onCancel={handleCancel}
-                onShowQr={setQrTarget}
-              />
-            ))}
-
-            {list.length > cards.length && (
-              <button
-                type="button"
-                onClick={() => setLimit(limit + PAGE_SIZE)}
-                className="w-full h-9 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                Load more ({list.length - cards.length} left)
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
       <AppointmentDetailsModal
@@ -485,10 +495,10 @@ function Appointments() {
 /** Placeholder cards shown while the first list request is in flight. */
 function Skeleton() {
   return (
-    <div className="space-y-3" aria-busy="true" aria-live="polite">
+    <div className="space-y-4" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading appointments</span>
       {[0, 1, 2].map((row) => (
-        <div key={row} className="bg-white dark:bg-[var(--surface)] rounded-xl p-4 border border-slate-200 dark:border-[var(--line)] space-y-3 animate-pulse" aria-hidden="true">
+        <div key={row} className="bg-white dark:bg-[var(--surface)] rounded-2xl p-5 md:p-6 border border-slate-200/80 dark:border-[var(--line)] shadow-2xs space-y-3 animate-pulse" aria-hidden="true">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2 flex-1">
               <SkeletonBlock className="h-3 w-20 rounded-full" />

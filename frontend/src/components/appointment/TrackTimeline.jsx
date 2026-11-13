@@ -22,14 +22,14 @@ export default function TrackTimeline({ status = 'upcoming', type = 'VISIT' }) {
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Track</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2.5">Track</p>
 
       {isCancelled || status === 'absent' ? (
         <div className={`rounded-lg border px-3 py-2 ${isCancelled ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
           <p className={`text-xs font-semibold ${isCancelled ? 'text-red-700' : 'text-amber-800'}`}>
             {isCancelled ? 'Cancelled' : 'No-show'}
           </p>
-          <p className={`text-[11px] leading-snug ${isCancelled ? 'text-red-600' : 'text-amber-700'}`}>
+          <p className={`text-xs leading-snug ${isCancelled ? 'text-red-600' : 'text-amber-700'}`}>
             {isCancelled
               ? 'This slot is no longer active. Book a new one to reschedule.'
               : 'This appointment was missed. Book a new slot if you still need to visit the store.'}
@@ -44,7 +44,7 @@ export default function TrackTimeline({ status = 'upcoming', type = 'VISIT' }) {
               <li key={step.key} className="flex-1 min-w-0 last:flex-none">
                 <div className="flex items-center">
                   <span
-                    className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
                       done ? 'bg-brand-orange border-brand-orange' : 'bg-white border-slate-300'
                     }`}
                   >
@@ -69,7 +69,7 @@ export default function TrackTimeline({ status = 'upcoming', type = 'VISIT' }) {
                   )}
                 </div>
                 <p
-                  className={`mt-1 text-[10px] leading-tight pr-1 ${
+                  className={`mt-1.5 text-xs leading-tight pr-1 ${
                     index === activeIndex
                       ? 'text-brand-orange font-semibold'
                       : done

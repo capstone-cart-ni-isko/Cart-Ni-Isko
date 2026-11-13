@@ -56,9 +56,9 @@ const NAV_GROUPS = [
       {
         to: '/admin/walkin',
         label: 'Walk-in Orders',
-        hideForStaff: true,
-        // POST /pos/* is admin-only in the API, so staff never open it.
-        roles: ['ADMIN', 'SUPER_ADMIN'],
+        // Owner decision (overrides rule 44 / REQ-EMP_HOME-01 / FLOW-WALKIN-01):
+        // staff run the walk-in register too; POST /pos/* is role:staff.
+        roles: ['ADMIN', 'SUPER_ADMIN', 'STAFF'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />

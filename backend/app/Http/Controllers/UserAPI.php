@@ -2540,6 +2540,39 @@ class UserAPI extends Controller
                 $notifId       = $json->input('notif_id');
                 $recipientType = strtolower($json->input('recipient_type'));
 
+                // FLOW-NOTIF-05 "Mark all as read": one statement for every
+                // unread row of the signed-in account. One request per row
+                // queued behind each other on the server and timed out part
+                // way, leaving the rest unread.
+                if ($json->boolean('all')) {
+                    $now = now();
+                    if ($recipientType === 'customer') {
+                        $ownerId = $this->customerId($json);
+                        if ($ownerId === null) {
+                            return response()->json(['success' => false, 'message' => 'Customer account not found'], 404);
+                        }
+                        $marked = CustNotif::where('cust_id', $ownerId)
+                            ->whereNull('custnotif_read')
+                            ->update(['custnotif_read' => $now]);
+                    } else {
+                        $employee = $json->user('api');
+                        if (! $employee instanceof Employee) {
+                            return response()->json(['success' => false, 'message' => 'Employee account not found'], 404);
+                        }
+                        $marked = EmpNotif::where('emp_id', $employee->getKey())
+                            ->whereNull('empnotif_read')
+                            ->update(['empnotif_read' => $now]);
+                    }
+
+                    $this->logActor($json, 'edit', 'PUT /api/notif/update - marked all ' . $marked . ' as read');
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => $marked . ' notification(s) marked as read',
+                        'data'    => ['marked' => $marked],
+                    ], 200);
+                }
+
                 if ($recipientType === 'customer') {
                     $notif = CustNotif::where('custnotif_id', $notifId)->first();
                     if (! $notif || (int) $notif->cust_id !== $this->customerId($json)) {
@@ -2641,10 +2674,28 @@ class UserAPI extends Controller
                 $isSelf = (int) $actor->getKey() === $userId;
                 $isSuperAdmin = $actor instanceof Employee && $actor->isSuperAdmin();
 
-                if (! $actor instanceof Employee || (! $isSelf && ! $isSuperAdmin)) {
+                // Admins run Live Attendance, so they may set another
+                // employee's in-store flag - and only that flag. Every other
+                // personal detail stays with the employee or a super admin.
+                $presenceKeys = ['emp_instore', 'emp_present'];
+                $presenceOnly = ($json->has('emp_instore') || $json->has('emp_present'))
+                    && array_diff(
+                        array_keys($json->all()),
+                        array_merge(['account_type', 'user_id'], $presenceKeys)
+                    ) === [];
+                $isAdminPresence = $actor instanceof Employee && $actor->isAdmin() && $presenceOnly;
+
+                if (! $actor instanceof Employee || (! $isSelf && ! $isSuperAdmin && ! $isAdminPresence)) {
                     return response()->json(['success' => false, 'message' => 'Employees cannot edit another employee\'s personal details.'], 403);
                 }
                 $user = Employee::findOrFail($userId);
+
+                // Super-admin safety rail: an admin never changes a super
+                // admin account, its in-store flag included.
+                if (! $isSelf && ! $isSuperAdmin) {
+                    $deniedTarget = $this->requireSuperAdminTarget($json, $user, 'change');
+                    if ($deniedTarget) return $deniedTarget;
+                }
             }
 
             [$payload, $error] = $isCustomer

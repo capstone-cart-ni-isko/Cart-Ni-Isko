@@ -1,5 +1,6 @@
 import { formatPrice } from './PriceTag.jsx'
 import { paymentMethodLabel } from '../../services/dashboard.js'
+import { variationText } from '../../utils/variation.js'
 
 /**
  * Digital receipt of a claimed / received order. Pure view over the order
@@ -74,7 +75,7 @@ export default function DigitalReceipt({ order, customer = '', alwaysShow = fals
             <div key={item.item_id ?? idx}>
               <p className="font-semibold text-[var(--ink)]">
                 {name}
-                {item.prodvar_name ? ` (${item.prodvar_name})` : ''}
+                {variationText(item) ? ` (${variationText(item)})` : ''}
               </p>
               <Row
                 label={`${item.qty} x ${formatPrice(item.amount)}`}

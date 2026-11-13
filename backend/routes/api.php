@@ -136,10 +136,10 @@ Route::middleware('auth:api')->group(function () {
     Route::delete('/orders/remove', [UserAPI::class, 'removeOrder']);
 
     // POS API Routes
-    Route::post('/pos/add', [OrdersAPI::class, 'addProductToOrder'])->middleware('role:admin');
-    Route::post('/pos/checkout', [OrdersAPI::class, 'checkoutOrder'])->middleware('role:admin');
-    Route::put('/pos/update', [OrdersAPI::class,'posUpdateOrderDetails'])->middleware('role:admin');
-    Route::delete('/pos/remove', [OrdersAPI::class, 'removeProductFromOrder'])->middleware('role:admin');
+    Route::post('/pos/add', [OrdersAPI::class, 'addProductToOrder'])->middleware('role:staff');
+    Route::post('/pos/checkout', [OrdersAPI::class, 'checkoutOrder'])->middleware('role:staff');
+    Route::put('/pos/update', [OrdersAPI::class,'posUpdateOrderDetails'])->middleware('role:staff');
+    Route::delete('/pos/remove', [OrdersAPI::class, 'removeProductFromOrder'])->middleware('role:staff');
 
     // Notif API Routes
     Route::post('/notif/create', [SystemAPI::class, 'createNotification'])->middleware('role:staff');

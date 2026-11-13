@@ -91,9 +91,36 @@ function writeStored(kind, value) {
   }
 }
 
+/**
+ * Which portal a bearer belongs to, read from its own signed payload
+ * (`cni1.<payload>.<sig>`, payload `t`: 'cust' | 'emp'). null when it cannot
+ * be read. Only used to keep each token in its own portal's slot (rule 71) -
+ * the server still verifies the signature on every request.
+ */
+export function tokenKind(token) {
+  try {
+    const part = String(token || '').split('.')[1]
+    if (!part) return null
+    const json = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')))
+    if (json?.t === 'cust') return 'customer'
+    if (json?.t === 'emp') return 'staff'
+  } catch {
+    // Not a readable bearer.
+  }
+  return null
+}
+
+/** True when the bearer may sit in this portal's slot. */
+export function tokenFitsSlot(token, kind) {
+  const owner = tokenKind(token)
+  return owner === null || owner === kind
+}
+
 /** Persist a session for this tab: `{ kind: 'customer'|'staff', token, user }`. */
 export function saveSession(kind, token, user) {
   if (!STORAGE_KEYS[kind]) return
+  // A staff bearer is never stored as the customer's session (or the reverse).
+  if (token && !tokenFitsSlot(token, kind)) return
   // `at` is the tie-breaker when a browser holds both portals at once: the
   // portal the person signed in to LAST is the one the bare "/" entry serves.
   sessions[kind] = { kind, token, user, at: Date.now() }
@@ -105,6 +132,13 @@ export function loadSession(kind) {
   if (!STORAGE_KEYS[kind]) return null
   if (!sessions[kind]) sessions[kind] = readStored(kind)
   const entry = sessions[kind]
+  // A slot holding the other portal's bearer is dropped, so that portal signs
+  // in again instead of acting as the wrong account.
+  if (entry?.token && !tokenFitsSlot(entry.token, kind)) {
+    sessions[kind] = null
+    writeStored(kind, null)
+    return null
+  }
   return entry && entry.kind === kind && entry.token && entry.user ? entry : null
 }
 

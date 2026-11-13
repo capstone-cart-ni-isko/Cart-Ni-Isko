@@ -1125,11 +1125,11 @@ export default function AdminOrders() {
                             {item.name}
                           </p>
                           <div className="flex flex-wrap items-center gap-2 text-[var(--muted)] text-xs">
-                            {item.prodvarName && (
-                              <span className="px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--ink-2)] font-medium">
-                                {item.prodvarName}
+                            {(item.variation || []).map((part) => (
+                              <span key={part.axis}>
+                                {part.axis}: <strong className="text-[var(--ink-2)]">{part.value}</strong>
                               </span>
-                            )}
+                            ))}
                             <span>Qty: <strong className="text-[var(--ink-2)]">{item.qty}</strong></span>
                             {item.category && <span>• {item.category}</span>}
                           </div>

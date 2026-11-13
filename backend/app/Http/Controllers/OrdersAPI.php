@@ -198,6 +198,14 @@ class OrdersAPI extends Controller
             ], 422);
         }
 
+        if ($targetKey === 'delivering' && ($blocked = $this->manualTransitBlock($order)) !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => $blocked,
+                'code'    => 'COURIER_MANAGED',
+            ], 409);
+        }
+
         $deliverExpect = null;
         if ($targetKey === 'delivering' && $json->filled('deliver_expect')) {
             try {
@@ -249,21 +257,17 @@ class OrdersAPI extends Controller
                 . ' (was ' . trim($priorStatus) . ')'
         );
 
-        // Delivery fee already paid at checkout: Ready to Ship is the moment
-        // to call the courier - no customer action is left. The order stays
-        // Ready to Ship until LalaMove reports the pickup (In Transit).
-        if ($status === 'to deliver' && $this->deliveryFeePrepaid($order)) {
-            $booking = $this->bookDeliveryCourier($order);
+        // A cancelled order, or one sent back to Processing, must not keep a
+        // LalaMove rider on the way.
+        if ($status === 'cancelled' || ($status === 'processing' && $priorKey === 'to deliver')) {
+            $this->releaseCourier($order, $status === 'cancelled' ? 'cancelled' : 'moved back to Processing');
+        }
 
-            if ($booking['booked']) {
-                $this->announce((int) $order->cust_id, 'Order #' . $order->ord_id
-                    . ' is ready to ship and a courier has been booked. Track it from your order page.');
-            } else {
-                $this->announce((int) $order->cust_id, 'Order #' . $order->ord_id
-                    . ' is ready to ship and waiting for a courier.');
-                $this->alertAdmins('[PRIORITY] Courier booking for order #' . $order->ord_id
-                    . ' failed: ' . $booking['message'] . ' Retry it from Deliveries.');
-            }
+        // Delivery fee already paid: Ready to Ship is the moment to call the
+        // courier - no customer action is left. The order stays Ready to Ship
+        // until LalaMove reports the pickup (In Transit).
+        if ($status === 'to deliver' && $this->deliveryFeePrepaid($order)) {
+            $booking = $this->dispatchReadyOrder($order->fresh());
 
             return response()->json([
                 'success' => true,
@@ -291,6 +295,184 @@ class OrdersAPI extends Controller
         return $delivery !== null
             && (float) ($delivery->deliver_fee_charged ?? 0) > 0
             && (float) $order->pay_received >= (float) $order->ord_amount;
+    }
+
+    /**
+     * Ready to Ship with the fee settled: book the courier and tell the
+     * customer and, on a failed booking, the admins. Every path that makes an
+     * order shippable (staff status change, fee paid later) ends here.
+     */
+    protected function dispatchReadyOrder(Order $order): array
+    {
+        $booking = $this->bookDeliveryCourier($order);
+        $custId  = (int) $order->cust_id;
+
+        if ($booking['booked']) {
+            $this->announce($custId, 'Order #' . $order->ord_id
+                . ' is ready to ship and a courier has been booked. Track it from your order page.');
+        } else {
+            $this->announce($custId, 'Order #' . $order->ord_id
+                . ' is ready to ship and waiting for a courier.');
+            $this->alertAdmins('[PRIORITY] Courier booking for order #' . $order->ord_id
+                . ' failed: ' . $booking['message'] . ' Book it again from Deliveries.');
+        }
+
+        return $booking;
+    }
+
+    /**
+     * Why staff may not mark this delivery In Transit by hand, or null. A
+     * booked LalaMove order reports its own pickup, and a parcel whose fee is
+     * still owed must not leave the store.
+     */
+    protected function manualTransitBlock(Order $order): ?string
+    {
+        $delivery = $this->deliveryForOrder($order);
+        if (! $delivery) {
+            return null;
+        }
+
+        if ($delivery->deliver_fee_charged === null) {
+            return 'The customer has not paid the delivery fee yet.';
+        }
+
+        if ($delivery->isBooked()) {
+            return 'LalaMove is handling this delivery - it moves to In Transit by itself once the rider picks the parcel up.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Cancel the live LalaMove booking of an order that no longer ships
+     * (cancelled, or sent back to Processing). When LalaMove refuses - the
+     * rider already has the parcel - the admins are told to settle it.
+     */
+    protected function releaseCourier(Order $order, string $reason): void
+    {
+        $delivery = $this->deliveryForOrder($order);
+        if (! $delivery || ! $delivery->isBooked()) {
+            return;
+        }
+
+        $courierId = $delivery->courierOrderId();
+        if (! $courierId || ! LalamoveService::isConfigured()) {
+            return;
+        }
+
+        try {
+            $result = (new LalamoveService())->cancelOrder($courierId);
+        } catch (\Throwable $e) {
+            $result = ['cancelled' => false, 'message' => $e->getMessage()];
+        }
+
+        if ($result['cancelled']) {
+            $delivery->forceFill(['deliver_placed' => null, 'deliver_last_event' => now()])->save();
+            $delivery->storeCourier(['status' => 'CANCELED']);
+
+            return;
+        }
+
+        Log::warning('LalaMove booking could not be released', [
+            'ord_id' => $order->ord_id,
+            'error'  => $result['message'],
+        ]);
+        $this->alertAdmins('[PRIORITY] Order #' . $order->ord_id . ' was ' . $reason
+            . ' but its LalaMove booking could not be cancelled (' . $result['message']
+            . '). Settle it with the rider or in the LalaMove app.');
+    }
+
+    /** Pending PayMongo session of a delivery fee paid after checkout. */
+    protected function deliveryFeeSessionKey(int $ordId): string
+    {
+        return 'delivery_fee_session:' . $ordId;
+    }
+
+    /** Fee in pesos a PayMongo checkout session charged (its line items). */
+    protected function sessionChargedAmount(array $session): ?float
+    {
+        $lines = $this->findDeep($session, 'line_items');
+        if (! is_array($lines) || $lines === []) {
+            return null;
+        }
+
+        $centavos = 0;
+        foreach ($lines as $line) {
+            $attrs = is_array($line['attributes'] ?? null) ? $line['attributes'] : $line;
+            $centavos += (int) ($attrs['amount'] ?? 0) * max(1, (int) ($attrs['quantity'] ?? 1));
+        }
+
+        return $centavos > 0 ? round($centavos / 100, 2) : null;
+    }
+
+    /**
+     * Add a delivery fee paid after checkout to the order - exactly once.
+     * The order row is locked, and a fee already on the delivery means it was
+     * settled (or charged at checkout), so a webhook retry, a reloaded return
+     * page or both arriving together can never add it twice.
+     *
+     * @return bool true when the fee was applied by this call
+     */
+    protected function settleDeliveryFee(Order $order, float $fee): bool
+    {
+        if ($fee <= 0) {
+            return false;
+        }
+
+        $applied = DB::transaction(function () use ($order, $fee) {
+            $locked   = Order::where('ord_id', $order->ord_id)->lockForUpdate()->first();
+            $delivery = $locked ? $this->deliveryForOrder($locked) : null;
+
+            if (! $locked || ! $delivery || $delivery->deliver_fee_charged !== null) {
+                return false;
+            }
+
+            $delivery->forceFill([
+                'deliver_fee_charged' => $fee,
+                'deliver_fee_actual'  => $delivery->deliver_fee_actual ?? $fee,
+            ])->save();
+
+            $locked->update([
+                'ord_amount'   => round((float) $locked->ord_amount + $fee, 2),
+                'pay_received' => round((float) $locked->pay_received + $fee, 2),
+            ]);
+
+            Payment::create([
+                'pay_created' => now(),
+                'pay_ref'     => 'PM-DEL-' . $locked->ord_id,
+                'pay_given'   => $fee,
+                'pay_due'     => $fee,
+                'pay_change'  => 0,
+            ]);
+
+            return true;
+        });
+
+        if ($applied) {
+            \Illuminate\Support\Facades\Cache::forget($this->deliveryFeeSessionKey((int) $order->ord_id));
+            $order->refresh();
+        }
+
+        return $applied;
+    }
+
+    /**
+     * After a late delivery fee is settled: a Ready to Ship order gets its
+     * courier now (it stays Ready to Ship until the pickup); an order still
+     * being prepared is booked when staff mark it Ready to Ship.
+     */
+    protected function afterDeliveryFeePaid(Order $order): void
+    {
+        $order->refresh();
+
+        if ($order->ord_status === 'to deliver') {
+            $this->dispatchReadyOrder($order);
+
+            return;
+        }
+
+        $this->announce((int) $order->cust_id, 'Delivery fee received for order #' . $order->ord_id
+            . '. The courier is booked once your order is ready to ship.');
     }
 
     protected function closeDispatch(Order $order): void
@@ -1223,29 +1405,17 @@ class OrdersAPI extends Controller
 
             if (str_starts_with($reference, 'delivery_fee:')) {
                 $ordId = (int) substr($reference, 13);
-                $order = Order::with('delivery')->find($ordId);
+                $order = Order::find($ordId);
                 if ($order && $paid && ! $failed) {
-                    $delivery = $order->delivery;
-                    $fee = $delivery ? (float) ($delivery->deliver_fee_charged ?? 0) : 0;
-                    if (strtolower((string) $order->ord_status) !== 'to receive') {
-                        DB::transaction(function () use ($order, $delivery, $fee) {
-                            $order->update([
-                                'ord_status'   => 'to receive',
-                                'ord_amount'   => round((float) $order->ord_amount + $fee, 2),
-                                'pay_received' => round((float) $order->pay_received + $fee, 2),
-                            ]);
-                            if ($fee > 0) {
-                                Payment::create([
-                                    'pay_created' => now(),
-                                    'pay_ref'     => $delivery ? ($delivery->delivery_ref ?: ('PM-DEL-' . strtoupper(Str::random(12)))) : ('PM-DEL-' . strtoupper(Str::random(12))),
-                                    'pay_given'   => $fee,
-                                    'pay_due'     => $fee,
-                                    'pay_change'  => 0,
-                                ]);
-                            }
-                        });
-                        $this->bookDeliveryCourier($order);
-                        $this->announce((int) $order->cust_id, 'Delivery fee confirmed for order #' . $order->ord_id . '. Your parcel is now out for delivery!');
+                    // The signed event carries what PayMongo actually charged.
+                    $pending = \Illuminate\Support\Facades\Cache::get($this->deliveryFeeSessionKey($ordId));
+                    $fee = $this->sessionChargedAmount($event)
+                        ?? (is_array($pending) ? (float) ($pending['fee'] ?? 0) : 0.0);
+
+                    if ($this->settleDeliveryFee($order, $fee)) {
+                        $this->logCustomer((int) $order->cust_id, 'edit',
+                            'POST /api/checkout/payment/webhook - order #' . $order->ord_id . ' delivery fee paid');
+                        $this->afterDeliveryFeePaid($order);
                     }
                 }
                 return $this->webhookAck('Delivery fee event processed');
@@ -1592,7 +1762,7 @@ class OrdersAPI extends Controller
      * LalaMove status -> order status. A courier order moves through three
      * statuses the store can see: Ready to Ship (`to deliver`, courier booked
      * and a rider being found or on the way), In Transit (`delivering`, the
-     * parcel was picked up) and Claimed (`claimed`, delivered).
+     * parcel was picked up) and Received (`received`, delivered).
      */
     private function applyCourierState(Order $order, Delivery $delivery, string $state, ?int $distanceM = null, ?string $previous = null): void
     {
@@ -1639,7 +1809,9 @@ class OrdersAPI extends Controller
                     ])->save();
 
                     if ($claim) {
-                        $order->update(['ord_status' => 'claimed']);
+                        // A delivery ends Received (the parcel-scan outcome,
+                        // FLOW-ORD_CLAIM-08), never the pickup word Claimed.
+                        $order->update(['ord_status' => 'received']);
                         // Same side effects as a confirmed receipt scan.
                         $this->fulfilOrder($order);
                     }
@@ -1649,7 +1821,7 @@ class OrdersAPI extends Controller
                     $this->announce($custId, 'Order #' . $order->ord_id . ' was delivered. Thank you for shopping!');
                 }
                 if ($claim) {
-                    $this->alertAdmins('Order #' . $order->ord_id . ' was delivered by LalaMove and marked Claimed.');
+                    $this->alertAdmins('Order #' . $order->ord_id . ' was delivered by LalaMove and marked Received.');
                 }
                 break;
 
@@ -1812,6 +1984,22 @@ class OrdersAPI extends Controller
         }
         if ($delivery->isBooked()) {
             return ['booked' => true, 'message' => 'The courier is already booked.'];
+        }
+        // Only a packed, shippable order gets a rider - never a cancelled,
+        // returned or still-processing one.
+        if ((string) $order->ord_status !== 'to deliver') {
+            return [
+                'booked'  => false,
+                'code'    => 409,
+                'message' => 'Only Ready to Ship orders can be booked with a courier.',
+            ];
+        }
+        if ($delivery->deliver_fee_charged === null) {
+            return [
+                'booked'  => false,
+                'code'    => 409,
+                'message' => 'The customer has not paid the delivery fee yet.',
+            ];
         }
         if ((float) $order->pay_received <= 0) {
             return ['booked' => false, 'message' => 'The order must be paid online before a courier is booked.'];
@@ -3033,9 +3221,11 @@ class OrdersAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Invalid order status transition.'], 409);
             }
 
+            // Every employee runs the walk-in register (owner decision that
+            // overrides rule 44); the route is role:staff to match.
             $employee = $json->user('api');
-            if (! $this->isEmployee($employee) || ! $this->isAdmin($employee)) {
-                return response()->json(['success' => false, 'message' => 'Administrator access is required.'], 403);
+            if (! $this->isEmployee($employee)) {
+                return response()->json(['success' => false, 'message' => 'Employee access is required.'], 403);
             }
 
             $order->load(['items.bag.prodvar.product']);
@@ -3899,6 +4089,14 @@ class OrdersAPI extends Controller
                 ], 409);
             }
 
+            if ($status === 'delivering' && ($blocked = $this->manualTransitBlock($order)) !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $blocked,
+                    'code'    => 'COURIER_MANAGED',
+                ], 409);
+            }
+
             if (in_array($status, ['to claim', 'delivering'], true)) {
                 foreach ($this->stockShortages($order) as $name) {
                     return response()->json([
@@ -3922,7 +4120,7 @@ class OrdersAPI extends Controller
                 $expect = null;
             }
 
-            DB::transaction(function () use ($order, $delivery, $status, $priorStatus, $expect) {
+            DB::transaction(function () use ($order, $delivery, $status, $priorStatus, $expect, $employee) {
                 $order->update(['ord_status' => $status]);
 
                 if ($status === 'delivering') {
@@ -3945,6 +4143,10 @@ class OrdersAPI extends Controller
                     }
                     if (in_array($priorStatus, ['claimed', 'received'], true)) {
                         $this->restockOrder($order, $employee);
+                    } elseif (! in_array($priorStatus, ['returned', 'refunded', 'cancelled'], true)) {
+                        // As PUT /orders/update: units held at checkout go
+                        // back on sale when the order never reached anyone.
+                        $this->releaseHeldStock($order, $employee);
                     }
                     foreach ($this->orderBags($order) as $bag) {
                         $this->bumpProdsales($bag, $order, 'cancel', $order->isWalkIn());
@@ -3957,7 +4159,14 @@ class OrdersAPI extends Controller
                 'tracking/update ' . $status . ' - order #' . $order->ord_id
             );
 
-            if ((int) $order->cust_id > 0) {
+            // Same courier side effects as PUT /orders/update.
+            if ($status === 'cancelled' || ($status === 'processing' && $priorStatus === 'to deliver')) {
+                $this->releaseCourier($order, $status === 'cancelled' ? 'cancelled' : 'moved back to Processing');
+            }
+
+            if ($status === 'to deliver' && $this->deliveryFeePrepaid($order)) {
+                $this->dispatchReadyOrder($order->fresh());
+            } elseif ((int) $order->cust_id > 0) {
                 $this->notifyCustomer(
                     (int) $order->cust_id,
                     'Order #' . $order->ord_id . ' status changed to ' . $status . '.'
@@ -5381,19 +5590,26 @@ class OrdersAPI extends Controller
         $lat     = $json->input('deliver_lat');
         $lng     = $json->input('deliver_lng');
 
-        $quote = $this->quoteDispatch($json, 'delivery', $speed);
-        $deliveryFee = round((float) ($quote['fee'] ?? 50.0), 2);
+        $delivery = $order->delivery;
+
+        // A fee already settled (at checkout, or paid later) is never charged
+        // again; the details may still be corrected until a rider is booked.
+        $feeSettled = $delivery !== null && $delivery->deliver_fee_charged !== null;
+        if ($feeSettled && $delivery->isBooked()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'A courier is already booked for this order. Contact the store to change the delivery details.',
+            ], 422);
+        }
 
         $customer = Customer::find($custId);
         $finalRecipient = $recipient !== '' ? $recipient : $this->customerFullName($customer);
         $finalPhone = $phone !== '' ? $phone : (string) ($customer->cust_phone ?? '');
         $expect = $this->deliveryExpectation($json, $speed);
 
-        $delivery = $order->delivery;
         if (! $delivery) {
-            // Every NOT NULL delivery column is supplied up front: the row is
-            // created before the update below, so a missing value fails here
-            // first (e.g. deliver_env when LalaMove has no credentials).
+            // Every NOT NULL delivery column is supplied up front. The fee
+            // stays empty until it is actually paid.
             $delivery = Delivery::create([
                 'deliver_id'          => $this->nextId('delivery', 'deliver_id'),
                 'ord_id'              => $order->ord_id,
@@ -5406,34 +5622,50 @@ class OrdersAPI extends Controller
                 'deliver_recipient'   => $finalRecipient,
                 'deliver_service'     => strtoupper($speed),
                 'deliver_env'         => LalamoveService::environment(),
-                'deliver_fee_charged' => $deliveryFee,
+                'deliver_fee_charged' => null,
             ]);
         }
 
         $delivery->update([
-            'deliver_address'     => $address,
-            'deliver_recipient'   => $finalRecipient,
-            'deliver_phone'       => $finalPhone,
-            'deliver_notes'       => $notes !== '' ? $notes : null,
-            'deliver_lat'         => is_numeric($lat) ? (float) $lat : null,
-            'deliver_lng'         => is_numeric($lng) ? (float) $lng : null,
-            'deliver_service'     => strtoupper($speed),
-            'deliver_fee_charged' => $deliveryFee,
-            'deliver_env'         => LalamoveService::environment(),
+            'deliver_address'   => $address,
+            'deliver_recipient' => $finalRecipient,
+            'deliver_phone'     => $finalPhone,
+            'deliver_notes'     => $notes !== '' ? $notes : null,
+            'deliver_lat'       => is_numeric($lat) ? (float) $lat : null,
+            'deliver_lng'       => is_numeric($lng) ? (float) $lng : null,
+            'deliver_service'   => strtoupper($speed),
+            'deliver_env'       => LalamoveService::environment(),
         ]);
 
-        if (! PayMongoService::isConfigured()) {
-            $delivery->update(['deliver_fee_actual' => $deliveryFee]);
-            $order->update([
-                'ord_status'   => 'to receive',
-                'ord_amount'   => round((float) $order->ord_amount + $deliveryFee, 2),
-                'pay_received' => round((float) $order->pay_received + $deliveryFee, 2),
-            ]);
-            $this->bookDeliveryCourier($order);
+        if ($feeSettled) {
+            $this->logCustomer($custId, 'edit', 'orders/delivery-details updated - order #' . $order->ord_id);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Delivery details confirmed and courier assigned.',
+                'message' => 'Delivery details updated.',
+                'data'    => [
+                    'ord_id'       => $order->ord_id,
+                    'delivery_fee' => (float) $delivery->deliver_fee_charged,
+                    'checkout_url' => null,
+                    'paid'         => true,
+                    'order'        => self::orderPayload($order->fresh()),
+                ],
+            ], 200);
+        }
+
+        $quote = $this->quoteDispatch($json, 'delivery', $speed);
+        $deliveryFee = round((float) ($quote['fee'] ?? 50.0), 2);
+
+        if (! PayMongoService::isConfigured()) {
+            // No payment gateway (local setup): the fee is recorded as paid.
+            if ($this->settleDeliveryFee($order, $deliveryFee)) {
+                $this->logCustomer($custId, 'edit', 'orders/delivery-details fee recorded - order #' . $order->ord_id);
+                $this->afterDeliveryFeePaid($order);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Delivery details confirmed.',
                 'data'    => [
                     'ord_id'       => $order->ord_id,
                     'delivery_fee' => $deliveryFee,
@@ -5445,22 +5677,34 @@ class OrdersAPI extends Controller
         }
 
         $returnBase = rtrim((string) config('services.frontend_url', 'http://localhost:5173'), '/');
-        $paymongo   = new PayMongoService();
 
-        $session = $paymongo->createCheckoutSession(
-            [[
-                'name'     => 'Delivery Fee - Order #' . $order->ord_id,
-                'amount'   => $deliveryFee,
-                'quantity' => 1,
-            ]],
-            'delivery_fee:' . $order->ord_id,
-            $returnBase . '/orders?status=delivery_fee_paid&order=' . $order->ord_id,
-            $returnBase . '/orders?status=delivery_fee_cancelled&order=' . $order->ord_id
+        try {
+            $session = (new PayMongoService())->createCheckoutSession(
+                [[
+                    'name'     => 'Delivery Fee - Order #' . $order->ord_id,
+                    'amount'   => $deliveryFee,
+                    'quantity' => 1,
+                ]],
+                'delivery_fee:' . $order->ord_id,
+                $returnBase . '/orders?status=delivery_fee_paid&order=' . $order->ord_id,
+                $returnBase . '/orders?status=delivery_fee_cancelled&order=' . $order->ord_id
+            );
+        } catch (\Throwable $e) {
+            Log::error('Delivery fee checkout session failed', ['ord_id' => $order->ord_id, 'error' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'The delivery fee payment could not be started. Please try again.',
+            ], 502);
+        }
+
+        // The delivery table has no column for the session, so the return
+        // page finds it here; the signed webhook settles the fee regardless.
+        \Illuminate\Support\Facades\Cache::put(
+            $this->deliveryFeeSessionKey((int) $order->ord_id),
+            ['session' => (string) ($session['id'] ?? ''), 'fee' => $deliveryFee],
+            now()->addDays(3)
         );
-
-        $delivery->forceFill([
-            'delivery_ref' => $session['id'],
-        ])->save();
 
         return response()->json([
             'success' => true,
@@ -5494,68 +5738,45 @@ class OrdersAPI extends Controller
             return response()->json(['success' => false, 'message' => 'No delivery record found.'], 404);
         }
 
-        $fee = (float) ($delivery->deliver_fee_charged ?? 0);
+        $paidResponse = fn (string $message) => response()->json([
+            'success' => true,
+            'message' => $message,
+            'data'    => [
+                'ord_id' => $order->ord_id,
+                'paid'   => true,
+                'order'  => self::orderPayload($order->fresh()),
+            ],
+        ], 200);
 
-        if (strtolower((string) $order->ord_status) === 'to receive') {
-            return response()->json([
-                'success' => true,
-                'message' => 'Delivery fee already paid and order is out to receive.',
-                'data'    => [
-                    'ord_id' => $order->ord_id,
-                    'paid'   => true,
-                    'order'  => self::orderPayload($order->fresh()),
-                ],
-            ], 200);
+        // Already settled (webhook first, or a reloaded return page).
+        if ($delivery->deliver_fee_charged !== null) {
+            return $paidResponse('Delivery fee already confirmed.');
         }
 
-        $settled = false;
-        if (! PayMongoService::isConfigured()) {
-            $settled = true;
-        } else {
-            $ref = $delivery->delivery_ref;
-            if ($ref) {
-                try {
-                    $session = (new PayMongoService())->retrieveCheckoutSession((string) $ref);
-                    $settled = PayMongoService::sessionIsPaid($session);
-                } catch (\Throwable $e) {
-                    Log::warning('PayMongo delivery fee check failed', ['error' => $e->getMessage()]);
+        // Only PayMongo's own answer for THIS order's fee session counts.
+        $pending   = \Illuminate\Support\Facades\Cache::get($this->deliveryFeeSessionKey($ordId));
+        $sessionId = is_array($pending) ? (string) ($pending['session'] ?? '') : '';
+
+        if ($sessionId !== '' && PayMongoService::isConfigured()) {
+            try {
+                $session   = (new PayMongoService())->retrieveCheckoutSession($sessionId);
+                $reference = (string) ($this->findDeep($session, 'reference_number') ?? '');
+
+                if ($reference === 'delivery_fee:' . $ordId && PayMongoService::sessionIsPaid($session)) {
+                    $fee = $this->sessionChargedAmount($session) ?? (float) ($pending['fee'] ?? 0);
+
+                    if ($this->settleDeliveryFee($order, $fee)) {
+                        $this->logCustomer($custId, 'edit', 'orders/delivery-fee paid - order #' . $order->ord_id);
+                        $this->afterDeliveryFeePaid($order);
+                    }
                 }
-            } else {
-                $settled = true;
+            } catch (\Throwable $e) {
+                Log::warning('PayMongo delivery fee check failed', ['error' => $e->getMessage()]);
             }
         }
 
-        if ($settled) {
-            DB::transaction(function () use ($order, $delivery, $fee) {
-                $order->update([
-                    'ord_status'   => 'to receive',
-                    'ord_amount'   => round((float) $order->ord_amount + $fee, 2),
-                    'pay_received' => round((float) $order->pay_received + $fee, 2),
-                ]);
-
-                Payment::create([
-                    'pay_created' => now(),
-                    'pay_ref'     => $delivery->delivery_ref ?: ('PM-DEL-' . strtoupper(Str::random(12))),
-                    'pay_given'   => $fee,
-                    'pay_due'     => $fee,
-                    'pay_change'  => 0,
-                ]);
-            });
-
-            $this->bookDeliveryCourier($order);
-
-            $this->logCustomer($custId, 'edit', 'orders/delivery-fee paid - order #' . $order->ord_id);
-            $this->announce($custId, 'Delivery fee confirmed for order #' . $order->ord_id . '. Your parcel is now out for delivery!');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Delivery fee confirmed. Order moved to To Receive.',
-                'data'    => [
-                    'ord_id' => $order->ord_id,
-                    'paid'   => true,
-                    'order'  => self::orderPayload($order->fresh()),
-                ],
-            ], 200);
+        if ($delivery->fresh()->deliver_fee_charged !== null) {
+            return $paidResponse('Delivery fee confirmed.');
         }
 
         return response()->json([
@@ -5585,135 +5806,14 @@ class OrdersAPI extends Controller
             return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
         }
 
-        $currentStatus = strtolower(trim((string) $order->ord_status));
-        if (! in_array($currentStatus, ['to pay', 'processing'], true)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Claiming method can only be switched while the order is Awaiting Payment or Processing.',
-            ], 422);
-        }
-
-        $targetMethod = strtolower(trim((string) $json->input('claiming')));
-        $targetMethod = ($targetMethod === 'deliver' || $targetMethod === 'delivery') ? 'deliver' : 'pickup';
-
-        $currentMethod = ($order->ord_claiming === 'deliver' || $order->delivery !== null) ? 'deliver' : 'pickup';
-        if ($targetMethod === $currentMethod) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Order is already set to ' . ($targetMethod === 'deliver' ? 'Courier Delivery' : 'Store Pickup') . '.',
-                'data'    => ['order' => self::orderPayload($order->fresh())],
-            ], 200);
-        }
-
-        if ($targetMethod === 'pickup') {
-            $appointment = $this->bookingAppointment($json, $custId);
-
-            DB::transaction(function () use ($order, $appointment) {
-                if ($order->parcel) {
-                    $order->parcel->delete();
-                }
-                if ($order->delivery) {
-                    $order->delivery->delete();
-                }
-
-                $pickup = $order->pickup;
-                if (! $pickup) {
-                    Pickup::create([
-                        'pickup_id'       => $this->nextId('pickup', 'pickup_id'),
-                        'appoint_id'     => $appointment->appoint_id,
-                        'ord_id'         => $order->ord_id,
-                        'pickup_created' => now(),
-                    ]);
-                } else {
-                    $pickup->update(['appoint_id' => $appointment->appoint_id]);
-                }
-
-                $order->update([
-                    'ord_claiming' => 'pickup',
-                ]);
-            });
-
-            $this->logCustomer($custId, 'edit', 'orders/switch-claiming pickup - order #' . $order->ord_id);
-            $this->announce($custId, 'Fulfillment for order #' . $order->ord_id . ' switched to Store Pickup.');
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Fulfillment method successfully switched to Store Pickup.',
-                'data'    => ['order' => self::orderPayload($order->fresh())],
-            ], 200);
-        }
-
-        // Switching to delivery
-        $customer = Customer::find($custId);
-        $speed = strtolower((string) $json->input('speed', 'standard'));
-        $expect = $this->deliveryExpectation($json, $speed);
-        $address = trim((string) $json->input('deliver_address', $customer->cust_address ?? ''));
-
-        DB::transaction(function () use ($order, $custId, $customer, $speed, $expect, $address) {
-            if ($order->pickup) {
-                if ($order->pickup->appointment) {
-                    $order->pickup->appointment->update(['appoint_status' => 'cancelled']);
-                }
-                $order->pickup->delete();
-            }
-
-            $delivery = $order->delivery;
-            if (! $delivery) {
-                $delivery = Delivery::create([
-                    'deliver_id'          => $this->nextId('delivery', 'deliver_id'),
-                    'ord_id'              => $order->ord_id,
-                    'cust_id'             => $custId,
-                    'deliver_address'     => $address,
-                    'deliver_phone'       => (string) ($customer->cust_phone ?? ''),
-                    'deliver_qr'          => 'QR-DEL-' . strtoupper(Str::random(10)),
-                    'deliver_expect'      => $expect,
-                    'deliver_created'     => now(),
-                    'deliver_recipient'   => $this->customerFullName($customer),
-                    'deliver_service'     => strtoupper($speed),
-                    'deliver_env'         => LalamoveService::environment(),
-                    'deliver_fee_charged' => null,
-                ]);
-            }
-
-            $parcel = $order->parcel;
-            if (! $parcel) {
-                $payId = $order->pickup?->pay_id;
-                if (! $payId) {
-                    $existingPayment = Payment::where('pay_ref', $order->pay_reference)->first();
-                    $payId = $existingPayment ? $existingPayment->pay_id : null;
-                }
-                if (! $payId) {
-                    $payment = Payment::create([
-                        'pay_created' => now(),
-                        'pay_ref'     => $order->pay_reference ?: ('ORD-' . $order->ord_id),
-                        'pay_given'   => (float) $order->pay_received,
-                        'pay_due'     => (float) $order->ord_amount,
-                        'pay_change'  => 0,
-                    ]);
-                    $payId = $payment->pay_id;
-                }
-
-                Parcel::create([
-                    'ord_id'         => $order->ord_id,
-                    'deliver_id'     => $delivery->deliver_id,
-                    'pay_id'         => $payId,
-                    'parcel_created' => now(),
-                ]);
-            }
-
-            $order->update([
-                'ord_claiming' => 'deliver',
-            ]);
-        });
-
-        $this->logCustomer($custId, 'edit', 'orders/switch-claiming delivery - order #' . $order->ord_id);
-        $this->announce($custId, 'Fulfillment for order #' . $order->ord_id . ' switched to Courier Delivery.');
+        // The claiming method (pickup or delivery, rule 53) is settled at
+        // checkout and fixed from then on: a placed order is never switched.
+        $this->logCustomer($custId, 'edit', 'orders/switch-claiming refused - order #' . $order->ord_id);
 
         return response()->json([
-            'success' => true,
-            'message' => 'Fulfillment method successfully switched to Courier Delivery.',
-            'data'    => ['order' => self::orderPayload($order->fresh())],
-        ], 200);
+            'success' => false,
+            'message' => 'The fulfilment method can no longer be changed once an order is placed.',
+            'code'    => 'CLAIMING_LOCKED',
+        ], 409);
     }
 }
-

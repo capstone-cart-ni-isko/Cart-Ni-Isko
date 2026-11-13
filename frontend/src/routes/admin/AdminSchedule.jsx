@@ -12,10 +12,12 @@ import ScheduleDutyRequests from '../../components/admin/ScheduleDutyRequests.js
 import ScheduleWeekGrid from '../../components/admin/ScheduleWeekGrid.jsx'
 import ScheduleMonthGrid from '../../components/admin/ScheduleMonthGrid.jsx'
 import {
+  MyDutySummary,
   RosterSection,
   ScheduleHeader,
   ScheduleCoverageSummary,
   ShiftBlocksSection,
+  StaffScheduleHeader,
 } from '../../components/admin/SchedulePageParts.jsx'
 import { empCanManageStore } from '../../components/admin/schema.js'
 import { logAction } from '../../services/access.js'
@@ -67,6 +69,11 @@ export default function AdminSchedule({ embedded = false }) {
   // a button that would 403.
   const canManageStore = empCanManageStore(currentAdminUser)
   const canPreschedule = canManageStore
+  // Staff do not plan the roster: they get a personal view (their own duty,
+  // the team's shifts read-only) and may only open their own blocks to flag
+  // them unavailable (FLOW-EMP_SCHED-04). No coverage figures, no attendance.
+  const isStaffView = !canManageStore
+  const selfEmpId = currentAdminUser?.emp_id ?? currentAdminUser?.id ?? null
 
   const isWeek = viewMode === 'Week'
   const isMonth = viewMode === 'Month'
@@ -213,7 +220,11 @@ export default function AdminSchedule({ embedded = false }) {
   const handleSaveBlock = async (payload) => {
     if (!editingShift) return
 
-    const error = await duty.amend(editingShift.shift_id, payload)
+    // Staff may only change their own availability flag: the API refuses any
+    // date/time/employee field from them, so send that flag alone.
+    const error = isStaffView
+      ? await duty.setUnavailable(editingShift.shift_id, payload.unavailable)
+      : await duty.amend(editingShift.shift_id, payload)
 
     // Same contract as the cancel: a refused save keeps the editor open with
     // the server's own message, so the value that was refused can be fixed.
@@ -232,8 +243,12 @@ export default function AdminSchedule({ embedded = false }) {
     )
     showToast(
       payload.unavailable
-        ? `${editingShift.employee_name || 'Employee'} marked unavailable for this shift. Super admins were alerted to find a substitute.`
-        : `Shift for ${editingShift.employee_name || 'employee'} updated.`,
+        ? isStaffView
+          ? 'You are marked unavailable for this shift. Admins were alerted to find a cover.'
+          : `${editingShift.employee_name || 'Employee'} marked unavailable for this shift. Admins were alerted to find a substitute.`
+        : isStaffView
+          ? 'You are available for this shift again.'
+          : `Shift for ${editingShift.employee_name || 'employee'} updated.`,
       'success'
     )
   }
@@ -272,12 +287,25 @@ export default function AdminSchedule({ embedded = false }) {
     setViewMode('Day')
   }
 
+  // Staff may open only their own block; everyone else's is read-only.
+  const openBlock = (shift) => {
+    if (isStaffView && String(shift?.emp_id) !== String(selfEmpId)) {
+      showToast('You can only update your own shifts. Ask an admin to change someone else’s.', 'error')
+      return
+    }
+    setEditingShift(shift)
+  }
+
   const content = (
     <div className="space-y-4">
-      <ScheduleHeader
-        onOpenCovers={() => setShowCovers(true)}
-        coverCount={duty.pendingReplacements.length}
-      />
+      {isStaffView ? (
+        <StaffScheduleHeader />
+      ) : (
+        <ScheduleHeader
+          onOpenCovers={() => setShowCovers(true)}
+          coverCount={duty.pendingReplacements.length}
+        />
+      )}
 
       <ScheduleToolbar
         viewMode={viewMode}
@@ -290,6 +318,18 @@ export default function AdminSchedule({ embedded = false }) {
         canAddShift={canPreschedule && canEditAvailability && !isMonth}
       />
 
+      {isStaffView && (
+        <MyDutySummary
+          selfEmpId={selfEmpId}
+          selectedDate={selectedDate}
+          dayShifts={duty.shifts}
+          isLoading={duty.isLoading}
+          error={duty.error}
+          canEdit={canEditAvailability}
+          onOpenShift={openBlock}
+        />
+      )}
+
       {isMonth ? (
         <ScheduleMonthGrid
           monthStart={monthStart}
@@ -301,23 +341,29 @@ export default function AdminSchedule({ embedded = false }) {
           weekStart={weekStart}
           officers={roster.officers}
           canEdit={canEditAvailability}
-          onEditBlock={setEditingShift}
+          onEditBlock={openBlock}
         />
       ) : (
         <>
-          <ScheduleCoverageSummary
-            shifts={duty.shifts}
-            dateLabel={fmtLongDate(selectedDate)}
-            isLoading={duty.isLoading}
-            error={duty.error}
-          />
+          {!isStaffView && (
+            <ScheduleCoverageSummary
+              shifts={duty.shifts}
+              dateLabel={fmtLongDate(selectedDate)}
+              isLoading={duty.isLoading}
+              error={duty.error}
+            />
+          )}
 
           <section className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div>
-                <h2 className="text-sm font-bold text-slate-900">Shift schedule</h2>
+                <h2 className="text-sm font-bold text-slate-900">
+                  {isStaffView ? 'Who’s on duty' : 'Shift schedule'}
+                </h2>
                 <p className="text-2xs text-slate-400 font-normal mt-0.5">
-                  Select a shift to edit it or mark it as needing a cover.
+                  {isStaffView
+                    ? 'Everyone scheduled on this date. Select your own shift to mark it unavailable.'
+                    : 'Select a shift to edit it or mark it as needing a cover.'}
                 </p>
               </div>
               <div className="inline-flex rounded-md border border-slate-200 bg-slate-100 p-0.5" role="group" aria-label="Day schedule display">
@@ -343,7 +389,7 @@ export default function AdminSchedule({ embedded = false }) {
                 shifts={duty.shifts}
                 officers={roster.officers}
                 canEdit={canEditAvailability}
-                onShiftClick={setEditingShift}
+                onShiftClick={openBlock}
                 isLoading={duty.isLoading}
                 error={duty.error}
                 onRetry={duty.reload}
@@ -355,8 +401,9 @@ export default function AdminSchedule({ embedded = false }) {
                 error={duty.error}
                 busyId={duty.busyId}
                 onRetry={duty.reload}
-                onEdit={setEditingShift}
-                onCancel={handleCancelShift}
+                onEdit={openBlock}
+                // Cancelling a block is an admin action (rule 38).
+                onCancel={isStaffView ? null : handleCancelShift}
                 canEdit={canEditAvailability}
               />
             )}
@@ -364,16 +411,18 @@ export default function AdminSchedule({ embedded = false }) {
         </>
       )}
 
-      <RosterSection
-        roster={roster}
-        canEdit={canEditAttendance}
-        filteredOfficers={filteredOfficers}
-        activeFilter={activeFilter}
-        onFilterChange={setActiveFilter}
-        onToggleDuty={handleToggleDuty}
-        canManageOthers={canPreschedule}
-        selfEmpId={currentAdminUser?.emp_id ?? currentAdminUser?.id ?? null}
-      />
+      {!isStaffView && (
+        <RosterSection
+          roster={roster}
+          canEdit={canEditAttendance}
+          filteredOfficers={filteredOfficers}
+          activeFilter={activeFilter}
+          onFilterChange={setActiveFilter}
+          onToggleDuty={handleToggleDuty}
+          canManageOthers={canPreschedule}
+          selfEmpId={selfEmpId}
+        />
+      )}
     </div>
   )
 
@@ -412,10 +461,11 @@ export default function AdminSchedule({ embedded = false }) {
           shift={editingShift}
           locked={!canEditAvailability}
           lockMessage={lockMessage}
+          availabilityOnly={isStaffView}
           isSaving={duty.busyId === editingShift.shift_id}
           onClose={() => setEditingShift(null)}
           onSubmit={handleSaveBlock}
-          onCancelBlock={handleCancelShift}
+          onCancelBlock={isStaffView ? null : handleCancelShift}
         />
       )}
     </>

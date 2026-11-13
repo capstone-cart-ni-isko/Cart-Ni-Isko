@@ -214,7 +214,7 @@ export default function AdminProductDetail() {
   // FLOW-MANAGE_INV-08: the history is fetched per window, so a date change
   // re-queries instead of slicing a fixed payload in the browser.
   useEffect(() => {
-    if (!prodId) return
+    if (!prodId || isStaff) return
     let cancelled = false
     fetchProductSales(prodId, { dateFrom, dateTo })
       .then((payload) => {
@@ -226,7 +226,7 @@ export default function AdminProductDetail() {
     return () => {
       cancelled = true
     }
-  }, [prodId, dateFrom, dateTo])
+  }, [prodId, dateFrom, dateTo, isStaff])
 
   const handleRangeChange = (value) => {
     setRange(value)
@@ -327,11 +327,17 @@ export default function AdminProductDetail() {
     setComboTarget(variant)
     setComboDraft({
       axisValues: { ...(variant?.options || {}) },
-      name: variant && variant.name !== variant.label ? variant.name : '',
+      // No free-text display name: a combination is named by its values.
+      name: '',
       stock: String(variant?.stock ?? 0),
       markup: String(variant?.markup ?? 0),
       pic: variant?.pic || '',
       preorder: productPreorderOn ? true : variant ? !!variant.preorderFlag : false,
+      // The only variation of a product, with no options: a single item.
+      single:
+        !!variant &&
+        (row?.variants?.length ?? 0) === 1 &&
+        Object.keys(variant.options || {}).length === 0,
     })
     setComboEditorOpen(true)
   }
@@ -373,11 +379,15 @@ export default function AdminProductDetail() {
       return
     }
     if (Number.isFinite(markup) && markup < 0) {
-      showToast('Markup cannot be negative.', 'error')
+      showToast('The add-on price cannot be negative.', 'error')
       return
     }
-    if (comboDuplicate) {
-      showToast(`"${comboDuplicate.label}" already varates this product the same way.`, 'error')
+    if (!comboDraft.single && comboDuplicate) {
+      showToast(`"${comboDuplicate.label}" already varies this product the same way.`, 'error')
+      return
+    }
+    if (!comboDraft.single && axisSummary.length === 0 && Object.keys(comboOptions).length === 0) {
+      showToast('Give the option a name and a value (for example Material: Acrylic).', 'error')
       return
     }
 
@@ -385,8 +395,13 @@ export default function AdminProductDetail() {
       prodvar_stock: stock,
       prodvar_markup: Number.isFinite(markup) ? markup : 0,
       prodvar_preorder: !!comboDraft.preorder,
-      ...(Object.keys(comboOptions).length > 0 ? { prodvar_options: comboOptions } : {}),
-      ...(comboDraft.name.trim() ? { prodvar_name: comboDraft.name.trim() } : {}),
+      // A single item has no options and the plain "Standard" name, which
+      // every order, cart and receipt screen leaves out.
+      ...(comboDraft.single
+        ? { prodvar_options: {}, prodvar_name: 'Standard' }
+        : Object.keys(comboOptions).length > 0
+          ? { prodvar_options: comboOptions }
+          : {}),
       ...(comboDraft.pic ? { prodvar_pic: comboDraft.pic } : {}),
     }
 
@@ -1105,13 +1120,15 @@ export default function AdminProductDetail() {
                   <span className="text-2xs text-slate-400 hidden sm:inline">
                     Low stock ≤ {row.lowStockThreshold} units
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => openComboEditor(null)}
-                    className="h-7 px-2.5 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-2xs font-semibold cursor-pointer"
-                  >
-                    + Combination
-                  </button>
+                  {!isStaff && (
+                    <button
+                      type="button"
+                      onClick={() => openComboEditor(null)}
+                      className="h-7 px-2.5 rounded-md bg-brand-orange hover:bg-brand-orange-dark text-white text-2xs font-semibold cursor-pointer"
+                    >
+                      + Combination
+                    </button>
+                  )}
                 </div>
               </div>
               {row.variants.length === 0 ? (
@@ -1121,7 +1138,15 @@ export default function AdminProductDetail() {
                   <table className="w-full text-xs">
                     <thead className="bg-slate-50 text-slate-500">
                       <tr>
-                        <th className="px-4 py-2 text-left font-semibold">Variation</th>
+                        {/* One column per axis (Color | Size | …); a product
+                            without axes keeps a single Variation column. */}
+                        {axisSummary.length > 0 ? (
+                          axisSummary.map((entry) => (
+                            <th key={entry.axis} className="px-4 py-2 text-left font-semibold">{entry.axis}</th>
+                          ))
+                        ) : (
+                          <th className="px-4 py-2 text-left font-semibold">Variation</th>
+                        )}
                         <th className="px-4 py-2 text-left font-semibold">Price</th>
                         <th className="px-4 py-2 text-left font-semibold">Stock</th>
                         <th className="px-4 py-2 text-left font-semibold">Status</th>
@@ -1132,16 +1157,15 @@ export default function AdminProductDetail() {
                     <tbody className="divide-y divide-slate-100">
                       {row.variants.map((variant) => (
                         <tr key={variant.id}>
-                          <td className="px-4 py-2">
-                            <div className="font-bold text-slate-900">{variant.label || variant.name}</div>
-                            {Object.keys(variant.options || {}).length > 0 && (
-                              <div className="text-2xs font-semibold text-slate-400">
-                                {Object.entries(variant.options)
-                                  .map(([axis, value]) => `${axis}: ${value}`)
-                                  .join(' · ')}
-                              </div>
-                            )}
-                          </td>
+                          {axisSummary.length > 0 ? (
+                            axisSummary.map((entry) => (
+                              <td key={entry.axis} className="px-4 py-2 font-semibold text-slate-900">
+                                {variant.options?.[entry.axis] || <span className="text-slate-300">—</span>}
+                              </td>
+                            ))
+                          ) : (
+                            <td className="px-4 py-2 font-semibold text-slate-900">{/^standard$/i.test(String(variant.name || "")) && row.variants.length === 1 ? "Single item" : variant.label || variant.name}</td>
+                          )}
                           <td className="px-4 py-2 text-slate-700">{money(variant.price)}</td>
                           <td className="px-4 py-2">
                             <span
@@ -1159,6 +1183,10 @@ export default function AdminProductDetail() {
                           <td className="px-4 py-2 text-slate-600">{variant.status}</td>
                           <td className="px-4 py-2 text-slate-400">{variant.lastUpdated}</td>
                           <td className="px-4 py-2 text-right">
+                            {/* Rule 41: staff view the inventory read-only. */}
+                            {isStaff ? (
+                              <span className="text-slate-400">—</span>
+                            ) : (
                             <div className="inline-flex items-center gap-1">
                               <button
                                 type="button"
@@ -1188,6 +1216,7 @@ export default function AdminProductDetail() {
                                 ×
                               </button>
                             </div>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1198,7 +1227,9 @@ export default function AdminProductDetail() {
             </div>
 
             {/* FLOW-MANAGE_INV-08 / REQ-MANAGE_INV-07: daily sales, revenue and
-                trend from prodsales, over the chosen date range. */}
+                trend from prodsales, over the chosen date range. Sales figures
+                are admin-only (REQ-EMP_HOME-01, GET /products/sales role:admin). */}
+            {!isStaff && (
             <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-sm font-bold text-slate-900">Sales history</h2>
@@ -1308,6 +1339,7 @@ export default function AdminProductDetail() {
                 </div>
               )}
             </div>
+            )}
           </>
         )}
 
@@ -1339,91 +1371,167 @@ export default function AdminProductDetail() {
               </>
             }
           >
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <label className="field-label mb-0">Ways to vary</label>
-                  <span className="text-2xs text-slate-400">
-                    {axisSummary.length}/{MAX_OPTION_AXES} axes in use
-                  </span>
-                </div>
-                  <p className="text-2xs text-slate-500">
-                    One combination is one row. Pick a value on each axis you want
-                    this row to cover — color&nbsp;×&nbsp;size, or
-                    color&nbsp;×&nbsp;material.
-                  </p>
-                  {(axisSummary.length > 0 ? axisSummary : [{ axis: '', values: [] }]).map((entry, index) => (
-                    <div key={`combo-axis-${index}`} className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        list="admin-product-detail-axes"
-                        placeholder={index === 0 ? 'Color' : index === 1 ? 'Size' : 'Axis name'}
-                        value={entry.axis}
-                        onChange={(e) => {
-                          const from = entry.axis
-                          const to = e.target.value
-                          setComboDraft((draft) => {
-                            const next = { ...draft.axisValues }
-                            if (from && !to) delete next[from]
-                            else if (from && to) {
-                              const value = next[from]
-                              delete next[from]
-                              next[to] = value
-                            } else if (to) {
-                              next[to] = ''
-                            }
-                            return { ...draft, axisValues: next }
-                          })
-                        }}
-                        className="h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
-                      />
-                      <input
-                        type="text"
-                        list={`admin-product-detail-values-${entry.axis}`}
-                        placeholder="Value (e.g. Cream)"
-                        value={comboDraft.axisValues?.[entry.axis] ?? ''}
-                        onChange={(e) =>
-                          setComboDraft((draft) => ({
-                            ...draft,
-                            axisValues: { ...draft.axisValues, [entry.axis]: e.target.value },
-                          }))
-                        }
-                        className="h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
-                      />
-                      <datalist id={`admin-product-detail-values-${entry.axis}`}>
-                        {(entry.values || []).map((value) => (
-                          <option key={value} value={value} />
-                        ))}
-                      </datalist>
-                    </div>
-                  ))}
-                  <datalist id="admin-product-detail-axes">
-                    {[...new Set([...SUGGESTED_AXES, ...axisSummary.map((entry) => entry.axis)])]
-                      .filter(Boolean)
-                      .map((axis) => (
-                        <option key={axis} value={axis} />
-                      ))}
-                  </datalist>
-                  {comboOptions && Object.keys(comboOptions).length > 0 && (
-                    <p className="text-2xs font-semibold text-slate-600">
-                      This row will be <span className="text-slate-900">{optionLabel({ prodvar_options: comboOptions })}</span>
-                    </p>
+                  <label className="field-label mb-0">Options</label>
+                  {axisSummary.length > 0 && (
+                    <span className="text-2xs text-slate-400">
+                      {axisSummary.length} of {MAX_OPTION_AXES}
+                    </span>
                   )}
-                  {comboDuplicate && (
+                </div>
+                {comboTarget && (row?.variants?.length ?? 0) === 1 && (
+                  <div role="radiogroup" aria-label="Product options" className="grid grid-cols-2 gap-2">
+                    {[
+                      { single: true, title: 'Single item', hint: 'Sold as one item, no options' },
+                      { single: false, title: 'Has options', hint: 'e.g. a color or material' },
+                    ].map((choice) => {
+                      const active = !!comboDraft.single === choice.single
+                      return (
+                        <button
+                          key={choice.title}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setComboDraft((draft) => ({ ...draft, single: choice.single }))}
+                          className={`text-left rounded-lg border px-3 py-2 transition-colors cursor-pointer ${
+                            active
+                              ? 'border-brand-orange bg-orange-50/60 ring-1 ring-brand-orange'
+                              : 'border-slate-200 bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="block text-xs font-bold text-slate-900">{choice.title}</span>
+                          <span className="block text-2xs text-slate-500">{choice.hint}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {comboDraft.single ? (
+                  <p className="text-2xs text-slate-500">
+                    This product is sold as one item. Orders and the cart show no variation for it.
+                  </p>
+                ) : (
+                  <>
+                <p className="text-2xs text-slate-500">
+                  {axisSummary.length > 0
+                    ? 'Pick a value for each option. Tap an existing value, or type a new one to add it.'
+                    : 'Name the option this product comes in (for example Color) and give this variation its value.'}
+                </p>
+                {(axisSummary.length > 0
+                  ? axisSummary
+                  // No options yet: the row edits the option name kept in the draft.
+                  : [{ axis: Object.keys(comboDraft.axisValues || {})[0] ?? '', values: [] }]
+                ).map((entry, index) => {
+                  const fixedName = axisSummary.length > 0
+                  const picked = comboDraft.axisValues?.[entry.axis] ?? ''
+                  return (
+                    <div key={`combo-axis-${index}`} className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5 space-y-2">
+                      {fixedName ? (
+                        <p className="text-xs font-bold text-slate-800">{entry.axis}</p>
+                      ) : (
+                        <div>
+                          <label className="text-2xs font-semibold text-slate-500 block mb-1">Option name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Color"
+                            value={entry.axis}
+                            onChange={(e) => {
+                              const from = entry.axis
+                              const to = e.target.value
+                              setComboDraft((draft) => {
+                                const next = { ...draft.axisValues }
+                                if (from && !to) delete next[from]
+                                else if (from && to) {
+                                  const value = next[from]
+                                  delete next[from]
+                                  next[to] = value
+                                } else if (to) {
+                                  next[to] = ''
+                                }
+                                return { ...draft, axisValues: next }
+                              })
+                            }}
+                            className="w-full h-8 px-2.5 rounded-md border border-slate-200 bg-white focus:ring-1 focus:ring-brand-orange"
+                          />
+                          {!entry.axis && (
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                              <span className="text-2xs text-slate-400">Quick pick:</span>
+                              {SUGGESTED_AXES.map((name) => (
+                                <button
+                                  key={name}
+                                  type="button"
+                                  onClick={() =>
+                                    setComboDraft((draft) => ({ ...draft, axisValues: { [name]: '' } }))
+                                  }
+                                  className="h-6 px-2 rounded-md border border-slate-200 bg-white text-2xs font-semibold text-slate-600 hover:border-brand-orange hover:text-brand-orange cursor-pointer"
+                                >
+                                  {name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {(fixedName || entry.axis) && (
+                        <div className="space-y-1.5">
+                          {(entry.values || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {entry.values.map((value) => {
+                                const selected = picked === value
+                                return (
+                                  <button
+                                    key={value}
+                                    type="button"
+                                    aria-pressed={selected}
+                                    onClick={() =>
+                                      setComboDraft((draft) => ({
+                                        ...draft,
+                                        axisValues: { ...draft.axisValues, [entry.axis]: value },
+                                      }))
+                                    }
+                                    className={`h-7 px-2.5 rounded-md border text-xs font-semibold transition-colors cursor-pointer ${
+                                      selected
+                                        ? 'border-brand-orange bg-orange-50 text-brand-orange'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    {value}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                          <input
+                            type="text"
+                            aria-label={`${entry.axis || 'Option'} value`}
+                            placeholder={(entry.values || []).length > 0 ? 'Or type a new value' : 'Value (e.g. Cream)'}
+                            value={picked}
+                            onChange={(e) =>
+                              setComboDraft((draft) => ({
+                                ...draft,
+                                axisValues: { ...draft.axisValues, [entry.axis]: e.target.value },
+                              }))
+                            }
+                            className="w-full h-8 px-2.5 rounded-md border border-slate-200 bg-white focus:ring-1 focus:ring-brand-orange"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {comboOptions && Object.keys(comboOptions).length > 0 && (
+                  <p className="text-2xs font-semibold text-slate-600">
+                    This variation: <span className="text-slate-900">{optionLabel({ prodvar_options: comboOptions })}</span>
+                  </p>
+                )}
+                  </>
+                )}
+                  {!comboDraft.single && comboDuplicate && (
                     <p className="text-2xs font-semibold text-rose-600">
                       {comboDuplicate.label || comboDuplicate.name} already covers this combination.
                     </p>
                   )}
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Display name (optional)</label>
-                  <input
-                    type="text"
-                    placeholder={optionLabel({ prodvar_options: comboOptions }) || 'e.g. Cream / Medium'}
-                    value={comboDraft.name}
-                    onChange={(e) => setComboDraft((draft) => ({ ...draft, name: e.target.value }))}
-                    className="w-full h-8 px-2.5 rounded-md border border-slate-200 focus:ring-1 focus:ring-brand-orange"
-                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -1438,7 +1546,7 @@ export default function AdminProductDetail() {
                     />
                   </div>
                   <div>
-                    <label className="font-semibold text-slate-700 block mb-1">Markup (₱)</label>
+                    <label className="font-semibold text-slate-700 block mb-1">Add-on price (₱)</label>
                     <input
                       type="number"
                       min="0"

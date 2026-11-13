@@ -77,6 +77,9 @@ export default function AdminUsers() {
   const canManageSuperAdmins = empCanManageSuperAdmins(currentAdminUser)
   const canManageEmployee = (emp) =>
     canManageStaff && (canManageSuperAdmins || emp?.category !== 'super admin')
+  // Super Admin accounts are not store staff: for Admin and Staff viewers they
+  // are left out of the directory entirely (rows, stat cards, filters and
+  // category options). The API already omits them; this keeps the UI honest.
   const categoryOptions = canManageSuperAdmins
     ? CATEGORIES
     : CATEGORIES.filter((categ) => categ !== 'super admin')
@@ -122,10 +125,18 @@ export default function AdminUsers() {
     loadEmployees()
   }, [loadEmployees, reloadKey])
 
+  const directory = useMemo(
+    () =>
+      empCanManageSuperAdmins(currentAdminUser)
+        ? employees
+        : employees.filter((e) => e.category !== 'super admin'),
+    [employees, currentAdminUser]
+  )
+
   // Header stats: total active count + distribution by category.
   const activeEmployees = useMemo(
-    () => employees.filter((e) => e.status === 'active'),
-    [employees]
+    () => directory.filter((e) => e.status === 'active'),
+    [directory]
   )
   const categoryDistribution = useMemo(() => {
     const counts = { staff: 0, admin: 0, 'super admin': 0 }
@@ -139,7 +150,7 @@ export default function AdminUsers() {
   // deleted filter; every other view hides them.
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    let rows = employees.filter((e) => {
+    let rows = directory.filter((e) => {
       if (statusFilter === 'deleted') {
         if (!e.deleted) return false
       } else if (e.deleted) {
@@ -167,7 +178,7 @@ export default function AdminUsers() {
       return 0
     })
     return rows
-  }, [employees, searchQuery, categoryFilter, statusFilter, sortBy, sortOrder])
+  }, [directory, searchQuery, categoryFilter, statusFilter, sortBy, sortOrder])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
@@ -335,14 +346,14 @@ export default function AdminUsers() {
 
         {/* Summary header: total active + category distribution */}
         {isLoading ? (
-          <StatCardsSkeleton count={4} />
+          <StatCardsSkeleton count={categoryOptions.length + 1} />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className={`grid gap-3 ${categoryOptions.length === 3 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
             <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
               <p className="text-2xs font-medium text-slate-500">Total active</p>
               <p className="text-2xl font-bold text-slate-900 tracking-tight">{activeEmployees.length}</p>
             </div>
-            {CATEGORIES.map((categ) => (
+            {categoryOptions.map((categ) => (
               <div key={categ} className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4">
                 <p className="text-2xs font-medium text-slate-500">{CATEGORY_LABEL[categ]}s</p>
                 <p className="text-2xl font-bold text-slate-900 tracking-tight">{categoryDistribution[categ]}</p>
@@ -379,7 +390,7 @@ export default function AdminUsers() {
                 aria-label="Filter by category"
               >
                 <option value="all">All categories</option>
-                {CATEGORIES.map((c) => (
+                {categoryOptions.map((c) => (
                   <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
                 ))}
               </select>
@@ -480,9 +491,9 @@ export default function AdminUsers() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
-                <tr className="border-b border-slate-100 bg-white text-2xs font-bold uppercase tracking-wider text-slate-400 select-none">
-                  <th className="py-4 px-5 w-24">ID</th>
-                  <th className="py-4 px-4">
+                <tr className="border-b border-slate-100 bg-slate-50/60 text-2xs font-semibold uppercase tracking-wider text-slate-500 select-none [&>th]:py-3 [&>th]:align-middle [&>th]:whitespace-nowrap">
+                  <th className="px-5 w-20">ID</th>
+                  <th className="px-4">
                     <button
                       type="button"
                       onClick={() => toggleSort('name')}
@@ -491,7 +502,7 @@ export default function AdminUsers() {
                       Name{sortIndicator('name')}
                     </button>
                   </th>
-                  <th className="py-4 px-4">
+                  <th className="px-4">
                     <button
                       type="button"
                       onClick={() => toggleSort('email')}
@@ -500,11 +511,11 @@ export default function AdminUsers() {
                       Email{sortIndicator('email')}
                     </button>
                   </th>
-                  <th className="py-4 px-4">Phone</th>
-                  <th className="py-4 px-4">Availability</th>
-                  <th className="py-4 px-4">Category</th>
-                  <th className="py-4 px-4">Status</th>
-                  <th className="py-4 px-4">
+                  <th className="px-4">Phone</th>
+                  <th className="px-4">Availability</th>
+                  <th className="px-4">Category</th>
+                  <th className="px-4">Status</th>
+                  <th className="px-4">
                     <button
                       type="button"
                       onClick={() => toggleSort('created')}
@@ -513,10 +524,10 @@ export default function AdminUsers() {
                       Created{sortIndicator('created')}
                     </button>
                   </th>
-                  <th className="py-4 px-5 text-right">Actions</th>
+                  <th className="px-5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
+              <tbody className="divide-y divide-slate-100 text-sm text-slate-600 [&_td]:align-middle">
                 {isLoading ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-slate-400">
@@ -529,7 +540,7 @@ export default function AdminUsers() {
                 ) : pageRows.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-12 text-center text-slate-400">
-                      {employees.length === 0
+                      {directory.length === 0
                         ? 'No employees found. Enroll staff to populate the directory.'
                         : 'No employees match the current filters.'}
                     </td>
@@ -545,31 +556,32 @@ export default function AdminUsers() {
                       .toUpperCase()
                     return (
                       <tr key={emp.emp_id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-4 px-5 font-mono text-slate-500">#{emp.emp_id}</td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-5 tabular-nums text-slate-500">#{emp.emp_id}</td>
+                        <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-[#DBEAFE] text-[#2563EB] font-bold text-xs flex items-center justify-center shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-[#DBEAFE] text-[#2563EB] font-semibold text-xs flex items-center justify-center shrink-0">
                               {initials || '—'}
                             </div>
-                            <span className="font-bold text-slate-900">{emp.name}</span>
+                            <span className="font-semibold text-slate-900 whitespace-nowrap">{emp.name}</span>
                           </div>
                         </td>
-                        <td className="py-4 px-4 text-slate-600">{emp.email || '—'}</td>
-                        <td className="py-4 px-4 text-slate-600">{emp.phone || '—'}</td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-4">{emp.email || '—'}</td>
+                        <td className="py-3 px-4 tabular-nums whitespace-nowrap">{emp.phone || '—'}</td>
+                        <td className="py-3 px-4">
                           <StatusPill
                             status={emp.inStore ? 'In Store' : 'Out of Store'}
                             variant={emp.inStore ? 'green' : 'amber'}
+                            className="!h-7 !text-xs"
                           />
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-4">
                           {canManageEmployee(emp) && !emp.deleted ? (
                             <div className="relative inline-flex items-center">
                               <select
                                 value={emp.category}
                                 disabled={updatingCategoryEmpId === emp.emp_id || String(emp.emp_id) === String(currentAdminUser?.emp_id || currentAdminUser?.id)}
                                 onChange={(e) => handleCategoryChange(emp, e.target.value)}
-                                className={`inline-flex items-center !h-6 !text-2xs !leading-none pl-2 pr-5 rounded-md border text-2xs font-medium cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60 disabled:cursor-not-allowed appearance-none ${
+                                className={`inline-flex items-center !h-7 !text-xs !leading-none pl-2.5 pr-6 rounded-md border font-medium cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-brand-orange disabled:opacity-60 disabled:cursor-not-allowed appearance-none ${
                                   emp.category === 'super admin'
                                     ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                                     : emp.category === 'admin'
@@ -584,7 +596,7 @@ export default function AdminUsers() {
                                   </option>
                                 ))}
                               </select>
-                              <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 text-current opacity-60 absolute right-1.5 pointer-events-none">
+                              <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-current opacity-60 absolute right-1.5 pointer-events-none">
                                 <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
                               </svg>
                             </div>
@@ -598,11 +610,13 @@ export default function AdminUsers() {
                                     : 'neutral'
                               }
                               label={CATEGORY_LABEL[emp.category] || emp.category}
+                              className="!h-7 !text-xs"
                             />
                           )}
                         </td>
-                        <td className="py-4 px-4">
+                        <td className="py-3 px-4">
                           <StatusBadge
+                            className="!h-7 !text-xs"
                             tone={
                               emp.status === 'active'
                                 ? 'done'
@@ -613,10 +627,10 @@ export default function AdminUsers() {
                             label={STATUS_LABEL[emp.status]}
                           />
                         </td>
-                        <td className="py-4 px-4 text-slate-500">{fmtDateTime(emp.created)}</td>
-                        <td className="py-4 px-5 text-right whitespace-nowrap">
+                        <td className="py-3 px-4 text-slate-500 whitespace-nowrap">{fmtDateTime(emp.created)}</td>
+                        <td className="py-3 px-5 text-right whitespace-nowrap">
                           {canManageEmployee(emp) && !emp.deleted && (
-                            <>
+                            <div className="inline-flex items-center justify-end gap-2">
                               {emp.status === 'active' ? (
                                 <button
                                   type="button"
@@ -627,7 +641,7 @@ export default function AdminUsers() {
                                       ? 'You cannot suspend your own account.'
                                       : 'Suspend this employee account'
                                   }
-                                  className="text-2xs font-semibold text-amber-600 hover:text-amber-800 mr-3 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="h-7 px-2.5 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white font-medium transition-colors text-xs whitespace-nowrap cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 hover:bg-slate-50"
                                 >
                                   Suspend
                                 </button>
@@ -635,7 +649,7 @@ export default function AdminUsers() {
                                 <button
                                   type="button"
                                   onClick={() => handleRecover(emp)}
-                                  className="text-2xs font-semibold text-emerald-600 hover:text-emerald-800 mr-3 cursor-pointer"
+                                  className="h-7 px-2.5 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white font-medium transition-colors text-xs whitespace-nowrap cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 hover:bg-slate-50"
                                 >
                                   Recover
                                 </button>
@@ -652,11 +666,11 @@ export default function AdminUsers() {
                                     ? 'You cannot delete your own account.'
                                     : 'Permanently delete this employee account'
                                 }
-                                className="text-2xs font-semibold text-rose-600 hover:text-rose-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="h-7 px-2.5 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white font-medium transition-colors text-xs whitespace-nowrap cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-rose-600 hover:bg-rose-50 hover:border-rose-200"
                               >
                                 Delete
                               </button>
-                            </>
+                            </div>
                           )}
                         </td>
                       </tr>

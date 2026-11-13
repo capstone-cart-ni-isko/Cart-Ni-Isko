@@ -10,6 +10,7 @@ import { StatCardsSkeleton, TableSkeleton } from '../../components/admin/kit/Adm
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { uploadImage } from '../../services/upload.js'
 import { empIsStaff } from '../../components/admin/schema.js'
+import OptionValuesInput from '../../components/admin/OptionValuesInput.jsx'
 import { normalizeProductCategory, PRODUCT_CATEGORIES } from '../../data/productCategories.js'
 
 /**
@@ -49,7 +50,21 @@ const MAX_IMAGE_BYTES = 2 * 1024 * 1024
  */
 const MAX_OPTION_AXES = 4
 
+/** One-click names for a product option. */
+const OPTION_NAME_SUGGESTIONS = ['Color', 'Size', 'Material', 'Style']
+
 const BLANK_VARIATION = { name: '', stock: '', markup: '', pic: '' }
+
+/** The axes a product's variations use (Color, Size, Material …), in order. */
+function variantAxes(prod) {
+  const axes = []
+  ;(prod?.variants || []).forEach((variant) => {
+    Object.keys(variant?.options || {}).forEach((axis) => {
+      if (!axes.includes(axis)) axes.push(axis)
+    })
+  })
+  return axes
+}
 
 /** Stable key of a combination, so a row survives an edit of the axes. */
 function optionKey(options) {
@@ -147,10 +162,13 @@ export default function AdminInventory() {
   const [newProdVariations, setNewProdVariations] = useState([
     { ...BLANK_VARIATION, name: 'Standard' },
   ])
-  // The two ways of describing the same variation set. 'list' is one row per
-  // variation typed out by hand; 'matrix' is the axes and their values once,
-  // exploded into every combination.
-  const [variationMode, setVariationMode] = useState('list')
+  // 'single' is one variation (one stock count); 'options' lists the product's
+  // options (Color, Size …) and their values once, and every combination of
+  // the values becomes its own variation.
+  const [variationMode, setVariationMode] = useState('single')
+  // "Set all" values for the variations table.
+  const [bulkStock, setBulkStock] = useState('')
+  const [bulkAddon, setBulkAddon] = useState('')
   const [axes, setAxes] = useState([{ axis: 'Color', values: [] }, { axis: 'Size', values: [] }])
   const [isCreatingProduct, setIsCreatingProduct] = useState(false)
 
@@ -161,8 +179,9 @@ export default function AdminInventory() {
    * combination key so re-ordering the values never empties the form.
    */
   useEffect(() => {
-    if (variationMode !== 'matrix') return
-    const combos = cartesian(axes)
+    if (variationMode !== 'options') return
+    // No option has a value yet: there is nothing to combine.
+    const combos = cartesian(axes).filter((options) => Object.keys(options).length > 0)
     const keys = combos.map(optionKey)
     setNewProdVariations((rows) => {
       const kept = rows.filter((row) => row.optionsKey && keys.includes(row.optionsKey))
@@ -191,6 +210,31 @@ export default function AdminInventory() {
     })
   }, [axes, variationMode])
 
+  /** The option names that currently produce variations, in order. */
+  const usableOptionNames = axes
+    .filter((entry) => String(entry.axis || '').trim() && (entry.values || []).length > 0)
+    .map((entry) => String(entry.axis).trim())
+
+  const switchVariationMode = (mode) => {
+    if (mode === variationMode) return
+    setVariationMode(mode)
+    setBulkStock('')
+    setBulkAddon('')
+    // A single item is one plain variation; the options table rebuilds itself
+    // from the option values (see the effect above).
+    if (mode === 'single') setNewProdVariations([{ ...BLANK_VARIATION, name: 'Standard' }])
+  }
+
+  const applyToAllVariations = () => {
+    setNewProdVariations((rows) =>
+      rows.map((row) => ({
+        ...row,
+        ...(bulkStock !== '' ? { stock: bulkStock } : {}),
+        ...(bulkAddon !== '' ? { markup: bulkAddon } : {}),
+      }))
+    )
+  }
+
   // Edit / Delete product state (backend-driven)
   const [showEditProductModal, setShowEditProductModal] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
@@ -207,7 +251,6 @@ export default function AdminInventory() {
   // window.confirm - one for removing a combination, one for replacing the
   // hand-typed variation list with the axis matrix.
   const [pendingVariantRemoval, setPendingVariantRemoval] = useState(null)
-  const [confirmMatrixSwitch, setConfirmMatrixSwitch] = useState(false)
 
   // One combination at a time (FLOW-MANAGE_INV-01). The row the drawer's Edit
   // button opens, plus the fields of it the admin is changing.
@@ -238,7 +281,7 @@ export default function AdminInventory() {
   const updateNameError = updateTouched.name && !editName.trim() ? 'Product name is required.' : ''
   const updatePriceError = updateTouched.price && !(parseFloat(editPrice) > 0) ? 'Product price must be greater than zero.' : ''
   const variantStockError = variantTouched.stock && !(Number.parseInt(variantDraft.stock, 10) >= 0) ? 'Stock must be zero or more.' : ''
-  const variantMarkupError = variantTouched.markup && Number.parseFloat(variantDraft.markup) < 0 ? 'Markup cannot be negative.' : ''
+  const variantMarkupError = variantTouched.markup && Number.parseFloat(variantDraft.markup) < 0 ? 'The add-on price cannot be negative.' : ''
 
   // REQ-ADD_PROD-07: one shared guard for every upload the form makes.
   const assertImageAcceptable = (file) => {
@@ -440,8 +483,25 @@ export default function AdminInventory() {
         options: row.options,
       }))
       .filter((row) => row.name !== '' || row.options || Number.isFinite(row.stock))
+    if (variationMode === 'options') {
+      const names = axes
+        .filter((entry) => (entry.values || []).length > 0)
+        .map((entry) => String(entry.axis || '').trim().toLowerCase())
+      if (names.some((name) => !name)) {
+        setCreateFormError('Give every option with values a name (for example Color or Size).')
+        return
+      }
+      if (new Set(names).size !== names.length) {
+        setCreateFormError('Each option needs a different name.')
+        return
+      }
+    }
     if (variations.length === 0) {
-      setCreateFormError('A product needs at least one variation.')
+      setCreateFormError(
+        variationMode === 'options'
+          ? 'Add at least one value to an option (for example Cream under Color).'
+          : 'A product needs at least one variation.'
+      )
       return
     }
     for (const [i, row] of variations.entries()) {
@@ -455,7 +515,7 @@ export default function AdminInventory() {
         return
       }
       if (Number.isFinite(row.markup) && row.markup < 0) {
-        setCreateFormError(`Variation ${i + 1} markup cannot be negative.`)
+        setCreateFormError(`Variation ${i + 1}: the add-on price cannot be negative.`)
         return
       }
       // REQ-IM-02: the message names the axis and value, not "the option set".
@@ -502,7 +562,9 @@ export default function AdminInventory() {
       setNewProdPrice('')
       setNewProdPreorder(false)
       setNewProdVariations([{ ...BLANK_VARIATION, name: 'Standard' }])
-      setVariationMode('list')
+      setVariationMode('single')
+      setBulkStock('')
+      setBulkAddon('')
       setAxes([{ axis: 'Color', values: [] }, { axis: 'Size', values: [] }])
     } finally {
       setIsCreatingProduct(false)
@@ -606,7 +668,6 @@ export default function AdminInventory() {
     }
     setVariantFormError('')
     const result = await updateVariant(variantEditor.prodId, variantEditor.variant.prodvarId, {
-      prodvar_name: variantDraft.name,
       prodvar_stock: stock,
       prodvar_markup: Number.isFinite(markup) ? markup : 0,
       // A pre-order combination is produced to order: it stays orderable with
@@ -1153,7 +1214,7 @@ export default function AdminInventory() {
                                       ? 'Switch this product back to In Stock'
                                       : 'Mark this product as a pre-order (no stock needed)'
                                   }
-                                  className={`h-7 px-2.5 inline-flex items-center justify-center rounded-md border text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                                  className={`h-7 px-2.5 min-w-[7.5rem] inline-flex items-center justify-center rounded-md border text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                                     prod.preorder
                                       ? 'border-orange-200 bg-orange-50 text-brand-orange hover:bg-orange-100'
                                       : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
@@ -1169,7 +1230,7 @@ export default function AdminInventory() {
                                     else unlistProduct(prod.id)
                                   }}
                                   title={prod.disabled ? 'Sell (relist in catalog)' : 'Unlist from customer catalog'}
-                                  className="h-7 px-2.5 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 font-medium hover:bg-slate-50 transition-colors text-xs whitespace-nowrap cursor-pointer"
+                                  className="h-7 px-2.5 min-w-[3.75rem] inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 font-medium hover:bg-slate-50 transition-colors text-xs whitespace-nowrap cursor-pointer"
                                 >
                                   {prod.disabled ? 'Sell' : 'Unlist'}
                                 </button>
@@ -1210,7 +1271,15 @@ export default function AdminInventory() {
                                   <thead>
                                     <tr className="border-b border-gray-200 bg-gray-50/80 text-2xs font-bold text-gray-400 uppercase tracking-wider">
                                       <th className="px-3 py-2 w-8" />
-                                      <th className="px-3 py-2">VARIANT</th>
+                                      {/* One column per axis (COLOR | SIZE | …);
+                                          a product without axes keeps VARIANT. */}
+                                      {variantAxes(prod).length > 0 ? (
+                                        variantAxes(prod).map((axis) => (
+                                          <th key={axis} className="px-3 py-2">{axis}</th>
+                                        ))
+                                      ) : (
+                                        <th className="px-3 py-2">VARIANT</th>
+                                      )}
                                       <th className="px-3 py-2">SKU</th>
                                       <th className="px-3 py-2">STOCK</th>
                                       <th className="px-3 py-2">PRICE</th>
@@ -1237,22 +1306,17 @@ export default function AdminInventory() {
                                               className="rounded text-brand-orange focus:ring-0"
                                             />
                                           </td>
-                                          <td className="px-3 py-2">
-                                            <div className="flex items-center gap-2">
-                                              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
-                                              <span className="font-bold text-gray-800 text-xs">
-                                                {variant.label || variant.name}
-                                              </span>
-                                              {variant.options
-                                                && Object.keys(variant.options).length > 0 && (
-                                                <span className="hidden lg:inline text-2xs font-semibold text-slate-400">
-                                                  {Object.entries(variant.options)
-                                                    .map(([axis, value]) => `${axis}: ${value}`)
-                                                    .join(' · ')}
-                                                </span>
-                                              )}
-                                            </div>
-                                          </td>
+                                          {variantAxes(prod).length > 0 ? (
+                                            variantAxes(prod).map((axis) => (
+                                              <td key={axis} className="px-3 py-2 font-bold text-gray-800 text-xs">
+                                                {variant.options?.[axis] || <span className="text-gray-300">—</span>}
+                                              </td>
+                                            ))
+                                          ) : (
+                                            <td className="px-3 py-2 font-bold text-gray-800 text-xs">
+                                              {variant.label || variant.name}
+                                            </td>
+                                          )}
                                           <td className="px-3 py-2 text-gray-500 font-medium text-xs">
                                             {variant.sku}
                                           </td>
@@ -1308,6 +1372,10 @@ export default function AdminInventory() {
                                             {variant.lastUpdated}
                                           </td>
                                           <td className="px-3 py-2 text-right">
+                                            {/* Rule 41: staff view the inventory read-only. */}
+                                            {isStaff ? (
+                                              <span className="text-2xs text-gray-400">—</span>
+                                            ) : (
                                             <div className="inline-flex items-center gap-1">
                                               <button
                                                 type="button"
@@ -1343,6 +1411,7 @@ export default function AdminInventory() {
                                                 ×
                                               </button>
                                             </div>
+                                            )}
                                           </td>
                                         </tr>
                                       )
@@ -1631,237 +1700,336 @@ export default function AdminInventory() {
                 </span>
               </label>
 
-              {/* FLOW-ADD_PROD-02/03: variations section */}
+              {/* FLOW-ADD_PROD-02/03: variations section. A product is either a
+                  single item (one variation) or has options (Color, Size …)
+                  whose values combine into one variation per combination. */}
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <label className="field-label mb-0">Variations</label>
-                    <p className="text-2xs text-[var(--muted)]">At least one variation with stock quantity</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 self-start sm:self-auto">
-                    {variationMode === 'list' && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setNewProdVariations((rows) => [...rows, { ...BLANK_VARIATION }])
-                        }
-                        className="btn btn--secondary h-7 px-2.5 text-2xs font-semibold"
-                      >
-                        + Add variation
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (variationMode === 'matrix') {
-                          setVariationMode('list')
-                          return
-                        }
-                        const dirty = newProdVariations.some(
-                          (row) => row.name || row.stock || row.markup || row.pic
-                        )
-                        if (dirty) {
-                          setConfirmMatrixSwitch(true)
-                          return
-                        }
-                        setVariationMode('matrix')
-                      }}
-                      className="btn btn--secondary h-7 px-2.5 text-2xs font-semibold"
-                    >
-                      {variationMode === 'matrix' ? 'Type them out' : 'Use axes'}
-                    </button>
-                  </div>
+                <div>
+                  <label className="field-label mb-0">Variations</label>
+                  <p className="text-2xs text-[var(--muted)]">
+                    Does this product come in different options, like colors or sizes?
+                  </p>
                 </div>
 
-                {variationMode === 'matrix' && (
-                  <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-2.5 space-y-2.5">
-                    <p className="text-2xs text-[var(--muted)]">
-                      List the ways this product can vary and the values each one
-                      takes. Every combination becomes its own variation with its
-                      own stock — color&nbsp;×&nbsp;size, or color&nbsp;×&nbsp;material.
-                    </p>
-                    {axes.map((entry, index) => (
-                      <div key={`axis-${index}`} className="space-y-1.5">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <input
-                            type="text"
-                            placeholder={index === 0 ? 'Color' : index === 1 ? 'Size' : 'Axis name'}
-                            value={entry.axis}
-                            onChange={(e) =>
-                              setAxes((rows) =>
-                                rows.map((r, i) => (i === index ? { ...r, axis: e.target.value } : r))
-                              )
-                            }
-                            className="field-input sm:w-32 h-8"
+                <div role="radiogroup" aria-label="Product options" className="grid grid-cols-2 gap-2">
+                  {[
+                    { mode: 'single', title: 'Single item', hint: 'One version with one stock count' },
+                    { mode: 'options', title: 'Has options', hint: 'e.g. colors, sizes or materials' },
+                  ].map((choice) => {
+                    const active = variationMode === choice.mode
+                    return (
+                      <button
+                        key={choice.mode}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => switchVariationMode(choice.mode)}
+                        className={`text-left rounded-lg border px-3 py-2.5 transition-colors cursor-pointer ${
+                          active
+                            ? 'border-brand-orange bg-orange-50/60 ring-1 ring-brand-orange'
+                            : 'border-[var(--line)] bg-[var(--surface)] hover:bg-[var(--surface-2)]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 text-xs font-bold text-[var(--ink)]">
+                          <span
+                            aria-hidden="true"
+                            className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 ${
+                              active
+                                ? 'border-brand-orange bg-brand-orange shadow-[inset_0_0_0_2px_#fff]'
+                                : 'border-[var(--line-3)]'
+                            }`}
                           />
-                          <div className="flex-1 min-w-0">
+                          {choice.title}
+                        </span>
+                        <span className="block mt-0.5 pl-5.5 text-2xs text-[var(--muted)]">{choice.hint}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {variationMode === 'single' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-2xs text-[var(--muted)] font-medium block mb-1">
+                        {newProdPreorder ? 'Stock (optional)' : 'Stock'}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0"
+                        value={newProdVariations[0]?.stock ?? ''}
+                        onChange={(e) =>
+                          setNewProdVariations((rows) =>
+                            rows.map((r, i) => (i === 0 ? { ...r, stock: e.target.value } : r))
+                          )
+                        }
+                        className="field-input h-9"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Image (optional)</label>
+                      <div className="flex items-center gap-2">
+                        {newProdVariations[0]?.pic && (
+                          <img
+                            src={getImageUrl(newProdVariations[0].pic)}
+                            alt="Variation preview"
+                            className="h-9 w-9 rounded-md border border-[var(--line)] object-contain bg-white shrink-0"
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddVariationPhotoIndex(0)
+                            addVariationPhotoRef.current?.click()
+                          }}
+                          className="btn btn--secondary flex-1 h-9 text-2xs font-semibold"
+                        >
+                          {newProdVariations[0]?.pic ? 'Replace' : 'Upload'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {axes.map((entry, index) => {
+                      const usedNames = axes
+                        .filter((_, i) => i !== index)
+                        .map((other) => String(other.axis || '').trim().toLowerCase())
+                      const suggestions = OPTION_NAME_SUGGESTIONS.filter(
+                        (name) => !usedNames.includes(name.toLowerCase())
+                      )
+                      const isDuplicate =
+                        String(entry.axis || '').trim() !== '' &&
+                        usedNames.includes(String(entry.axis).trim().toLowerCase())
+                      return (
+                        <div
+                          key={`option-${index}`}
+                          className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-3 space-y-2.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-2xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                              Option {index + 1}
+                            </p>
+                            {axes.length > 1 && (
+                              <button
+                                type="button"
+                                aria-label={`Remove option ${index + 1}`}
+                                onClick={() => setAxes((rows) => rows.filter((_, i) => i !== index))}
+                                className="h-7 px-2 rounded-md text-2xs font-semibold text-[var(--muted)] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Option name</label>
                             <input
                               type="text"
-                              placeholder="e.g. Cream, Black, Navy"
-                              value={(entry.values || []).join(', ')}
+                              placeholder="e.g. Color"
+                              value={entry.axis}
                               onChange={(e) =>
                                 setAxes((rows) =>
-                                  rows.map((r, i) =>
-                                    i === index
-                                      ? {
-                                          ...r,
-                                          values: e.target.value
-                                            .split(',')
-                                            .map((v) => v.trim())
-                                            .filter(Boolean),
-                                        }
-                                      : r
-                                  )
+                                  rows.map((r, i) => (i === index ? { ...r, axis: e.target.value } : r))
                                 )
                               }
-                              className="field-input h-8"
+                              aria-invalid={isDuplicate ? 'true' : undefined}
+                              className="field-input h-9"
+                            />
+                            {isDuplicate ? (
+                              <p className="field-error">Each option needs a different name.</p>
+                            ) : (
+                              !String(entry.axis || '').trim() &&
+                              suggestions.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                  <span className="text-2xs text-[var(--muted)]">Quick pick:</span>
+                                  {suggestions.map((name) => (
+                                    <button
+                                      key={name}
+                                      type="button"
+                                      onClick={() =>
+                                        setAxes((rows) =>
+                                          rows.map((r, i) => (i === index ? { ...r, axis: name } : r))
+                                        )
+                                      }
+                                      className="h-6 px-2 rounded-md border border-[var(--line)] bg-[var(--surface)] text-2xs font-semibold text-[var(--ink-2)] hover:border-brand-orange hover:text-brand-orange cursor-pointer"
+                                    >
+                                      {name}
+                                    </button>
+                                  ))}
+                                </div>
+                              )
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Values</label>
+                            <OptionValuesInput
+                              values={entry.values || []}
+                              onChange={(values) =>
+                                setAxes((rows) => rows.map((r, i) => (i === index ? { ...r, values } : r)))
+                              }
+                              ariaLabel={`Values for ${entry.axis || `option ${index + 1}`}`}
+                              placeholder={`Type a ${String(entry.axis || 'value').toLowerCase()} and press Enter`}
                             />
                           </div>
-                          {axes.length > 1 && (
-                            <button
-                              type="button"
-                              aria-label={`Remove axis ${index + 1}`}
-                              onClick={() => setAxes((rows) => rows.filter((_, i) => i !== index))}
-                              className="btn btn--ghost h-8 w-8 p-0 text-base"
-                            >
-                              ×
-                            </button>
-                          )}
                         </div>
-                        {(entry.values || []).length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {(entry.values || []).map((value) => (
-                              <span
-                                key={`${entry.axis}-${value}`}
-                                className="px-2 py-0.5 rounded-md border border-[var(--line)] bg-[var(--surface)] text-2xs font-semibold text-[var(--ink-2)]"
-                              >
-                                {value}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      )
+                    })}
+
                     {axes.length < MAX_OPTION_AXES && (
                       <button
                         type="button"
                         onClick={() => setAxes((rows) => [...rows, { axis: '', values: [] }])}
-                        className="btn btn--ghost border border-dashed border-[var(--line-2)] h-7 px-2.5 text-2xs text-[var(--muted)] hover:text-brand-orange"
+                        className="btn btn--ghost w-full border border-dashed border-[var(--line-2)] h-9 text-xs text-[var(--muted)] hover:text-brand-orange"
                       >
-                        + Add another way to vary
+                        + Add another option ({axes.length} of {MAX_OPTION_AXES})
                       </button>
+                    )}
+
+                    {newProdVariations.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-[var(--line-2)] px-3 py-4 text-center text-2xs text-[var(--muted)]">
+                        Add values to an option to see the variations here.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-end justify-between gap-2">
+                          <p className="text-xs font-bold text-[var(--ink)]">
+                            {newProdVariations.length} variation{newProdVariations.length === 1 ? '' : 's'}
+                          </p>
+                          <div className="flex items-end gap-1.5">
+                            <div>
+                              <label className="text-2xs text-[var(--muted)] font-medium block mb-0.5">Stock</label>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="—"
+                                value={bulkStock}
+                                onChange={(e) => setBulkStock(e.target.value)}
+                                className="field-input h-8 w-20"
+                                aria-label="Stock for every variation"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-2xs text-[var(--muted)] font-medium block mb-0.5">Add-on ₱</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="—"
+                                value={bulkAddon}
+                                onChange={(e) => setBulkAddon(e.target.value)}
+                                className="field-input h-8 w-20"
+                                aria-label="Add-on price for every variation"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={applyToAllVariations}
+                              disabled={bulkStock === '' && bulkAddon === ''}
+                              className="btn btn--secondary h-8 px-2.5 text-2xs font-semibold"
+                            >
+                              Set all
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-lg border border-[var(--line)]">
+                          <table className="w-full min-w-[440px] text-xs">
+                            <thead className="bg-[var(--surface-2)] text-2xs font-semibold text-[var(--muted)]">
+                              <tr>
+                                {usableOptionNames.map((name) => (
+                                  <th key={name} className="px-2.5 py-2 text-left">{name}</th>
+                                ))}
+                                <th className="px-2.5 py-2 text-left">{newProdPreorder ? 'Stock (optional)' : 'Stock'}</th>
+                                <th className="px-2.5 py-2 text-left">Add-on ₱</th>
+                                <th className="px-2.5 py-2 text-left">Image</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[var(--line)]">
+                              {newProdVariations.map((row, index) => (
+                                <tr key={`variation-${row.optionsKey || index}`}>
+                                  {usableOptionNames.map((name) => (
+                                    <td key={name} className="px-2.5 py-1.5 font-semibold text-[var(--ink)] whitespace-nowrap">
+                                      {row.options?.[name] || '—'}
+                                    </td>
+                                  ))}
+                                  <td className="px-2.5 py-1.5">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      placeholder="0"
+                                      value={row.stock}
+                                      onChange={(e) =>
+                                        setNewProdVariations((rows) =>
+                                          rows.map((r, i) => (i === index ? { ...r, stock: e.target.value } : r))
+                                        )
+                                      }
+                                      aria-label={`Stock for ${combinationLabel(row.options)}`}
+                                      className="field-input h-8 w-20"
+                                    />
+                                  </td>
+                                  <td className="px-2.5 py-1.5">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="0"
+                                      value={row.markup}
+                                      onChange={(e) =>
+                                        setNewProdVariations((rows) =>
+                                          rows.map((r, i) => (i === index ? { ...r, markup: e.target.value } : r))
+                                        )
+                                      }
+                                      aria-label={`Add-on price for ${combinationLabel(row.options)}`}
+                                      className="field-input h-8 w-20"
+                                    />
+                                  </td>
+                                  <td className="px-2.5 py-1.5">
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setAddVariationPhotoIndex(index)
+                                          addVariationPhotoRef.current?.click()
+                                        }}
+                                        title={row.pic ? 'Replace image' : 'Add image'}
+                                        aria-label={`${row.pic ? 'Replace' : 'Add'} image for ${combinationLabel(row.options)}`}
+                                        className="h-8 w-8 rounded-md border border-[var(--line)] bg-[var(--surface)] overflow-hidden flex items-center justify-center text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange cursor-pointer"
+                                      >
+                                        {row.pic ? (
+                                          <img src={getImageUrl(row.pic)} alt="" className="h-full w-full object-contain bg-white" />
+                                        ) : (
+                                          <span className="text-base leading-none">+</span>
+                                        )}
+                                      </button>
+                                      {row.pic && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setNewProdVariations((rows) =>
+                                              rows.map((r, i) => (i === index ? { ...r, pic: '' } : r))
+                                            )
+                                          }
+                                          aria-label={`Remove image for ${combinationLabel(row.options)}`}
+                                          className="h-6 w-6 rounded text-[var(--muted)] hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                        >
+                                          ×
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="text-2xs text-[var(--muted)]">
+                          The add-on price is added to the base price for that variation. Leave it at 0 to sell at the base price.
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  {newProdVariations.map((row, index) => (
-                    <div key={`variation-${row.optionsKey || index}`} className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-2.5 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          placeholder={
-                            row.options
-                              ? `${combinationLabel(row.options)} (leave blank to use this)`
-                              : 'Variation name (e.g. Medium)'
-                          }
-                          value={row.name}
-                          onChange={(e) =>
-                            setNewProdVariations((rows) =>
-                              rows.map((r, i) => (i === index ? { ...r, name: e.target.value } : r))
-                            )
-                          }
-                          className="field-input flex-1 h-8"
-                        />
-                        {row.options && (
-                          <span className="hidden sm:inline text-2xs font-semibold text-[var(--muted)] shrink-0">
-                            {combinationLabel(row.options)}
-                          </span>
-                        )}
-                        {variationMode === 'list' && newProdVariations.length > 1 && (
-                          <button
-                            type="button"
-                            aria-label={`Remove variation ${index + 1}`}
-                            onClick={() =>
-                              setNewProdVariations((rows) => rows.filter((_, i) => i !== index))
-                            }
-                            className="btn btn--ghost h-8 w-8 p-0 text-base"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-2xs text-[var(--muted)] font-medium block mb-1">
-                            {newProdPreorder ? 'Stock (optional)' : 'Stock'}
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            placeholder="0"
-                            value={row.stock}
-                            onChange={(e) =>
-                              setNewProdVariations((rows) =>
-                                rows.map((r, i) => (i === index ? { ...r, stock: e.target.value } : r))
-                              )
-                            }
-                            className="field-input h-8"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Markup (₱)</label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="0"
-                            value={row.markup}
-                            onChange={(e) =>
-                              setNewProdVariations((rows) =>
-                                rows.map((r, i) => (i === index ? { ...r, markup: e.target.value } : r))
-                              )
-                            }
-                            className="field-input h-8"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-2xs text-[var(--muted)] font-medium block mb-1">Image (optional)</label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAddVariationPhotoIndex(index)
-                              addVariationPhotoRef.current?.click()
-                            }}
-                            className="btn btn--secondary w-full h-8 text-2xs font-semibold"
-                          >
-                            {row.pic ? 'Replace' : 'Upload'}
-                          </button>
-                        </div>
-                      </div>
-                      {row.pic && (
-                        <div className="flex items-center gap-2 pt-1 border-t border-[var(--line)]">
-                          <img
-                            src={getImageUrl(row.pic)}
-                            alt={`Variation ${index + 1} preview`}
-                            className="h-10 w-10 rounded-md border border-[var(--line)] object-contain bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setNewProdVariations((rows) =>
-                                rows.map((r, i) => (i === index ? { ...r, pic: '' } : r))
-                              )
-                            }
-                            className="text-2xs font-semibold text-rose-600 hover:underline cursor-pointer"
-                          >
-                            Remove image
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
                 <input
                   ref={addVariationPhotoRef}
                   type="file"
@@ -2058,15 +2226,6 @@ export default function AdminInventory() {
         confirmText="Remove"
       />
 
-      <ConfirmModal
-        isOpen={confirmMatrixSwitch}
-        onClose={() => setConfirmMatrixSwitch(false)}
-        onConfirm={() => setVariationMode('matrix')}
-        title="Switch to the combination matrix?"
-        message="The variations typed out by hand will be replaced by the combinations of the axes below."
-        confirmText="Use axes"
-      />
-
       {/* FLOW-MANAGE_INV-01: one combination, edited on its own, so every other
           prodvar row - and every bag and sales row hanging off it - is left
           untouched. */}
@@ -2100,16 +2259,6 @@ export default function AdminInventory() {
                   ))}
                 </div>
               )}
-              <div>
-                <label className="field-label">Display name (optional)</label>
-                <input
-                  type="text"
-                  placeholder={variantEditor.variant.label || 'Cream / Medium'}
-                  value={variantDraft.name}
-                  onChange={(e) => setVariantDraft((draft) => ({ ...draft, name: e.target.value }))}
-                  className="field-input"
-                />
-              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="field-label">Stock</label>
@@ -2130,7 +2279,7 @@ export default function AdminInventory() {
                   )}
                 </div>
                 <div>
-                  <label className="field-label">Markup (₱)</label>
+                  <label className="field-label">Add-on price (₱)</label>
                   <input
                     type="number"
                     min="0"

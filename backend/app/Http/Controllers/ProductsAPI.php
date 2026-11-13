@@ -1666,9 +1666,15 @@ class ProductsAPI extends Controller
                     ], 422);
                 }
 
-                $name = trim((string) ($row['prodvar_name'] ?? $row['name'] ?? ''));
+                // A combination is named by its values ("Cream / Medium"): no
+                // free-text display name, so the name can never contradict
+                // the axes it was built from. A row without axes keeps the
+                // name it was given.
+                $name = $options !== []
+                    ? self::optionLabel($options)
+                    : trim((string) ($row['prodvar_name'] ?? $row['name'] ?? ''));
                 if ($name === '') {
-                    $name = self::optionLabel($options, 'Variation ' . ($index + 1));
+                    $name = 'Variation ' . ($index + 1);
                 }
 
                 $rows[] = [
@@ -1915,14 +1921,18 @@ class ProductsAPI extends Controller
                 return response()->json(['success' => false, 'message' => $optionError], 422);
             }
 
-            $name = array_key_exists('prodvar_name', $input) || array_key_exists('name', $input)
-                ? trim((string) ($input['prodvar_name'] ?? $input['name'] ?? ''))
-                : null;
-            if ($name === null || $name === '') {
-                $name = self::optionLabel(
-                    $optionsSent ? $options : self::decodeOptions($existing?->prodvar_options),
-                    (string) ($existing->prodvar_name ?? 'Variation')
-                );
+            // A combination is named by its values; a typed name only applies
+            // to a variation that has no axes at all.
+            $effectiveOptions = $optionsSent ? $options : self::decodeOptions($existing?->prodvar_options);
+            if ($effectiveOptions !== []) {
+                $name = self::optionLabel($effectiveOptions);
+            } else {
+                $name = array_key_exists('prodvar_name', $input) || array_key_exists('name', $input)
+                    ? trim((string) ($input['prodvar_name'] ?? $input['name'] ?? ''))
+                    : '';
+                if ($name === '') {
+                    $name = (string) ($existing->prodvar_name ?? 'Variation');
+                }
             }
 
             $attributes = ['prodvar_name' => $name];

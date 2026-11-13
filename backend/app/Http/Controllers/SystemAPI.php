@@ -1349,6 +1349,22 @@ class SystemAPI extends Controller
         }
     }
 
+    /**
+     * Super Admin accounts own the system; they are not store staff and take
+     * no part in day-to-day operations. Every employee list an Admin or Staff
+     * account reads (staff directory, roster, appointment and notification
+     * pickers) therefore leaves them out. Only a Super Admin sees the complete
+     * list (REQ-EMP_LIST-01). Sign-in and access are untouched.
+     */
+    private function visibleEmployees(Request $json, $employees)
+    {
+        if ($this->isSuperAdmin($json->user('api'))) {
+            return $employees;
+        }
+
+        return $employees->reject(fn (Employee $employee) => $employee->isSuperAdmin());
+    }
+
     public function displayAccounts(Request $json)
     {
         $denied = $this->denyUnlessEmployee($json);
@@ -1368,9 +1384,9 @@ class SystemAPI extends Controller
                     ->values();
             }
             if (in_array($accountType, ['employee', 'all'])) {
-                $employees = Employee::whereNull('emp_deleted')
+                $employees = $this->visibleEmployees($json, Employee::whereNull('emp_deleted')
                     ->orderBy('emp_created', 'desc')
-                    ->get()
+                    ->get())
                     ->map(fn (Employee $employee) => array_merge($employee->toArray(), $this->employeeAliases($employee)))
                     ->values();
             }
@@ -1492,14 +1508,14 @@ class SystemAPI extends Controller
             }
 
             if (in_array($accountType, ['employee', 'all'])) {
-                $employees = Employee::whereNull('emp_deleted')
+                $employees = $this->visibleEmployees($json, Employee::whereNull('emp_deleted')
                     ->where(function ($builder) use ($query) {
                         $builder->where('emp_surname', 'like', "%{$query}%")
                             ->orWhere('emp_givname', 'like', "%{$query}%")
                             ->orWhere('emp_email', 'like', "%{$query}%")
                             ->orWhere('emp_phone', 'like', "%{$query}%");
                     })
-                    ->get()
+                    ->get())
                     ->map(fn (Employee $employee) => array_merge($employee->toArray(), $this->employeeAliases($employee)))
                     ->values();
             }
@@ -1545,7 +1561,7 @@ class SystemAPI extends Controller
 
             if (in_array($accountType, ['employee', 'all'])) {
                 $col = $sortBy === 'name' ? 'emp_surname' : ($sortBy === 'type' ? 'emp_categ' : 'emp_created');
-                $employees = Employee::whereNull('emp_deleted')->orderBy($col, $order)->get()
+                $employees = $this->visibleEmployees($json, Employee::whereNull('emp_deleted')->orderBy($col, $order)->get())
                     ->map(fn (Employee $employee) => array_merge($employee->toArray(), $this->employeeAliases($employee)))
                     ->values();
             }

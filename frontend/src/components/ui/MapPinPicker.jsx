@@ -32,13 +32,55 @@ function FollowPin({ value }) {
 
 const round = (n) => Math.round(Number(n) * 1e6) / 1e6
 
-export default function MapPinPicker({ value, onChange, query = '' }) {
+/** OpenStreetMap reverse-geocode answer -> the address form's fields. */
+function addressFromOsm(a = {}) {
+  const street = [a.house_number, a.road].filter(Boolean).join(' ')
+  const postcode = String(a.postcode || '').trim()
+  return {
+    addressLine: street || a.building || a.amenity || a.residential || '',
+    barangay: a.quarter || a.village || a.suburb || a.neighbourhood || a.hamlet || '',
+    city: a.city || a.town || a.municipality || '',
+    province: a.state || a.province || a.county || '',
+    postalCode: /^\d{4}$/.test(postcode) ? postcode : '',
+  }
+}
+
+/**
+ * onAddress (optional): called with { addressLine, barangay, city, province,
+ * postalCode } read from the spot the customer tapped or located, so the
+ * form can fill itself from the map.
+ */
+export default function MapPinPicker({ value, onChange, query = '', onAddress }) {
   const [busy, setBusy] = useState('')
   const [note, setNote] = useState('')
 
-  const pick = (spot) => {
+  const fillFromMap = async (spot) => {
+    if (!onAddress) return
+    setBusy('address')
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${spot.lat}&lon=${spot.lng}`
+      const res = await fetch(url, { headers: { Accept: 'application/json' } })
+      const data = res.ok ? await res.json() : null
+      if (data?.address) {
+        onAddress(addressFromOsm(data.address))
+        setNote('Address filled in from the map — check it and add your house no. if needed.')
+      } else {
+        setNote('No address was found for that spot. Type it in instead.')
+      }
+    } catch {
+      setNote('The map could not read an address right now. Type it in instead.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  // A tap or "Use my location" both drops the pin and reads its address;
+  // "Find on map" only moves the pin to what was already typed.
+  const pick = (spot, { fill = false } = {}) => {
     setNote('')
-    onChange({ lat: round(spot.lat), lng: round(spot.lng) })
+    const pinned = { lat: round(spot.lat), lng: round(spot.lng) }
+    onChange(pinned)
+    if (fill) fillFromMap(pinned)
   }
 
   const useMyLocation = () => {
@@ -50,7 +92,7 @@ export default function MapPinPicker({ value, onChange, query = '' }) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setBusy('')
-        pick({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        pick({ lat: pos.coords.latitude, lng: pos.coords.longitude }, { fill: true })
       },
       () => {
         setBusy('')
@@ -111,7 +153,7 @@ export default function MapPinPicker({ value, onChange, query = '' }) {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <ClickToPin onPick={pick} />
+          <ClickToPin onPick={(spot) => pick(spot, { fill: true })} />
           <FollowPin value={value} />
           {value && (
             <CircleMarker
@@ -123,7 +165,15 @@ export default function MapPinPicker({ value, onChange, query = '' }) {
         </MapContainer>
       </div>
       <div className="flex items-center justify-between gap-2 text-[11px] text-gray-500">
-        <span>{value ? `Pinned at ${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}` : 'Tap the map where the rider should go.'}</span>
+        <span>
+          {busy === 'address'
+            ? 'Reading the address…'
+            : value
+            ? `Pinned at ${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}`
+            : onAddress
+            ? 'Tap the map where the rider should go — the address fills in by itself.'
+            : 'Tap the map where the rider should go.'}
+        </span>
         {value && (
           <button type="button" onClick={() => onChange(null)} className="font-semibold text-red-500 hover:underline cursor-pointer">
             Remove pin

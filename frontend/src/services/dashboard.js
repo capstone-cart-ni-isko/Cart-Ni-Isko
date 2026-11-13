@@ -1,4 +1,5 @@
 import { normalizeProductCategory } from '../data/productCategories.js'
+import { variationParts } from '../utils/variation.js'
 
 /**
  * Admin dashboard & analytics aggregation layer (SRS REQ-SD-01/02/03).
@@ -116,6 +117,9 @@ function mapItemRow(item) {
     prodvarId: item.prodvar_id || prodvar?.prodvar_id || null,
     name: product?.prod_name || item.prod_name || `Item #${item.prod_id}`,
     prodvarName: item.prodvar_name || prodvar?.prodvar_name || '',
+    // Each axis under its own name ({axis, value}), so admin screens read a
+    // variation exactly the way the customer's order does.
+    variation: variationParts(item),
     qty,
     // item_amount is the LINE TOTAL (price x qty) - derive the unit price.
     price: qty > 0 ? lineTotal / qty : lineTotal,
@@ -550,19 +554,46 @@ export function buildSalesTrend(rows = [], range = 'Today', custom = null) {
   // mutually exclusive and add back up to the total, so the stacked bars and
   // the Total line always agree.
   return buckets.map((bucket) => {
-    let walkin = 0
-    let preorder = 0
-    let online = 0
+    const sums = { walkin: 0, preorder: 0, online: 0 }
+    let orders = 0
     rows.forEach((row) => {
       const date = parseDate(row.createdAt)
       if (!date || !bucket.match(date)) return
-      const value = Number(row.total) || 0
-      if (row.isPos) walkin += value
-      else if (row.preorder) preorder += value
-      else online += value
+      sums[orderTypeOf(row)] += Number(row.total) || 0
+      orders += 1
     })
-    return { date: bucket.label, walkin, preorder, online, total: walkin + preorder + online }
+    return {
+      date: bucket.label,
+      ...sums,
+      total: sums.walkin + sums.preorder + sums.online,
+      orders,
+    }
   })
+}
+
+/**
+ * FLOW-ANALYTICS-03: the one order-type rule every sales breakdown shares -
+ * walk-in (POS) first, then pre-order, everything else is a regular online order.
+ */
+export function orderTypeOf(row) {
+  if (row?.isPos) return 'walkin'
+  if (row?.preorder) return 'preorder'
+  return 'online'
+}
+
+/** Revenue + order count per order type for a set of mapped orders. */
+export function buildOrderTypeMix(rows = []) {
+  const mix = {
+    online: { sales: 0, orders: 0 },
+    walkin: { sales: 0, orders: 0 },
+    preorder: { sales: 0, orders: 0 },
+  }
+  rows.forEach((row) => {
+    const entry = mix[orderTypeOf(row)]
+    entry.sales += Number(row.total) || 0
+    entry.orders += 1
+  })
+  return mix
 }
 
 /** Sales per product category for the "Sales performance" bars. */
