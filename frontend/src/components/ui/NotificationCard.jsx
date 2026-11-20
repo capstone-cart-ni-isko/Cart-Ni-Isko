@@ -221,16 +221,13 @@ export default function NotificationCard({
       tabIndex={0}
       onClick={() => onClick?.(notification)}
       onKeyDown={handleKeyDown}
-      className={`group relative rounded-2xl border transition-all duration-150 cursor-pointer p-4 sm:p-5 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40 ${
-        isUnread
-          ? 'bg-orange-50/25 border-orange-200 shadow-2xs hover:border-orange-300 hover:shadow-xs dark:bg-orange-950/15 dark:border-orange-500/30'
-          : 'bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs dark:bg-[var(--surface-2)] dark:border-[var(--line)]'
-      } ${className}`}
+      aria-label={`${isUnread ? 'Unread: ' : ''}${notification.title}`}
+      className={`group relative rounded-xl border bg-white border-slate-200 shadow-2xs transition-colors duration-150 cursor-pointer p-4 select-none hover:border-slate-300 hover:bg-slate-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40 dark:bg-[var(--surface-2)] dark:border-[var(--line)] ${className}`}
     >
       <div className="flex items-start gap-3.5 sm:gap-4">
         {/* Leading Category/Status Icon */}
         <div
-          className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${notification.iconBg}`}
+          className={`w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 ${notification.iconBg}`}
         >
           <NotifIcon icon={notification.icon} className="w-5 h-5" />
         </div>
@@ -240,7 +237,16 @@ export default function NotificationCard({
           {/* Header row: Title + Unread indicator on left, Timestamp on right */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-[var(--ink)] tracking-tight leading-snug truncate">
+              {isUnread && (
+                <span aria-hidden="true" className="w-2 h-2 rounded-full bg-brand-orange shrink-0" />
+              )}
+              <h3
+                className={`text-sm sm:text-base tracking-tight leading-snug truncate ${
+                  isUnread
+                    ? 'font-bold text-slate-900 dark:text-[var(--ink)]'
+                    : 'font-semibold text-slate-700 dark:text-[var(--ink-2)]'
+                }`}
+              >
                 {notification.title}
               </h3>
             </div>
@@ -251,17 +257,21 @@ export default function NotificationCard({
           </div>
 
           {/* Description Text */}
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-[var(--ink)]/80 mt-1.5 leading-relaxed break-words line-clamp-3">
+          <p
+            className={`text-xs sm:text-sm mt-1 leading-relaxed break-words line-clamp-3 ${
+              isUnread ? 'text-slate-600 dark:text-[var(--ink)]/80' : 'text-slate-500 dark:text-[var(--muted)]'
+            }`}
+          >
             {notification.message}
           </p>
 
           {/* Footer Metadata Row */}
-          <div className="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-[var(--line)] flex items-center justify-between gap-3 flex-wrap">
+          <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-[var(--line)] flex items-center justify-between gap-3 flex-wrap">
             {/* Badges container */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Priority badge - staff portal only */}
               {showMeta && isPriority && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-2xs font-bold bg-amber-50 text-amber-700 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60">
+                <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md text-2xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                   Priority
                 </span>
@@ -269,7 +279,7 @@ export default function NotificationCard({
 
               {/* Order number tag - staff portal only */}
               {showMeta && notification.orderNumber && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-mono font-semibold bg-orange-50 text-brand-orange border border-orange-200/60 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800/60">
+                <span className="inline-flex items-center h-6 px-2 rounded-md text-2xs font-semibold tabular-nums bg-orange-50 text-brand-orange border border-orange-200/60 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800/60">
                   {notification.orderNumber}
                 </span>
               )}
@@ -277,7 +287,7 @@ export default function NotificationCard({
               {/* Semantic category tag */}
               {notification.tag && (
                 <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold border ${notification.tagClass}`}
+                  className={`inline-flex items-center h-6 px-2 rounded-md text-2xs font-semibold border ${notification.tagClass}`}
                 >
                   {notification.tag}
                 </span>

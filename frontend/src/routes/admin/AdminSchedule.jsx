@@ -3,7 +3,6 @@ import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
 import { useScheduleRoster } from '../../hooks/useScheduleRoster.js'
 import { useScheduleShifts } from '../../hooks/useScheduleShifts.js'
-import { useScheduleSlots } from '../../hooks/useScheduleSlots.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import ScheduleToolbar from '../../components/admin/ScheduleToolbar.jsx'
 import ScheduleTimelineGrid from '../../components/admin/ScheduleTimelineGrid.jsx'
@@ -13,12 +12,14 @@ import ScheduleDutyRequests from '../../components/admin/ScheduleDutyRequests.js
 import ScheduleWeekGrid from '../../components/admin/ScheduleWeekGrid.jsx'
 import ScheduleMonthGrid from '../../components/admin/ScheduleMonthGrid.jsx'
 import {
+  MyDutySummary,
   RosterSection,
   ScheduleHeader,
+  ScheduleCoverageSummary,
   ShiftBlocksSection,
-  ThresholdBar,
+  StaffScheduleHeader,
 } from '../../components/admin/SchedulePageParts.jsx'
-import { empRoleKey } from '../../components/admin/schema.js'
+import { empCanManageStore } from '../../components/admin/schema.js'
 import { logAction } from '../../services/access.js'
 import {
   addDays,
@@ -35,9 +36,10 @@ import {
 /**
  * DOMAIN 7 (EMPLOYEE SCHEDULING).
  *
- * FLOW-EMP_SCHED-01: super admins open this screen at `/admin/schedules`;
- * the Staff tab of the employee portal embeds the very same screen
- * (`embedded`), so every scheduling operation is reachable from there too.
+ * FLOW-EMP_SCHED-01: admins and super admins open this screen at
+ * `/admin/schedules`; the Staff tab of the employee portal embeds the very
+ * same screen (`embedded`), so every scheduling operation is reachable from
+ * there too.
  * With `embedded` the AdminLayout is supplied by the host page instead.
  *
  * The three calendar layouts the SRS asks for all read the same API: the day
@@ -47,10 +49,11 @@ import {
  * always repaints from the server.
  */
 export default function AdminSchedule({ embedded = false }) {
-  const { currentAdminUser, isSuperAdmin } = useAdmin() || {}
+  const { currentAdminUser } = useAdmin() || {}
   const { showToast } = useToast()
 
   const [viewMode, setViewMode] = useState('Day')
+  const [dayDisplayMode, setDayDisplayMode] = useState('Timeline')
   const [activeFilter, setActiveFilter] = useState('all')
   const [showCovers, setShowCovers] = useState(false)
   const [assignOfficerId, setAssignOfficerId] = useState(null)
@@ -60,13 +63,17 @@ export default function AdminSchedule({ embedded = false }) {
   const dateKey = dayKey(selectedDate)
   const roster = useScheduleRoster()
   const duty = useScheduleShifts(dateKey)
-  const slots = useScheduleSlots(dateKey)
 
-  // Rule 38: only super admins (and, as the API allows, admins) preschedule
-  // somebody else. Everyone else keeps their own availability half
-  // (FLOW-EMP_SCHED-04) and never sees a button that would 403.
-  const roleKey = empRoleKey(currentAdminUser)
-  const canPreschedule = roleKey === 'SUPER_ADMIN' || roleKey === 'ADMIN'
+  // Rule 38: admins and super admins preschedule somebody else. Everyone
+  // else keeps their own availability half (FLOW-EMP_SCHED-04) and never sees
+  // a button that would 403.
+  const canManageStore = empCanManageStore(currentAdminUser)
+  const canPreschedule = canManageStore
+  // Staff do not plan the roster: they get a personal view (their own duty,
+  // the team's shifts read-only) and may only open their own blocks to flag
+  // them unavailable (FLOW-EMP_SCHED-04). No coverage figures, no attendance.
+  const isStaffView = !canManageStore
+  const selfEmpId = currentAdminUser?.emp_id ?? currentAdminUser?.id ?? null
 
   const isWeek = viewMode === 'Week'
   const isMonth = viewMode === 'Month'
@@ -86,18 +93,20 @@ export default function AdminSchedule({ embedded = false }) {
       : fmtLongDate(selectedDate)
 
   // REQ-SS-02: a past day, or today once the shop has opened, is locked for
-  // everybody except a super admin. The server enforces the same rule on the
-  // block itself, so this only decides what the UI offers.
+  // staff. An admin or super admin may still correct the roster; the server
+  // enforces the same rule on the block itself, so this only decides what the
+  // UI offers.
   const lockedDay = isLockedDay(selectedDate)
-  const canEditAvailability = isSuperAdmin || !lockedDay
+  const canEditAvailability = canManageStore || !lockedDay
+  const canEditAttendance = canManageStore || !isLockedDay(new Date())
   const lockMessage =
-    'This date is locked and can no longer be changed. Only a super admin can override it.'
+    'This date is locked and can no longer be changed. An admin or super admin can override it.'
 
   const filteredOfficers = useMemo(
     () =>
       roster.officers.filter((officer) => {
-        if (activeFilter === 'available') return officer.available
-        if (activeFilter === 'conflict') return !officer.available
+        if (activeFilter === 'in-store') return officer.available
+        if (activeFilter === 'out-of-store') return !officer.available
         return true
       }),
     [roster.officers, activeFilter]
@@ -126,8 +135,8 @@ export default function AdminSchedule({ embedded = false }) {
 
   // On Duty / Off Duty. A REQ-SS-02 rejection arrives as the API error message.
   const handleToggleDuty = async (officer, inStore) => {
-    if (!canEditAvailability) {
-      showToast(lockMessage, 'error')
+    if (!canEditAttendance) {
+      showToast('Live attendance can no longer be changed after the store opens. An admin or super admin can override this.', 'error')
       return
     }
 
@@ -139,18 +148,15 @@ export default function AdminSchedule({ embedded = false }) {
 
     recordLog(
       inStore ? 'SET IN-STORE' : 'SET OFF-STORE',
-      `${inStore ? 'Marked' : 'Unmarked'} ${officer.name} as ${
-        inStore ? 'On Duty' : 'Off Duty'
-      } for ${fmtLongDate(selectedDate)}`
+      `Marked ${officer.name} ${inStore ? 'in store' : 'out of store'}`
     )
-    showToast(`${officer.name} is now ${inStore ? 'On Duty' : 'Off Duty'}.`, 'success')
+    showToast(`${officer.name} is now ${inStore ? 'In Store' : 'Out of Store'}.`, 'success')
   }
 
   // POST /shifts writes one block per selected employee (REQ-EMP_SCHED-06
-  // batch scheduling); the assignee is also marked Available so the block
-  // does not read as PENDING REPLACEMENT straight away. The server is what
-  // enforces the DOMAIN 7 rules - the 10-minute grid, no overlapping block
-  // and the weekly 180-minute minimum - so its message is shown as-is.
+  // batch scheduling). Scheduling a shift does not change the employee's
+  // current in-store status; the server enforces the time grid, overlap rule,
+  // and weekly minimum.
   const handleAssign = async (payload) => {
     const ids =
       Array.isArray(payload.emp_ids) && payload.emp_ids.length > 0
@@ -177,16 +183,13 @@ export default function AdminSchedule({ embedded = false }) {
         continue
       }
 
-      await roster.setDuty(empId, true)
       scheduled.push(name)
     }
 
     if (scheduled.length > 0) {
       recordLog(
         'ASSIGN DUTY',
-        `Assigned ${payload.shift_start} - ${payload.shift_end} on ${fmtLongDate(
-          selectedDate
-        )} to ${scheduled.join(', ')}`
+        `Assigned ${payload.shift_start} - ${payload.shift_end} on ${payload.shift_date || dateKey} to ${scheduled.join(', ')}`
       )
     }
 
@@ -217,7 +220,11 @@ export default function AdminSchedule({ embedded = false }) {
   const handleSaveBlock = async (payload) => {
     if (!editingShift) return
 
-    const error = await duty.amend(editingShift.shift_id, payload)
+    // Staff may only change their own availability flag: the API refuses any
+    // date/time/employee field from them, so send that flag alone.
+    const error = isStaffView
+      ? await duty.setUnavailable(editingShift.shift_id, payload.unavailable)
+      : await duty.amend(editingShift.shift_id, payload)
 
     // Same contract as the cancel: a refused save keeps the editor open with
     // the server's own message, so the value that was refused can be fixed.
@@ -236,8 +243,12 @@ export default function AdminSchedule({ embedded = false }) {
     )
     showToast(
       payload.unavailable
-        ? `Block #${editingShift.shift_id} marked unavailable. Super admins were alerted to find a substitute.`
-        : `Block #${editingShift.shift_id} updated.`,
+        ? isStaffView
+          ? 'You are marked unavailable for this shift. Admins were alerted to find a cover.'
+          : `${editingShift.employee_name || 'Employee'} marked unavailable for this shift. Admins were alerted to find a substitute.`
+        : isStaffView
+          ? 'You are available for this shift again.'
+          : `Shift for ${editingShift.employee_name || 'employee'} updated.`,
       'success'
     )
   }
@@ -261,7 +272,7 @@ export default function AdminSchedule({ embedded = false }) {
         shift.employee_name || 'officer'
       } on ${fmtLongDate(selectedDate)}`
     )
-    showToast(`Block #${shift.shift_id} cancelled.`, 'success')
+    showToast(`Shift for ${shift.employee_name || 'employee'} cancelled.`, 'success')
   }
 
   const step = (delta) => {
@@ -276,12 +287,25 @@ export default function AdminSchedule({ embedded = false }) {
     setViewMode('Day')
   }
 
+  // Staff may open only their own block; everyone else's is read-only.
+  const openBlock = (shift) => {
+    if (isStaffView && String(shift?.emp_id) !== String(selfEmpId)) {
+      showToast('You can only update your own shifts. Ask an admin to change someone else’s.', 'error')
+      return
+    }
+    setEditingShift(shift)
+  }
+
   const content = (
     <div className="space-y-4">
-      <ScheduleHeader
-        onOpenCovers={() => setShowCovers(true)}
-        coverCount={duty.pendingReplacements.length}
-      />
+      {isStaffView ? (
+        <StaffScheduleHeader />
+      ) : (
+        <ScheduleHeader
+          onOpenCovers={() => setShowCovers(true)}
+          coverCount={duty.pendingReplacements.length}
+        />
+      )}
 
       <ScheduleToolbar
         viewMode={viewMode}
@@ -290,79 +314,115 @@ export default function AdminSchedule({ embedded = false }) {
         onViewChange={setViewMode}
         onShiftDate={step}
         onToday={goToday}
+        onAddShift={() => openAssignModal('')}
+        canAddShift={canPreschedule && canEditAvailability && !isMonth}
       />
 
-      {isMonth ? (
-        <>
-          <ThresholdBar
-            slots={slots}
-            officers={roster.officers}
-            shifts={duty.shifts}
-            canEditAvailability={canEditAvailability}
-            lockMessage={lockMessage}
-          />
+      {isStaffView && (
+        <MyDutySummary
+          selfEmpId={selfEmpId}
+          selectedDate={selectedDate}
+          dayShifts={duty.shifts}
+          isLoading={duty.isLoading}
+          error={duty.error}
+          canEdit={canEditAvailability}
+          onOpenShift={openBlock}
+        />
+      )}
 
-          <ScheduleMonthGrid
-            monthStart={monthStart}
-            officers={roster.officers}
-            canEdit={canEditAvailability}
-            onPickDay={openDay}
-          />
-        </>
+      {isMonth ? (
+        <ScheduleMonthGrid
+          monthStart={monthStart}
+          canEdit={canEditAvailability}
+          onPickDay={openDay}
+        />
       ) : isWeek ? (
         <ScheduleWeekGrid
           weekStart={weekStart}
           officers={roster.officers}
           canEdit={canEditAvailability}
-          onAssignOfficer={canPreschedule ? () => openAssignModal(null) : null}
-          onEditBlock={setEditingShift}
+          onEditBlock={openBlock}
         />
       ) : (
         <>
-          <ThresholdBar
-            slots={slots}
-            officers={roster.officers}
-            shifts={duty.shifts}
-            canEditAvailability={canEditAvailability}
-            lockMessage={lockMessage}
-          />
+          {!isStaffView && (
+            <ScheduleCoverageSummary
+              shifts={duty.shifts}
+              dateLabel={fmtLongDate(selectedDate)}
+              isLoading={duty.isLoading}
+              error={duty.error}
+            />
+          )}
 
-          <ScheduleTimelineGrid
-            shifts={duty.shifts}
-            officers={roster.officers}
-            canEdit={canEditAvailability}
-            onShiftClick={setEditingShift}
-          />
-
-          <ShiftBlocksSection
-            shifts={duty.shifts}
-            isLoading={duty.isLoading}
-            error={duty.error}
-            busyId={duty.busyId}
-            onRetry={duty.reload}
-            onEdit={setEditingShift}
-            onCancel={handleCancelShift}
-            canEdit={canEditAvailability}
-            totalCount={roster.officers.length}
-            activeFilter={activeFilter}
-            onDutyCount={roster.onDutyCount}
-            offDutyCount={roster.offDutyCount}
-            onFilterChange={setActiveFilter}
-          />
+          <section className="bg-white rounded-lg p-4 border border-slate-200 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">
+                  {isStaffView ? 'Who’s on duty' : 'Shift schedule'}
+                </h2>
+                <p className="text-2xs text-slate-400 font-normal mt-0.5">
+                  {isStaffView
+                    ? 'Everyone scheduled on this date. Select your own shift to mark it unavailable.'
+                    : 'Select a shift to edit it or mark it as needing a cover.'}
+                </p>
+              </div>
+              <div className="inline-flex rounded-md border border-slate-200 bg-slate-100 p-0.5" role="group" aria-label="Day schedule display">
+                {['Timeline', 'List'].map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setDayDisplayMode(mode)}
+                    aria-pressed={dayDisplayMode === mode}
+                    className={`h-7 rounded px-2.5 text-xs font-semibold transition-colors cursor-pointer ${
+                      dayDisplayMode === mode
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {dayDisplayMode === 'Timeline' ? (
+              <ScheduleTimelineGrid
+                shifts={duty.shifts}
+                officers={roster.officers}
+                canEdit={canEditAvailability}
+                onShiftClick={openBlock}
+                isLoading={duty.isLoading}
+                error={duty.error}
+                onRetry={duty.reload}
+              />
+            ) : (
+              <ShiftBlocksSection
+                shifts={duty.shifts}
+                isLoading={duty.isLoading}
+                error={duty.error}
+                busyId={duty.busyId}
+                onRetry={duty.reload}
+                onEdit={openBlock}
+                // Cancelling a block is an admin action (rule 38).
+                onCancel={isStaffView ? null : handleCancelShift}
+                canEdit={canEditAvailability}
+              />
+            )}
+          </section>
         </>
       )}
 
-      <RosterSection
-        roster={roster}
-        canEdit={canEditAvailability}
-        filteredOfficers={filteredOfficers}
-        shifts={duty.shifts}
-        onAssign={(officer) => openAssignModal(officer.id)}
-        onEditShift={setEditingShift}
-        onToggleDuty={handleToggleDuty}
-        canAssign={canPreschedule}
-        selfEmpId={currentAdminUser?.emp_id ?? currentAdminUser?.id ?? null}
-      />
+      {!isStaffView && (
+        <RosterSection
+          roster={roster}
+          canEdit={canEditAttendance}
+          filteredOfficers={filteredOfficers}
+          activeFilter={activeFilter}
+          onFilterChange={setActiveFilter}
+          onToggleDuty={handleToggleDuty}
+          canManageOthers={canPreschedule}
+          selfEmpId={selfEmpId}
+        />
+      )}
     </div>
   )
 
@@ -387,7 +447,6 @@ export default function AdminSchedule({ embedded = false }) {
           key={`${assignOfficerId}-${dateKey}-${viewMode}`}
           officers={roster.officers}
           initialOfficerId={assignOfficerId}
-          dateLabel={dateLabel}
           date={dateKey}
           lockMessage={lockMessage}
           isSaving={duty.busyId === 'new'}
@@ -400,13 +459,13 @@ export default function AdminSchedule({ embedded = false }) {
         <ScheduleBlockModal
           key={editingShift.shift_id}
           shift={editingShift}
-          dateLabel={dateLabel}
           locked={!canEditAvailability}
           lockMessage={lockMessage}
+          availabilityOnly={isStaffView}
           isSaving={duty.busyId === editingShift.shift_id}
           onClose={() => setEditingShift(null)}
           onSubmit={handleSaveBlock}
-          onCancelBlock={handleCancelShift}
+          onCancelBlock={isStaffView ? null : handleCancelShift}
         />
       )}
     </>

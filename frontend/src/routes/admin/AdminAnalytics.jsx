@@ -21,7 +21,10 @@ import {
   buildTrendLabel,
   buildTopProducts,
   buildConversion,
+  buildCategorySales,
+  buildOrderTypeMix,
 } from '../../services/dashboard.js'
+import SalesOverview from '../../components/admin/SalesOverview.jsx'
 
 // SRS refresh cadence for staff analytics (REQ-SD-02)
 const REFRESH_MS = 30000
@@ -107,10 +110,6 @@ export default function AdminAnalytics() {
     [orders, timeRange, customWindow]
   )
   const sales = useMemo(() => summarizeSales(rangeOrders), [rangeOrders])
-  const baseline = useMemo(
-    () => summarizeSales(filterOrdersByRange(orders, '30D')).avg,
-    [orders]
-  )
   const salesTrend = useMemo(
     () => buildTrendLabel(orders, timeRange, (row) => row.total, customWindow),
     [orders, timeRange, customWindow]
@@ -131,21 +130,22 @@ export default function AdminAnalytics() {
     return ids.size
   }, [rangeOrders])
 
-  const avgOrderValue = sales.avg
-  const avgProgress = baseline > 0 ? Math.min(100, Math.round((avgOrderValue / baseline) * 100)) : 0
 
   // Chart data points (Online vs Walk-in POS per bucket)
   const trendData = useMemo(
     () => buildSalesTrend(rangeOrders, timeRange, customWindow),
     [rangeOrders, timeRange, customWindow]
   )
-  const maxSales = Math.max(...trendData.map((d) => d.total || 0), 1)
-  const peakPoint = useMemo(
-    () => trendData.reduce((best, point) => (point.total > (best?.total || 0) ? point : best), null),
-    [trendData]
-  )
-  const firstPoint = trendData[0]
-  const lastPoint = trendData[trendData.length - 1]
+  // Sales Overview breakdowns: order-type mix and sales by category for the
+  // same window the KPI cards describe.
+  const orderMix = useMemo(() => buildOrderTypeMix(rangeOrders), [rangeOrders])
+  const categorySales = useMemo(() => buildCategorySales(rangeOrders, Infinity), [rangeOrders])
+  const bucketUnit =
+    timeRange === 'Today'
+      ? 'hour'
+      : timeRange === 'Month' || (customWindow && customWindow.duration > 14 * 86400000)
+        ? '5-day period'
+        : 'day'
 
   const recentOrders = orders.slice(0, 4)
   const topProducts = useMemo(
@@ -171,14 +171,32 @@ export default function AdminAnalytics() {
       ['Generated', new Date().toLocaleString()],
       ['Total sales (PHP)', sales.gross.toFixed(2)],
       ['Total orders', String(sales.count)],
-      ['Average order value (PHP)', sales.avg.toFixed(2)],
       ['Active customers', String(activeCustomers)],
     ],
     tables: [
       {
         title: 'Sales trend by order type',
-        head: ['Date', 'Walk-in', 'Pre-order', 'Online', 'Total'],
-        rows: trendData.map((p) => [p.date, p.walkin, p.preorder, p.online, p.total]),
+        head: ['Date', 'Walk-in', 'Pre-order', 'Online', 'Total', 'Orders'],
+        rows: trendData.map((p) => [p.date, p.walkin, p.preorder, p.online, p.total, p.orders]),
+      },
+      {
+        title: 'Sales by order type',
+        head: ['Order type', 'Orders', 'Revenue (PHP)', 'Share'],
+        rows: [
+          ['Online', orderMix.online],
+          ['Walk-in', orderMix.walkin],
+          ['Pre-order', orderMix.preorder],
+        ].map(([label, entry]) => [
+          label,
+          entry.orders,
+          entry.sales.toFixed(2),
+          sales.gross > 0 ? `${((entry.sales / sales.gross) * 100).toFixed(1)}%` : '0%',
+        ]),
+      },
+      {
+        title: 'Sales by category',
+        head: ['Category', 'Units sold', 'Revenue (PHP)'],
+        rows: categorySales.map((c) => [c.category, c.units, c.sales.toFixed(2)]),
       },
       {
         title: 'Top products',
@@ -315,7 +333,7 @@ export default function AdminAnalytics() {
         </div>
 
         {/* 4 KPI Cards Matching Page 1 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             title="TOTAL SALES"
             value={`₱${sales.gross.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
@@ -357,113 +375,19 @@ export default function AdminAnalytics() {
             }
             iconBg="bg-amber-50 text-amber-600"
           />
-          <StatCard
-            title="AVG. ORDER VALUE"
-            value={`₱${avgOrderValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-            progressBar={avgProgress}
-            subtitle={
-              baseline > 0 ? `${avgProgress}% of 30-day average` : 'No 30-day baseline yet'
-            }
-            icon={
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                <rect x="2" y="5" width="20" height="14" rx="2" />
-                <line x1="2" y1="10" x2="22" y2="10" />
-              </svg>
-            }
-            iconBg="bg-purple-50 text-purple-600"
-          />
         </div>
 
         {/* 2-Column Main Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Left: Sales Overview Line Chart (2 Cols) */}
+          {/* Main Left: Sales Overview (2 Cols) */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-2xl p-6 border border-gray-100/90 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-black text-gray-900">
-                    Sales Overview
-                  </h2>
-                  <p className="text-xs text-gray-400 font-medium">
-                    Revenue breakdown by order type (walk-in vs. preorder)
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 text-xs font-bold">
-                  <div className="flex items-center gap-1.5 text-brand-orange">
-                    <span className="w-2.5 h-2.5 rounded-full bg-brand-orange" />
-                    <span>Pre-order</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-blue-600">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
-                    <span>Walk-in</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-emerald-600">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <span>Online</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Interactive SVG Area Chart */}
-              <div className="pt-6 pb-2">
-                <div className="h-64 flex items-end justify-between gap-3 px-2 border-b border-gray-100 relative">
-                  {trendData.length === 0 && (
-                    <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-gray-400">
-                      No sales recorded in this period.
-                    </div>
-                  )}
-                  {trendData.map((point) => {
-                    const preorderH = Math.round((point.preorder / maxSales) * 100)
-                    const walkinH = Math.round((point.walkin / maxSales) * 100)
-                    const onlineH = Math.round((point.online / maxSales) * 100)
-
-                    return (
-                      <div
-                        key={point.date}
-                        className="flex-1 flex flex-col items-center gap-2 group h-full justify-end"
-                      >
-                        {/* Hover card */}
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-2xs p-2 rounded-xl pointer-events-none whitespace-nowrap shadow-xl -mb-2 z-20 space-y-0.5">
-                          <p className="font-extrabold text-orange-300">{point.date}</p>
-                          <p>Walk-in: ₱{point.walkin.toLocaleString()}</p>
-                          <p>Pre-order: ₱{point.preorder.toLocaleString()}</p>
-                          <p>Online: ₱{point.online.toLocaleString()}</p>
-                          <p className="font-bold border-t border-gray-700 pt-0.5">
-                            Total: ₱{point.total.toLocaleString()}
-                          </p>
-                        </div>
-
-                        {/* Combined Stacked Bar / Trend Column */}
-                        <div className="w-full max-w-[42px] flex flex-col justify-end h-full gap-1">
-                          <div
-                            className="w-full bg-brand-orange rounded-t-lg transition-all duration-500 group-hover:brightness-110"
-                            style={{ height: `${preorderH}%` }}
-                          />
-                          <div
-                            className="w-full bg-blue-500 transition-all duration-500 group-hover:brightness-110"
-                            style={{ height: `${walkinH}%` }}
-                          />
-                          <div
-                            className="w-full bg-emerald-500 rounded-t-sm transition-all duration-500 group-hover:brightness-110"
-                            style={{ height: `${onlineH}%` }}
-                          />
-                        </div>
-
-                        <span className="text-xs font-bold text-gray-500">
-                          {point.date}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <div className="flex justify-between items-center text-2xs text-gray-400 font-semibold pt-2">
-                  <span>{firstPoint ? `${firstPoint.date} (Start)` : '—'}</span>
-                  <span>{peakPoint ? `Peak: ${peakPoint.date}` : '—'}</span>
-                  <span>{lastPoint ? `${lastPoint.date} (Latest)` : '—'}</span>
-                </div>
-              </div>
-            </div>
+            <SalesOverview
+              trendData={trendData}
+              orderMix={orderMix}
+              categorySales={categorySales}
+              rangeLabel={rangeLabel}
+              bucketUnit={bucketUnit}
+            />
 
             {/* Recent Orders Mini Table */}
             <div className="bg-white rounded-2xl p-6 border border-gray-100/90 shadow-xs space-y-4">

@@ -6,6 +6,7 @@ import { fetchMyAccount, updateAccount } from '../../services/accounts.js'
 import { fetchShifts, setShiftUnavailable } from '../../services/shifts.js'
 import Modal from '../ui/Modal.jsx'
 import Button from '../ui/Button.jsx'
+import { empCanManageStore } from './schema.js'
 
 /**
  * DOMAIN 7 / FLOW-EMP_SCHED-04 + REQ-SS-03 — the docked sidebar's
@@ -68,6 +69,9 @@ export default function ClockInOut() {
   const { showToast } = useToast()
 
   const empId = currentAdminUser?.emp_id ?? currentAdminUser?.id ?? null
+  // Admins and super admins run the store: their time-out is not a request
+  // waiting on anyone, they clock out directly and reassign cover themselves.
+  const isManager = empCanManageStore(currentAdminUser)
 
   const [isLoading, setIsLoading] = useState(true)
   const [isBusy, setIsBusy] = useState(false)
@@ -191,9 +195,11 @@ export default function ClockInOut() {
       setConfirmingOut(false)
       await load()
       showToast(
-        handedOver.length > 0
-          ? `Time-out requested. ${handedOver.join(', ')} needs a substitute — super admins were alerted.`
-          : 'You are clocked out of the store.',
+        handedOver.length === 0
+          ? 'You are clocked out of the store.'
+          : isManager
+            ? `You are clocked out. ${handedOver.join(', ')} is now open for cover on the Schedules page.`
+            : `Time-out requested. ${handedOver.join(', ')} needs a substitute — admins were alerted.`,
         'success'
       )
     } catch (err) {
@@ -243,7 +249,7 @@ export default function ClockInOut() {
           title={
             canAct
               ? 'Mark yourself in the store for your scheduled block'
-              : 'You have no scheduled block today — a super admin preschedules you from the Schedules screen'
+              : 'You have no scheduled block today — an admin schedules you from the Schedules screen'
           }
         >
           <span className="shrink-0 flex justify-center">
@@ -264,21 +270,24 @@ export default function ClockInOut() {
         <Modal
           isOpen={confirmingOut}
           onClose={() => setConfirmingOut(false)}
-          title="Request to time out?"
+          title={isManager ? 'Clock out now?' : 'Request to time out?'}
           footer={
             <>
               <Button variant="secondary" onClick={() => setConfirmingOut(false)} className="px-3.5">
                 Cancel
               </Button>
               <Button variant="danger" onClick={handleClockOut} className="px-3.5">
-                Time out
+                {isManager ? 'Clock out' : 'Time out'}
               </Button>
             </>
           }
         >
           <p className="text-sm text-gray-600 font-medium leading-relaxed">
-            You will be marked out of the store, and your remaining duty shift
-            {remaining.length === 1 ? '' : 's'} today will be flagged so a supervisor can assign a replacement if needed.
+            {isManager
+              ? remaining.length > 0
+                ? `You will be marked out of the store. Your remaining shift${remaining.length === 1 ? '' : 's'} today will show as needing cover, so you can reassign ${remaining.length === 1 ? 'it' : 'them'} from the Schedules page if needed.`
+                : 'You will be marked out of the store.'
+              : `You will be marked out of the store, and your remaining duty shift${remaining.length === 1 ? '' : 's'} today will be flagged so an admin can assign a replacement if needed.`}
           </p>
         </Modal>
       )}

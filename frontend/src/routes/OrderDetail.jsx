@@ -31,6 +31,7 @@ import DigitalReceipt from '../components/ui/DigitalReceipt.jsx'
 import OrderReviewModal from '../components/orders/OrderReviewModal.jsx'
 import { canReviewOrder } from '../services/reviews.js'
 import { appointmentStatusLabel } from '../services/appointments.js'
+import { variationParts } from '../utils/variation.js'
 
 const RECEIVING = ['TO CLAIM', 'IN TRANSIT', 'TO RECEIVE']
 const CAN_CANCEL = ['AWAITING PAYMENT', 'TO PROCESS']
@@ -652,11 +653,17 @@ function OrderDetail() {
                 // legacy `item_amount` alias is a LINE total, never a unit.
                 const price = Number(entry?.amount ?? order.price ?? 0)
                 const qty = Number(entry?.qty ?? entry?.item_qty ?? order.qty ?? 1)
-                const size = prodvar?.prodvar_name ?? entry?.size ?? order.size ?? null
-                const color =
-                  prodvar?.prodvar_pic
-                    ? { name: prodvar.prodvar_name || 'Variation', value: '#FF6A00' }
-                    : entry?.color ?? order.color ?? null
+                // Each axis under its own name (Color: Cream · Size: Small);
+                // older local rows only carry the picker's size / color labels.
+                const fromAxes = variationParts(entry)
+                const legacyColor = entry?.color?.name ?? order.color?.name ?? null
+                const legacySize = entry?.size ?? order.size ?? null
+                const variation = fromAxes.length > 0
+                  ? fromAxes
+                  : [
+                      ...(legacyColor ? [{ axis: 'Color', value: String(legacyColor) }] : []),
+                      ...(legacySize ? [{ axis: 'Size', value: String(legacySize) }] : []),
+                    ]
                 const itemKey = entry?.item_id ?? `${entry?.bag_id ?? 'line'}-${idx}`
                 const targetProdId = entry?.prod_id || product?.prod_tag || product?.prod_id || order.productId
 
@@ -694,24 +701,11 @@ function OrderDetail() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 flex-wrap">
-                        {size && (
-                          <>
-                            <span>
-                              Size: <strong className="text-gray-800">{size}</strong>
-                            </span>
-                            <span>·</span>
-                          </>
-                        )}
-                        {color && (
-                          <span className="flex items-center gap-1.5">
-                            Color:{' '}
-                            <span
-                              className="w-2.5 h-2.5 rounded-sm border border-gray-300 inline-block shrink-0"
-                              style={{ backgroundColor: color.value || color.name }}
-                            />
-                            <strong className="text-gray-800">{color.name}</strong>
+                        {variation.map((part) => (
+                          <span key={part.axis}>
+                            {part.axis}: <strong className="text-gray-800">{part.value}</strong>
                           </span>
-                        )}
+                        ))}
                         <span>
                           Qty: <strong className="text-gray-800">{qty}</strong>
                         </span>

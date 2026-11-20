@@ -3,14 +3,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useApiWarmup } from '../hooks/useApi.js'
 import { useToast } from '../hooks/useToast.js'
-import AppShell from '../components/layout/AppShell.jsx'
-import BackButton from '../components/ui/BackButton.jsx'
 import brandLogo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import signInBackground from '../assets/Branding/Copy of Tindahan ni Isko BG with Elements.jpg'
 import merchStoreIcon from '../assets/Branding/Copy of store.png'
 import merchShirtIcon from '../assets/Branding/Copy of shirt.png'
 import merchCapIcon from '../assets/Branding/Copy of cap.png'
 import merchJacketIcon from '../assets/Branding/Copy of jacket.png'
-import merchLanyardIcon from '../assets/Branding/Copy of lanyard.png'
 import merchBadgeIcon from '../assets/Branding/Copy of badge.png'
 import sparkIcon from '../assets/Branding/Copy of sparkle(1).png'
 import starIcon from '../assets/Branding/Copy of star(1).png'
@@ -196,9 +194,21 @@ function SignIn() {
   )
 
   return (
-    <div className="h-screen w-full overflow-hidden flex flex-col justify-center items-center p-4 font-sans bg-slate-50/70 dark:bg-[var(--surface-2)] relative select-none">
+    <div className="h-screen w-full overflow-hidden flex flex-col justify-center items-center p-4 font-sans bg-sky-100 relative isolate select-none">
+      <img src={signInBackground} alt="" className="absolute inset-0 h-full w-full object-cover object-center" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-300/10 via-white/5 to-orange-300/15 pointer-events-none" aria-hidden="true" />
+      <div className="absolute left-5 top-5 sm:left-8 sm:top-7 z-10 flex items-center gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-lg shadow-sky-950/10 backdrop-blur-md">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-sky-700 text-sm font-black tracking-tight text-white shadow-sm">BU</span>
+        <span className="leading-tight">
+          <span className="block text-xs font-extrabold tracking-wide text-slate-900 sm:text-sm">BICOL UNIVERSITY</span>
+          <span className="block text-[10px] font-semibold text-slate-600 sm:text-xs">University Student Council</span>
+        </span>
+      </div>
+      <div className="absolute right-5 top-6 z-10 hidden rounded-full border border-white/60 bg-white/65 px-4 py-2 text-[10px] font-extrabold tracking-[0.18em] text-sky-900 shadow-sm backdrop-blur-md sm:block">
+        OFFICIAL CAMPUS MERCH
+      </div>
       {/* Subtle Campus-Themed Background Elements with Festive Isko/Iska Characters & Confetti */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+      <div className="hidden">
         {/* Gentle brand aura radial glows */}
         <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-brand-orange/10 blur-3xl" />
         <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full bg-orange-400/10 blur-3xl" />
@@ -247,8 +257,6 @@ function SignIn() {
 
                 {/* Isko Hair (Full, stylish, neat student haircut with volume and fringe — no bald comb-over) */}
                 <path d="M 57 80 C 54 52, 70 42, 84 42 C 98 42, 110 52, 107 80 C 103 66, 94 60, 84 62 C 73 64, 65 72, 57 80 Z" fill="#0F172A" />
-                <path d="M 61 74 C 70 66, 80 65, 87 68 C 94 65, 102 68, 105 76 C 100 70, 92 68, 85 71 C 77 74, 68 77, 61 74 Z" fill="#1E293B" />
-
                 {/* Eyebrows */}
                 <path d="M 70 72 Q 75 69 80 71" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" />
                 <path d="M 86 71 Q 91 69 96 72" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" />
@@ -275,10 +283,7 @@ function SignIn() {
                 <path d="M 58 104 L 106 104 L 112 176 L 52 176 Z" fill="#EA580C" rx="10" />
                 <path d="M 74 104 L 82 113 L 90 104" stroke="#C2410C" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
-                {/* Crossbody Bag Strap & Bag */}
-                <line x1="62" y1="104" x2="110" y2="172" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
-                <rect x="98" y="156" width="22" height="24" rx="5" fill="#0F172A" />
-                <rect x="105" y="166" width="8" height="4" rx="1" fill="#475569" />
+
 
                 {/* Pants */}
                 <rect x="62" y="176" width="17" height="70" rx="5" fill="#334155" />
@@ -304,8 +309,7 @@ function SignIn() {
 
                 {/* Iska Hair (Cute bob/shoulder length with bangs and side framing locks — full volume) */}
                 <path d="M 134 88 C 130 58, 145 48, 158 48 C 172 48, 186 58, 182 88 C 178 74, 170 68, 163 70 C 156 72, 150 67, 143 69 C 137 71, 135 78, 134 88 Z" fill="#0F172A" />
-                <path d="M 134 88 C 133 98, 134 110, 137 118 C 139 110, 138 98, 137 90 Z" fill="#1E293B" />
-                <path d="M 182 88 C 183 98, 182 110, 179 118 C 177 110, 178 98, 179 90 Z" fill="#1E293B" />
+
 
                 {/* Eyebrows */}
                 <path d="M 146 81 Q 150 78 154 80" stroke="#0F172A" strokeWidth="1.8" strokeLinecap="round" />
@@ -346,8 +350,6 @@ function SignIn() {
                 <path d="M 176 136 L 157 146" stroke="#FED7AA" strokeWidth="9" strokeLinecap="round" />
                 <circle cx="157" cy="146" r="4.5" fill="#FED7AA" />
 
-                {/* Backpack strap */}
-                <line x1="174" y1="112" x2="136" y2="180" stroke="#0F172A" strokeWidth="5" strokeLinecap="round" />
 
                 {/* Dark Jeans */}
                 <rect x="134" y="184" width="17" height="68" rx="5" fill="#0F172A" />
@@ -446,21 +448,17 @@ function SignIn() {
       {/* Standardized Centered Login Card - Identical structure & styling as AdminLogin */}
       <div className="w-full max-w-md mx-auto bg-white dark:bg-[var(--surface)] rounded-3xl shadow-lg p-6 sm:p-7 space-y-3.5 relative z-10 animate-fade-in">
         <div className="space-y-1.5 text-center">
-          <div className="inline-flex p-2.5 rounded-2xl bg-gradient-to-b from-orange-50 to-transparent border border-orange-100/60 shadow-2xs mx-auto">
+          <div className="inline-flex mb-5">
             <img
               src={brandLogo}
               alt="Tindahan ni Isko"
-              className="h-11 w-auto object-contain drop-shadow-xs"
+              className="h-16 w-auto object-contain drop-shadow-xs"
             />
           </div>
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[var(--surface-2)] text-slate-700 dark:text-[var(--ink)] text-[10px] font-bold uppercase tracking-wider mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-orange animate-pulse" />
-              <span>Student &amp; Customer Portal</span>
-            </div>
             <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[var(--ink)]">Student &amp; Customer Sign In</h1>
             <p className="text-xs text-gray-500 dark:text-[var(--muted)] font-medium mt-0.5 leading-relaxed">
-              Access your orders, bag, and favorite products anytime, anywhere.
+              Access your orders and favorite merch anytime, anywhere.
             </p>
           </div>
         </div>

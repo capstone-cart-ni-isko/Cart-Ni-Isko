@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { variationText } from '../../utils/variation.js'
 import Modal from '../ui/Modal.jsx'
 import Button from '../ui/Button.jsx'
 import LoadingSpinner from '../ui/LoadingSpinner.jsx'
@@ -25,7 +26,7 @@ function productsOf(order) {
     const prodId = row.prod_id ?? row.product?.prod_id ?? row.prodvar?.prod_id
     if (prodId == null) return
     const key = String(prodId)
-    const variant = row.prodvar_name || row.prodvar?.prodvar_name || row.size || ''
+    const variant = variationText(row) || row.size || ''
     const existing = byProduct.get(key)
     if (existing) {
       existing.qty += Number(row.qty ?? row.item_qty ?? 1)

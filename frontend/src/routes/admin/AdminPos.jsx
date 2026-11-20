@@ -10,6 +10,7 @@ import { getImageUrl } from '../../utils/imageUtils.js'
 import { mapOrderRows } from '../../services/dashboard.js'
 import { findProductsByCode, productMatchesQuery } from '../../services/adminProducts.js'
 import { normalizeProductCategory, PRODUCT_CATEGORIES } from '../../data/productCategories.js'
+import { variationText } from '../../utils/variation.js'
 
 const CATEGORY_ALL = 'All Items'
 /**
@@ -96,6 +97,18 @@ export default function AdminPos() {
   // through the customer pre-order flow, so it must not be ringable at the
   // walk-in register.
   const products = backendProducts.filter((p) => !p.disabled && !p.preorder)
+
+  // A register line names its variation by axis (Color: Cream · Size: Small),
+  // looked up from the line's prodvar_id; 'Standard' says nothing, so it is hidden.
+  const posVariantLabel = (item) => {
+    for (const product of backendProducts) {
+      const match = (product.variants || []).find(
+        (variant) => item?.prodvarId != null && Number(variant.prodvarId) === Number(item.prodvarId)
+      )
+      if (match) return variationText({ prodvar_options: match.options, prodvar_name: match.name })
+    }
+    return /^standard$/i.test(String(item?.variant || '')) ? '' : String(item?.variant || '')
+  }
 
   // The pills come from the live catalog, with the store's predefined set as
   // the floor so an empty catalog still offers the standard categories.
@@ -608,7 +621,7 @@ export default function AdminPos() {
                       />
                       <div className="min-w-0">
                         <h4 className="text-xs font-bold text-gray-900 truncate">{item.name}</h4>
-                        <p className="text-2xs text-gray-400 truncate">{item.variant}</p>
+                        {posVariantLabel(item) && <p className="text-2xs text-gray-400 truncate">{posVariantLabel(item)}</p>}
                         <p className="text-xs font-black text-gray-900 mt-0.5">
                           ₱{((Number(item?.price) || 0) * (Number(item?.qty) || 1)).toFixed(2)}
                         </p>
@@ -1038,8 +1051,8 @@ export default function AdminPos() {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <h4 className="text-xs font-bold text-gray-900 leading-tight">{item.name}</h4>
-                              {item.variant && (
-                                <p className="text-2xs text-gray-400 mt-0.5">{item.variant}</p>
+                              {posVariantLabel(item) && (
+                                <p className="text-2xs text-gray-400 mt-0.5">{posVariantLabel(item)}</p>
                               )}
                               {cartSku(products, item) && (
                                 <p className="text-2xs text-gray-400">SKU: {cartSku(products, item)}</p>
@@ -1454,7 +1467,7 @@ export default function AdminPos() {
                   <div key={i} className="py-2 flex items-center justify-between text-xs">
                     <div className="min-w-0 pr-2">
                       <p className="font-bold text-gray-900 truncate">{item.name}</p>
-                      <p className="text-2xs text-gray-400">{item.qty}x • {item.variant}</p>
+                      <p className="text-2xs text-gray-400">{[`${item.qty}x`, posVariantLabel(item)].filter(Boolean).join(' • ')}</p>
                     </div>
                     <p className="font-bold text-gray-900 shrink-0">₱{((item.price || 0) * item.qty).toFixed(2)}</p>
                   </div>

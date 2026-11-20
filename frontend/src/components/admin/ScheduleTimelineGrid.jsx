@@ -48,6 +48,9 @@ export default function ScheduleTimelineGrid({
   officers = [],
   onShiftClick,
   canEdit = true,
+  isLoading = false,
+  error = '',
+  onRetry,
 }) {
   const rows = officers
     .map((officer) => ({
@@ -58,10 +61,29 @@ export default function ScheduleTimelineGrid({
     }))
     .filter((row) => row.blocks.length > 0)
 
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-xs text-slate-400">
+        Loading the selected date’s schedule…
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs font-semibold text-rose-700">
+        <span>{error}</span>
+        <button type="button" onClick={onRetry} className="shrink-0 font-bold underline cursor-pointer">
+          Retry
+        </button>
+      </div>
+    )
+  }
+
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-xs text-slate-400">
-        No duty blocks on the timeline for this date yet.
+        No shifts scheduled for this date. Use Add shift to start planning coverage.
       </div>
     )
   }
@@ -113,7 +135,7 @@ export default function ScheduleTimelineGrid({
                 <div className="relative min-h-[46px] items-center" style={GRID_STYLE}>
                   {blocks.map((shift) => {
                     const { first, span } = blockPosition(shift)
-                    const unavailable = !!shift.unavailable
+                    const needsCover = !!shift.unavailable || shift.status === 'PENDING REPLACEMENT'
 
                     return (
                       <button
@@ -123,10 +145,10 @@ export default function ScheduleTimelineGrid({
                         title={`${
                           shift.employee_name ? `${shift.employee_name}: ` : ''
                         }${fmtTime(shift.shift_start)} – ${fmtTime(shift.shift_end)}${
-                          unavailable ? ' · unavailable' : ''
+                          needsCover ? ' · needs cover' : ''
                         }${canEdit ? ' · click to edit' : ''}`}
                         className={`relative rounded-md border px-1.5 py-1 text-left transition-colors ${
-                          unavailable
+                          needsCover
                             ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-pointer hover:bg-slate-200'
                             : 'bg-blue-50 border-blue-200 text-blue-700 cursor-pointer hover:bg-blue-100'
                         }`}
@@ -134,13 +156,13 @@ export default function ScheduleTimelineGrid({
                       >
                         <span
                           className={`block text-2xs font-bold truncate ${
-                            unavailable ? 'line-through' : ''
+                            needsCover ? 'line-through' : ''
                           }`}
                         >
                           {fmtTime(shift.shift_start)} – {fmtTime(shift.shift_end)}
                         </span>
                         <span className="block text-2xs font-normal opacity-80 truncate">
-                          {unavailable ? 'Unavailable' : `#${shift.shift_id}`}
+                          {needsCover ? 'Needs cover' : shift.status || 'Scheduled'}
                         </span>
                       </button>
                     )

@@ -11,6 +11,13 @@ import { passwordProblem, meetsPasswordStandard, PASSWORD_HINT } from '../utils/
   the one-time recovery code the account holder saved from Account Settings.
   Step 0: identifier + recovery code. Step 2: new password.
 */
+function normalizeCustomerPhone(value) {
+  const digits = String(value).replace(/\D/g, '')
+  return digits.length >= 12 && digits.startsWith('63')
+    ? `0${digits.slice(2)}`
+    : digits
+}
+
 function ForgotPassword() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -37,6 +44,10 @@ function ForgotPassword() {
       setUserType('employee')
       return
     }
+    if (fromQuery === 'customer') {
+      setUserType('customer')
+      return
+    }
     const saved = localStorage.getItem('isko_forgot_type')
     if (saved === 'customer' || saved === 'employee') {
       setUserType(saved)
@@ -55,9 +66,11 @@ function ForgotPassword() {
 
   const handleIdentifierSubmit = async (e) => {
     e.preventDefault()
-    const identifierVal = identifier.trim()
+    const identifierVal = userType === 'customer'
+      ? normalizeCustomerPhone(identifier)
+      : identifier.trim()
     if (userType === 'customer') {
-      if (identifierVal.length < 5) return
+      if (!/^\d{10,11}$/.test(identifierVal)) return
     } else {
       if (!identifierVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifierVal)) return
     }
@@ -202,7 +215,7 @@ function ForgotPassword() {
                     type="email"
                     required
                     autoComplete="email"
-                    placeholder="superadmin@bicol-u.edu.ph"
+                    placeholder="admin@bicol-u.edu.ph"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     className="field-input field-input--lg !pl-10.5 rounded-xl font-medium"
@@ -300,12 +313,6 @@ function ForgotPassword() {
             </form>
           )}
 
-          {/* Footer security note */}
-          <div className="text-center pt-2 border-t border-slate-100 dark:border-[var(--line)]">
-            <p className="text-xs text-gray-400 dark:text-[var(--muted)]">
-              Protected by Bicol University Student Council IAM System
-            </p>
-          </div>
         </div>
       </div>
     )
@@ -318,9 +325,6 @@ function ForgotPassword() {
         {/* Rule 69: Top-left back button */}
         <div className="flex justify-between items-center">
           <BackButton onClick={prevStep} />
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-orange-50 text-brand-orange">
-            Customer Account
-          </span>
         </div>
 
         {/* Customer Header */}
@@ -330,31 +334,32 @@ function ForgotPassword() {
             {step === 2 && 'Set New Password'}
           </h1>
           <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium leading-relaxed">
-            {step === 0 && 'Enter your registered phone number or email and the recovery code you saved.'}
+            {step === 0 && 'Enter your registered mobile number and the recovery code you saved.'}
             {step === 2 && `Create a secure password. ${PASSWORD_HINT}`}
           </p>
         </div>
 
-        {/* Step 0: Customer Phone / Email */}
+        {/* Step 0: Customer Phone */}
         {step === 0 && (
           <form onSubmit={handleIdentifierSubmit} className="space-y-4.5" noValidate>
             <div>
-              <label htmlFor="customer-identifier" className="field-label">
-                Mobile Number or Email
+              <label htmlFor="customer-phone" className="field-label">
+                Mobile Number
               </label>
               <div className="relative">
                 <input
-                  id="customer-identifier"
-                  type="text"
-                  autoComplete="username"
-                  placeholder="09XXXXXXXXX or student@bicol-u.edu.ph"
+                  id="customer-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="09XXXXXXXXX"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="field-input field-input--lg rounded-xl font-medium"
                 />
               </div>
               <p className="field-hint mt-1.5">
-                Enter the phone number or university email registered to your customer account.
+                Enter the mobile number registered to your customer account.
               </p>
             </div>
 
@@ -362,9 +367,9 @@ function ForgotPassword() {
 
             <button
               type="submit"
-              disabled={identifier.trim().length < 5 || !recoveryCodeValid || isSubmitting}
+              disabled={!/^\d{10,11}$/.test(normalizeCustomerPhone(identifier)) || !recoveryCodeValid || isSubmitting}
               className={`btn btn--lg btn--block rounded-xl ${
-                identifier.trim().length >= 5 && recoveryCodeValid && !isSubmitting
+                /^\d{10,11}$/.test(normalizeCustomerPhone(identifier)) && recoveryCodeValid && !isSubmitting
                   ? 'btn--primary text-white cursor-pointer btn-press'
                   : 'btn--secondary cursor-not-allowed opacity-70'
               }`}

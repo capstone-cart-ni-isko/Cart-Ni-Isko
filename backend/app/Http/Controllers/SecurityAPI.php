@@ -286,10 +286,10 @@ class SecurityAPI extends Controller
                 $this->clearLoginFailures('emp', $email);
 
                 if ($check['temporary'] && $employee->emp_created
-                    && $employee->emp_created->copy()->addHours(24)->isPast()) {
+                    && $employee->emp_created->copy()->addHours(48)->isPast()) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'The temporary password has expired. Contact a super admin.',
+                        'message' => 'The temporary password has expired. Use Forgot Password to reset it, or contact an admin if you cannot access your university email.',
                         'code' => 'TEMP_PASSWORD_EXPIRED',
                     ], 403);
                 }
@@ -299,13 +299,13 @@ class SecurityAPI extends Controller
                 }
 
                 $missingSetup = SystemSettings::missingCritical();
-                if ($missingSetup && ! $this->isSuperAdmin($employee)) {
+                if ($missingSetup && ! $this->isAdmin($employee)) {
                     $this->logEmployee((int) $employee->emp_id, 'auth',
                         'POST /api/auth/emp_login - blocked, setup incomplete');
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'Store setup is incomplete. A super admin must finish the setup wizard first.',
+                        'message' => 'Store setup is incomplete. An admin must finish the setup wizard first.',
                         'code'    => 'SETUP_INCOMPLETE',
                         'data'    => ['missing_critical' => $missingSetup],
                     ], 503);
@@ -472,16 +472,18 @@ class SecurityAPI extends Controller
                     $user = null;
                 }
             } else {
-                if (str_contains($rawIdentifier, '@')) {
-                    $user = Customer::where('cust_email', strtolower($rawIdentifier))->first();
-                } else {
-                    $phone = preg_replace('/[^0-9]/', '', $rawIdentifier) ?: $rawIdentifier;
-                    if (strlen($phone) >= 12 && str_starts_with($phone, '63')) {
-                        $phone = '0' . substr($phone, 2);
-                    }
-                    $user = Customer::where('cust_phone', $phone)->first();
+                $phone = preg_replace('/[^0-9]/', '', $rawIdentifier) ?: '';
+                if (strlen($phone) >= 12 && str_starts_with($phone, '63')) {
+                    $phone = '0' . substr($phone, 2);
+                }
+                if (! preg_match('/^\d{10,11}$/', $phone)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Enter the mobile number registered to your customer account.',
+                    ], 422);
                 }
 
+                $user = Customer::where('cust_phone', $phone)->first();
                 if ($user && ($user->cust_deleted !== null || $user->cust_suspended !== null || (isset($user->cust_disabled) && $user->cust_disabled !== null))) {
                     $user = null;
                 }

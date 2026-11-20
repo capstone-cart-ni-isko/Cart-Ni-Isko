@@ -112,6 +112,10 @@ function mapServerItem(row) {
     lineTotal: Number(row.line_total ?? qty * amount),
     size: sizeLabel || row.size || null,
     color: color && colorLabel ? { ...color, name: colorLabel } : color,
+    // Every axis of the variation ({Color, Size} or {Color, Material} …) so
+    // the bag can label each value under its real axis name.
+    options: opts,
+    prodvarName: variation?.prodvar_name || row.prodvar_name || null,
     // Units left of THIS variation (null when the server did not say).
     stock: Number.isFinite(stock) ? stock : null,
     available: row.available !== false,

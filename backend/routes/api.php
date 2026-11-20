@@ -82,7 +82,7 @@ Route::post('/delivery/webhook', [OrdersAPI::class, 'lalamoveWebhook'])->middlew
 // Everything else requires a Sanctum bearer token
 Route::middleware('auth:api')->group(function () {
     Route::post('/auth/logout', [SecurityAPI::class, 'logout']);
-    Route::post('/auth/emp_signup', [UserAPI::class, 'employeeSignup'])->middleware('role:super_admin');
+    Route::post('/auth/emp_signup', [UserAPI::class, 'employeeSignup'])->middleware('role:admin');
     Route::post('/auth/backup_credentials', [UserAPI::class, 'backupCredentials']);
     Route::put('/auth/update_credentials', [UserAPI::class, 'updateCredentials']);
     // One-time recovery code for the signed-out "Forgot password" flow.
@@ -142,10 +142,10 @@ Route::middleware('auth:api')->group(function () {
     Route::delete('/orders/remove', [UserAPI::class, 'removeOrder']);
 
     // POS API Routes
-    Route::post('/pos/add', [OrdersAPI::class, 'addProductToOrder'])->middleware('role:admin');
-    Route::post('/pos/checkout', [OrdersAPI::class, 'checkoutOrder'])->middleware('role:admin');
-    Route::put('/pos/update', [OrdersAPI::class,'posUpdateOrderDetails'])->middleware('role:admin');
-    Route::delete('/pos/remove', [OrdersAPI::class, 'removeProductFromOrder'])->middleware('role:admin');
+    Route::post('/pos/add', [OrdersAPI::class, 'addProductToOrder'])->middleware('role:staff');
+    Route::post('/pos/checkout', [OrdersAPI::class, 'checkoutOrder'])->middleware('role:staff');
+    Route::put('/pos/update', [OrdersAPI::class,'posUpdateOrderDetails'])->middleware('role:staff');
+    Route::delete('/pos/remove', [OrdersAPI::class, 'removeProductFromOrder'])->middleware('role:staff');
 
     // Notif API Routes
     Route::post('/notif/create', [SystemAPI::class, 'createNotification'])->middleware('role:staff');
@@ -177,11 +177,11 @@ Route::middleware('auth:api')->group(function () {
 
     // Accounts API Routes
     Route::get('/accounts/me', [UserAPI::class, 'displayMyAccount']);
-    Route::put('/accounts/type', [SystemAPI::class, 'changeAccountType'])->middleware('role:super_admin');
-    Route::delete('/accounts/delete', [SystemAPI::class, 'deleteAccount'])->middleware('role:super_admin');
-    Route::post('/accounts/disable', [SystemAPI::class, 'disableAccount'])->middleware('role:super_admin');
+    Route::put('/accounts/type', [SystemAPI::class, 'changeAccountType'])->middleware('role:admin');
+    Route::delete('/accounts/delete', [SystemAPI::class, 'deleteAccount'])->middleware('role:admin');
+    Route::post('/accounts/disable', [SystemAPI::class, 'disableAccount'])->middleware('role:admin');
     Route::get('/accounts/display', [SystemAPI::class, 'displayAccounts'])->middleware('role:staff');
-    Route::post('/accounts/recover', [SystemAPI::class, 'recoverAccount'])->middleware('role:super_admin');
+    Route::post('/accounts/recover', [SystemAPI::class, 'recoverAccount'])->middleware('role:admin');
     Route::get('/accounts/search', [SystemAPI::class, 'searchAccounts'])->middleware('role:staff');
     Route::get('/accounts/sort', [SystemAPI::class, 'sortAccounts'])->middleware('role:staff');
     Route::put('/accounts/update', [UserAPI::class, 'updateAccountDetails']);

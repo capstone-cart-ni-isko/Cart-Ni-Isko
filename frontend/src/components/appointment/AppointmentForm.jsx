@@ -322,7 +322,7 @@ export default function AppointmentForm({
   }
 
   return (
-    <div className="bg-white rounded-xl p-4 border border-slate-200 space-y-3">
+    <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs space-y-3">
       <div>
         <h2 className="text-base font-semibold text-slate-900 tracking-tight">
           {title ||

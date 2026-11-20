@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { apiGet, apiPost } from '../../services/api.js'
 import { updateSettings } from '../../services/settings.js'
-import { isSuperAdminRow } from '../../components/admin/schema.js'
+import { isAdminRow } from '../../components/admin/schema.js'
 import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
+import { FormSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 
 /*
     DOMAIN 1: SETUP - FLOW-SETUP-01..05
@@ -95,7 +96,7 @@ export default function SetupWizard({ embedded = false }) {
 
   const canInitialize = Boolean(status?.needs_initial_super_admin)
   const domain = status?.bicol_domain || '@bicol-u.edu.ph'
-  const editable = canInitialize || isSuperAdminRow(currentAdminUser)
+  const editable = canInitialize || isAdminRow(currentAdminUser)
 
   useEffect(() => {
     let cancelled = false
@@ -164,8 +165,8 @@ export default function SetupWizard({ embedded = false }) {
         })
         setDone(true)
       } else {
-        // Rule 40: only a super admin writes a system-wide key, and the API
-        // refuses anyone else - the guard here just says so before the round trip.
+        // Admins and super admins own the store-wide keys; the API refuses
+        // anyone else - the guard here just says so before the round trip.
         await updateSettings(store)
         setDone(true)
       }
@@ -217,12 +218,7 @@ export default function SetupWizard({ embedded = false }) {
           )}
 
           {loading ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 flex items-center justify-center">
-              <span className="inline-flex items-center gap-2 text-xs text-slate-400">
-                <span className="spinner-circle !w-3.5 !h-3.5" />
-                Reading setup status…
-              </span>
-            </div>
+            <FormSkeleton sections={1} fields={4} />
           ) : done ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
               <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto mb-3">
@@ -264,9 +260,9 @@ export default function SetupWizard({ embedded = false }) {
                 </div>
               )}
 
-              {!canInitialize && !isSuperAdminRow(currentAdminUser) && (
+              {!canInitialize && !isAdminRow(currentAdminUser) && (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold text-slate-600">
-                  Read-only: only a super admin can change store-wide settings.{' '}
+                  Read-only: only an admin or super admin can change store-wide settings.{' '}
                   <button type="button" onClick={() => navigate('/admin/login')} className="text-brand-orange hover:underline cursor-pointer">
                     Sign in
                   </button>{' '}

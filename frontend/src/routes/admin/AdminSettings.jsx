@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import AdminAccount from './AdminAccount.jsx'
 import AdminAccessLogs from './AdminAccessLogs.jsx'
+import AdminStoreCustomization from './AdminStoreCustomization.jsx'
 import SetupWizard from './SetupWizard.jsx'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { useToast } from '../../hooks/useToast.js'
@@ -9,6 +10,9 @@ import { useTheme } from '../../context/ThemeContext.jsx'
 import { fetchSettings, updateSettings, fetchMyPreferences, updateMyPreferences } from '../../services/settings.js'
 import UiToggle from '../../components/ui/Toggle.jsx'
 import BackButton from '../../components/ui/BackButton.jsx'
+import SkeletonBlock from '../../components/ui/SkeletonBlock.jsx'
+import { FormSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
+import { empCanManageStore } from '../../components/admin/schema.js'
 
 // ── Reusable inline toggle ──────────────────────────────────────────────────
 // The shared Toggle from the UI kit: one switch look for the admin portal and
@@ -206,17 +210,18 @@ function NumberField({ label, hint, value, min, max, step = 1, suffix, onSave })
  * (FLOW-EMP_SET-04 notification reminders, FLOW-EMP_SET-05 dark mode).
  *
  * FLOW-EMP_SET-06/07 — the store-wide half (appointment duration, timeslot
- * capacity, minimum weekly hours, notification intervals) is shown only to a
- * super admin; SettingsAPI refuses those keys for anybody else (rule 40).
+ * capacity, minimum weekly hours, notification intervals) is store-management
+ * territory: Admin and Super Admin accounts may change it. Only the Access Log
+ * stays super-admin only.
  */
 export default function AdminSettings() {
   const navigate = useNavigate()
   const location = useLocation()
   const { showToast } = useToast()
   const { isSuperAdmin, logoutAdmin, currentAdminUser } = useAdmin()
-  // The store manager (admin) owns the appointment schedule; the super admin
-  // (developers) keeps every other system setting.
-  const canManageSchedule = isSuperAdmin || currentAdminUser?.roleKey === 'ADMIN'
+  // Admin and Super Admin accounts run the store; a staff account only sees
+  // its own profile and preferences.
+  const canManageStore = empCanManageStore(currentAdminUser)
   const { dark, set: setTheme } = useTheme()
 
   // FLOW-ACCESS_LOG-07: `/admin/settings/logs` is the deep link straight to the
@@ -245,6 +250,7 @@ export default function AdminSettings() {
 
   // Personal preferences (the caller's own `emp_*` columns)
   const [prefs, setPrefs] = useState({})
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(true)
 
   // Store Operations
   const [isStoreOpen, setIsStoreOpen] = useState(true)
@@ -306,11 +312,16 @@ export default function AdminSettings() {
       .then((data) => {
         if (!cancelled) setPrefs(data || {})
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (!cancelled) showToast(err?.message || 'Unable to load preferences.', 'error')
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingPrefs(false)
+      })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [showToast])
 
   const mark = () => setHasUnsavedChanges(true)
 
@@ -364,7 +375,8 @@ export default function AdminSettings() {
   }
 
   const handleSave = async () => {
-    // An admin may only write the scheduling keys (the API refuses the rest).
+    // A staff account may only write the scheduling keys; admin and super
+    // admin accounts write the whole store document.
     const schedulingPayload = {
       slot_minutes: slotMinutes,
       visit_slot_duration: slotMinutes,
@@ -374,7 +386,7 @@ export default function AdminSettings() {
       appointment_reminder_minutes: reminderMinutes,
       closed_dates: closedDates,
     }
-    const payload = !isSuperAdmin ? schedulingPayload : {
+    const payload = !canManageStore ? schedulingPayload : {
       ...schedulingPayload,
       store_open: isStoreOpen,
       maintenance_mode: !isStoreOpen,
@@ -449,28 +461,7 @@ export default function AdminSettings() {
         },
       ],
     },
-    ...(!isSuperAdmin && canManageSchedule
-      ? [
-          {
-            group: 'Store',
-            items: [
-              {
-                id: 'timing',
-                label: 'Appointments & Scheduling',
-                icon: railIcon(
-                  <>
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </>
-                ),
-              },
-            ],
-          },
-        ]
-      : []),
-    ...(isSuperAdmin
+    ...(canManageStore
       ? [
           {
             group: 'Store',
@@ -499,9 +490,10 @@ export default function AdminSettings() {
               },
               /* DOMAIN 1 - FLOW-SETUP-01/02: the setup wizard stays reachable
                  after the first run, so store-wide configuration (name,
-                 location, contact, operating hours) can be corrected later -
-                 rule 40 keeps the write to super admins, both here and in the
-                 API. It renders inside this shell instead of leaving the page. */
+                 location, contact, operating hours) can be corrected later.
+                 Admin and Super Admin accounts both own this pane, and the
+                 API accepts either. It renders inside this shell instead of
+                 leaving the page. */
               {
                 id: 'store-setup',
                 label: 'Store Setup',
@@ -515,20 +507,24 @@ export default function AdminSettings() {
               },
               /* DOMAIN 32 - FLOW-ACCESS_LOG-07: the merged access log renders
                  inside this shell too; `/admin/settings/logs` is its deep link.
-                 Super admins only (rule 39), which is exactly who this "Store"
-                 group is rendered for. */
-              {
-                id: 'access-log',
-                label: 'Access Log',
-                icon: railIcon(
-                  <>
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="8" y1="13" x2="16" y2="13" />
-                    <line x1="8" y1="17" x2="16" y2="17" />
-                  </>
-                ),
-              },
+                 Super admins only (rule 39), so the entry is added on top of
+                 the store-management group rather than replacing it. */
+              ...(isSuperAdmin
+                ? [
+                    {
+                      id: 'access-log',
+                      label: 'Access Log',
+                      icon: railIcon(
+                        <>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="8" y1="13" x2="16" y2="13" />
+                          <line x1="8" y1="17" x2="16" y2="17" />
+                        </>
+                      ),
+                    },
+                  ]
+                : []),
             ],
           },
         ]
@@ -578,7 +574,7 @@ export default function AdminSettings() {
           : activeSection === 'access-log'
             ? 'A complete record of every sign-in, view and change made by customers and staff, newest first.'
             : activeSection === 'store-setup'
-              ? 'The store name, location, contact and operating hours that both portals read.'
+                ? 'Manage store details, operating hours and the banners shown on your storefront.'
               : 'Your account, your password and your backup contacts.'
 
   return (
@@ -672,11 +668,6 @@ export default function AdminSettings() {
             </div>
 
             {/* ── Load states ── */}
-            {isLoading && isSystemPane && (
-              <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-xs font-semibold text-slate-600 flex items-center gap-2">
-                <span className="spinner-circle !w-3.5 !h-3.5" /> Loading settings…
-              </div>
-            )}
             {loadError && (
               <div className="mb-4 flex items-center justify-between gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                 <p className="text-xs font-semibold text-red-700">{loadError}</p>
@@ -702,7 +693,12 @@ export default function AdminSettings() {
             {/* ── DOMAIN 1 / FLOW-SETUP-01/02 — the setup wizard renders inside
                   the settings shell for super admins, so store configuration
                   never leaves this page. ── */}
-            {isSuperAdmin && activeSection === 'store-setup' && <SetupWizard embedded />}
+            {canManageStore && activeSection === 'store-setup' && (
+              <>
+                <SetupWizard embedded />
+                <AdminStoreCustomization embedded />
+              </>
+            )}
 
             {/* ── FLOW-EMP_SET-04 / FLOW-EMP_SET-05 — personal preferences ── */}
             {activeSection === 'preferences' && (
@@ -724,6 +720,19 @@ export default function AdminSettings() {
                   </div>
                 </div>
 
+                {isLoadingPrefs ? (
+                  <div className="px-6 py-4 space-y-4" aria-hidden="true">
+                    {[0, 1, 2].map((row) => (
+                      <div key={row} className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-b-0">
+                        <div className="flex-1 space-y-2">
+                          <SkeletonBlock className="h-3 w-36 rounded" />
+                          <SkeletonBlock className="h-3 w-2/3 rounded" />
+                        </div>
+                        <SkeletonBlock className="h-6 w-11 shrink-0 rounded-full" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                 <div className="px-6 py-4">
                   <NumberField
                     label="Appointment reminder"
@@ -759,11 +768,15 @@ export default function AdminSettings() {
                     <Toggle checked={dark} onChange={handleDarkMode} size="md" />
                   </div>
                 </div>
+                )}
               </div>
             )}
 
             {/* ── FLOW-EMP_SET-06 — store-wide operations (super admin) ── */}
-            {isSuperAdmin && activeSection === 'store-operations' && (
+            {canManageStore && activeSection === 'store-operations' && (
+              isLoading ? (
+                <FormSkeleton sections={1} fields={3} />
+              ) : (
               <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100">
                   <div className="flex items-center gap-3">
@@ -851,11 +864,15 @@ export default function AdminSettings() {
                   </div>
                 </div>
               </div>
+              )
             )}
 
             {/* ── FLOW-EMP_SET-07 — appointment duration, timeslot capacity,
-                  minimum weekly hours, notification intervals (super admin) ── */}
-            {canManageSchedule && activeSection === 'timing' && (
+                  minimum weekly hours, notification intervals (store managers) ── */}
+            {canManageStore && activeSection === 'timing' && (
+              isLoading ? (
+                <FormSkeleton sections={2} fields={3} />
+              ) : (
               <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100">
                   <div className="flex items-center gap-3">
@@ -913,7 +930,7 @@ export default function AdminSettings() {
                       mark()
                     }}
                   />
-                  {isSuperAdmin && (
+                  {canManageStore && (
                   <NumberField
                     label="Minimum weekly hours"
                     hint="Minimum scheduled hours required for each employee per week."
@@ -940,7 +957,7 @@ export default function AdminSettings() {
                       mark()
                     }}
                   />
-                  {isSuperAdmin && (
+                  {canManageStore && (
                   <NumberField
                     label="System notification follow-up"
                     hint="How often pending system alerts are re-sent to staff."
@@ -1018,10 +1035,11 @@ export default function AdminSettings() {
                   )}
                 </div>
               </div>
+              )
             )}
 
             {/* ── Preview Cards (super admin overview) ── */}
-            {isSuperAdmin && (activeSection === 'store-operations' || activeSection === 'timing') && (
+            {canManageStore && !isLoading && (activeSection === 'store-operations' || activeSection === 'timing') && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <PreviewCard
                   title="Order Preferences"
@@ -1079,7 +1097,7 @@ export default function AdminSettings() {
       </div>
 
       {/* ── Sticky Bottom Bar (system panes only) ── */}
-      {((isSuperAdmin && isSystemPane) || (canManageSchedule && activeSection === 'timing')) && (
+      {canManageStore && isSystemPane && (
         <div className="fixed bottom-0 right-0 left-0 md:left-72 bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-md border-t border-slate-200 dark:border-[var(--line)] px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-slate-400' : hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />

@@ -205,6 +205,15 @@ input[type="checkbox"].check-plain:checked::after {
   transform: rotate(45deg) translateY(-1px);
 }
 
+.shopping-bag input[type="checkbox"].cart-checkbox:checked {
+  background-color: #ff7704;
+  border-color: #ff7704;
+}
+
+.shopping-bag input[type="checkbox"].cart-checkbox:checked::after {
+  border-color: #fff;
+}
+
 /* ── Shared brand surfaces ── */
 .gradient-orange-header {
   background: linear-gradient(135deg, #F97316 0%, #FB923C 50%, #FDBA74 100%);

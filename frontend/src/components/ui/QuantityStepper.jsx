@@ -1,6 +1,3 @@
-import minusIcon from '../../assets/icons/common/minus.svg'
-import plusIcon from '../../assets/icons/common/plus.svg'
-
 function QuantityStepper({ value, onChange, min = 1, max = 99, disabled = false, className = '' }) {
   const handleDecrement = () => {
     if (!disabled && value > min) {
@@ -27,7 +24,10 @@ function QuantityStepper({ value, onChange, min = 1, max = 99, disabled = false,
         title="Decrease quantity"
         aria-label="Decrease quantity"
       >
-        <img src={minusIcon} alt="" className="w-2.5 h-2.5" />
+        {/* currentColor: readable in light and dark themes */}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-3.5 h-3.5" aria-hidden="true">
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
       </button>
       <span className="stepper__value">{value}</span>
       <button
@@ -38,7 +38,10 @@ function QuantityStepper({ value, onChange, min = 1, max = 99, disabled = false,
         title="Increase quantity"
         aria-label="Increase quantity"
       >
-        <img src={plusIcon} alt="" className="w-2.5 h-2.5" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="w-3.5 h-3.5" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
       </button>
     </div>
   )

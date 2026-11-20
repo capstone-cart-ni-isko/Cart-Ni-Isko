@@ -55,6 +55,37 @@ export function markRead(notifId, recipientType) {
   return apiPut('/notif/update', { notif_id: notifId, recipient_type: recipientType })
 }
 
+/**
+ * PUT /notif/update { all: true } - every unread notification of the signed-in
+ * account in ONE request. One request per row queued on the server, timed out
+ * part way and left the rest unread.
+ */
+export function markAllRead(recipientType) {
+  return apiPut('/notif/update', { recipient_type: recipientType, all: true })
+}
+
+/**
+ * Stamp rows as read in the local inbox mirror too, so reopening the page
+ * never repaints them as unread from the stored copy. `ids` = null marks all.
+ */
+export function markReadInCache(recipientType, recipientId, ids = null) {
+  const rows = readNotificationsCache(recipientType, recipientId)
+  if (!Array.isArray(rows)) return
+  const readField = recipientType === 'customer' ? 'custnotif_read' : 'empnotif_read'
+  const idField = recipientType === 'customer' ? 'custnotif_id' : 'empnotif_id'
+  const wanted = ids === null ? null : new Set(ids.map(String))
+  const stamp = new Date().toISOString()
+  writeNotificationsCache(
+    recipientType,
+    recipientId,
+    rows.map((row) =>
+      !row[readField] && (wanted === null || wanted.has(String(row[idField] ?? row.id)))
+        ? { ...row, [readField]: stamp }
+        : row
+    )
+  )
+}
+
 export function unreadCount(notifications) {
   return notifications.filter((n) => !(n.custnotif_read || n.empnotif_read)).length
 }

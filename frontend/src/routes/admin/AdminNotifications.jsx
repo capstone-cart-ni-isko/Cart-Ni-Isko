@@ -11,7 +11,9 @@ import { fetchAccounts } from '../../services/accounts.js'
 import { useApiChange } from '../../hooks/useApiChange.js'
 import {
   fetchNotifications,
+  markAllRead,
   markRead,
+  markReadInCache,
   readNotificationsCache,
 } from '../../services/notifications.js'
 
@@ -170,6 +172,7 @@ export default function AdminNotifications() {
   const openNotification = (item) => {
     if (!item.read) {
       setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)))
+      markReadInCache('employee', empId, [item.id])
       markRead(item.id, 'employee')
         .catch(() => {})
         .finally(() => window.dispatchEvent(new Event('notifications-changed')))
@@ -209,11 +212,16 @@ export default function AdminNotifications() {
     setItems((prev) => prev.map((n) => ({ ...n, read: true })))
     setSelectedNotif((prev) => (prev ? { ...prev, read: true } : prev))
     try {
-      await Promise.all(unreadItems.map((n) => markRead(n.id, 'employee').catch(() => {})))
+      await markAllRead('employee')
+      markReadInCache('employee', empId)
       showToast(
         `Marked ${unreadItems.length} notification${unreadItems.length === 1 ? '' : 's'} as read.`,
         'success'
       )
+    } catch (err) {
+      // Never pretend: put the server's real state back on screen.
+      showToast(err?.message || 'Could not mark the notifications as read. Please try again.', 'error')
+      load()
     } finally {
       window.dispatchEvent(new Event('notifications-changed'))
     }

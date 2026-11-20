@@ -26,6 +26,8 @@ export default function Modal({
   onClose,
   title = '',
   subtitle = '',
+  // Accessible name for the dialog when `title` is not plain text.
+  ariaLabel = '',
   children,
   footer = null,
   size = 'sm', // 'sm' → max-w-sm, 'wide' → wider forms
@@ -80,7 +82,7 @@ export default function Modal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={title || undefined}
+        aria-label={ariaLabel || (typeof title === 'string' && title) || undefined}
         className={`modal-panel${
           size === 'wide'
             ? ' modal-panel--wide'

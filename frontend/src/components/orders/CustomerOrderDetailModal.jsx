@@ -14,7 +14,7 @@ import {
   MapPinIcon,
   MessageSquareIcon,
 } from '../ui/Icons.jsx'
-import { fetchOrder, requestCancel, updateOrder, submitDeliveryDetails, confirmDeliveryFeePayment, switchClaimingMethod } from '../../services/orders.js'
+import { fetchOrder, requestCancel, updateOrder, submitDeliveryDetails, confirmDeliveryFeePayment } from '../../services/orders.js'
 import { getTrack, scanQr } from '../../services/tracking.js'
 import { parseDate, paymentSummary } from '../../services/dashboard.js'
 import { QrScanModal } from '../ui/QRScanner.jsx'
@@ -27,6 +27,7 @@ import { useApiChange } from '../../hooks/useApiChange.js'
 import { STATUS_CONTEXT } from '../../routes/Orders.jsx'
 import { canReviewOrder } from '../../services/reviews.js'
 import { appointmentStatusLabel } from '../../services/appointments.js'
+import { variationParts } from '../../utils/variation.js'
 
 const RECEIVING = ['TO CLAIM', 'IN TRANSIT', 'TO RECEIVE']
 const CAN_CANCEL = ['AWAITING PAYMENT', 'TO PROCESS']
@@ -104,8 +105,6 @@ export default function CustomerOrderDetailModal({
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [scanMode, setScanMode] = useState(null)
   const [isRescheduling, setIsRescheduling] = useState(false)
-  const [isSwitchingToPickup, setIsSwitchingToPickup] = useState(false)
-  const [switchingClaiming, setSwitchingClaiming] = useState(false)
 
   const orderId = initialOrder?.id ?? initialOrder?.ord_id
 
@@ -147,7 +146,7 @@ export default function CustomerOrderDetailModal({
       }
 
       const method =
-        fallback?.fulfillment?.method || (raw?.ord_claiming === 'deliver' ? 'Courier Delivery' : 'Store Pickup')
+        fallback?.fulfillment?.method || (String(raw?.ord_claiming || '').includes('deliver') ? 'Courier Delivery' : 'Store Pickup')
       const trackType = method === 'Courier Delivery' ? 'delivery' : 'pickup'
       try {
         const res = await getTrack(orderId, trackType)
@@ -321,46 +320,6 @@ export default function CustomerOrderDetailModal({
     }
   }
 
-  const handleSwitchToDelivery = async () => {
-    if (switchingClaiming || !orderId) return
-    if (!window.confirm('Switch this order fulfillment from Store Pickup to Courier Delivery?')) return
-    setSwitchingClaiming(true)
-    try {
-      const res = await switchClaimingMethod({
-        ord_id: orderId,
-        claiming: 'deliver',
-      })
-      showToast(res?.message || 'Fulfillment switched to Courier Delivery.', 'success')
-      await loadDetails()
-      onOrderUpdated?.()
-    } catch (err) {
-      showToast(err?.message || 'Failed to switch fulfillment method.', 'error')
-    } finally {
-      setSwitchingClaiming(false)
-    }
-  }
-
-  const handlePickupSlotSelected = async (saved) => {
-    if (!orderId) return
-    setSwitchingClaiming(true)
-    try {
-      const res = await switchClaimingMethod({
-        ord_id: orderId,
-        claiming: 'pickup',
-        appoint_start: saved?.appoint_start || saved?.start,
-        appoint_id: saved?.appoint_id || saved?.id,
-      })
-      showToast(res?.message || 'Fulfillment switched to Store Pickup.', 'success')
-      setIsSwitchingToPickup(false)
-      await loadDetails()
-      onOrderUpdated?.()
-    } catch (err) {
-      showToast(err?.message || 'Failed to switch fulfillment method.', 'error')
-    } finally {
-      setSwitchingClaiming(false)
-    }
-  }
-
   const handleConfirmReceipt = async () => {
     if (busy || !qrPayload) return
     setBusy(true)
@@ -406,9 +365,6 @@ export default function CustomerOrderDetailModal({
   const courierTrackUrl = courier?.share_url || effectiveRaw?.deliver_share_link || null
   const appointId = effectiveRaw?.appoint_id || effectiveRaw?.appointment?.appoint_id || null
   const canReschedulePickup = !isDelivery && Boolean(appointId) && !['CLAIMED', 'RECEIVED', 'CANCELLED', 'RETURNED'].includes(status)
-  const canSwitchClaiming =
-    ['AWAITING PAYMENT', 'TO PROCESS'].includes(status) ||
-    ['to pay', 'processing'].includes(String(effectiveRaw?.ord_status || '').toLowerCase())
 
   if (!isOpen || !order) return null
 
@@ -753,36 +709,8 @@ export default function CustomerOrderDetailModal({
                 ))}
             </div>
 
-            {/* Customer can switch claiming method between pickup and delivery while status is Processing */}
-            {canSwitchClaiming && (
-              <div className="pt-2 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <span className="text-xs text-[var(--muted)]">
-                  {isDelivery ? 'Prefer to pick up at the store instead?' : 'Need this order delivered to your address instead?'}
-                </span>
-                <button
-                  type="button"
-                  disabled={switchingClaiming}
-                  onClick={() => {
-                    if (isDelivery) {
-                      setIsSwitchingToPickup(true)
-                    } else {
-                      handleSwitchToDelivery()
-                    }
-                  }}
-                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-orange/40 bg-brand-orange/10 text-brand-orange hover:bg-brand-orange/20 font-semibold text-xs transition-colors cursor-pointer w-full sm:w-auto disabled:opacity-50"
-                >
-                  {isDelivery ? <MapPinIcon className="w-3.5 h-3.5" /> : <TruckIcon className="w-3.5 h-3.5" />}
-                  <span>
-                    {switchingClaiming
-                      ? 'Switching…'
-                      : isDelivery
-                      ? 'Switch to Store Pickup'
-                      : 'Switch to Courier Delivery'}
-                  </span>
-                </button>
-              </div>
-            )}
-
+            {/* The fulfilment method is fixed once the order is placed: there is
+                no switching between pickup and delivery afterwards. */}
             {/* FLOW-MANAGE_BOOKED-04: Allow customer to reschedule claiming of pickup orders */}
             {canReschedulePickup && (
               <div className="pt-2 border-t border-[var(--line)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -906,10 +834,17 @@ export default function CustomerOrderDetailModal({
               const name = product.prod_name || product.name || entry?.prod_name || order.name
               const price = Number(entry?.amount ?? order.price ?? 0)
               const qty = Number(entry?.qty ?? entry?.item_qty ?? order.qty ?? 1)
-              const size = prodvar?.prodvar_name ?? entry?.size ?? order.size ?? null
-              const color = prodvar?.prodvar_pic
-                ? { name: prodvar.prodvar_name || 'Variation', value: '#FF6A00' }
-                : entry?.color ?? order.color ?? null
+              // Each axis under its own name (Color: Cream · Size: Small);
+              // older local rows only carry the picker's size / color labels.
+              const fromAxes = variationParts(entry)
+              const legacyColor = entry?.color?.name ?? order.color?.name ?? null
+              const legacySize = entry?.size ?? order.size ?? null
+              const variation = fromAxes.length > 0
+                ? fromAxes
+                : [
+                    ...(legacyColor ? [{ axis: 'Color', value: String(legacyColor) }] : []),
+                    ...(legacySize ? [{ axis: 'Size', value: String(legacySize) }] : []),
+                  ]
               const itemKey = entry?.item_id ?? `${entry?.bag_id ?? 'line'}-${idx}`
               const targetProdId = entry?.prod_id || product?.prod_tag || product?.prod_id || order.productId
 
@@ -944,23 +879,14 @@ export default function CustomerOrderDetailModal({
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-xs text-[var(--muted)] flex-wrap">
-                      {size && (
-                        <span>
-                          Size: <strong className="text-[var(--ink-2)]">{size}</strong>
+                      {variation.map((part) => (
+                        <span key={part.axis} className="contents">
+                          <span>
+                            {part.axis}: <strong className="text-[var(--ink-2)]">{part.value}</strong>
+                          </span>
+                          <span>·</span>
                         </span>
-                      )}
-                      {size && color && <span>·</span>}
-                      {color && (
-                        <span className="flex items-center gap-1.5">
-                          Color:{' '}
-                          <span
-                            className="w-2.5 h-2.5 rounded-xs border border-[var(--line)] inline-block shrink-0"
-                            style={{ backgroundColor: color.value || color.name }}
-                          />
-                          <strong className="text-[var(--ink-2)]">{color.name}</strong>
-                        </span>
-                      )}
-                      <span>·</span>
+                      ))}
                       <span>
                         Qty: <strong className="text-[var(--ink-2)]">{qty}</strong>
                       </span>
@@ -1141,27 +1067,6 @@ export default function CustomerOrderDetailModal({
         </Modal>
       )}
 
-      {/* Switch to Pickup Slot Selection Modal */}
-      {isSwitchingToPickup && (
-        <Modal
-          isOpen={isSwitchingToPickup}
-          onClose={() => setIsSwitchingToPickup(false)}
-          title={`Select Pickup Slot · Order #${orderId}`}
-          subtitle="Choose an available slot to claim your order at the store"
-          size="wide"
-        >
-          <div className="p-1">
-            <AppointmentForm
-              type="PICKUP"
-              custId={currentUser?.cust_id ?? currentUser?.id}
-              collectOnly={true}
-              title="Pick a claim slot"
-              onSuccess={handlePickupSlotSelected}
-              onCancel={() => setIsSwitchingToPickup(false)}
-            />
-          </div>
-        </Modal>
-      )}
     </Modal>
   )
 }

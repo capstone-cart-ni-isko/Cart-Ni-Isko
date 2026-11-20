@@ -69,6 +69,32 @@ export function empIsStaff(row) {
 }
 
 /**
+ * Can this employee manage the store?
+ *
+ * Both 'Admin' and 'Super Admin' accounts run the store: they edit the
+ * roster, enroll and manage employees, and change the store-wide settings.
+ * Only a 'staff' employee is limited to their own day-to-day screens.
+ *
+ * This is the one predicate the sidebar, the route guards and every
+ * management screen share, so an 'Admin' can never be shown a button whose
+ * route (or API call) still answers 403.
+ */
+export function empCanManageStore(row) {
+  return ['ADMIN', 'SUPER_ADMIN'].includes(empRoleKey(row))
+}
+
+/**
+ * The super-admin-only safety rail.
+ *
+ * Managing another Super Admin, or reading the audit trail, stays with the
+ * owner of the system: an 'Admin' runs the store, but cannot promote
+ * themselves (or anyone else) past their own rank.
+ */
+export function empCanManageSuperAdmins(row) {
+  return empRoleKey(row) === 'SUPER_ADMIN'
+}
+
+/**
  * Where the ribbon's "home" icon and the post-login redirect take this
  * employee.
  *

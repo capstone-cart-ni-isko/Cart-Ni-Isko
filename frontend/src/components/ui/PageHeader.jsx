@@ -29,7 +29,7 @@ export default function PageHeader({ title, subtitle, backTo, rightAction, class
         )}
         <div className="min-w-0">
           <h1 className="page-title text-gray-900 dark:text-[var(--ink)] truncate">{title}</h1>
-          {subtitle && <p className="text-sm text-gray-500 dark:text-[var(--muted)] mt-0.5 truncate">{subtitle}</p>}
+          {subtitle && <p className="text-sm text-gray-500 dark:text-[var(--muted)] mt-0.5 leading-snug">{subtitle}</p>}
         </div>
       </div>
       {rightAction && <div className="shrink-0 ml-4">{rightAction}</div>}

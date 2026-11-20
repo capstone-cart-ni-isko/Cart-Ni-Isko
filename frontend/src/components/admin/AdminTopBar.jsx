@@ -299,9 +299,6 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
         >
           <Link to={homePath} className="flex items-center gap-2 shrink-0 min-w-0" title="Tindahan ni Isko">
             <img src={brandLogo} alt="Tindahan ni Isko" className="h-9 object-contain hover:opacity-90 transition-opacity" />
-            <span className="hidden lg:block text-sm font-extrabold text-slate-900 dark:text-[var(--ink)] tracking-tight truncate">
-              Tindahan ni Isko
-            </span>
           </Link>
         </div>
 

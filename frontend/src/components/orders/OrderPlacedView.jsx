@@ -3,6 +3,7 @@ import { formatPrice } from '../ui/PriceTag.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import paymongoLogo from '../../assets/icons/brand/paymongo-logo.png'
+import { variationText } from '../../utils/variation.js'
 
 function formatDateTime(value, withTime = true) {
   if (!value) return null
@@ -55,14 +56,15 @@ function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed
   )
 
   return (
-    <div className="w-full max-w-xl bg-white rounded-2xl p-6 md:p-8 border border-slate-200/90 shadow-sm space-y-6 animate-scale-in">
-      <div className="flex justify-center">
-        <img src={logo} alt="Tindahan ni Isko" className="h-9 object-contain" />
+    <div className="@container w-full max-w-xl lg:max-w-5xl bg-white rounded-2xl p-6 md:p-8 lg:p-10 border border-slate-200/90 shadow-sm space-y-6 lg:space-y-8 animate-scale-in">
+      {/* Assurance header: centred on phones, one row on the web */}
+      <div className="flex flex-col items-center gap-6 @3xl:flex-row-reverse @3xl:items-center @3xl:justify-between @3xl:gap-8 @3xl:pb-8 @3xl:border-b @3xl:border-slate-100">
+      <div className="flex justify-center shrink-0">
+        <img src={logo} alt="Tindahan ni Isko" className="h-9 @3xl:h-11 object-contain" />
       </div>
 
-      {/* Assurance header */}
-      <div className="text-center space-y-3">
-        <div className="mx-auto w-16 h-16 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center shadow-xs">
+      <div className="text-center space-y-3 @3xl:text-left @3xl:space-y-0 @3xl:flex @3xl:items-center @3xl:gap-5">
+        <div className="mx-auto @3xl:mx-0 w-16 h-16 shrink-0 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center shadow-xs">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -77,10 +79,10 @@ function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed
           </svg>
         </div>
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-xl md:text-2xl @3xl:text-3xl font-bold text-gray-900 tracking-tight">
             {confirmed ? 'Order Placed & Paid!' : 'Order Placed!'}
           </h1>
-          <p className="text-sm text-gray-600 mt-1.5 max-w-md mx-auto leading-relaxed">
+          <p className="text-sm text-gray-600 mt-1.5 max-w-md mx-auto @3xl:mx-0 @3xl:max-w-xl leading-relaxed">
             {firstName ? `Thank you, ${firstName}! ` : 'Thank you! '}
             {confirmed
               ? 'Your transaction has been securely processed via PayMongo. Your order is now confirmed.'
@@ -88,9 +90,13 @@ function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed
           </p>
         </div>
       </div>
+      </div>
 
+      <div className="flex flex-col gap-6 @3xl:grid @3xl:grid-cols-[minmax(0,1fr)_minmax(0,25rem)] @3xl:gap-8 @3xl:items-start">
+      {/* Right column (web): payment summary and actions, kept in view */}
+      <div className="contents @3xl:flex @3xl:flex-col @3xl:gap-5 @3xl:col-start-2 @3xl:row-start-1 @3xl:sticky @3xl:top-6">
       {/* Order + payment summary */}
-      <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm overflow-hidden bg-white shadow-2xs">
+      <div className="order-1 rounded-xl border border-slate-200 divide-y divide-slate-100 text-sm overflow-hidden bg-white shadow-2xs">
         <div className="flex justify-between items-center gap-3 p-3.5 bg-slate-50/70">
           <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Transaction Details</span>
           <span className="text-xs font-semibold text-gray-800 bg-white px-2 py-0.5 rounded border border-slate-200">
@@ -132,8 +138,44 @@ function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed
         </div>
       </div>
 
+      {/* Action buttons: view order details & continue browsing store */}
+      <div className="order-5 space-y-2.5 pt-2 @3xl:pt-0">
+        <button
+          type="button"
+          onClick={() => leaveTo(`/orders/${order?.ord_id}`)}
+          className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+        >
+          <span>View Order Details & QR Code</span>
+
+        </button>
+
+        <button
+          type="button"
+          onClick={() => leaveTo('/shop')}
+          className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-slate-100 hover:bg-slate-200/80 text-slate-800 border border-slate-200 transition-colors cursor-pointer flex items-center justify-center gap-2"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-600">
+            <circle cx="9" cy="21" r="1" />
+            <circle cx="20" cy="21" r="1" />
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+          </svg>
+          <span>Continue Browsing Store</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => leaveTo('/home')}
+          className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
+        >
+          Return to Home
+        </button>
+      </div>
+      </div>
+
+      {/* Left column (web): claiming details, items and next steps */}
+      <div className="contents @3xl:flex @3xl:flex-col @3xl:gap-6 @3xl:col-start-1 @3xl:row-start-1 @3xl:min-w-0">
       {/* Claiming details */}
-      <div className="p-4 bg-slate-50/90 rounded-xl border border-slate-200/80 space-y-1.5 text-sm">
+      <div className="order-2 p-4 @3xl:p-5 bg-slate-50/90 rounded-xl border border-slate-200/80 space-y-1.5 text-sm">
         <div className="flex items-center justify-between">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
             {isDelivery ? 'Delivery Information' : 'Pickup Information'}
@@ -173,14 +215,14 @@ function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed
 
       {/* Items */}
       {items.length > 0 && (
-        <div className="space-y-2">
+        <div className="order-3 space-y-2">
           <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
             Order Items ({items.length})
           </p>
-          <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 rounded-xl p-2 bg-slate-50/80 border border-slate-200/70 scrollbar-none">
+          <div className="max-h-52 @3xl:max-h-96 overflow-y-auto divide-y divide-slate-100 rounded-xl p-2 bg-slate-50/80 border border-slate-200/70 scrollbar-none">
             {items.map((line, idx) => {
               const name = line.prod_name || line.product?.name || 'Item'
-              const variant = line.prodvar_name || line.size
+              const variant = variationText(line) || line.size
               const image =
                 line.prodvar_pic || line.product?.images?.[0] || line.product?.image || null
               return (
@@ -215,7 +257,7 @@ function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed
       )}
 
       {/* What happens next */}
-      <div className="p-4 rounded-xl border border-orange-200/90 bg-orange-50/70 text-xs sm:text-sm">
+      <div className="order-4 p-4 @3xl:p-5 rounded-xl border border-orange-200/90 bg-orange-50/70 text-xs sm:text-sm">
         <p className="font-bold text-gray-900 flex items-center gap-1.5">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-brand-orange">
             <circle cx="12" cy="12" r="10" />
@@ -231,37 +273,7 @@ function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed
         </p>
       </div>
 
-      {/* Action buttons: view order details & continue browsing store */}
-      <div className="space-y-2.5 pt-2">
-        <button
-          type="button"
-          onClick={() => leaveTo(`/orders/${order?.ord_id}`)}
-          className="w-full py-3.5 px-4 rounded-xl font-bold text-sm bg-brand-orange hover:bg-brand-orange-dark text-white shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-        >
-          <span>View Order Details & QR Code</span>
-
-        </button>
-
-        <button
-          type="button"
-          onClick={() => leaveTo('/shop')}
-          className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-slate-100 hover:bg-slate-200/80 text-slate-800 border border-slate-200 transition-colors cursor-pointer flex items-center justify-center gap-2"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-slate-600">
-            <circle cx="9" cy="21" r="1" />
-            <circle cx="20" cy="21" r="1" />
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-          </svg>
-          <span>Continue Browsing Store</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => leaveTo('/home')}
-          className="w-full py-2 text-xs font-semibold text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
-        >
-          Return to Home
-        </button>
+      </div>
       </div>
     </div>
   )

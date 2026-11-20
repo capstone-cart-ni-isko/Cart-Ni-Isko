@@ -1,4 +1,4 @@
-import { clearSession, peekSession, saveSession } from './session.js'
+import { clearSession, peekSession, saveSession, tokenFitsSlot } from './session.js'
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL
 
@@ -107,6 +107,8 @@ export function activePortal() {
 export function setApiToken(token, kind) {
   const slot = kind || activePortal()
   const next = token || null
+  // Each portal only ever holds its own kind of bearer (rule 71).
+  if (next && !tokenFitsSlot(next, slot)) return
   if (tokens[slot] !== next) clearGetCache()
   tokens[slot] = next
 }
@@ -248,8 +250,10 @@ function withQuery(path, params) {
   return suffix ? `${path}?${suffix}` : path
 }
 
-export async function apiGet(path, params = {}, options = {}) {
+export async function apiGet(path, params = {}, { cache: useCache = true, ...options } = {}) {
   const url = withQuery(path, params)
+  if (!useCache) return apiRequest(url, options)
+
   const kind = activePortal()
   const token = tokens[kind] || null
   const key = getCacheKey(kind, token, url)

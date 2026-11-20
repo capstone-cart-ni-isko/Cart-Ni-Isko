@@ -56,9 +56,9 @@ const NAV_GROUPS = [
       {
         to: '/admin/walkin',
         label: 'Walk-in Orders',
-        hideForStaff: true,
-        // POST /pos/* is admin-only in the API, so staff never open it.
-        roles: ['ADMIN', 'SUPER_ADMIN'],
+        // Owner decision (overrides rule 44 / REQ-EMP_HOME-01 / FLOW-WALKIN-01):
+        // staff run the walk-in register too; POST /pos/* is role:staff.
+        roles: ['ADMIN', 'SUPER_ADMIN', 'STAFF'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
@@ -151,11 +151,10 @@ const NAV_GROUPS = [
       {
         to: '/admin/staff',
         label: 'Staff',
-        // REQ-EMP_HOME-01: the Staff entry is admin/super-admin territory, and
-        // App.jsx locks /admin/staff (and /admin/users) to SUPER_ADMIN only, so
-        // the entry mirrors the route guard exactly - showing it to a plain
-        // ADMIN would only bounce them back to their home page.
-        roles: ['SUPER_ADMIN'],
+        // REQ-EMP_HOME-01: the Staff entry is store-management territory, so
+        // Admin and Super Admin accounts both see it. App.jsx guards
+        // /admin/staff (and /admin/users) with the same pair of roles.
+        roles: ['ADMIN', 'SUPER_ADMIN'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -169,8 +168,10 @@ const NAV_GROUPS = [
         to: '/admin/schedules',
         label: 'Schedules',
         // FLOW-EMP_SCHED-01/04: the scheduling screen is reachable by every
-        // employee - super admins preschedule the roster and each employee can
-        // review their own availability - so this entry stays visible to all.
+        // employee - admins and super admins preschedule the roster and each
+        // employee can review their own availability - so this entry stays
+        // visible to all.
+        roles: ['ADMIN', 'SUPER_ADMIN', 'STAFF'],
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={ICON}>
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -347,6 +348,7 @@ export default function AdminSidebar({ onCloseMobile }) {
           ))}
         </nav>
 
+
         {/* Clock In / Clock Out — directly above Logout, so the signed-in
             employee can always see whether they are scheduled to be in store
             right now and can request to time out ahead of their scheduled end
@@ -354,6 +356,18 @@ export default function AdminSidebar({ onCloseMobile }) {
         <div className="shrink-0 px-2 pt-1.5 pb-1.5 border-t border-slate-100 dark:border-[var(--line)] space-y-1">
           <ClockInOut />
         </div>
+
+        {/*
+        <div className="shrink-0 px-3 py-2 flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center text-2xs font-bold shrink-0" aria-hidden="true">
+            {currentAdminUser?.avatar || currentAdminUser?.name?.slice(0, 1)?.toUpperCase() || 'U'}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-xs font-bold text-slate-700 dark:text-[var(--ink)]" title={currentAdminUser?.name || currentAdminUser?.email || 'Current account'}>
+              {currentAdminUser?.name || currentAdminUser?.email || 'Current account'}
+            </span>
+          </span>
+        </div>*/}
 
         {/* Logout — last entry, pinned to the foot of the card so it is
             always reachable, with a confirmation (DOMAIN 16). */}

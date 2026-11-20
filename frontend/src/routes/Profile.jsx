@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useContext } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
@@ -6,7 +6,6 @@ import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import { dispatchModeOf, fetchOrders, orderFilterBucket } from '../services/orders.js'
 import { fetchMyAccount } from '../services/accounts.js'
 import { fetchNotifications, unreadCount } from '../services/notifications.js'
-import { WishlistContext } from '../context/WishlistContext.jsx'
 import Avatar from '../components/ui/Avatar.jsx'
 import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import notificationIcon from '../assets/icons/common/notification.svg'
@@ -27,21 +26,75 @@ const IN_PROGRESS_STATUSES = new Set([
    SVG Icon Components for Layout
    ────────────────────────────────────────────── */
 
-function OrdersNavIcon({ className = 'w-5 h-5' }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-      <path d="m3.27 6.96 8.73 5.05 8.73-5.05" /><path d="M12 22.08V12" />
-    </svg>
-  )
-}
-
 function PencilIcon({ className = 'w-4 h-4' }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
+  )
+}
+
+function OrderStatusOverview({ overview }) {
+  const statuses = [
+    {
+      key: 'in_progress',
+      label: 'In Progress',
+      count: overview.inProgress,
+      iconColor: 'bg-blue-100 text-[#2563EB]',
+      cardColor: 'bg-blue-50/60 border-blue-100/70 hover:bg-blue-50',
+    },
+    {
+      key: 'for_pickup',
+      label: 'For Pickup',
+      count: overview.forPickup,
+      iconColor: 'bg-orange-100 text-brand-orange',
+      cardColor: 'bg-orange-50/60 border-orange-100/70 hover:bg-orange-50',
+    },
+    {
+      key: 'for_delivery',
+      label: 'For Delivery',
+      count: overview.forDelivery,
+      iconColor: 'bg-emerald-100 text-emerald-600',
+      cardColor: 'bg-emerald-50/60 border-emerald-100/70 hover:bg-emerald-50',
+    },
+    {
+      key: 'completed',
+      label: 'Completed',
+      count: overview.completed,
+      iconColor: 'bg-purple-100 text-purple-600',
+      cardColor: 'bg-purple-50/60 border-purple-100/70 hover:bg-purple-50',
+    },
+  ]
+
+  return (
+    <section className="rounded-2xl border border-gray-100/90 bg-white p-4 shadow-xs">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-gray-900">Quick Order Statuses</h2>
+          <p className="mt-0.5 text-[10px] font-medium text-gray-400">Active and recent purchases</p>
+        </div>
+        <ViewAllLink to="/orders">View all</ViewAllLink>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5 pt-1 sm:grid-cols-4">
+        {statuses.map(({ key, label, count, iconColor, cardColor }) => (
+          <Link
+            key={key}
+            to={`/orders?status=${key}`}
+            className={`group flex min-w-0 items-center gap-2.5 rounded-xl border p-2.5 transition-colors ${cardColor}`}
+          >
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconColor}`}>
+              <PipelineIcon id={key} className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-lg font-semibold leading-none text-gray-900">{count}</p>
+              <p className="mt-0.5 truncate text-[11px] font-semibold text-gray-500">{label}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -93,6 +146,9 @@ function Profile() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   const baseUser = currentUser || {}
+  const isGuest = String(
+    baseUser.cust_type || baseUser.type || baseUser.role || ''
+  ).trim().toLowerCase() === 'guest'
 
   const rawEmail = baseUser.cust_email || baseUser.email || ''
   const rawPhone = baseUser.cust_phone || baseUser.phone || ''
@@ -114,8 +170,6 @@ function Profile() {
   // Fresh copy of the signed-in row: phone, pronoun, birthday and the saved
   // delivery addresses are not carried in the session slot (REQ-CUST_PROF-02).
   const [account, setAccount] = useState(null)
-  const { wishlistItems } = useContext(WishlistContext)
-
   const handleLogout = () => {
     logout()
     showToast('Signed out successfully')
@@ -171,9 +225,6 @@ function Profile() {
 
   const overview = useMemo(() => {
     const counts = {
-      totalOrders: orders.length,
-      completedOrders: 0,
-      savedItems: wishlistItems.length,
       inProgress: 0,
       forPickup: 0,
       forDelivery: 0,
@@ -190,7 +241,6 @@ function Profile() {
         counts.inProgress += 1
       }
       if (bucket === 'claimed') {
-        counts.completedOrders += 1
         counts.completed += 1
       }
       if (bucket === 'to-claim') {
@@ -201,7 +251,7 @@ function Profile() {
     })
 
     return counts
-  }, [orders, wishlistItems])
+  }, [orders])
 
   const rightAction = (
     <div className="flex items-center gap-2">
@@ -240,11 +290,6 @@ function Profile() {
         <div className="space-y-4">
           {/* Orange Banner - Mobile Redesign */}
           <div className="rounded-3xl p-5 text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] space-y-4">
-            <div className="absolute inset-0 opacity-[0.05] select-none pointer-events-none flex items-center justify-center">
-              <span className="text-5xl font-semibold tracking-widest rotate-[12deg] whitespace-nowrap text-white">
-                TINDAHAN NI ISKO
-              </span>
-            </div>
 
             {/* Avatar + Info Header with Settings Icon */}
             <div className="flex items-start justify-between gap-3 relative z-10">
@@ -255,18 +300,9 @@ function Profile() {
                 <div className="min-w-0 text-white">
                   <h1 className="text-lg font-semibold tracking-tight leading-tight truncate">{fullName}</h1>
                   <p className="text-white/90 text-xs font-normal mt-0.5 truncate">{email}</p>
-                  <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
+                  {!isGuest && <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>}
                 </div>
               </div>
-
-              {/* Settings Action Button - Rectangular */}
-              <Link
-                to="/settings"
-                className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs text-white hover:bg-white hover:text-gray-800 flex items-center justify-center shadow-2xs active:scale-95 transition-all shrink-0"
-                title="Settings"
-              >
-                <SettingsIcon className="w-5 h-5" />
-              </Link>
             </div>
 
             {/* Action Bar: Edit Profile - Rectangular */}
@@ -281,135 +317,41 @@ function Profile() {
             </div>
           </div>
 
-          {/* 1. Quick Overview - 2x2 Responsive Grid */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-gray-900">Quick Overview</h3>
-            </div>
+         
 
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* Total Orders */}
-              <div className="bg-[#F0F5FF] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-                <div className="w-9 h-9 rounded-lg bg-blue-100 text-[#2563EB] flex items-center justify-center shrink-0">
-                  <OrdersNavIcon className="w-4.5 h-4.5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-xl font-semibold text-gray-900 leading-none">{overview.totalOrders}</span>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Total Orders</p>
-                </div>
-              </div>
+          <OrderStatusOverview overview={overview} />
 
-              {/* Completed Orders */}
-              <div className="bg-[#F0FDF4] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-                <div className="w-9 h-9 rounded-lg bg-emerald-100 text-[#10B981] flex items-center justify-center shrink-0">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4.5 h-4.5">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+          {!isGuest && (
+            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-semibold text-gray-900">About Me</h2>
                 </div>
-                <div className="min-w-0">
-                  <span className="text-xl font-semibold text-gray-900 leading-none">{overview.completedOrders}</span>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Completed</p>
-                </div>
+                <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
+                  <PencilIcon className="w-3.5 h-3.5" />
+                </Link>
               </div>
-
-              {/* Saved Items */}
-              <div className="bg-[#FAF5FF] rounded-xl p-3 flex items-center gap-3 shadow-2xs">
-                <div className="w-9 h-9 rounded-lg bg-purple-100 text-[#8B5CF6] flex items-center justify-center shrink-0">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4.5 h-4.5">
-                    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-                  </svg>
-                </div>
-                <div className="min-w-0">
-                  <span className="text-xl font-semibold text-gray-900 leading-none">{overview.savedItems}</span>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5 truncate">Saved Items</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. About Me - 2 Columns on mobile */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-gray-900">About Me</h2>
-              </div>
-              <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                <PencilIcon className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-            <p className="text-sm text-gray-600 leading-relaxed font-normal">{college}{course ? ` – ${course}` : ''}</p>
-            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">Year Level</p>
-                <p className="text-sm font-semibold text-gray-900">{yearLevel}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">Campus</p>
-                <p className="text-sm font-semibold text-gray-900">{campus}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">Course</p>
-                <p className="text-sm font-semibold text-gray-900 leading-snug">{course}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">College</p>
-                <p className="text-sm font-semibold text-gray-900 leading-snug">{college}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 3. My Orders Stepper */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-gray-900">My Orders</h2>
-              </div>
-              <ViewAllLink to="/orders">View all</ViewAllLink>
-            </div>
-
-            <div className="flex items-center justify-between px-1">
-              <Link to="/orders?status=in_progress" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center">
-                  <PipelineIcon id="in_progress" className="w-4 h-4 text-[#2563EB]" />
+              <p className="text-sm text-gray-600 leading-relaxed font-normal">{college}{course ? ` – ${course}` : ''}</p>
+              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Year Level</p>
+                  <p className="text-sm font-semibold text-gray-900">{yearLevel}</p>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900 leading-none">{overview.inProgress}</p>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5">In Progress</p>
-                </div>
-              </Link>
-              <span className="text-gray-300 font-light text-xs">→</span>
-              <Link to="/orders?status=for_pickup" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-[#FFF4E5] text-[#FF6A00] flex items-center justify-center">
-                  <PipelineIcon id="for_pickup" className="w-4 h-4 text-[#FF6A00]" />
+                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Campus</p>
+                  <p className="text-sm font-semibold text-gray-900">{campus}</p>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900 leading-none">{overview.forPickup}</p>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5">For Pickup</p>
-                </div>
-              </Link>
-              <span className="text-gray-300 font-light text-xs">→</span>
-              <Link to="/orders?status=for_delivery" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-[#E8F8EE] text-[#10B981] flex items-center justify-center">
-                  <PipelineIcon id="for_delivery" className="w-4 h-4 text-[#10B981]" />
+                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Course</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-snug">{course}</p>
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-gray-900 leading-none">{overview.forDelivery}</p>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5">For Delivery</p>
+                  <p className="text-xs font-semibold text-gray-500 mb-0.5">College</p>
+                  <p className="text-sm font-semibold text-gray-900 leading-snug">{college}</p>
                 </div>
-              </Link>
-              <span className="text-gray-300 font-light text-xs">→</span>
-              <Link to="/orders?status=completed" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-[#F3E8FF] text-[#8B5CF6] flex items-center justify-center">
-                  <PipelineIcon id="completed" className="w-4 h-4 text-[#8B5CF6]" />
-                </div>
-                <div>
-                  <p className="text-lg font-semibold text-gray-900 leading-none">{overview.completed}</p>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5">Completed</p>
-                </div>
-              </Link>
+              </div>
             </div>
-          </div>
-
+          )}
           {/* 4. Contact Information */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
@@ -464,25 +406,8 @@ function Profile() {
             </div>
           </div>
 
-          {/* 6. Help Center */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-semibold text-gray-900">Need Help?</h3>
-            </div>
-            <p className="text-xs text-gray-500 leading-relaxed">
-              We're here to assist with your BU merch orders, campus pickups, and sizing queries.
-            </p>
-            {/* A real action (mailto) instead of a non-interactive span, using
-                the same support address the desktop footer links to. */}
-            <a
-              href="mailto:support@tindahanniisko.com"
-              className="w-full py-2.5 px-4 rounded-xl border border-orange-200 bg-orange-50/60 text-[#FF6A00] font-semibold text-xs flex items-center justify-center gap-2 hover:bg-orange-100 transition-colors"
-            >
-              Contact Support
-            </a>
-          </div>
 
-          {/* 7. Account Security */}
+          {/* 6. Account Security */}
           <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -503,7 +428,7 @@ function Profile() {
             </div>
           </div>
 
-          {/* 8. Log Out — opens the shared confirmation (FLOW-CUST_LOGOUT-01/02) */}
+          {/* 7. Log Out — opens the shared confirmation (FLOW-CUST_LOGOUT-01/02) */}
           <button
             type="button"
             onClick={() => setShowLogoutConfirm(true)}
@@ -522,11 +447,7 @@ function Profile() {
       <div className="hidden md:block w-full max-w-6xl mx-auto py-2 animate-fade-in space-y-3.5">
         {/* Top Banner - Sleek compact style */}
         <div className="rounded-2xl py-6 px-6 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
-          <div className="absolute inset-0 opacity-[0.04] select-none pointer-events-none flex items-center justify-center">
-            <span className="text-[5rem] font-semibold tracking-widest rotate-[4deg] whitespace-nowrap text-white">
-              TINDAHAN NI ISKO
-            </span>
-          </div>
+
 
           {/* Left: Avatar + Info */}
           <div className="flex items-center gap-4 relative z-10">
@@ -536,7 +457,7 @@ function Profile() {
             <div className="text-white">
               <h1 className="text-xl md:text-2xl font-semibold tracking-tight leading-tight">{fullName}</h1>
               <p className="text-white/90 text-xs font-normal mt-0.5">{email}</p>
-              <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>
+              {!isGuest && <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>}
             </div>
           </div>
 
@@ -563,107 +484,50 @@ function Profile() {
         <div className="w-full">
           <div className="space-y-3.5">
 
-            {/* 1. Quick View of Order Statuses Card */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-900">Quick Order Statuses</h2>
-                    <p className="text-[10px] text-gray-400 font-medium">Active and recent purchases</p>
-                  </div>
-                </div>
-                <ViewAllLink to="/orders">View all</ViewAllLink>
-              </div>
+            <OrderStatusOverview overview={overview} />
 
-              <div className="grid grid-cols-4 gap-2.5 pt-1">
-                <Link to="/orders?status=in_progress" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-blue-50/60 border border-blue-100/70 hover:bg-blue-50 transition-colors group">
-                  <div className="w-9 h-9 rounded-lg bg-blue-100 text-[#2563EB] flex items-center justify-center shrink-0">
-                    <PipelineIcon id="in_progress" className="w-4.5 h-4.5 text-[#2563EB]" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-lg font-semibold text-gray-900 leading-none">{overview.inProgress}</p>
-                    <p className="text-[11px] text-gray-500 font-semibold mt-0.5 truncate">In Progress</p>
-                  </div>
-                </Link>
-
-                <Link to="/orders?status=for_pickup" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-orange-50/60 border border-orange-100/70 hover:bg-orange-50 transition-colors group">
-                  <div className="w-9 h-9 rounded-lg bg-orange-100 text-brand-orange flex items-center justify-center shrink-0">
-                    <PipelineIcon id="for_pickup" className="w-4.5 h-4.5 text-brand-orange" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-lg font-semibold text-gray-900 leading-none">{overview.forPickup}</p>
-                    <p className="text-[11px] text-gray-500 font-semibold mt-0.5 truncate">For Pickup</p>
-                  </div>
-                </Link>
-
-                <Link to="/orders?status=for_delivery" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100/70 hover:bg-emerald-50 transition-colors group">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                    <PipelineIcon id="for_delivery" className="w-4.5 h-4.5 text-emerald-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-lg font-semibold text-gray-900 leading-none">{overview.forDelivery}</p>
-                    <p className="text-[11px] text-gray-500 font-semibold mt-0.5 truncate">For Delivery</p>
-                  </div>
-                </Link>
-
-                <Link to="/orders?status=completed" className="flex items-center gap-2.5 p-2.5 rounded-xl bg-purple-50/60 border border-purple-100/70 hover:bg-purple-50 transition-colors group">
-                  <div className="w-9 h-9 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
-                    <PipelineIcon id="completed" className="w-4.5 h-4.5 text-purple-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-lg font-semibold text-gray-900 leading-none">{overview.completed}</p>
-                    <p className="text-[11px] text-gray-500 font-semibold mt-0.5 truncate">Completed</p>
-                  </div>
-                </Link>
-              </div>
-            </div>
-
-            {/* 2. About Me Card */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div>
+            {!isGuest && (
+              <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
                     <h2 className="text-sm font-semibold text-gray-900">About Me</h2>
-                    <p className="text-[10px] text-gray-400 font-medium">Academic profile &amp; department</p>
+                  </div>
+                  <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
+                    <PencilIcon className="w-3 h-3" />
+                  </Link>
+                </div>
+
+                <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-normal">
+                  {college} {course && `– ${course}`}
+                </p>
+
+                <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Year Level</p>
+                    <p className="font-semibold text-gray-900 mt-0.5">{yearLevel}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Course</p>
+                    <p className="font-semibold text-gray-900 mt-0.5 truncate">{course}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Campus</p>
+                    <p className="font-semibold text-gray-900 mt-0.5">{campus}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase">College</p>
+                    <p className="font-semibold text-gray-900 mt-0.5 truncate">{college}</p>
                   </div>
                 </div>
-                <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                  <PencilIcon className="w-3 h-3" />
-                </Link>
               </div>
-
-              <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-normal">
-                {college} {course && `– ${course}`}
-              </p>
-
-              <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Year Level</p>
-                  <p className="font-semibold text-gray-900 mt-0.5">{yearLevel}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Course</p>
-                  <p className="font-semibold text-gray-900 mt-0.5 truncate">{course}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Campus</p>
-                  <p className="font-semibold text-gray-900 mt-0.5">{campus}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">College</p>
-                  <p className="font-semibold text-gray-900 mt-0.5 truncate">{college}</p>
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* 3. Contact Information Card */}
             <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-semibold text-gray-900">Contact Information</h2>
-                  <p className="text-[10px] text-gray-400 font-medium">
-                    Phone, pronoun, birthday and delivery addresses
-                  </p>
+
                 </div>
                 <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
                   <PencilIcon className="w-3 h-3" />

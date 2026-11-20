@@ -6,6 +6,7 @@ use App\Models\EmpNotif;
 use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Setting;
+use App\Support\EmployeePassword;
 use App\Http\Controllers\AppointmentsAPI;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -316,16 +317,22 @@ class ShiftApiTest extends TestCase
         $admin = $this->makeSuperAdmin();
         $onDuty = $this->makeEmployee();
         $offDuty = $this->makeEmployee(['emp_instore' => 0]);
-        $this->makeShift($onDuty, ['shift_date' => '2026-10-05']);
-        $this->makeShift($offDuty, ['shift_date' => '2026-10-05']);
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00:00'));
+        $this->makeShift($onDuty, ['shift_date' => '2026-10-05', 'shift_start' => '08:00', 'shift_end' => '18:00']);
+        $this->makeShift($offDuty, ['shift_date' => '2026-10-05', 'shift_start' => '08:00', 'shift_end' => '18:00']);
+        $this->makeShift($offDuty, ['shift_date' => '2026-10-06', 'shift_start' => '08:00', 'shift_end' => '18:00']);
 
         $byDate = $this->getJson('/api/shifts?date=2026-10-05', $this->headers($admin));
         $byDate->assertStatus(200);
         $this->assertCount(2, $byDate->json('data'));
 
-        // The off-duty assignee puts its block in PENDING REPLACEMENT (REQ-SS-03)
+        // Current attendance matters during an active block, but not for a future block.
         $byStatus = $this->getJson('/api/shifts?status=PENDING REPLACEMENT', $this->headers($admin));
         $byStatus->assertStatus(200)->assertJsonPath('data.0.emp_id', $offDuty->getKey());
+        $this->getJson('/api/shifts?date=2026-10-06', $this->headers($admin))
+            ->assertJsonPath('data.0.status', 'SCHEDULED');
+
+        Carbon::setTestNow();
     }
 
     public function test_derived_status_tracks_the_shift_window()
@@ -362,27 +369,31 @@ class ShiftApiTest extends TestCase
 
     public function test_staff_availability_change_is_blocked_after_the_block_start()
     {
-        // A non-super-admin: the route lets an admin through, and the REQ-SS-02
-        // deadline is what stops this write.
-        $admin = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        // A staff member's own exception: the route lets employees through, and
+        // the REQ-SS-02 deadline is what stops this write. Admins are store
+        // managers and can override it.
+        $staff = $this->makeEmployee(['emp_type' => 'STAFF']);
         Carbon::setTestNow(Carbon::parse('2026-10-05 10:00:00'));
 
+        // A week-wide baseline keeps the 180-minute floor out of the way.
+        $this->makeShift($staff, ['shift_date' => '2026-10-05', 'shift_start' => '00:00', 'shift_end' => '23:59']);
+
         // The block is already running, so the deadline has passed
-        $shift = $this->makeShift($admin, [
+        $block = $this->makeShift($staff, [
             'shift_date'  => '2026-10-05',
             'shift_start' => '09:00',
-            'shift_end'   => '18:00',
+            'shift_end'   => '12:00',
         ]);
 
         $response = $this->putJson(
-            '/api/shifts/' . $shift->sched_id,
-            ['emp_instore' => false],
-            $this->headers($admin)
+            '/api/shifts/' . $block->sched_id,
+            ['unavailable' => true],
+            $this->headers($staff)
         );
 
         $response->assertStatus(403);
         $response->assertJsonPath('code', 'ALR_AVAIL_AFTER_BLOCK_START');
-        $this->assertSame(1, (int) $admin->fresh()->emp_instore);
+        $this->assertNull($block->fresh()->sched_disabled);
 
         Carbon::setTestNow();
     }
@@ -432,6 +443,29 @@ class ShiftApiTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_admin_may_override_availability_after_the_block_start()
+    {
+        $admin = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        $officer = $this->makeEmployee(['emp_type' => 'STAFF']);
+        Carbon::setTestNow(Carbon::parse('2026-10-05 10:00:00'));
+
+        $shift = $this->makeShift($officer, [
+            'shift_date'  => '2026-10-05',
+            'shift_start' => '09:00',
+            'shift_end'   => '18:00',
+        ]);
+
+        $this->putJson(
+            '/api/shifts/' . $shift->sched_id,
+            ['emp_instore' => false],
+            $this->headers($admin)
+        )->assertStatus(200);
+
+        $this->assertSame(0, (int) $officer->fresh()->emp_instore);
+
+        Carbon::setTestNow();
+    }
+
     // ==========================================
     // REQ-SS-03 PENDING REPLACEMENT (instructions 70-71)
     // ==========================================
@@ -441,7 +475,7 @@ class ShiftApiTest extends TestCase
         $superAdmin = $this->makeSuperAdmin();
         $otherSuperAdmin = $this->makeSuperAdmin();
         $officer = $this->makeEmployee(['emp_instore' => 1, 'emp_type' => 'ADMIN']);
-        Carbon::setTestNow(Carbon::parse('2026-10-05 07:30:00'));
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00:00'));
 
         $shift = $this->makeShift($officer, [
             'shift_date'  => '2026-10-05',
@@ -464,7 +498,7 @@ class ShiftApiTest extends TestCase
         $this->assertNotNull($alert, 'The super admin alert was not created.');
         $this->assertStringContainsString('PENDING REPLACEMENT', $alert->empnotif_msg);
         $this->assertStringContainsString('Juan Dela Cruz', $alert->empnotif_msg);
-        $this->assertStringContainsString('2026-10-05 07:30:00', $alert->empnotif_msg);
+        $this->assertStringContainsString('2026-10-05 12:00:00', $alert->empnotif_msg);
 
         // Every super admin is alerted exactly once, and nobody else is. The
         // assertion counts the super admins present rather than a fixed number,
@@ -482,15 +516,16 @@ class ShiftApiTest extends TestCase
         Carbon::setTestNow();
     }
 
-    public function test_slot_state_reports_pending_replacements()
+    public function test_slot_state_does_not_count_future_out_of_store_employees_as_pending_replacements()
     {
         $admin = $this->makeSuperAdmin();
         $officer = $this->makeEmployee(['emp_instore' => 0]);
-        $this->makeShift($officer);
-        $this->makeShift($officer, ['shift_start' => '18:00', 'shift_end' => '20:00']);
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00:00'));
+        $this->makeShift($officer, ['shift_date' => '2026-10-06']);
+        $this->makeShift($officer, ['shift_date' => '2026-10-06', 'shift_start' => '18:00', 'shift_end' => '20:00']);
 
         $response = $this->getJson(
-            '/api/appoint/slots?date=' . now()->addDay()->format('Y-m-d'),
+            '/api/appoint/slots?date=2026-10-06',
             $this->headers($admin)
         );
         $response->assertStatus(200);
@@ -498,9 +533,10 @@ class ShiftApiTest extends TestCase
         $slots = $response->json('data.slots');
         $this->assertNotEmpty($slots);
         foreach ($slots as $slot) {
-            // Both blocks lost their assignee, so both read as needing cover
-            $this->assertSame(2, $slot['pending_replacements']);
+            $this->assertSame(0, $slot['pending_replacements']);
         }
+
+        Carbon::setTestNow();
     }
 
     // ==========================================
@@ -560,6 +596,47 @@ class ShiftApiTest extends TestCase
      * preschedules the new employee (FLOW-EMP_ENROLL-06 / REQ-EMP_ENROLL-06),
      * and that write has to name its key too or the whole enrollment fails.
      */
+    public function test_enrollment_accepts_an_admin_set_temporary_password()
+    {
+        $admin = $this->makeSuperAdmin();
+        $password = 'Isko#2026';
+        $email = 'custompassword' . uniqid() . '@bicol-u.edu.ph';
+
+        $response = $this->postJson('/api/auth/emp_signup', [
+            'givname' => 'Custom',
+            'surname' => 'Password',
+            'email'   => $email,
+            'phone'   => '0951' . random_int(1000000, 9999999),
+            'categ'   => 'STAFF',
+            'password' => $password,
+        ], $this->headers($admin))->assertStatus(201)
+            ->assertJsonPath('data.temporary_password', $password)
+            ->assertJsonPath('data.must_change_password', true);
+
+        $employee = Employee::where('emp_email', $email)->firstOrFail();
+        $verification = EmployeePassword::verify($password, (string) $employee->emp_password);
+        $this->assertTrue($verification['valid']);
+        $this->assertTrue($verification['temporary']);
+        $this->assertArrayNotHasKey('emp_password', $response->json('data'));
+    }
+
+    public function test_enrollment_rejects_a_weak_admin_set_password()
+    {
+        $admin = $this->makeSuperAdmin();
+        $email = 'weakpassword' . uniqid() . '@bicol-u.edu.ph';
+
+        $this->postJson('/api/auth/emp_signup', [
+            'givname' => 'Weak',
+            'surname' => 'Password',
+            'email'   => $email,
+            'phone'   => '0951' . random_int(1000000, 9999999),
+            'categ'   => 'STAFF',
+            'password' => 'weak',
+        ], $this->headers($admin))->assertStatus(400);
+
+        $this->assertDatabaseMissing('employee', ['emp_email' => $email]);
+    }
+
     public function test_prescheduling_a_new_employee_writes_a_keyed_block()
     {
         $admin = $this->makeSuperAdmin();
@@ -764,16 +841,15 @@ class ShiftApiTest extends TestCase
             $this->headers($admin)
         )->assertStatus(400);
 
-        // A plain admin may not cancel the last block of the week (the week
-        // would fall under the floor); a super admin re-plans the roster.
+        // A store manager may cancel the last block of the week even though
+        // the week then falls under the floor; the roster is theirs to re-plan.
         $adminOnly = $this->makeEmployee(['emp_type' => 'ADMIN']);
-        $this->deleteJson('/api/shifts/' . $shiftId, [], $this->headers($adminOnly))->assertStatus(400);
-        $this->deleteJson('/api/shifts/' . $shiftId, [], $this->headers($admin))->assertStatus(200);
+        $this->deleteJson('/api/shifts/' . $shiftId, [], $this->headers($adminOnly))->assertStatus(200);
 
         $this->assertDatabaseCount('schedules', 0);
     }
 
-    public function test_blocks_more_than_a_day_in_the_past_need_a_super_admin()
+    public function test_blocks_more_than_a_day_in_the_past_need_a_store_manager()
     {
         $admin = $this->makeEmployee(['emp_type' => 'ADMIN']);
         $superAdmin = $this->makeSuperAdmin();
@@ -783,8 +859,8 @@ class ShiftApiTest extends TestCase
         // is already behind the clock whatever hour the suite runs at.
         $yesterday = now()->subDays(2);
 
-        // REQ-EMP_SCHED-03: an admin may not write a block more than 24 hours
-        // in the past.
+        // REQ-EMP_SCHED-03: an admin (store manager) may correct the roster
+        // more than 24 hours in the past.
         $this->postJson(
             '/api/shifts',
             $this->shiftPayload($officer, [
@@ -793,15 +869,15 @@ class ShiftApiTest extends TestCase
                 'shift_end'   => '11:00',
             ]),
             $this->headers($admin)
-        )->assertStatus(400);
+        )->assertStatus(201);
 
         // A super admin may still correct the roster.
         $this->postJson(
             '/api/shifts',
             $this->shiftPayload($officer, [
                 'shift_date'  => $yesterday->format('Y-m-d'),
-                'shift_start' => '08:00',
-                'shift_end'   => '11:00',
+                'shift_start' => '12:00',
+                'shift_end'   => '15:00',
             ]),
             $this->headers($superAdmin)
         )->assertStatus(201);
@@ -877,25 +953,26 @@ class ShiftApiTest extends TestCase
         $this->assertTrue($block->isStaffed());
     }
 
-    public function test_flagging_a_block_unavailable_obeys_the_req_ss_02_deadline()
+    public function test_admin_may_flag_a_block_unavailable_after_the_block_start()
     {
         $admin = $this->makeEmployee(['emp_type' => 'ADMIN']);
         $officer = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
         Carbon::setTestNow(Carbon::parse('2026-10-05 10:00:00'));
 
+        // A week-wide baseline keeps the 180-minute floor out of the way.
+        $this->makeShift($officer, ['shift_date' => '2026-10-05', 'shift_start' => '00:00', 'shift_end' => '23:59']);
         $block = $this->makeShift($officer, [
             'shift_date'  => '2026-10-05',
             'shift_start' => '09:00',
-            'shift_end'   => '18:00',
+            'shift_end'   => '12:00',
         ]);
 
-        // The block is already running, so only a super admin may override.
+        // A store manager may override the REQ-SS-02 deadline.
         $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => true], $this->headers($admin))
-            ->assertStatus(403)
-            ->assertJsonPath('code', 'ALR_AVAIL_AFTER_BLOCK_START');
+            ->assertStatus(200)
+            ->assertJsonPath('data.unavailable', true);
 
-        $block->refresh();
-        $this->assertNull($block->sched_disabled);
+        $this->assertNotNull($block->fresh()->sched_disabled);
 
         Carbon::setTestNow();
     }
@@ -948,7 +1025,7 @@ class ShiftApiTest extends TestCase
         $other = $this->makeEmployee(['emp_type' => 'STAFF', 'emp_instore' => 1]);
         $block = $this->makeShift($other);
 
-        // Rule 38: the roster belongs to the super admins, and an employee's own
+        // Rule 38: the roster belongs to the store managers, and an employee's own
         // exception only ever applies to their own block.
         $this->putJson('/api/shifts/' . $block->sched_id, ['unavailable' => true], $this->headers($officer))
             ->assertStatus(403);

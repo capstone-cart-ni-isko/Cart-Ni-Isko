@@ -831,23 +831,22 @@ export function AdminProvider({ children }) {
    */
   const posCheckout = useCallback(
     async ({ paymentMethod = 'Cash', customerName = 'Walk-in Customer', studentId = 'N/A', amountTendered = 0, discount = 0 } = {}) => {
-      const snapshot = posCartRef.current
-      const subtotal = snapshot.reduce((sum, line) => sum + line.price * line.qty, 0)
-      const ordId = posOrderIdRef.current
-
-      if (!ordId || snapshot.length === 0) {
-        return { success: false, error: 'The POS cart is empty.' }
-      }
-
-      // The cashier's discount: capped at the cart here, re-checked against the
-      // server-calculated total and stored on orders.ord_discount there.
-      const discountAmount = Math.max(0, Math.min(Number(discount) || 0, subtotal))
-      const due = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
-      const tendered = Number(amountTendered) > 0 ? Number(amountTendered) : due
-
       try {
         // Drain any pending cart edits first so the server total is final.
         await syncPosCart()
+        const snapshot = posCartRef.current
+        const ordId = posOrderIdRef.current
+        if (!ordId || snapshot.length === 0) {
+          return { success: false, error: 'The POS cart is empty.' }
+        }
+
+        const subtotal = snapshot.reduce((sum, line) => sum + line.price * line.qty, 0)
+        // The cashier's discount: capped at the cart here, re-checked against
+        // the server-calculated total and stored on orders.ord_discount.
+        const discountAmount = Math.max(0, Math.min(Number(discount) || 0, subtotal))
+        const due = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
+        const tendered = Number(amountTendered) > 0 ? Number(amountTendered) : due
+
         // FLOW-WALKIN-06 / REQ-WALKIN-02: the tender the cashier picked has to
         // reach the server, otherwise every walk-in sale is recorded as cash
         // and the payment reference can never show which method was used.

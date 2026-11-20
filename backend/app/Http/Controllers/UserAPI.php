@@ -235,9 +235,24 @@ class UserAPI extends Controller
             if ($q !== '') {
                 $query->where(function ($builder) use ($q) {
                     $builder->where('ord_status', 'like', "%{$q}%")
+                            ->orWhere('ord_tag', 'like', "%{$q}%")
                             ->orWhereHas('items.bag.prodvar.product', function ($pq) use ($q) {
                                 $pq->where('prod_name', 'like', "%{$q}%")
                                    ->orWhere('prod_tag', 'like', "%{$q}%");
+                            })
+                            ->orWhereHas('customer', function ($customer) use ($q) {
+                                $like = "%{$q}%";
+                                $customer->where('cust_email', 'like', $like)
+                                    ->orWhere('cust_phone', 'like', $like)
+                                    ->orWhere(function ($name) use ($q) {
+                                        foreach (preg_split('/\s+/', trim($q)) as $part) {
+                                            $like = "%{$part}%";
+                                            $name->where(function ($token) use ($like) {
+                                                $token->where('cust_givname', 'like', $like)
+                                                    ->orWhere('cust_surname', 'like', $like);
+                                            });
+                                        }
+                                    });
                             });
 
                     if (ctype_digit($q)) {
@@ -1616,14 +1631,40 @@ class UserAPI extends Controller
 
             $validator = (new DatabaseAPI())->employeeSignup($json);
             if ($validator) {
-                $this->logEnrollment($json, 'FAILED', $validator->getData()['message'] ?? 'rejected');
+                $payload = $validator->getData(true);
+                $this->logEnrollment($json, 'FAILED', $payload['message'] ?? 'rejected');
 
                 return $validator;
             }
 
             $email = strtolower(trim((string) $json->input('email')));
-            $temporaryPassword = EmployeePassword::generateTemporary(20);
+            $requestedPassword = $json->input('password');
+            if ($requestedPassword !== null && $requestedPassword !== '') {
+                if (! is_string($requestedPassword)
+                    || strlen($requestedPassword) > 72
+                    || preg_match('/\s/', $requestedPassword)
+                    || ! EmployeePassword::meetsStandard($requestedPassword)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => EmployeePassword::STANDARD_MESSAGE . ' Spaces are not allowed, and passwords may not exceed 72 bytes.',
+                    ], 422);
+                }
+                $temporaryPassword = $requestedPassword;
+            } else {
+                $temporaryPassword = EmployeePassword::generateTemporary(20);
+            }
             $type = $this->employeeCategory($json);
+
+            // Enrolling employees is a store-manager action, but creating a
+            // Super Admin stays a Super Admin's own privilege.
+            if ($type === 'super admin' && !$this->isSuperAdmin($json->user('api'))) {
+                $this->logEnrollment($json, 'FAILED', 'only a super admin may enroll a super admin');
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only a super admin may create another super admin account.',
+                ], 403);
+            }
 
             if (Employee::where('emp_email', $email)->exists()) {
                 $this->logEnrollment($json, 'FAILED', 'duplicate email ' . $email);
@@ -1701,8 +1742,10 @@ class UserAPI extends Controller
                         'emplog_action'  => 'REGISTER',
                         'emplog_desc'    => 'Registered employee ' . $employee->emp_id . ' ('
                             . $employee->emp_givname . ' ' . $employee->emp_surname . ') as '
-                            . $type . ' by super admin '
-                            . ($by instanceof Employee ? $by->emp_id : 'unknown')
+                            . $type . ' by '
+                            . ($by instanceof Employee
+                                ? strtolower($by->category()) . ' #' . $by->emp_id
+                                : 'an unknown account')
                             . '. Reason: new employee onboarding.',
                     ])
                 );
@@ -2365,16 +2408,12 @@ class UserAPI extends Controller
                     }
                 }
 
-                // Admins (store managers) own the scheduling keys; every other
-                // system-wide key stays with the super admin.
-                $schedulingOnly = !empty($system)
-                    && array_diff(array_keys($system), \App\Support\SystemSettings::SCHEDULING_KEYS) === [];
-
-                if (!empty($system) && !$this->isSuperAdmin($user)
-                    && !($schedulingOnly && $this->isAdmin($user))) {
+                // Store managers (admin and super admin) own every system-wide
+                // key; customers and staff only ever write their own preferences.
+                if (!empty($system) && !$this->isAdmin($user)) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Only super admin employees may perform this action'
+                        'message' => 'Only admin or super admin employees may change system settings'
                     ], 403);
                 }
 
@@ -2552,6 +2591,39 @@ class UserAPI extends Controller
                 $notifId       = $json->input('notif_id');
                 $recipientType = strtolower($json->input('recipient_type'));
 
+                // FLOW-NOTIF-05 "Mark all as read": one statement for every
+                // unread row of the signed-in account. One request per row
+                // queued behind each other on the server and timed out part
+                // way, leaving the rest unread.
+                if ($json->boolean('all')) {
+                    $now = now();
+                    if ($recipientType === 'customer') {
+                        $ownerId = $this->customerId($json);
+                        if ($ownerId === null) {
+                            return response()->json(['success' => false, 'message' => 'Customer account not found'], 404);
+                        }
+                        $marked = CustNotif::where('cust_id', $ownerId)
+                            ->whereNull('custnotif_read')
+                            ->update(['custnotif_read' => $now]);
+                    } else {
+                        $employee = $json->user('api');
+                        if (! $employee instanceof Employee) {
+                            return response()->json(['success' => false, 'message' => 'Employee account not found'], 404);
+                        }
+                        $marked = EmpNotif::where('emp_id', $employee->getKey())
+                            ->whereNull('empnotif_read')
+                            ->update(['empnotif_read' => $now]);
+                    }
+
+                    $this->logActor($json, 'edit', 'PUT /api/notif/update - marked all ' . $marked . ' as read');
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => $marked . ' notification(s) marked as read',
+                        'data'    => ['marked' => $marked],
+                    ], 200);
+                }
+
                 if ($recipientType === 'customer') {
                     $notif = CustNotif::where('custnotif_id', $notifId)->first();
                     if (! $notif || (int) $notif->cust_id !== $this->customerId($json)) {
@@ -2653,10 +2725,28 @@ class UserAPI extends Controller
                 $isSelf = (int) $actor->getKey() === $userId;
                 $isSuperAdmin = $actor instanceof Employee && $actor->isSuperAdmin();
 
-                if (! $actor instanceof Employee || (! $isSelf && ! $isSuperAdmin)) {
+                // Admins run Live Attendance, so they may set another
+                // employee's in-store flag - and only that flag. Every other
+                // personal detail stays with the employee or a super admin.
+                $presenceKeys = ['emp_instore', 'emp_present'];
+                $presenceOnly = ($json->has('emp_instore') || $json->has('emp_present'))
+                    && array_diff(
+                        array_keys($json->all()),
+                        array_merge(['account_type', 'user_id'], $presenceKeys)
+                    ) === [];
+                $isAdminPresence = $actor instanceof Employee && $actor->isAdmin() && $presenceOnly;
+
+                if (! $actor instanceof Employee || (! $isSelf && ! $isSuperAdmin && ! $isAdminPresence)) {
                     return response()->json(['success' => false, 'message' => 'Employees cannot edit another employee\'s personal details.'], 403);
                 }
                 $user = Employee::findOrFail($userId);
+
+                // Super-admin safety rail: an admin never changes a super
+                // admin account, its in-store flag included.
+                if (! $isSelf && ! $isSuperAdmin) {
+                    $deniedTarget = $this->requireSuperAdminTarget($json, $user, 'change');
+                    if ($deniedTarget) return $deniedTarget;
+                }
             }
 
             [$payload, $error] = $isCustomer

@@ -69,7 +69,7 @@ class SystemAPI extends Controller
             return response()->json([
                 'success' => false,
                 'code'    => 'ALREADY_INITIALIZED',
-                'message' => 'The store already has employees. Ask a super admin to enroll you instead.',
+                'message' => 'The store already has employees. Ask an admin to enroll you instead.',
             ], 409);
         }
 
@@ -340,7 +340,7 @@ class SystemAPI extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Only your own availability exception can be changed here. '
-                        . 'A super admin preschedules and amends duty blocks.',
+                        . 'An admin preschedules and amends duty blocks.',
                 ], 403);
             }
         }
@@ -466,7 +466,7 @@ class SystemAPI extends Controller
             return response()->json(['success' => false, 'message' => 'Duty shift not found'], 404);
         }
 
-        if (! $this->isSuperAdmin($json->user('api')) && $shift->isStaffed()) {
+        if (! $this->isAdmin($json->user('api')) && $shift->isStaffed()) {
             $weekAfter = $this->weekMinutes(
                 (int) $shift->emp_id,
                 $shift->sched_time_start,
@@ -561,7 +561,7 @@ class SystemAPI extends Controller
 
     private function shiftTooFarInPast(Request $json, Carbon $start)
     {
-        if ($this->isSuperAdmin($json->user('api'))) {
+        if ($this->isAdmin($json->user('api'))) {
             return null;
         }
 
@@ -664,18 +664,17 @@ class SystemAPI extends Controller
             return 'PENDING REPLACEMENT';
         }
 
-        if ($shift->employee === null || ! $shift->employee->inStore()) {
-            return 'PENDING REPLACEMENT';
-        }
-
         if (! $shift->sched_time_start || ! $shift->sched_time_end) {
             return 'SCHEDULED';
         }
 
-        if (now()->between($shift->sched_time_start, $shift->sched_time_end)) return 'ACTIVE';
         if (now()->greaterThan($shift->sched_time_end)) return 'COMPLETED';
+        if (now()->lessThan($shift->sched_time_start)) return 'SCHEDULED';
+        if ($shift->employee === null || ! $shift->employee->inStore()) {
+            return 'PENDING REPLACEMENT';
+        }
 
-        return 'SCHEDULED';
+        return 'ACTIVE';
     }
 
     private function changeAvailability(Schedule $shift, bool $inStore): void
@@ -1078,12 +1077,13 @@ class SystemAPI extends Controller
         return null;
     }
 
-    private function denyUnlessSuperAdmin(Request $json)
+    /** Store-management actions: Admin and Super Admin accounts. */
+    private function denyUnlessStoreManager(Request $json)
     {
-        if (! $this->isSuperAdmin($json->user('api'))) {
+        if (! $this->isAdmin($json->user('api'))) {
             return response()->json([
                 'success' => false,
-                'message' => 'Only super admin employees may perform this action',
+                'message' => 'Only admin or super admin employees may perform this action',
             ], 403);
         }
 
@@ -1095,7 +1095,7 @@ class SystemAPI extends Controller
         $validator = (new DatabaseAPI())->changeAccountType($json);
         if ($validator) return $validator;
 
-        $denied = $this->denyUnlessSuperAdmin($json);
+        $denied = $this->denyUnlessStoreManager($json);
         if ($denied) return $denied;
 
         try {
@@ -1118,15 +1118,33 @@ class SystemAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Employee account not found'], 404);
             }
 
-            $previousType = strtoupper((string) $user->emp_categ);
+            // Super-admin safety rail: only a Super Admin may touch a Super
+            // Admin account or hand the rank out. An Admin may promote staff
+            // to Admin, and nothing beyond that.
             $actor = $json->user('api');
+            if (! $this->isSuperAdmin($actor)) {
+                if ($user->isSuperAdmin()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only a super admin may change a super admin account.',
+                    ], 403);
+                }
+                if ($newType === 'super admin') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only a super admin may promote an account to super admin.',
+                    ], 403);
+                }
+            }
+
+            $previousType = strtoupper((string) $user->emp_categ);
             $user->update(['emp_categ' => $newType]);
 
             $this->logEmployee(
                 (int) $user->emp_id,
                 'edit',
                 'PUT /api/accounts/type - role changed from ' . $previousType . ' to '
-                    . strtoupper($newType) . ' by super admin #' . $actor->emp_id
+                    . strtoupper($newType) . ' by ' . strtoupper((string) ($actor->emp_categ ?: 'employee')) . ' #' . $actor->emp_id
             );
 
             $fresh = $user->fresh();
@@ -1155,7 +1173,7 @@ class SystemAPI extends Controller
         $validator = (new DatabaseAPI())->deleteAccount($json);
         if ($validator) return $validator;
 
-        $denied = $this->denyUnlessSuperAdmin($json);
+        $denied = $this->denyUnlessStoreManager($json);
         if ($denied) return $denied;
 
         try {
@@ -1163,6 +1181,7 @@ class SystemAPI extends Controller
             $accountType = strtolower($json->input('account_type'));
             $hardDelete = (bool) $json->input('hard_delete', false);
             $adminId = (int) $json->user('api')->emp_id;
+            $actorRole = strtolower($json->user('api')->category());
 
             if ($accountType === 'employee' && (int) $userId === $adminId) {
                 return response()->json([
@@ -1194,7 +1213,7 @@ class SystemAPI extends Controller
                     $this->logEmployee(
                         $adminId,
                         'edit',
-                        'DELETE /api/accounts/delete - customer #' . $userId . ' purged by super admin #' . $adminId
+                        'DELETE /api/accounts/delete - customer #' . $userId . ' purged by ' . $actorRole . ' #' . $adminId
                     );
                 } else {
                     $user->update([
@@ -1204,12 +1223,15 @@ class SystemAPI extends Controller
                     $this->logCustomer(
                         (int) $userId,
                         'edit',
-                        'DELETE /api/accounts/delete - soft-deleted by super admin #' . $adminId
+                        'DELETE /api/accounts/delete - soft-deleted by ' . $actorRole . ' #' . $adminId
                     );
                 }
             } else {
                 $user = Employee::where('emp_id', $userId)->first();
                 if (! $user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
+
+                $deniedTarget = $this->requireSuperAdminTarget($json, $user, 'delete');
+                if ($deniedTarget) return $deniedTarget;
 
                 if ($hardDelete) {
                     Log::warning('Employee account permanently deleted', [
@@ -1260,7 +1282,7 @@ class SystemAPI extends Controller
         $validator = (new DatabaseAPI())->disableAccount($json);
         if ($validator) return $validator;
 
-        $denied = $this->denyUnlessSuperAdmin($json);
+        $denied = $this->denyUnlessStoreManager($json);
         if ($denied) return $denied;
 
         try {
@@ -1268,6 +1290,7 @@ class SystemAPI extends Controller
             $accountType = strtolower($json->input('account_type'));
             $reason = trim((string) $json->input('reason'));
             $adminId = (int) $json->user('api')->emp_id;
+            $actorRole = strtolower($json->user('api')->category());
 
             if ($accountType === 'customer') {
                 $user = Customer::where('cust_id', $userId)->first();
@@ -1281,7 +1304,7 @@ class SystemAPI extends Controller
                 $this->logCustomer(
                     (int) $userId,
                     'edit',
-                    'POST /api/accounts/disable - disabled by super admin #' . $adminId
+                    'POST /api/accounts/disable - disabled by ' . $actorRole . ' #' . $adminId
                         . ' at ' . now() . '. Reason: ' . $reason
                 );
 
@@ -1289,6 +1312,9 @@ class SystemAPI extends Controller
             } else {
                 $user = Employee::where('emp_id', $userId)->first();
                 if (! $user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
+
+                $deniedTarget = $this->requireSuperAdminTarget($json, $user, 'disable');
+                if ($deniedTarget) return $deniedTarget;
 
                 $user->update([
                     'emp_suspended' => now(),
@@ -1298,7 +1324,7 @@ class SystemAPI extends Controller
                 $this->logEmployee(
                     (int) $userId,
                     'edit',
-                    'POST /api/accounts/disable - disabled by super admin #' . $adminId
+                    'POST /api/accounts/disable - disabled by ' . $actorRole . ' #' . $adminId
                         . ' at ' . now() . '. Reason: ' . $reason
                 );
 
@@ -1323,6 +1349,22 @@ class SystemAPI extends Controller
         }
     }
 
+    /**
+     * Super Admin accounts own the system; they are not store staff and take
+     * no part in day-to-day operations. Every employee list an Admin or Staff
+     * account reads (staff directory, roster, appointment and notification
+     * pickers) therefore leaves them out. Only a Super Admin sees the complete
+     * list (REQ-EMP_LIST-01). Sign-in and access are untouched.
+     */
+    private function visibleEmployees(Request $json, $employees)
+    {
+        if ($this->isSuperAdmin($json->user('api'))) {
+            return $employees;
+        }
+
+        return $employees->reject(fn (Employee $employee) => $employee->isSuperAdmin());
+    }
+
     public function displayAccounts(Request $json)
     {
         $denied = $this->denyUnlessEmployee($json);
@@ -1342,9 +1384,9 @@ class SystemAPI extends Controller
                     ->values();
             }
             if (in_array($accountType, ['employee', 'all'])) {
-                $employees = Employee::whereNull('emp_deleted')
+                $employees = $this->visibleEmployees($json, Employee::whereNull('emp_deleted')
                     ->orderBy('emp_created', 'desc')
-                    ->get()
+                    ->get())
                     ->map(fn (Employee $employee) => array_merge($employee->toArray(), $this->employeeAliases($employee)))
                     ->values();
             }
@@ -1373,7 +1415,7 @@ class SystemAPI extends Controller
         $validator = (new DatabaseAPI())->recoverAccount($json);
         if ($validator) return $validator;
 
-        $denied = $this->denyUnlessSuperAdmin($json);
+        $denied = $this->denyUnlessStoreManager($json);
         if ($denied) return $denied;
 
         try {
@@ -1381,6 +1423,7 @@ class SystemAPI extends Controller
             $accountType = strtolower($json->input('account_type'));
             $reason = trim((string) $json->input('reason', ''));
             $adminId = (int) $json->user('api')->emp_id;
+            $actorRole = strtolower($json->user('api')->category());
 
             if ($accountType === 'customer') {
                 $user = Customer::where('cust_id', $userId)->first();
@@ -1394,7 +1437,7 @@ class SystemAPI extends Controller
                 $this->logCustomer(
                     (int) $userId,
                     'edit',
-                    'POST /api/accounts/recover - recovered by super admin #' . $adminId
+                    'POST /api/accounts/recover - recovered by ' . $actorRole . ' #' . $adminId
                         . ' at ' . now() . ($reason !== '' ? '. Reason: ' . $reason : '.')
                 );
 
@@ -1402,6 +1445,9 @@ class SystemAPI extends Controller
             } else {
                 $user = Employee::where('emp_id', $userId)->first();
                 if (! $user) return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
+
+                $deniedTarget = $this->requireSuperAdminTarget($json, $user, 'recover');
+                if ($deniedTarget) return $deniedTarget;
 
                 $user->update([
                     'emp_suspended' => null,
@@ -1411,7 +1457,7 @@ class SystemAPI extends Controller
                 $this->logEmployee(
                     (int) $userId,
                     'edit',
-                    'POST /api/accounts/recover - recovered by super admin #' . $adminId
+                    'POST /api/accounts/recover - recovered by ' . $actorRole . ' #' . $adminId
                         . ' at ' . now() . ($reason !== '' ? '. Reason: ' . $reason : '.')
                 );
 
@@ -1462,14 +1508,14 @@ class SystemAPI extends Controller
             }
 
             if (in_array($accountType, ['employee', 'all'])) {
-                $employees = Employee::whereNull('emp_deleted')
+                $employees = $this->visibleEmployees($json, Employee::whereNull('emp_deleted')
                     ->where(function ($builder) use ($query) {
                         $builder->where('emp_surname', 'like', "%{$query}%")
                             ->orWhere('emp_givname', 'like', "%{$query}%")
                             ->orWhere('emp_email', 'like', "%{$query}%")
                             ->orWhere('emp_phone', 'like', "%{$query}%");
                     })
-                    ->get()
+                    ->get())
                     ->map(fn (Employee $employee) => array_merge($employee->toArray(), $this->employeeAliases($employee)))
                     ->values();
             }
@@ -1515,7 +1561,7 @@ class SystemAPI extends Controller
 
             if (in_array($accountType, ['employee', 'all'])) {
                 $col = $sortBy === 'name' ? 'emp_surname' : ($sortBy === 'type' ? 'emp_categ' : 'emp_created');
-                $employees = Employee::whereNull('emp_deleted')->orderBy($col, $order)->get()
+                $employees = $this->visibleEmployees($json, Employee::whereNull('emp_deleted')->orderBy($col, $order)->get())
                     ->map(fn (Employee $employee) => array_merge($employee->toArray(), $this->employeeAliases($employee)))
                     ->values();
             }

@@ -94,12 +94,14 @@ export default function AdminAppointments() {
   const [loadError, setLoadError] = useState('')
   const [slotsUnavailable, setSlotsUnavailable] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [showPurpose, setShowPurpose] = useState(false)
 
   // Cancel-appointment flow (required reason — REQ-SC-04)
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelReason, setCancelReason] = useState('')
   const [isCancelling, setIsCancelling] = useState(false)
+  const [viewingBooking, setViewingBooking] = useState(null)
   // Sudden suspension: move the whole day's bookings at once
   const [showSuspend, setShowSuspend] = useState(false)
   const [suspendReason, setSuspendReason] = useState('')
@@ -213,13 +215,6 @@ export default function AdminAppointments() {
         location: a.appoint_desc || (a.appoint_qr ? `QR ${a.appoint_qr}` : 'Campus Merch Shop'),
         subtext: `Customer #${a.cust_id} · ${rules.minutes} min slot`,
         icon: 'desk',
-        action: 'Cancel',
-        actionKind: 'cancel',
-        onAction: () => {
-          setCancelTarget(a)
-          setCancelReason('')
-          setShowDeclineModal(true)
-        },
         raw: a,
       })
     })
@@ -300,7 +295,23 @@ export default function AdminAppointments() {
     setShowDeclineModal(true)
   }
 
+  const handleViewBooking = (appt) => setViewingBooking(appt)
+
   const isAdminRole = ['ADMIN', 'SUPER_ADMIN'].includes(currentAdminUser?.roleKey)
+  const viewingType =
+    String(viewingBooking?.appoint_type || '').toUpperCase() === 'CLAIM' ? 'Claim' : 'Visit'
+  const viewingStart = parseDateish(viewingBooking?.appoint_date)
+  const viewingDuration = SLOT_RULES[viewingType.toUpperCase()].minutes
+  const viewingEnd = viewingStart
+    ? new Date(viewingStart.getTime() + viewingDuration * 60000)
+    : null
+  const viewingCustomerName = [
+    viewingBooking?.cust_givname,
+    viewingBooking?.cust_surname,
+  ].filter(Boolean).join(' ') || viewingBooking?.customer_name || viewingBooking?.cust_name
+  const viewingStatus = viewingBooking?.appoint_closed
+    ? 'Closed'
+    : viewingBooking?.appoint_status || 'Upcoming'
 
   const openSuspend = () => {
     setSuspendReason('')
@@ -335,14 +346,6 @@ export default function AdminAppointments() {
     } finally {
       setIsSuspending(false)
     }
-  }
-
-  const handleBannerCancelClick = () => {
-    if (dayBookings.length === 0) {
-      showToast('No bookings to cancel on this date.', 'info')
-      return
-    }
-    handleOpenCancel(dayBookings[0])
   }
 
   const handleConfirmCancel = async () => {
@@ -398,7 +401,7 @@ export default function AdminAppointments() {
                 <span>{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, {staffName}!</span>
               </h1>
               <p className="text-xs text-slate-500 font-normal mt-0.5">
-                Here's your assigned shift and today's schedule at a glance.
+                Here's the store's appointments at a glance.
               </p>
             </div>
           </div>
@@ -441,82 +444,45 @@ export default function AdminAppointments() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Left Column (8 cols) */}
           <div className="lg:col-span-8 space-y-4">
-            {/* 1. Assigned Shift Card */}
-            <div className="bg-[#FFF9F5] border border-[#FFE7D6] rounded-lg p-4 relative overflow-hidden">
-              <div className="flex flex-col md:flex-row items-start justify-between gap-4">
-                {/* Shift Info */}
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-md bg-[#FFE8D6] text-[#FF6A00] flex items-center justify-center shrink-0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                    </svg>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="inline-block bg-[#FFEDE1] text-[#E65100] text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
-                      Master Calendar
-                    </span>
-                    <h2 className="text-base font-bold text-slate-900">{fmtBadgeDate(selectedDate)}</h2>
-                    <div className="space-y-0.5 text-xs text-slate-600 font-medium">
-                      <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                        <span>Campus Merch Shop · Student Help Desk</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        <span className="font-bold text-slate-800 whitespace-nowrap">
-                          {slotsUnavailable ? 'Unavailable' : `${availableSlotCount} open`}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-400">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        <span>
-                          In-store staff: {inStoreStaff == null ? '—' : inStoreStaff}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Day Summary Bullets */}
-                <div className="space-y-1 text-xs text-slate-600 border-t md:border-t-0 md:border-l border-orange-100 pt-2.5 md:pt-0 md:pl-4">
-                  <p className="font-semibold text-slate-900 mb-0.5">Day Summary</p>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    <span>{dayTotals.claims} claim booking{dayTotals.claims === 1 ? '' : 's'} (30 min, capacity 10)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    <span>{dayTotals.visits} visit booking{dayTotals.visits === 1 ? '' : 's'} (10 min, capacity 1)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                    <span>{dayTotals.cancelled} closed appointment{dayTotals.cancelled === 1 ? '' : 's'}</span>
-                  </div>
-                </div>
-
-                {/* Reload Button */}
-                <button
-                  type="button"
-                  onClick={reload}
-                  className="self-start md:self-center border border-[#FF6A00] text-[#FF6A00] bg-white hover:bg-orange-50 text-xs font-semibold h-8 px-3 rounded-md flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+            {/* 1. Selected-day summary */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                {
+                  label: 'Bookings',
+                  value: dayTotals.claims + dayTotals.visits,
+                  detail: `${dayTotals.claims} claim · ${dayTotals.visits} visit`,
+                  tone: 'bg-[var(--tint-info-bg)] text-[var(--tint-info-fg)]',
+                  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><polyline points="9 16 11 18 15 14" /></svg>,
+                },
+                {
+                  label: 'Available Slots',
+                  value: slotsUnavailable ? '—' : availableSlotCount,
+                  detail: slotsUnavailable ? 'Availability unavailable' : 'Open for booking',
+                  tone: 'bg-[var(--tint-ok-bg)] text-[var(--tint-ok-fg)]',
+                  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></svg>,
+                },
+                {
+                  label: 'Closed Appointments',
+                  value: dayTotals.cancelled,
+                  detail: 'Cancelled or closed',
+                  tone: 'bg-[var(--tint-brand-bg)] text-[var(--tint-brand-fg)]',
+                  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><line x1="10" y1="14" x2="14" y2="18" /><line x1="14" y1="14" x2="10" y2="18" /></svg>,
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="bg-white rounded-xl border border-slate-200 p-4 flex items-center gap-4 min-w-0"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  <span>Refresh</span>
-                </button>
-              </div>
+                  <span className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${stat.tone}`} aria-hidden="true">
+                    {stat.icon}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xl font-bold text-slate-900 leading-tight tabular-nums">{stat.value}</p>
+                    <p className="text-sm font-semibold text-slate-800 truncate">{stat.label}</p>
+                    <p className="text-xs text-slate-500 truncate">{stat.detail}</p>
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* 2. Today's Timeline */}
@@ -524,17 +490,8 @@ export default function AdminAppointments() {
               {/* Timeline Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shrink-0">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-5 h-5">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
-                  </div>
                   <div>
                     <h2 className="text-lg font-black text-gray-900">Appointments Timeline</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Bookings and time slots in chronological order.</p>
                   </div>
                 </div>
 
@@ -582,7 +539,6 @@ export default function AdminAppointments() {
                       const m = start.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i)
                       if (!m) return 'Other'
                       let hh = parseInt(m[1], 10)
-                      const mm = m[2]
                       const ampm = (m[3] || '').toUpperCase()
                       if (ampm === 'PM' && hh !== 12) hh += 12
                       if (ampm === 'AM' && hh === 12) hh = 0
@@ -609,60 +565,102 @@ export default function AdminAppointments() {
                       const bookingCount = Math.max(directBookings, slotOccupied)
                       const hasBookings = bookingCount > 0
                       const openSlots = hourItems.filter((i) => i.type === 'free').length
+                      const unavailableSlots = hourItems.filter((i) => i.type === 'class').length
+                      const stateLabel = openSlots > 0
+                        ? hasBookings ? 'Partially booked' : 'Available'
+                        : hasBookings ? 'Booked' : 'Closed'
+                      const stateStyle = openSlots > 0
+                        ? hasBookings
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-emerald-100 text-emerald-700'
+                        : hasBookings
+                          ? 'bg-orange-100 text-orange-800'
+                          : 'bg-slate-100 text-slate-600'
                       return (
                         <details
                           key={hourKey}
-                          className={`group rounded-lg overflow-hidden transition-all ${
-                            hasBookings
-                              ? 'border-2 border-brand-orange bg-white shadow-2xs'
-                              : 'border border-slate-200 bg-white'
-                          }`}
+                          className="group rounded-xl overflow-hidden border border-[#E5EAF5] bg-white transition-colors hover:border-[#D7DFEF]"
                         >
                           <summary
-                            className={`flex items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none transition-colors ${
-                              hasBookings
-                                ? 'bg-orange-50/70 hover:bg-orange-50'
-                                : 'bg-slate-50/70 hover:bg-slate-50'
-                            }`}
+                            className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gradient-to-r from-slate-50/80 to-[#F8FAFF] hover:from-slate-50 hover:to-[#F1F5FF] cursor-pointer select-none transition-colors"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <div className="w-20 text-left whitespace-nowrap">
-                                <span className={`text-sm font-bold ${hasBookings ? 'text-brand-orange-dark' : 'text-gray-900'}`}>
-                                  {displayHour}
-                                </span>
+                              <div className="relative w-5 self-stretch flex justify-center shrink-0">
+                                <span className={`absolute top-0.5 bottom-0.5 left-1/2 -translate-x-1/2 w-px ${hasBookings ? 'bg-orange-200' : 'bg-slate-200'}`} />
+                                <span className={`relative mt-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${hasBookings ? 'bg-[#FF8A00]' : openSlots > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                               </div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {hasBookings ? (
-                                  <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#FFE2D1] text-[#E65100] border border-[#FFD0B5]">
-                                    <span className="w-2 h-2 rounded-full bg-[#FF6A00]" />
-                                    <span>{bookingCount} {bookingCount === 1 ? 'Booking' : 'Bookings'}</span>
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1.5 text-2xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                                    <span>No bookings</span>
-                                  </span>
-                                )}
-                                {openSlots > 0 && (
-                                  <span className="text-2xs text-gray-400 font-medium">
-                                    · {openSlots} open slot{openSlots === 1 ? '' : 's'}
-                                  </span>
-                                )}
+                              <div className="min-w-0 flex-1">
+                                <span className="block text-sm font-bold text-slate-900">{displayHour}</span>
+                                <span className="block text-[11px] text-slate-500">
+                                  {hasBookings
+                                    ? `${bookingCount} appointment${bookingCount === 1 ? '' : 's'}`
+                                    : openSlots > 0 ? `${openSlots} available slot${openSlots === 1 ? '' : 's'}` : 'Unavailable for bookings'}
+                                  {openSlots > 0 && hasBookings ? ` · ${openSlots} open` : ''}
+                                </span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-2xs font-semibold text-brand-orange group-open:hidden">
-                                {hasBookings ? 'View details' : ''}
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${stateStyle}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${stateLabel === 'Available' ? 'bg-emerald-500' : stateLabel === 'Closed' ? 'bg-slate-400' : 'bg-orange-500'}`} />
+                                {stateLabel}
                               </span>
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 transition-transform duration-200 group-open:rotate-180">
                                 <polyline points="6 9 12 15 18 9" />
                               </svg>
                             </div>
                           </summary>
-                          <div className="p-3 space-y-2">
+                          <div className="p-3 space-y-2 border-t border-slate-100 bg-white">
                             {hourItems.map((item) => {
                               const isShift = item.type === 'shift'
                               const isFree = item.type === 'free'
+                              const cardClass = `flex-1 rounded-lg p-3 flex items-center justify-between gap-3 transition-colors ${
+                                isShift
+                                  ? 'bg-[#FFF5ED] border border-[#FFE2D1] hover:bg-orange-100/70 hover:border-orange-300'
+                                  : isFree
+                                  ? 'bg-[#F0FDF4] border border-[#DCFCE7]'
+                                  : 'bg-slate-50 border border-slate-200'
+                              }`
+                              const cardContents = (
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div
+                                    className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
+                                      isShift
+                                        ? 'bg-[#FFE8D6] text-[#FF6A00]'
+                                        : isFree
+                                        ? 'bg-emerald-100 text-[#10B981]'
+                                        : 'bg-white text-slate-500 border border-slate-200'
+                                    }`}
+                                  >
+                                    {item.icon === 'desk' ? (
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                        <rect x="3" y="4" width="18" height="12" rx="2" />
+                                        <line x1="7" y1="20" x2="7" y2="16" />
+                                        <line x1="17" y1="20" x2="17" y2="16" />
+                                      </svg>
+                                    ) : item.icon === 'clock' ? (
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <polyline points="12 6 12 12 16 14" />
+                                      </svg>
+                                    ) : (
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
+                                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-gray-900 truncate">{item.title}</p>
+                                    {item.location && (
+                                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                        <span>{item.location}</span>
+                                        {item.subtext && <span>• {item.subtext}</span>}
+                                      </p>
+                                    )}
+                                    {item.subtitle && <p className="text-xs text-gray-500 mt-0.5">{item.subtitle}</p>}
+                                  </div>
+                                </div>
+                              )
                               return (
                                 <div key={item.key} className="flex items-start gap-4">
                                   <div className="w-20 text-left shrink-0 pt-1">
@@ -694,72 +692,32 @@ export default function AdminAppointments() {
                                     }`}
                                   />
                                   <div
-                                    className={`flex-1 rounded-lg p-3 flex items-center justify-between gap-3 ${
-                                      isShift
-                                        ? 'bg-[#FFF5ED] border border-[#FFE2D1]'
-                                        : isFree
-                                        ? 'bg-[#F0FDF4] border border-[#DCFCE7]'
-                                        : 'bg-slate-50 border border-slate-200 hover:bg-slate-100/60 transition-colors'
-                                    }`}
+                                    className={cardClass}
                                   >
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <div
-                                        className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
-                                          isShift
-                                            ? 'bg-[#FFE8D6] text-[#FF6A00]'
-                                            : isFree
-                                            ? 'bg-emerald-100 text-[#10B981]'
-                                            : 'bg-white text-slate-500 border border-slate-200'
-                                        }`}
-                                      >
-                                        {item.icon === 'desk' ? (
-                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                            <rect x="3" y="4" width="18" height="12" rx="2" />
-                                            <line x1="7" y1="20" x2="7" y2="16" />
-                                            <line x1="17" y1="20" x2="17" y2="16" />
-                                          </svg>
-                                        ) : item.icon === 'clock' ? (
-                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                            <circle cx="12" cy="12" r="10" />
-                                            <polyline points="12 6 12 12 16 14" />
-                                          </svg>
-                                        ) : (
-                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                                            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                                          </svg>
-                                        )}
-                                      </div>
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-bold text-gray-900 truncate">{item.title}</p>
-                                        {item.location && (
-                                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                            <span>{item.location}</span>
-                                            {item.subtext && <span>• {item.subtext}</span>}
-                                          </p>
-                                        )}
-                                        {item.subtitle && <p className="text-xs text-gray-500 mt-0.5">{item.subtitle}</p>}
-                                      </div>
-                                    </div>
-                                    {item.action ? (
+                                    {isShift ? (
                                       <button
                                         type="button"
-                                        onClick={item.onAction}
-                                        className={`text-xs font-bold px-3 py-1.5 rounded-xl border active:scale-95 transition-all shadow-2xs whitespace-nowrap cursor-pointer ${
-                                          item.actionKind === 'cancel'
-                                            ? 'border-red-300 text-red-700 bg-white hover:bg-red-50'
-                                            : 'border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50'
-                                        }`}
+                                        onClick={() => handleViewBooking(item.raw)}
+                                        aria-label={`View details for ${item.title}`}
+                                        className="flex-1 flex items-center justify-between gap-3 min-w-0 text-left rounded-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange"
                                       >
-                                        {item.action}
+                                        {cardContents}
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-slate-400 shrink-0">
+                                          <polyline points="9 18 15 12 9 6" />
+                                        </svg>
                                       </button>
                                     ) : (
-                                      <span className="text-gray-300 text-lg">›</span>
+                                      cardContents
                                     )}
                                   </div>
                                 </div>
                               )
                             })}
+                            {unavailableSlots > 0 && (
+                              <p className="text-[10px] text-slate-400 text-right">
+                                {unavailableSlots} unavailable slot{unavailableSlots === 1 ? '' : 's'}
+                              </p>
+                            )}
                           </div>
                         </details>
                       )
@@ -778,8 +736,8 @@ export default function AdminAppointments() {
                 <div>
                   <h4 className="text-sm font-bold text-gray-900">Need to cancel a booking?</h4>
                   <p className="text-xs text-gray-600 mt-0.5">
-                    Canceling an appointment requires a reason and is recorded in the audit log.
-                    For a sudden suspension, “Suspend day” moves every booking of this date at once.
+                    Open a booking for its details and cancellation options. For a sudden suspension,
+                    “Suspend day” moves every booking of this date at once.
                   </p>
                 </div>
               </div>
@@ -794,14 +752,6 @@ export default function AdminAppointments() {
                   Suspend day
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleBannerCancelClick}
-                disabled={dayBookings.length === 0}
-                className="border border-brand-orange text-brand-orange bg-white hover:bg-orange-50 font-bold text-xs h-8 px-3 rounded-md whitespace-nowrap cursor-pointer self-end sm:self-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel Appointment
-              </button>
               </div>
             </div>
           </div>
@@ -931,30 +881,35 @@ export default function AdminAppointments() {
                 </button>
               </div>
             </div>
-
-            {/* 4. Reminder — opens the notifications screen */}
-            <div
-              onClick={() => navigate('/admin/notifications')}
-              className="bg-white rounded-3xl p-5 border border-gray-100/90 shadow-xs flex items-center justify-between gap-3 hover:border-gray-200 transition-colors cursor-pointer group"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-[#EBF2FF] text-[#2563EB] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-gray-900">Reminder</h4>
-                  <p className="text-xs text-gray-500 font-medium mt-0.5 leading-relaxed">
-                    Always communicate early if you're unable to take your assigned shift. It helps the team stay on track!
-                  </p>
-                </div>
-              </div>
-              <span className="text-gray-300 text-lg group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all">›</span>
-            </div>
           </div>
         </div>
+
+        <Modal
+          isOpen={showPurpose}
+          onClose={() => setShowPurpose(false)}
+          title="About the Appointments Page"
+          subtitle="Daily bookings and store-slot availability"
+          footer={
+            <Button variant="primary" onClick={() => setShowPurpose(false)} className="px-4">
+              Got it
+            </Button>
+          }
+        >
+          <div className="space-y-3 text-sm text-slate-600">
+            <p>
+              Use this page to review customer store visits and order-pickup appointments,
+              together with the slots available for the selected date.
+            </p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>Change the date to review another day, or select a day in the weekly overview.</li>
+              <li>Expand a timeline hour to see its bookings and individual slot availability.</li>
+              <li>Admins can cancel a booking with a customer-facing reason or suspend a day to reschedule its bookings.</li>
+            </ul>
+            <p className="text-xs text-slate-500">
+              The summary counts show active claim and visit bookings, open slots, and closed appointments for the selected day.
+            </p>
+          </div>
+        </Modal>
 
         {/* Suspend day - batch reschedule (POST /appoint/bulk-reschedule) */}
         {showSuspend && (
@@ -1032,6 +987,81 @@ export default function AdminAppointments() {
                 {suspendError && <p className="text-xs font-semibold text-rose-600" role="alert">{suspendError}</p>}
               </div>
             )}
+          </Modal>
+        )}
+
+        {viewingBooking && (
+          <Modal
+            isOpen
+            onClose={() => setViewingBooking(null)}
+            title={`${viewingType} Booking`}
+            subtitle={`Booking #${viewingBooking.appoint_id}`}
+            size="wide"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setViewingBooking(null)}>
+                  Close
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    handleOpenCancel(viewingBooking)
+                    setViewingBooking(null)
+                  }}
+                  className="px-3.5"
+                >
+                  Cancel Appointment
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Date and time</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {viewingStart
+                      ? `${viewingStart.toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })} · ${fmtTime(viewingStart)}${viewingEnd ? ` – ${fmtTime(viewingEnd)}` : ''}`
+                      : 'Not available'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">{viewingDuration}-minute {viewingType.toLowerCase()} slot</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Customer</p>
+                  <p className="mt-1 text-sm font-bold text-slate-900">
+                    {viewingCustomerName || `Customer #${viewingBooking.cust_id}`}
+                  </p>
+                  {viewingCustomerName && (
+                    <p className="mt-1 text-xs text-slate-500">Customer #{viewingBooking.cust_id}</p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                  <p className="mt-1 text-sm font-bold capitalize text-slate-900">{viewingStatus}</p>
+                </div>
+                {viewingBooking.appoint_qr && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Booking reference</p>
+                    <p className="mt-1 break-all text-sm font-semibold text-slate-900">
+                      {viewingBooking.appoint_qr}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {viewingBooking.appoint_desc && (
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-2xs font-semibold uppercase tracking-wide text-slate-500">Booking details</p>
+                  <p className="mt-1 text-sm text-slate-700">{viewingBooking.appoint_desc}</p>
+                </div>
+              )}
+              <p className="text-xs text-slate-500">
+                Cancelling requires a reason. The customer will be notified after the cancellation is confirmed.
+              </p>
+            </div>
           </Modal>
         )}
 

@@ -195,19 +195,23 @@ function App() {
                     <Route path="/admin/dashboard" element={<AdminDashboard />} />
                   </Route>
                   <Route path="/admin/orders" element={<AdminOrders />} />
-                  {/* Rule 41 / REQ-MANAGE_INV-01: inventory is an admin and
-                      super-admin surface. The backend already refuses staff on
-                      every /products write (role:admin); leaving the route open
-                      made the sidebar entry and its screen reachable by a
-                      'staff' employee that the spec says never sees Products. */}
-                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                  {/* REQ-EMP_HOME-01 keeps "Products" in a staff employee's
+                      sidebar (only Dashboard, Walk-in, Reviews and Sales are
+                      hidden), so staff may open the inventory READ-ONLY: the
+                      pages hide every management control for them, and the
+                      backend refuses staff on every /products write
+                      (role:admin, rule 41 / REQ-MANAGE_INV-01). */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN', 'STAFF']} />}>
                     <Route path="/admin/inventory" element={<AdminInventory />} />
-                    {/* FLOW-ADD_PROD-01 names the "/admin/add-product" page; it
-                        opens the same create form the inventory page hosts. */}
-                    <Route path="/admin/add-product" element={<AdminInventory />} />
                     {/* FLOW-MANAGE_INV-05: one product's detail page (variations,
                         prices, stock levels, metrics and its sales history). */}
                     <Route path="/admin/inventory/:prodId" element={<AdminProductDetail />} />
+                  </Route>
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                    {/* FLOW-ADD_PROD-01 names the "/admin/add-product" page; it
+                        opens the same create form the inventory page hosts.
+                        Adding products stays admin-only (REQ-ADD_PROD-01). */}
+                    <Route path="/admin/add-product" element={<AdminInventory />} />
                   </Route>
                   {/* /admin/fulfillment → redirect to the new Pickup module */}
                   <Route path="/admin/fulfillment" element={<Navigate to="/admin/pickup" replace />} />
@@ -221,13 +225,12 @@ function App() {
                     <Route path="/admin/analytics" element={<AdminAnalytics />} />
                   </Route>
                   {/* Rule 40 / FLOW-EMP_SET-06 — store-wide customization is
-                      super-admin territory, and SettingsAPI answers 403 to
-                      anyone else, so gating the route stops a form whose
-                      Save button can never succeed. */}
-                  <Route element={<RequireRole roles={['SUPER_ADMIN']} />}>
+                      store-management territory: both Admin and Super Admin
+                      accounts may edit it, and the API accepts either. */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
                     <Route path="/admin/customization" element={<AdminStoreCustomization />} />
                   </Route>
-                  {/* FLOW-EMP_SCHED-01 — super admins preschedule from
+                  {/* FLOW-EMP_SCHED-01 — admins and super admins preschedule from
                       `/admin/schedules`; the singular spelling stays as an
                       alias so existing deep links still land. The screen
                       itself keeps a staff-accessible "my availability" half
@@ -242,9 +245,11 @@ function App() {
                     <Route path="/admin/reviews" element={<AdminReviews />} />
                   </Route>
                   {/* REQ-EMP_LIST-01 / REQ-EMP_LIST-05 — the employee directory
-                      is super-admin only, and typing the URL must not be a way
-                      around the sidebar entry that staff never see. */}
-                  <Route element={<RequireRole roles={['SUPER_ADMIN']} />}>
+                      is a store-management screen: Admin and Super Admin
+                      accounts may open it. The API still keeps Super Admin
+                      accounts themselves out of an Admin's reach (only a
+                      Super Admin may manage a Super Admin). */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
                     <Route path="/admin/users" element={<AdminUsers />} />
                     {/* The staff directory link the sidebar and the enrollment
                         confirmation both point at. */}
@@ -281,20 +286,24 @@ function App() {
                     <Route path="/admin/settings/logs" element={<AdminSettings />} />
                   </Route>
 
-                  {/* POS is walked through by admins and super admins (rule 44).
-                      FLOW-EMP_HOME-05 lists "Walk-in Orders" as its own sidebar
-                      entry: it is the same register screen under the spec's URL.
-                      Without this route the link fell through the "*" rule and
-                      dropped the employee into the CUSTOMER portal. */}
-                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
+                  {/* POS / walk-in orders are run by every employee: staff were
+                      given full register access by the store owner (this
+                      overrides rule 44 / FLOW-WALKIN-01; the /pos/* API is
+                      role:staff to match). FLOW-EMP_HOME-05 lists "Walk-in
+                      Orders" as its own sidebar entry: it is the same register
+                      screen under the spec's URL. Without this route the link
+                      fell through the "*" rule and dropped the employee into
+                      the CUSTOMER portal. */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN', 'STAFF']} />}>
                     <Route path="/admin/pos" element={<AdminPos />} />
                     <Route path="/admin/walkin" element={<AdminPos />} />
                   </Route>
 
-                  {/* DOMAIN 6 / REQ-EMP_ENROLL-01: enrollment is a super
-                      admin only screen, mirroring role:super_admin on
-                      POST /auth/emp_signup. */}
-                  <Route element={<RequireRole roles={['SUPER_ADMIN']} />}>
+                  {/* DOMAIN 6 / REQ-EMP_ENROLL-01: enrollment is a
+                      store-management screen. Admin and Super Admin accounts
+                      may enroll staff; only a Super Admin may create another
+                      Super Admin (enforced again by the API). */}
+                  <Route element={<RequireRole roles={['ADMIN', 'SUPER_ADMIN']} />}>
                     <Route path="/admin/enroll" element={<AdminEnroll />} />
                   </Route>
                 </Route>
