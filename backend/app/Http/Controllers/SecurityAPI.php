@@ -83,6 +83,40 @@ class SecurityAPI extends Controller
             return true;
         }
 
+        // H2: after 5 failed sign-ins for one account in 15 minutes, further
+        // attempts for that account are refused until the window passes.
+        private const loginMaxFailures = 5;
+        private const loginLockMinutes = 15;
+
+        private function loginFailureKey(string $scope, string $identifier): string
+        {
+            return 'auth:login_fail:' . $scope . ':' . sha1(strtolower(trim($identifier)));
+        }
+
+        private function loginLockedOut(string $scope, string $identifier)
+        {
+            if ((int) Cache::get($this->loginFailureKey($scope, $identifier), 0) < self::loginMaxFailures) {
+                return null;
+            }
+
+            return response()->json([
+                'success' => false,
+                'code'    => 'LOGIN_LOCKED',
+                'message' => 'Too many failed sign-in attempts. Please wait ' . self::loginLockMinutes . ' minutes and try again.',
+            ], 429);
+        }
+
+        private function recordLoginFailure(string $scope, string $identifier): void
+        {
+            $key = $this->loginFailureKey($scope, $identifier);
+            Cache::put($key, (int) Cache::get($key, 0) + 1, now()->addMinutes(self::loginLockMinutes));
+        }
+
+        private function clearLoginFailures(string $scope, string $identifier): void
+        {
+            Cache::forget($this->loginFailureKey($scope, $identifier));
+        }
+
         public function customerLogin(Request $json)
         {
 
@@ -92,10 +126,15 @@ class SecurityAPI extends Controller
             $identifier = (string) ($json->input('email') ?: $json->input('phone'));
             $password   = (string) $json->input('password');
 
+            if ($locked = $this->loginLockedOut('cust', $identifier)) {
+                return $locked;
+            }
+
             try {
                 $customer = $this->findCustomerByIdentifier($identifier, $password);
 
                 if (! $customer) {
+                    $this->recordLoginFailure('cust', $identifier);
                     $this->stampFailedLogin($identifier);
 
                     return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
@@ -104,6 +143,8 @@ class SecurityAPI extends Controller
                 if ($customer->cust_deleted || $customer->cust_suspended || $customer->cust_disabled) {
                     return response()->json(['success' => false, 'message' => 'Account disabled'], 403);
                 }
+
+                $this->clearLoginFailures('cust', $identifier);
 
                 $pendingSignup = Schema::hasColumn('customer', 'cust_unverified')
                     ? $customer->cust_unverified !== null
@@ -215,30 +256,34 @@ class SecurityAPI extends Controller
             $email = trim((string) $json->input('email'));
             $password = (string) $json->input('password');
 
+            if ($locked = $this->loginLockedOut('emp', $email)) {
+                return $locked;
+            }
+
             try {
                 $employee = Employee::where('emp_email', $email)->first();
+                $check = $employee
+                    ? EmployeePassword::verify($password, (string) $employee->emp_password)
+                    : ['valid' => false, 'temporary' => false];
 
-                if (! $employee) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'User not found',
-                        'code' => 'EMP_NOT_FOUND',
-                    ], 401);
-                }
-
-                $check = EmployeePassword::verify($password, (string) $employee->emp_password);
-
+                // One answer for an unknown email and a wrong password, so the
+                // form cannot be used to find out which staff emails exist.
                 if (! $check['valid']) {
-                    $this->stampFailedEmployeeLogin($employee);
-                    $this->logEmployee((int) $employee->emp_id, 'auth',
-                        'POST /api/auth/emp_login - failed');
+                    $this->recordLoginFailure('emp', $email);
+                    if ($employee) {
+                        $this->stampFailedEmployeeLogin($employee);
+                        $this->logEmployee((int) $employee->emp_id, 'auth',
+                            'POST /api/auth/emp_login - failed');
+                    }
 
                     return response()->json([
                         'success' => false,
-                        'message' => 'Wrong password',
-                        'code' => 'WRONG_PASSWORD',
+                        'message' => 'Incorrect email or password.',
+                        'code' => 'INVALID_CREDENTIALS',
                     ], 401);
                 }
+
+                $this->clearLoginFailures('emp', $email);
 
                 if ($check['temporary'] && $employee->emp_created
                     && $employee->emp_created->copy()->addHours(24)->isPast()) {
@@ -346,42 +391,6 @@ class SecurityAPI extends Controller
             }
 
             return ! in_array((string) config('mail.default'), ['log', 'array', ''], true);
-        }
-
-        public function employeeLoginCheck(Request $json)
-        {
-            try {
-                return $this->performEmployeeLoginCheck($json);
-            } catch (\Throwable $e) {
-                report($e);
-
-                return $this->fail('Could not check the login details. Please try again.', 500);
-            }
-        }
-
-        private function performEmployeeLoginCheck(Request $json)
-        {
-            $email = trim((string) $json->input('email', ''));
-            $password = (string) $json->input('password', '');
-
-            $employee = $email !== ''
-                ? Employee::where('emp_email', $email)->first()
-                : null;
-
-            $verified = $employee && $password !== ''
-                ? EmployeePassword::verify($password, (string) $employee->emp_password)
-                : null;
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'email_exists' => $employee !== null,
-                    'password_correct' => (bool) ($verified['valid'] ?? false),
-                    'must_change_password' => (bool) (($verified['valid'] ?? false) && ($verified['temporary'] ?? false)),
-                    'account_disabled' => (bool) ($employee
-                        && ($employee->emp_suspended || $employee->emp_deleted || $employee->emp_disabled)),
-                ],
-            ], 200);
         }
 
         private function stampFailedEmployeeLogin(Employee $employee): void

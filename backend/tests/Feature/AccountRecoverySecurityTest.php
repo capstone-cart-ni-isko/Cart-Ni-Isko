@@ -210,4 +210,41 @@ class AccountRecoverySecurityTest extends TestCase
         $this->signup(['phone' => '0917123456'])->assertStatus(400);
         $this->signup(['phone' => '+63 917 123 4567'])->assertStatus(201);
     }
+
+    // ==========================================
+    // H2 / H3 / M6 hardening
+    // ==========================================
+
+    public function test_repeated_failed_logins_lock_the_account_temporarily()
+    {
+        $customer = $this->makeCustomer();
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->postJson('/api/auth/cust_login', [
+                'phone' => $customer->cust_phone, 'password' => 'WrongPass1!',
+            ])->assertStatus(401);
+        }
+
+        // Even the right password is refused while the lock lasts.
+        $this->postJson('/api/auth/cust_login', [
+            'phone' => $customer->cust_phone, 'password' => 'Password123!',
+        ])->assertStatus(429)->assertJsonPath('code', 'LOGIN_LOCKED');
+    }
+
+    public function test_staff_login_does_not_reveal_which_emails_exist()
+    {
+        $this->postJson('/api/auth/emp_login', [
+            'email' => 'nobody' . uniqid() . '@bicol-u.edu.ph', 'password' => 'Password123!',
+        ])->assertStatus(401)->assertJsonPath('code', 'INVALID_CREDENTIALS');
+
+        $this->postJson('/api/auth/emp_login/check', ['email' => 'x@bicol-u.edu.ph'])
+            ->assertStatus(404);
+    }
+
+    public function test_api_responses_carry_security_headers()
+    {
+        $this->getJson('/api/products/categories')
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('X-Frame-Options', 'DENY');
+    }
 }

@@ -993,6 +993,13 @@ class AppointmentsAPI extends Controller
                 return response()->json(['success' => false, 'message' => 'Appointment not found.'], 404);
             }
 
+            // M4 (security review): a customer may only ask to move their own
+            // appointment; staff may ask for any.
+            $requester = $json->user('api');
+            if ($requester instanceof Customer && (int) $appointment->cust_id !== (int) $requester->getKey()) {
+                return response()->json(['success' => false, 'message' => 'Appointment not found.'], 404);
+            }
+
             if ($appointment->appoint_status !== 'upcoming' || $appointment->appoint_closed) {
                 return response()->json([
                     'success' => false,
@@ -1000,7 +1007,7 @@ class AppointmentsAPI extends Controller
                 ], 409);
             }
 
-            $reason = trim((string) $json->input('reason', ''));
+            $reason = mb_substr(trim(strip_tags((string) $json->input('reason', ''))), 0, 300);
 
             try {
                 $this->notifyCustomer((int) $appointment->cust_id,

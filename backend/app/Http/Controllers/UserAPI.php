@@ -2042,11 +2042,27 @@ class UserAPI extends Controller
 
             $update = [$passwordField => Hash::make($json->input('new_password'))];
             if ($user instanceof Customer) {
-                if ($json->has('phone')) {
-                    $update['cust_phone'] = $json->input('phone');
+                // M3 (security review): a new phone/email must be valid and
+                // not already belong to another account (both are sign-in IDs).
+                if ($json->filled('phone')) {
+                    $phone = $this->normalizePhone((string) $json->input('phone'));
+                    if (! preg_match(DatabaseAPI::PH_MOBILE_REGEX, $phone)) {
+                        return $this->fail(DatabaseAPI::PH_MOBILE_MESSAGE, 422);
+                    }
+                    if (Customer::where('cust_phone', $phone)->where('cust_id', '!=', $user->cust_id)->exists()) {
+                        return $this->fail('That phone number is already registered.', 409);
+                    }
+                    $update['cust_phone'] = $phone;
                 }
-                if ($json->has('email')) {
-                    $update['cust_email'] = $json->input('email');
+                if ($json->filled('email')) {
+                    $email = mb_strtolower(trim((string) $json->input('email')));
+                    if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                        return $this->fail('Invalid email format.', 422);
+                    }
+                    if (Customer::where('cust_email', $email)->where('cust_id', '!=', $user->cust_id)->exists()) {
+                        return $this->fail('That email address is already registered.', 409);
+                    }
+                    $update['cust_email'] = $email;
                 }
             } else {
                 if ($json->has('phone')) {

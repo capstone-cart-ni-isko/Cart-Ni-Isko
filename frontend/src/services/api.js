@@ -143,7 +143,27 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest(path, { method = 'GET', body, headers, silent = false } = {}) {
+/*
+  PERF-01: the API sleeps when idle on free hosting, so the first request
+  after a quiet spell can time out or get a 502/503 from the proxy while
+  the server boots. A read (GET) is safe to repeat, so it is retried once
+  after a short pause instead of failing the whole screen. Writes are never
+  retried automatically.
+*/
+const RETRYABLE_STATUS = new Set([0, 408, 502, 503, 504])
+
+export async function apiRequest(path, options = {}) {
+  const method = options.method || 'GET'
+  try {
+    return await apiRequestOnce(path, options)
+  } catch (error) {
+    if (method !== 'GET' || !(error instanceof ApiError) || !RETRYABLE_STATUS.has(error.status)) throw error
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+    return apiRequestOnce(path, options)
+  }
+}
+
+async function apiRequestOnce(path, { method = 'GET', body, headers, silent = false } = {}) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   if (!silent) setLoading(1)

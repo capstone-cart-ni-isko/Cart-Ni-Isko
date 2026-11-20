@@ -1467,7 +1467,9 @@ class OrdersAPI extends Controller
 
             $orderId = (string) ($this->findDeep($event, 'orderId') ?? '');
 
-            if ($orderId === '') {
+            // L2: LalaMove order ids are digits; anything else (including the
+            // LIKE wildcards % and _) would match an arbitrary delivery.
+            if ($orderId === '' || ! preg_match('/^[0-9]{3,32}$/', $orderId)) {
                 return $this->webhookAck('Event acknowledged');
             }
 
@@ -4128,8 +4130,12 @@ class OrdersAPI extends Controller
             }
 
             if (! $order) {
-                $this->notifyAllEmployees('[PRIORITY] Failed QR scan' . $byLabel
-                    . ': code "' . $code . '" does not match any active order.');
+                // M5: only staff scans alert every employee, and the scanned
+                // text is trimmed, so a customer cannot spam the staff inbox.
+                if ($this->isEmployee($user)) {
+                    $this->notifyAllEmployees('[PRIORITY] Failed QR scan' . $byLabel
+                        . ': code "' . mb_substr(strip_tags($code), 0, 80) . '" does not match any active order.');
+                }
                 $this->logScanAttempt($user, $code, false, 'no matching order');
 
                 return response()->json([

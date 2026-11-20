@@ -24,8 +24,10 @@ services:
         value: production
       - key: APP_DEBUG
         value: false
+      # PERF-01: 8 PHP workers + opcache can exhaust a 512 MB instance and
+      # trigger restarts (each restart = another cold start). 4 is enough.
       - key: PHP_CLI_SERVER_WORKERS
-        value: 8
+        value: 4
       - key: DB_CONNECTION
         value: pgsql
       # Supabase IPv4 connection pooler (transaction mode). The direct

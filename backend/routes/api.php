@@ -20,9 +20,11 @@ Route::get('/setup/status', [SystemAPI::class, 'status']);
 Route::post('/setup/initialize', [SystemAPI::class, 'initialize'])->middleware('throttle:10,1');
 
 // Public Auth API Routes (no token required, login/signup issue the Sanctum token)
-Route::post('/auth/cust_signup', [UserAPI::class, 'customerSignup']);
-Route::post('/auth/cust_login', [SecurityAPI::class, 'customerLogin']);
-Route::post('/auth/emp_login', [SecurityAPI::class, 'employeeLogin']);
+// H2 (security review): every public auth route is rate limited per client,
+// on top of the per-account lockout inside the login handlers.
+Route::post('/auth/cust_signup', [UserAPI::class, 'customerSignup'])->middleware('throttle:10,1');
+Route::post('/auth/cust_login', [SecurityAPI::class, 'customerLogin'])->middleware('throttle:20,1');
+Route::post('/auth/emp_login', [SecurityAPI::class, 'employeeLogin'])->middleware('throttle:20,1');
 // DOMAIN 2 - realtime field checks for the staff login form. Public because
 // nobody owns a session yet, throttled because it answers "does this account
 // exist" and "is this the right password" without opening a session. The form
@@ -30,7 +32,9 @@ Route::post('/auth/emp_login', [SecurityAPI::class, 'employeeLogin']);
 // has to cover a full minute of ordinary typing (FLOW-EMP_LOGIN-02..08 ask
 // for an answer "immediately") without leaving the window where the inline
 // messages would go silent.
-Route::post('/auth/emp_login/check', [SecurityAPI::class, 'employeeLoginCheck'])->middleware('throttle:180,1');
+// Removed in the security review: /auth/emp_login/check answered "does this
+// email exist" and "is this the right password" without opening a session
+// (a password-guessing oracle) and no screen used it.
 // DOMAIN 2 - password recovery. Public because the caller owns no session
 // yet, and throttled because it answers "does this account exist" and sends
 // an OTP to the registered contact without proving anything first (the same
@@ -67,13 +71,13 @@ Route::get('/reviews/score', [ProductsAPI::class, 'scoreRating']);
 
 // Public PayMongo webhook (REQ-CHECKOUT-03): the gateway calls this without a
 // bearer token, so it stays outside `auth:api` and verifies its own signature.
-Route::post('/checkout/payment/webhook', [OrdersAPI::class, 'paymentWebhook']);
+Route::post('/checkout/payment/webhook', [OrdersAPI::class, 'paymentWebhook'])->middleware('throttle:120,1');
 
 // Public LalaMove webhook: the courier pushes order/driver status changes here
 // (ASSIGNING_DRIVER / ON_GOING / PICKED_UP / COMPLETED / CANCELED). LalaMove
 // does not sign its webhooks, so the handler only trusts the LalaMove order id
 // and never the payload's status text blindly.
-Route::post('/delivery/webhook', [OrdersAPI::class, 'lalamoveWebhook']);
+Route::post('/delivery/webhook', [OrdersAPI::class, 'lalamoveWebhook'])->middleware('throttle:120,1');
 
 // Everything else requires a Sanctum bearer token
 Route::middleware('auth:api')->group(function () {
@@ -85,11 +89,11 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/auth/recovery_code', [SecurityAPI::class, 'generateRecoveryCode'])->middleware('throttle:5,1');
 
     // DOMAIN 29 - REQ-CUST_SET-02: phone OTP before a sensitive change
-    Route::post('/otp/issue', [SecurityAPI::class, 'issue']);
-    Route::post('/otp/verify', [SecurityAPI::class, 'verify']);
+    Route::post('/otp/issue', [SecurityAPI::class, 'issue'])->middleware('throttle:10,1');
+    Route::post('/otp/verify', [SecurityAPI::class, 'verify'])->middleware('throttle:20,1');
 
     // AUTO-FILL: loads the code that was just sent, so the user need not type it.
-    Route::post('/otp/auto_fill', [SecurityAPI::class, 'autoFillOtp']);
+    Route::post('/otp/auto_fill', [SecurityAPI::class, 'autoFillOtp'])->middleware('throttle:20,1');
 
     // Cart API Routes (DOMAIN 25: customer bag lives in the `bag` table)
     Route::post('/cart/add', [UserAPI::class, 'addOrder']);
@@ -102,13 +106,13 @@ Route::middleware('auth:api')->group(function () {
     // Checkout API Routes (the webhook above is public)
     Route::post('/checkout/dispatch', [OrdersAPI::class, 'determineDispatchDetails']);
     Route::post('/checkout/payment', [OrdersAPI::class, 'integratePayment']);
-    Route::post('/checkout/payment/intent', [OrdersAPI::class, 'createPaymentIntent']);
+    Route::post('/checkout/payment/intent', [OrdersAPI::class, 'createPaymentIntent'])->middleware('throttle:10,1');
     // An existing order still awaiting payment can reopen hosted checkout
     // without placing a new order or signing in again.
     Route::post('/checkout/payment/resume', [OrdersAPI::class, 'resumePayment']);
     // The browser is back from PayMongo: the return URL carries the order id
     // and the webhook may still be in flight, so the PWA asks this to settle.
-    Route::post('/checkout/payment/status', [OrdersAPI::class, 'paymentStatus']);
+    Route::post('/checkout/payment/status', [OrdersAPI::class, 'paymentStatus'])->middleware('throttle:30,1');
 
     // Courier dispatch (staff): book / cancel the LalaMove order behind a paid
     // delivery. Harmless when LalaMove is unconfigured - it reports that and
@@ -159,7 +163,7 @@ Route::middleware('auth:api')->group(function () {
     // authenticated account and lets OrdersAPI::scanCode() decide per code,
     // exactly as it did before the role gate was added. Gating it to admins
     // locked customers and staff out of their own scan flows.
-    Route::post('/tracking/scan', [OrdersAPI::class, 'scanCode']);
+    Route::post('/tracking/scan', [OrdersAPI::class, 'scanCode'])->middleware('throttle:30,1');
 
     // Access API Routes
     Route::post('/access/flag', [SystemAPI::class, 'flagIrregularity'])->middleware('role:staff');
@@ -196,7 +200,7 @@ Route::middleware('auth:api')->group(function () {
     // FLOW-MANAGE_APP-09: the admin's reschedule-request queue, and the
     // customer/employee action that opens a request on an open booking.
     Route::get('/appoint/reschedule-requests', [AppointmentsAPI::class, 'rescheduleRequests'])->middleware('role:admin');
-    Route::post('/appoint/reschedule-request', [AppointmentsAPI::class, 'createRescheduleRequest']);
+    Route::post('/appoint/reschedule-request', [AppointmentsAPI::class, 'createRescheduleRequest'])->middleware('throttle:10,1');
 
     // Uploads API Routes (real file uploads for product / profile photos)
     Route::post('/uploads', [ProductsAPI::class, 'uploadImage']);

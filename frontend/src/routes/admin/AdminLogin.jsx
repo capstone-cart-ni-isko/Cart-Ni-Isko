@@ -124,12 +124,11 @@ export default function AdminLogin() {
     }
 
     const code = res.code || ''
-    if (code === 'EMP_NOT_FOUND' || res.error === 'User not found') {
-      setSubmitEmailMsg('User not found')
-      setSubmitPasswordMsg(null)
-    } else if (code === 'WRONG_PASSWORD' || res.error === 'Wrong password') {
+    if (code === 'INVALID_CREDENTIALS') {
+      // The server no longer says which half was wrong (no account
+      // enumeration), so the message sits under the password field.
       setSubmitEmailMsg(null)
-      setSubmitPasswordMsg('Wrong password')
+      setSubmitPasswordMsg(res.error || 'Incorrect email or password.')
     } else {
       // Account disabled, expired temporary password, throttling, an
       // unreachable server - all of them belong on the banner.

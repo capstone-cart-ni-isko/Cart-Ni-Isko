@@ -52,8 +52,21 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/api/],
+        // PERF-02: page loads go to the network first (3 s budget) and only
+        // fall back to the cached shell when offline. Serving the precached
+        // index.html first meant a refresh kept showing the old build.
+        navigateFallback: null,
+        runtimeCaching: [
+          {
+            urlPattern: ({ request, url }) => request.mode === 'navigate' && !url.pathname.startsWith('/api'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pages',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 20 },
+            },
+          },
+        ],
       },
     }),
   ],

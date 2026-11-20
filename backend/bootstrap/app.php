@@ -25,6 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(App\Http\Middleware\ApiTimeLimit::class);
         $middleware->append(App\Http\Middleware\CacheReads::class);
         $middleware->append(App\Http\Middleware\RenewApiToken::class);
+        // Security review: withhold raw exception text from 5xx bodies and add
+        // baseline security headers (nosniff, frame-deny, referrer, HSTS).
+        $middleware->append(App\Http\Middleware\SecureApiResponses::class);
 
         // Render terminates TLS at its proxy and forwards plain HTTP. Trusting
         // its X-Forwarded-* headers makes generated URLs (product images

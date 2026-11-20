@@ -30,7 +30,7 @@ RUN chmod -R 777 storage bootstrap/cache
 
 # php -S is single-threaded by default: one slow Supabase round trip stalls
 # every other request. A worker pool keeps each request inside its 1s budget.
-ENV PHP_CLI_SERVER_WORKERS=8
+ENV PHP_CLI_SERVER_WORKERS=4
 # Do NOT set PHP_INI_SCAN_DIR: any value for it (an empty string included)
 # overrides the compiled-in scan directory, so conf.d/ would be skipped and
 # neither docker-php-ext-opcache.ini nor the settings below would ever load.

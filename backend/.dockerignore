@@ -2,3 +2,27 @@
 node_modules
 vendor
 .git
+
+# Security review (L11): keep dev/maintenance scripts, dumps and tests out of
+# the production image. None are web-reachable, but they need not ship.
+tests
+cartniisko2026
+schema.sql
+*.docx
+*.pdf
+*.txt
+!public/robots.txt
+_extract_docx.py
+extract_srs.py
+check_*.php
+compliance_check.php
+final_assessment.php
+final_check.php
+gap_analysis.php
+investigate_*.php
+iso_25010_check.php
+rehash_passwords.php
+restore_products.php
+seed_super_admin.php
+verify_tmp.php
+
