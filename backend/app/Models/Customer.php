@@ -69,6 +69,9 @@ class Customer extends Authenticatable
 
     protected $hidden = [
         'cust_password',
+        'cust_backup_answer',
+        'cust_backup_code',
+        'cust_login_active',
     ];
 
     protected $casts = [

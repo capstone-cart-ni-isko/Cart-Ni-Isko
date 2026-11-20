@@ -603,7 +603,7 @@ abstract class Controller
     // AUTO-FILL: loads the code that was just sent, so the user need not type it.
     protected function currentOtpCode(object $user): ?string
     {
-        if (! config('otp.autofill', true)) {
+        if (! config('otp.demo_mode', false)) {
             return null;
         }
 

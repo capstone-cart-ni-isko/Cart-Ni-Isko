@@ -812,12 +812,17 @@ class UserAPI extends Controller
         return [];
     }
 
+    // The unit price always comes from the catalog. A client-sent
+    // `item_amount` is ignored: trusting it let a customer set any price.
     private function unitAmount($sent, Product $product, Prodvar $prodvar): float
     {
-        if ($sent !== null && $sent !== '') {
-            return round((float) $sent, 2);
-        }
+        unset($sent);
 
+        return self::catalogUnitAmount($product, $prodvar);
+    }
+
+    public static function catalogUnitAmount(Product $product, Prodvar $prodvar): float
+    {
         return round((float) $product->prod_price + (float) ($prodvar->prodvar_markup ?? 0), 2);
     }
 
@@ -1233,10 +1238,8 @@ class UserAPI extends Controller
                 ], 409);
             }
 
-            $sent = $json->input('item_amount');
-            $unit = $sent !== null && $sent !== ''
-                ? round((float) $sent, 2)
-                : round((float) $product->prod_price + (float) ($prodvar->prodvar_markup ?? 0), 2);
+            // Catalog price only - a client-sent item_amount is ignored.
+            $unit = UserAPI::catalogUnitAmount($product, $prodvar);
 
             UserAPI::upsertBagLine($custId, $prodvar, $qty, $unit);
             UserAPI::syncCartCounter($custId);
@@ -2120,7 +2123,6 @@ class UserAPI extends Controller
             'backup_email'       => 'cust_backup_email',
             'backup_ques'        => 'cust_backup_ques',
             'backup_answer'      => 'cust_backup_answer',
-            'backup_code'        => 'cust_backup_code',
         ];
 
         private const employeePrefs = [
@@ -2132,7 +2134,6 @@ class UserAPI extends Controller
             'backup_email'       => 'emp_backup_email',
             'backup_ques'        => 'emp_backup_ques',
             'backup_answer'      => 'emp_backup_answer',
-            'backup_code'        => 'emp_backup_code',
         ];
 
         private function isPreferenceKey(string $key): bool

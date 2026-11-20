@@ -1285,6 +1285,16 @@ class OrdersAPI extends Controller
                 self::rememberPayMethodForOrder((int) $order->ord_id, $method);
             }
 
+            $paidCentavos = PayMongoService::paidAmount(is_array($resource) ? $resource : []);
+            if ($paidCentavos !== null && $paidCentavos < (int) round((float) $order->ord_amount * 100)) {
+                Log::warning('PayMongo webhook: paid amount below order total', [
+                    'ord_id' => $order->ord_id,
+                    'paid'   => $paidCentavos,
+                ]);
+
+                return $this->webhookAck('Paid amount does not cover the order');
+            }
+
             $alreadyPaid = (float) $order->pay_received > 0;
 
             $payment = $this->markOrderPaid($order, [
@@ -1370,20 +1380,10 @@ class OrdersAPI extends Controller
             ], 200);
         }
 
-        $incomingStatus = strtolower((string) $json->input('status', ''));
-        // The success_url is only reached after PayMongo has collected the
-        // money, so a paid return needs no third-party round trip to prove it.
-        // The one exception is the exact wallet: when the webhook has not
-        // filled it yet, ask PayMongo once so the receipt can name GCash, Maya
-        // or Card instead of a generic list.
-        $session = [];
-        if ($incomingStatus === 'paid') {
-            if ($state['payment_method'] === null) {
-                $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference, 6);
-            }
-        } else {
-            $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
-        }
+        // The `status=paid` on the return URL is typed by the browser and
+        // proves nothing - anyone can open /checkout?status=paid&order=N.
+        // Only PayMongo's own record of the order's session can settle it.
+        $session = (new PayMongoService())->retrieveCheckoutSession((string) $order->pay_reference);
 
         $method = PayMongoService::paymentMethod($session)
             ?? $state['payment_method'];
@@ -1393,7 +1393,10 @@ class OrdersAPI extends Controller
             self::rememberPayMethodForOrder((int) $order->ord_id, $method);
         }
 
-        $settled = $incomingStatus === 'paid' || PayMongoService::sessionIsPaid($session);
+        $expectedCentavos = (int) round((float) $order->ord_amount * 100);
+        $paidCentavos = PayMongoService::paidAmount($session);
+        $settled = PayMongoService::sessionIsPaid($session)
+            && ($paidCentavos === null || $paidCentavos >= $expectedCentavos);
 
         if ($settled) {
             // The webhook may have settled it while the return was in flight.
@@ -1983,7 +1986,15 @@ class OrdersAPI extends Controller
                     $preorderLines[(int) $bag->prodvar_id] = true;
                 }
 
-                $subtotal += round((float) $bag->bag_amount * $qty, 2);
+                // Re-price from the catalog at the moment of purchase, so a
+                // stale or tampered bag amount can never reach the charge.
+                $unit = UserAPI::catalogUnitAmount($prodvar->product, $prodvar);
+                if (round((float) $bag->bag_amount, 2) !== $unit) {
+                    $bag->bag_amount = $unit;
+                    $bag->save();
+                }
+
+                $subtotal += round($unit * $qty, 2);
             }
 
             $subtotal    = round($subtotal, 2);
@@ -5508,20 +5519,19 @@ class OrdersAPI extends Controller
             ], 200);
         }
 
+        // Only PayMongo's record of this order's own delivery-fee session can
+        // settle the fee. With no session (or no gateway) there is nothing to
+        // confirm here: the no-gateway path is settled by submitDeliveryDetails.
         $settled = false;
-        if (! PayMongoService::isConfigured()) {
-            $settled = true;
-        } else {
-            $ref = $delivery->delivery_ref;
-            if ($ref) {
-                try {
-                    $session = (new PayMongoService())->retrieveCheckoutSession((string) $ref);
-                    $settled = PayMongoService::sessionIsPaid($session);
-                } catch (\Throwable $e) {
-                    Log::warning('PayMongo delivery fee check failed', ['error' => $e->getMessage()]);
-                }
-            } else {
-                $settled = true;
+        $ref = (string) ($delivery->delivery_ref ?? '');
+        if (PayMongoService::isConfigured() && $ref !== '') {
+            try {
+                $session = (new PayMongoService())->retrieveCheckoutSession($ref);
+                $paidCentavos = PayMongoService::paidAmount($session);
+                $settled = PayMongoService::sessionIsPaid($session)
+                    && ($paidCentavos === null || $paidCentavos >= (int) round($fee * 100));
+            } catch (\Throwable $e) {
+                Log::warning('PayMongo delivery fee check failed', ['error' => $e->getMessage()]);
             }
         }
 

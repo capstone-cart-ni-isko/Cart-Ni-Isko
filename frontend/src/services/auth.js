@@ -175,15 +175,29 @@ export async function signInUser(credentials) {
 }
 
 /** POST /auth/recover_credentials - start password recovery for an account. */
-export async function recoverCredentials(identifier, accountType = 'customer') {
+export async function recoverCredentials(identifier, accountType = 'customer', recoveryCode = '') {
   try {
     const data = await apiPost('/auth/recover_credentials', {
       identifier,
       account_type: accountType,
+      recovery_code: recoveryCode,
     })
     return { data, error: null }
   } catch (err) {
     return { data: null, error: err.message || 'Could not start password recovery.' }
+  }
+}
+
+/**
+ * POST /auth/recovery_code - mint a one-time recovery code for the signed-in
+ * account. The plain code is returned once; only its hash is stored.
+ */
+export async function generateRecoveryCode(currentPassword) {
+  try {
+    const data = await apiPost('/auth/recovery_code', { current_password: currentPassword })
+    return { code: data?.data?.recovery_code || null, error: null }
+  } catch (err) {
+    return { code: null, error: err.message || 'Could not generate a recovery code.' }
   }
 }
 

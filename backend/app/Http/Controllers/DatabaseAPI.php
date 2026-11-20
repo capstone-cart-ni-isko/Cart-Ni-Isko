@@ -1027,9 +1027,11 @@ class DatabaseAPI extends Controller
     public function recoverCredentials(Request $json)
     {
         return $this->validateFields($json, [
-            'identifier'   => 'required',
-            'account_type' => 'required|in:customer,employee',
+            'identifier'    => 'required|string|max:255',
+            'account_type'  => 'required|in:customer,employee',
+            'recovery_code' => 'required|string|max:32',
         ], [
+            'recovery_code.required' => 'Enter the recovery code you saved from Account Settings.',
             'identifier.required'   => 'Identifier (phone or email) is required.',
             'account_type.required' => 'Account type is required.',
             'account_type.in'       => 'Account type must be customer or employee.',

@@ -58,6 +58,12 @@ services:
         value: https://cartniisko.com
       - key: APP_URL
         value: https://cart-ni-isko-api.onrender.com
+      # No SMS gateway: customer codes go to the in-app inbox. Demo mode lets
+      # the verification screens read the code back, which signup needs to
+      # work at all. It is NOT phone verification; password recovery never
+      # uses it (recovery codes instead). Set false only with a real gateway.
+      - key: OTP_DEMO_MODE
+        value: "true"
       - key: CACHE_STORE
         value: file
       - key: SESSION_DRIVER

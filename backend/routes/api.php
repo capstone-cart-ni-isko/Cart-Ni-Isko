@@ -81,6 +81,8 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/auth/emp_signup', [UserAPI::class, 'employeeSignup'])->middleware('role:super_admin');
     Route::post('/auth/backup_credentials', [UserAPI::class, 'backupCredentials']);
     Route::put('/auth/update_credentials', [UserAPI::class, 'updateCredentials']);
+    // One-time recovery code for the signed-out "Forgot password" flow.
+    Route::post('/auth/recovery_code', [SecurityAPI::class, 'generateRecoveryCode'])->middleware('throttle:5,1');
 
     // DOMAIN 29 - REQ-CUST_SET-02: phone OTP before a sensitive change
     Route::post('/otp/issue', [SecurityAPI::class, 'issue']);

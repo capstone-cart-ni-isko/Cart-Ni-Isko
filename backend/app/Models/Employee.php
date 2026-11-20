@@ -53,6 +53,7 @@ class Employee extends Authenticatable
     protected $hidden = [
         'emp_password',
         'emp_backup_answer',
+        'emp_backup_code',
         'emp_login_active',
     ];
 

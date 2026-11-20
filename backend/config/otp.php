@@ -2,7 +2,17 @@
 
 return [
 
-    'autofill' => filter_var(env('OTP_AUTOFILL', true), FILTER_VALIDATE_BOOL),
+    /*
+        Demo mode. There is no SMS gateway, so customer codes are delivered
+        to the in-app notification inbox. With demo mode ON the verification
+        screens read the code back and pre-fill it (convenient for a demo,
+        but it proves nothing about owning the phone number). With it OFF the
+        code is never returned by the API. Password-recovery codes are never
+        returned either way - recovery uses the account's recovery code.
+    */
+    'demo_mode' => filter_var(env('OTP_DEMO_MODE', env('OTP_AUTOFILL', false)), FILTER_VALIDATE_BOOL),
+
+    'autofill' => filter_var(env('OTP_DEMO_MODE', env('OTP_AUTOFILL', false)), FILTER_VALIDATE_BOOL),
 
     /*
         Two-factor sign-in for employees: after the password, a 6-digit code

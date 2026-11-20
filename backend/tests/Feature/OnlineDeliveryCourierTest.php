@@ -939,4 +939,68 @@ class OnlineDeliveryCourierTest extends TestCase
         $this->assertSame(0.0, (float) $order->fresh()->pay_received);
         $this->assertFalse(Delivery::where('ord_id', $order->ord_id)->firstOrFail()->isBooked());
     }
+
+    // ==========================================
+    // SECURITY REVIEW 2026-11-20
+    // ==========================================
+
+    public function test_a_return_url_claiming_paid_does_not_settle_an_unpaid_order()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct();
+        $this->fakePayMongo();
+        $this->fakeLalamove();
+
+        [$order] = $this->checkoutDelivery($customer, $product);
+
+        // The faked PayMongo session is still `active` with no payments.
+        $this->json('POST', '/api/checkout/payment/status', [
+            'ord_id' => $order->ord_id,
+            'status' => 'paid',
+        ], $this->headers($customer))
+            ->assertStatus(200)
+            ->assertJsonPath('data.paid', false);
+
+        $this->assertSame(0.0, (float) $order->fresh()->pay_received);
+    }
+
+    public function test_the_cart_ignores_a_client_sent_price()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct(['prod_price' => 250.00]);
+
+        $this->json('POST', '/api/cart/add', [
+            'cust_id'     => $customer->cust_id,
+            'prod_id'     => $product->prod_id,
+            'item_qty'    => 1,
+            'item_amount' => 1.00,
+        ], $this->headers($customer))->assertStatus(201);
+
+        $bag = \App\Models\Bag::where('cust_id', $customer->cust_id)->firstOrFail();
+        $this->assertEquals(250.00, (float) $bag->bag_amount);
+    }
+
+    public function test_checkout_reprices_a_tampered_bag_line_from_the_catalog()
+    {
+        $customer = $this->makeCustomer();
+        $product  = $this->makeProduct(['prod_price' => 250.00]);
+        $this->fakePayMongo();
+        $this->fakeLalamove();
+
+        $this->fillBag($customer, $product, 2);
+        \App\Models\Bag::where('cust_id', $customer->cust_id)->update(['bag_amount' => 1.00]);
+        $this->grantCheckoutOtp($customer);
+
+        $this->json('POST', '/api/checkout/payment/intent', [
+            'gateway'         => 'paymongo',
+            'dispatch_type'   => 'delivery',
+            'speed'           => 'standard',
+            'deliver_address' => 'Bagumbayan, Legazpi City, Albay',
+            'deliver_lat'     => '13.1391',
+            'deliver_lng'     => '123.7438',
+        ], $this->headers($customer))->assertStatus(201);
+
+        $order = Order::where('cust_id', $customer->cust_id)->firstOrFail();
+        $this->assertGreaterThanOrEqual(500.00, (float) $order->ord_amount);
+    }
 }

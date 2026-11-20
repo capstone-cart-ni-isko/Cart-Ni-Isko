@@ -1,28 +1,30 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../hooks/useToast.js'
-import OtpInput from '../components/ui/OtpInput.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import { recoverCredentials, resetCredentials } from '../services/auth.js'
-import { redeemOtpChallenge, startOtpChallenge, readChallengeInbox } from '../services/otp.js'
 import { passwordProblem, meetsPasswordStandard, PASSWORD_HINT } from '../utils/passwordRules.js'
 
+/*
+  Password recovery. There is no SMS gateway, and a code sent to the in-app
+  inbox cannot reach someone who is signed out, so ownership is proved with
+  the one-time recovery code the account holder saved from Account Settings.
+  Step 0: identifier + recovery code. Step 2: new password.
+*/
 function ForgotPassword() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { showToast } = useToast()
 
-  const [step, setStep] = useState(0) // 0: Identifier, 1: OTP, 2: Reset
+  const [step, setStep] = useState(0) // 0: Identifier + recovery code, 2: Reset
   const [identifier, setIdentifier] = useState('')
+  const [recoveryCode, setRecoveryCode] = useState('')
+  const [recoveryError, setRecoveryError] = useState('')
   const [challenge, setChallenge] = useState('')
-  const [maskedContact, setMaskedContact] = useState('')
-  const [otp, setOtp] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
-  const [timer, setTimer] = useState(59)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [otpError, setOtpError] = useState('')
   const [userType, setUserType] = useState(() => {
     const fromQuery = searchParams.get('type')
     if (fromQuery === 'employee' || fromQuery === 'admin') return 'employee'
@@ -49,69 +51,31 @@ function ForgotPassword() {
     }
   }, [userType])
 
-  useEffect(() => {
-    if (step !== 1 || timer <= 0) return
-    const interval = setInterval(() => {
-      setTimer((t) => t - 1)
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [step, timer])
-
-  const loadInboxCode = useCallback(async (challengeToken) => {
-    if (!challengeToken) return
-    const { data } = await readChallengeInbox(challengeToken, 'recovery')
-    if (data?.code) {
-      setOtp((cur) => (cur === '' ? data.code : cur))
-    }
-  }, [])
+  const recoveryCodeValid = recoveryCode.replace(/[^A-Za-z0-9]/g, '').length === 12
 
   const handleIdentifierSubmit = async (e) => {
     e.preventDefault()
     const identifierVal = identifier.trim()
     if (userType === 'customer') {
-      if (identifierVal.length < 10) return
+      if (identifierVal.length < 5) return
     } else {
       if (!identifierVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifierVal)) return
     }
+    if (!recoveryCodeValid) return
 
     setIsSubmitting(true)
-    const { data, error } = await recoverCredentials(identifierVal, userType)
+    setRecoveryError('')
+    const { data, error } = await recoverCredentials(identifierVal, userType, recoveryCode.trim())
     setIsSubmitting(false)
 
     if (error || !data?.data?.challenge) {
-      showToast(error || 'Could not verify account. Please try again.', 'error')
+      setRecoveryError(error || 'The account details or recovery code are incorrect.')
       return
     }
 
-    const payload = data.data
-    setChallenge(payload.challenge)
-    setMaskedContact(payload.contact || identifierVal)
-
-    // The code is never echoed by the API - it is delivered through the
-    // account's own inbox and read back with the signed challenge, so the
-    // OTP input pre-fills from there.
-    loadInboxCode(payload.challenge)
-
-    setStep(1)
-    setTimer(59)
-    showToast(data.message || 'Verification code sent!')
-    localStorage.setItem('isko_forgot_type', userType)
-  }
-
-  const handleOtpSubmit = async (e) => {
-    e.preventDefault()
-    if (otp.length < 6 || isSubmitting) return
-    setIsSubmitting(true)
-    setOtpError('')
-
-    const { error } = await redeemOtpChallenge(challenge, 'recovery', otp)
-    setIsSubmitting(false)
-    if (error) {
-      setOtpError(error || 'That code is not correct.')
-      return
-    }
+    setChallenge(data.data.challenge)
     setStep(2)
-    showToast('Code verified. Set your new password.')
+    showToast(data.message || 'Recovery code accepted. Set your new password.')
   }
 
   const handleResetSubmit = async (e) => {
@@ -126,18 +90,10 @@ function ForgotPassword() {
     })
     setIsSubmitting(false)
     if (error) {
-      // Machine codes keep the flow moving instead of dead-ending: a stale
-      // verification goes back to the OTP step, an expired challenge back to
-      // the start.
-      if (code === 'OTP_REQUIRED') {
-        showToast('That code has expired. Please verify it once more.', 'error')
-        setStep(1)
-        setOtp('')
-        setTimer(59)
-        return
-      }
-      if (code === 'CHALLENGE_EXPIRED') {
-        showToast('The recovery session expired. Please start again.', 'error')
+      if (code === 'OTP_REQUIRED' || code === 'CHALLENGE_EXPIRED') {
+        // The recovery code is single-use and already spent, so the
+        // account holder has to contact the store if the session lapsed.
+        showToast('The recovery session expired. Please contact the store to reset your password.', 'error')
         setStep(0)
         setChallenge('')
         return
@@ -145,7 +101,7 @@ function ForgotPassword() {
       showToast(error, 'error')
       return
     }
-    showToast('Password reset successfully. Please sign in.')
+    showToast('Password reset. Sign in, then generate a new recovery code in Account Settings.')
     if (userType === 'employee') {
       navigate('/admin/login')
     } else {
@@ -153,28 +109,9 @@ function ForgotPassword() {
     }
   }
 
-  const handleResend = async () => {
-    if (!challenge) {
-      handleIdentifierSubmit({ preventDefault: () => {} })
-      return
-    }
-    setIsSubmitting(true)
-    const { error } = await startOtpChallenge(challenge, 'recovery')
-    setIsSubmitting(false)
-    if (error) {
-      showToast(error, 'error')
-      return
-    }
-    setTimer(59)
-    setOtp('')
-    setOtpError('')
-    showToast('A new verification code has been sent!')
-    loadInboxCode(challenge)
-  }
-
   const prevStep = () => {
     if (step > 0) {
-      setStep((s) => s - 1)
+      setStep(0)
     } else {
       if (userType === 'employee') {
         navigate('/admin/login')
@@ -184,11 +121,31 @@ function ForgotPassword() {
     }
   }
 
-  const formatTime = (secs) => {
-    const m = Math.floor(secs / 60).toString().padStart(2, '0')
-    const s = (secs % 60).toString().padStart(2, '0')
-    return `${m}:${s}`
-  }
+  const recoveryCodeField = (id) => (
+    <div>
+      <label htmlFor={id} className="field-label">
+        Recovery Code
+      </label>
+      <input
+        id={id}
+        type="text"
+        autoComplete="off"
+        autoCapitalize="characters"
+        spellCheck={false}
+        placeholder="XXXX-XXXX-XXXX"
+        value={recoveryCode}
+        onChange={(e) => {
+          setRecoveryCode(e.target.value.toUpperCase())
+          if (recoveryError) setRecoveryError('')
+        }}
+        className="field-input field-input--lg rounded-xl font-mono tracking-widest"
+      />
+      <p className="field-hint mt-1.5">
+        The 12-character code you saved from Account Settings. No code? Contact the store to reset your password.
+      </p>
+      {recoveryError && <p className="field-error mt-1">{recoveryError}</p>}
+    </div>
+  )
 
   const isCustomer = userType === 'customer'
 
@@ -213,17 +170,10 @@ function ForgotPassword() {
           <div className="text-center space-y-2">
             <h1 className="page-title text-xl sm:text-2xl font-bold text-gray-900 dark:text-[var(--ink)]">
               {step === 0 && 'Reset Staff Credentials'}
-              {step === 1 && 'Verify Identity'}
               {step === 2 && 'Set New Password'}
             </h1>
             <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium">
-              {step === 0 && 'Enter your university email to receive a recovery verification code.'}
-              {step === 1 && (
-                <>
-                  Enter the 6-digit verification code sent to{' '}
-                  <span className="font-semibold text-gray-700 dark:text-gray-200">{maskedContact || identifier}</span>
-                </>
-              )}
+              {step === 0 && 'Enter your university email and the recovery code you saved.'}
               {step === 2 && `Create a new password. ${PASSWORD_HINT}`}
             </p>
           </div>
@@ -263,11 +213,13 @@ function ForgotPassword() {
                 </p>
               </div>
 
+              {recoveryCodeField('admin-recovery-code')}
+
               <button
                 type="submit"
-                disabled={!identifier.trim() || isSubmitting}
+                disabled={!identifier.trim() || !recoveryCodeValid || isSubmitting}
                 className={`btn btn--lg btn--block rounded-xl ${
-                  identifier.trim() && !isSubmitting
+                  identifier.trim() && recoveryCodeValid && !isSubmitting
                     ? 'btn--primary text-white cursor-pointer btn-press'
                     : 'btn--secondary cursor-not-allowed opacity-70'
                 }`}
@@ -278,67 +230,9 @@ function ForgotPassword() {
                     Checking account…
                   </span>
                 ) : (
-                  <span>Send Recovery Code</span>
+                  <span>Verify Recovery Code</span>
                 )}
               </button>
-            </form>
-          )}
-
-          {/* Step 1: 6-Digit OTP */}
-          {step === 1 && (
-            <form onSubmit={handleOtpSubmit} className="space-y-5" noValidate>
-              <div className="flex flex-col items-center">
-                <OtpInput
-                  value={otp}
-                  onChange={(v) => {
-                    setOtp(v)
-                    if (otpError) setOtpError('')
-                  }}
-                  length={6}
-                />
-              </div>
-
-              {otpError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium rounded-xl flex items-center gap-2">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  <span>{otpError}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={otp.length < 6 || isSubmitting}
-                className={`btn btn--lg btn--block rounded-xl ${
-                  otp.length === 6 && !isSubmitting
-                    ? 'btn--primary text-white cursor-pointer btn-press'
-                    : 'btn--secondary cursor-not-allowed opacity-70'
-                }`}
-              >
-                {isSubmitting ? 'Verifying…' : 'Verify Code'}
-              </button>
-
-              <div className="text-center pt-2">
-                {timer > 0 ? (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                    Resend code in <span className="text-brand-orange font-semibold">{formatTime(timer)}</span>
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-500 font-medium">
-                    Didn't receive code?{' '}
-                    <button
-                      type="button"
-                      onClick={handleResend}
-                      className="text-brand-orange font-semibold hover:underline"
-                    >
-                      Resend
-                    </button>
-                  </p>
-                )}
-              </div>
             </form>
           )}
 
@@ -433,17 +327,10 @@ function ForgotPassword() {
         <div className="text-center space-y-2">
           <h1 className="page-title text-xl sm:text-2xl font-bold text-gray-900 dark:text-[var(--ink)]">
             {step === 0 && 'Forgot Password'}
-            {step === 1 && 'Enter Verification Code'}
             {step === 2 && 'Set New Password'}
           </h1>
           <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium leading-relaxed">
-            {step === 0 && 'Enter your registered phone number or email to receive a recovery code.'}
-            {step === 1 && (
-              <>
-                Enter the 6-digit code sent to{' '}
-                <span className="font-semibold text-gray-700 dark:text-gray-200">{maskedContact || identifier}</span>
-              </>
-            )}
+            {step === 0 && 'Enter your registered phone number or email and the recovery code you saved.'}
             {step === 2 && `Create a secure password. ${PASSWORD_HINT}`}
           </p>
         </div>
@@ -471,11 +358,13 @@ function ForgotPassword() {
               </p>
             </div>
 
+            {recoveryCodeField('customer-recovery-code')}
+
             <button
               type="submit"
-              disabled={identifier.trim().length < 5 || isSubmitting}
+              disabled={identifier.trim().length < 5 || !recoveryCodeValid || isSubmitting}
               className={`btn btn--lg btn--block rounded-xl ${
-                identifier.trim().length >= 5 && !isSubmitting
+                identifier.trim().length >= 5 && recoveryCodeValid && !isSubmitting
                   ? 'btn--primary text-white cursor-pointer btn-press'
                   : 'btn--secondary cursor-not-allowed opacity-70'
               }`}
@@ -489,64 +378,6 @@ function ForgotPassword() {
                 <span>Continue</span>
               )}
             </button>
-          </form>
-        )}
-
-        {/* Step 1: 6-Digit OTP */}
-        {step === 1 && (
-          <form onSubmit={handleOtpSubmit} className="space-y-5" noValidate>
-            <div className="flex flex-col items-center">
-              <OtpInput
-                value={otp}
-                onChange={(v) => {
-                  setOtp(v)
-                  if (otpError) setOtpError('')
-                }}
-                length={6}
-              />
-            </div>
-
-            {otpError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium rounded-xl flex items-center gap-2">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 shrink-0">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-                <span>{otpError}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={otp.length < 6 || isSubmitting}
-              className={`btn btn--lg btn--block rounded-xl ${
-                otp.length === 6 && !isSubmitting
-                  ? 'btn--primary text-white cursor-pointer btn-press'
-                  : 'btn--secondary cursor-not-allowed opacity-70'
-              }`}
-            >
-              {isSubmitting ? 'Verifying…' : 'Verify Code'}
-            </button>
-
-            <div className="text-center pt-2">
-              {timer > 0 ? (
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Resend code in <span className="text-brand-orange font-semibold">{formatTime(timer)}</span>
-                </p>
-              ) : (
-                <p className="text-xs text-gray-500 font-medium">
-                  Didn't receive code?{' '}
-                  <button
-                    type="button"
-                    onClick={handleResend}
-                    className="text-brand-orange font-semibold hover:underline"
-                  >
-                    Resend
-                  </button>
-                </p>
-              )}
-            </div>
           </form>
         )}
 

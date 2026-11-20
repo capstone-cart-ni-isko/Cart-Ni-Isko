@@ -57,9 +57,30 @@ class SecurityAPI extends Controller
                 $passMatches = false;
             }
 
-            return ($passMatches || (string) $customer->cust_password === $password)
+            return $this->customerPasswordOk($customer, $password, $passMatches)
                 ? $customer
                 : null;
+        }
+
+        // A stored hash is only ever checked with Hash::check - comparing the
+        // submitted text to it would let a leaked hash work as the password.
+        // A legacy plain-text row (written before hashing) still matches once
+        // and is re-hashed on the spot.
+        private function customerPasswordOk(Customer $customer, string $password, bool $hashMatched): bool
+        {
+            if ($hashMatched) {
+                return true;
+            }
+
+            $stored = (string) $customer->cust_password;
+            if ($stored === '' || EmployeePassword::isHashed($stored) || ! hash_equals($stored, $password)) {
+                return false;
+            }
+
+            $customer->cust_password = Hash::make($password);
+            $customer->save();
+
+            return true;
         }
 
         public function customerLogin(Request $json)
@@ -139,7 +160,7 @@ class SecurityAPI extends Controller
                     $matches = false;
                 }
 
-                return ($matches || (string) $customer->cust_password === $password)
+                return $this->customerPasswordOk($customer, $password, $matches)
                     ? $customer
                     : null;
             }
@@ -431,6 +452,7 @@ class SecurityAPI extends Controller
 
             $accountType = (string) $json->input('account_type');
             $rawIdentifier = trim((string) $json->input('identifier'));
+            $recoveryCode = $this->normalizeRecoveryCode((string) $json->input('recovery_code'));
             $user = null;
 
             if ($accountType === 'employee') {
@@ -454,52 +476,124 @@ class SecurityAPI extends Controller
                 }
             }
 
-            if (! $user) {
+            // There is no SMS gateway: a code sent to the in-app inbox cannot
+            // reach someone who is signed out, and handing it back here would
+            // let anyone reset any account. Recovery therefore proves
+            // ownership with the one-time recovery code the account holder
+            // generated in Account Settings (stored hashed, like a password).
+            $lockKey = 'auth:recovery_fail:' . sha1($accountType . '|' . strtolower($rawIdentifier));
+            if ((int) Cache::get($lockKey, 0) >= 5) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No active account found with the provided details.',
-                ], 404);
-            }
-
-            [$code, $error] = $this->issueOtpCode($user, 'recovery');
-            if ($code === null) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $error ?: 'Please wait before requesting another code.',
+                    'message' => 'Too many attempts. Please wait 15 minutes and try again.',
                 ], 429);
             }
 
+            $column = $user instanceof Employee ? 'emp_backup_code' : 'cust_backup_code';
+            $stored = $user ? (string) ($user->{$column} ?? '') : '';
+            $valid = $user
+                && $recoveryCode !== ''
+                && str_starts_with($stored, '$2y$')
+                && Hash::check($recoveryCode, $stored);
+
+            // One uniform answer for an unknown account, a missing code and a
+            // wrong code, so the endpoint does not reveal which accounts exist.
+            if (! $valid) {
+                Cache::put($lockKey, (int) Cache::get($lockKey, 0) + 1, now()->addMinutes(15));
+
+                return response()->json([
+                    'success' => false,
+                    'code'    => 'RECOVERY_MISMATCH',
+                    'message' => 'The account details or recovery code are incorrect. If you never saved a recovery code, contact the store to reset your password.',
+                ], 422);
+            }
+
+            Cache::forget($lockKey);
+
+            // The recovery code is single-use: it is spent now, and the
+            // account holder generates a new one after signing back in.
+            $user->{$column} = null;
+            $user->save();
+
             $isEmployee = $user instanceof Employee;
+            Cache::put($this->otpVerifiedKey($this->otpSubjectId($user), 'recovery', $this->otpScope($user)), true,
+                now()->addMinutes(self::otpVerifiedTtlMinutes));
             $challenge = ApiToken::challenge($user, 'recovery');
-            $maskedContact = $isEmployee
-                ? $this->maskEmail((string) $user->emp_email)
-                : $this->maskPhone((string) $user->cust_phone);
 
             if ($isEmployee) {
                 $this->logEmployee((int) $user->emp_id, 'authentication',
-                    'POST /api/auth/recover_credentials - employee recovery challenge issued');
+                    'POST /api/auth/recover_credentials - recovery code accepted');
             } else {
                 $this->logCustomer((int) $user->cust_id, 'authentication',
-                    'POST /api/auth/recover_credentials - customer recovery challenge issued');
+                    'POST /api/auth/recover_credentials - recovery code accepted');
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Verification code sent to ' . $maskedContact . '.',
+                'message' => 'Recovery code accepted. Set your new password.',
                 'data' => [
                     'challenge'    => $challenge,
                     'purpose'      => 'recovery',
                     'account_type' => $accountType,
-                    // The code itself is never echoed here - exactly like the
-                    // signup and stale-login challenges, it is delivered only
-                    // through the account's own inbox (or university email for
-                    // employees) and read back with the signed challenge.
-                    'channel'      => $isEmployee ? 'email' : 'phone',
-                    'contact'      => $maskedContact,
-                    'delivery'     => $isEmployee ? 'email' : 'in_app_notification',
-                    'expires_in'   => self::otpTtlMinutes * 60,
+                    'verified'     => true,
+                    'expires_in'   => self::otpVerifiedTtlMinutes * 60,
                 ],
             ], 200);
+        }
+
+        private function normalizeRecoveryCode(string $code): string
+        {
+            return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $code) ?? '');
+        }
+
+        // Account Settings: generate a fresh one-time recovery code. The
+        // current password is required so a stolen session cannot mint a
+        // code and keep the account. The plain code is shown exactly once.
+        public function generateRecoveryCode(Request $json)
+        {
+            try {
+                $user = $json->user('api');
+                if (! $user instanceof Customer && ! $user instanceof Employee) {
+                    return $this->fail('Only customer and employee accounts have recovery codes.', 403);
+                }
+
+                $password = (string) $json->input('current_password');
+                $valid = $user instanceof Employee
+                    ? (bool) (EmployeePassword::verify($password, (string) $user->emp_password)['valid'] ?? false)
+                    : ($password !== '' && Hash::check($password, (string) $user->cust_password));
+
+                if (! $valid) {
+                    return $this->fail('Current password is incorrect.', 422);
+                }
+
+                $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                $plain = '';
+                for ($i = 0; $i < 12; $i++) {
+                    $plain .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+                }
+
+                $column = $user instanceof Employee ? 'emp_backup_code' : 'cust_backup_code';
+                $user->{$column} = Hash::make($plain);
+                $user->save();
+
+                if ($user instanceof Employee) {
+                    $this->logEmployee((int) $user->emp_id, 'edit', 'POST /api/auth/recovery_code - recovery code generated');
+                } else {
+                    $this->logCustomer((int) $user->cust_id, 'edit', 'POST /api/auth/recovery_code - recovery code generated');
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Save this recovery code somewhere safe. It is shown only once and works one time.',
+                    'data'    => [
+                        'recovery_code' => implode('-', str_split($plain, 4)),
+                    ],
+                ], 200);
+            } catch (\Throwable $e) {
+                report($e);
+
+                return $this->fail('Could not generate a recovery code. Please try again.', 500);
+            }
         }
 
         public function resetCredentials(Request $json)
@@ -898,76 +992,58 @@ class SecurityAPI extends Controller
 
         $user = $challenge['user'];
         $isEmployee = $user instanceof Employee;
+        $purpose = (string) $json->input('purpose');
 
-        if ($isEmployee) {
-            $notifications = EmpNotif::where('emp_id', (int) $user->emp_id)
-                ->where('empnotif_created', '>=', now()->subMinutes(15))
-                ->orderByDesc('empnotif_created')
-                ->get();
+        // This route is reachable without a session: whoever holds a
+        // challenge can call it. It therefore never lists the account's
+        // notifications, never marks them read, and hands a code back only
+        // in demo mode - never for password recovery (anyone who knows a
+        // phone number could reset the account) and never for the staff
+        // second factor, which is only ever read from the employee's email.
+        $reveal = config('otp.demo_mode', false)
+            && $purpose !== 'recovery'
+            && ! ($isEmployee && $purpose === 'login');
 
-            foreach ($notifications as $notification) {
-                if (! $notification->empnotif_read) {
-                    $notification->update(['empnotif_read' => now()]);
+        $code = null;
+        if ($reveal) {
+            $rows = $isEmployee
+                ? EmpNotif::where('emp_id', (int) $user->emp_id)
+                    ->where('empnotif_created', '>=', now()->subMinutes(self::otpTtlMinutes))
+                    ->orderByDesc('empnotif_created')
+                    ->pluck('empnotif_msg')
+                : CustNotif::where('cust_id', (int) $user->cust_id)
+                    ->where('custnotif_created', '>=', now()->subMinutes(self::otpTtlMinutes))
+                    ->orderByDesc('custnotif_created')
+                    ->pluck('custnotif_msg');
+
+            foreach ($rows as $message) {
+                if (preg_match('/\bYour verification code is (\d{6})\b/', (string) $message, $m) === 1) {
+                    $code = $m[1];
+                    break;
                 }
             }
+        }
 
+        if ($isEmployee) {
             $this->logEmployee((int) $user->emp_id, 'view', 'POST /api/otp/challenge/inbox');
-
-            // The staff sign-in code is the second factor: it is only ever
-            // read from the employee's email, never handed back here.
-            $code = (string) $json->input('purpose') === 'login'
-                ? null
-                : $notifications
-                    ->map(static fn ($row) => preg_match('/\b(\d{6})\b/', (string) $row->empnotif_msg, $m) ? $m[1] : null)
-                    ->filter()
-                    ->first();
-            if ((string) $json->input('purpose') === 'login') {
-                $notifications = collect();
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Notification inbox retrieved successfully.',
-                'data'    => [
-                    'purpose'       => (string) $json->input('purpose'),
-                    'channel'       => 'email',
-                    'contact'       => $this->maskEmail((string) $user->emp_email),
-                    'phone'         => $this->maskEmail((string) $user->emp_email),
-                    'code'          => $code,
-                    'notifications' => $notifications->values(),
-                    'expires_in'    => self::otpTtlMinutes * 60,
-                ],
-            ], 200);
+        } else {
+            $this->logCustomer((int) $user->cust_id, 'view', 'POST /api/otp/challenge/inbox');
         }
 
-        $notifications = CustNotif::where('cust_id', (int) $user->cust_id)
-            ->where('custnotif_created', '>=', now()->subMinutes(15))
-            ->orderByDesc('custnotif_created')
-            ->get();
-
-        foreach ($notifications as $notification) {
-            if (! $notification->custnotif_read) {
-                $notification->update(['custnotif_read' => now()]);
-            }
-        }
-
-        $this->logCustomer((int) $user->cust_id, 'view', 'POST /api/otp/challenge/inbox');
-
-        $code = $notifications
-            ->map(static fn ($row) => preg_match('/\b(\d{6})\b/', (string) $row->custnotif_msg, $m) ? $m[1] : null)
-            ->filter()
-            ->first();
+        $contact = $isEmployee
+            ? $this->maskEmail((string) $user->emp_email)
+            : $this->maskPhone((string) $user->cust_phone);
 
         return response()->json([
             'success' => true,
             'message' => 'Notification inbox retrieved successfully.',
             'data'    => [
-                'purpose'       => (string) $json->input('purpose'),
-                'channel'       => 'phone',
-                'contact'       => $this->maskPhone((string) $user->cust_phone),
-                'phone'         => $this->maskPhone((string) $user->cust_phone),
+                'purpose'       => $purpose,
+                'channel'       => $isEmployee ? 'email' : 'phone',
+                'contact'       => $contact,
+                'phone'         => $contact,
                 'code'          => $code,
-                'notifications' => $notifications->values(),
+                'notifications' => [],
                 'expires_in'    => self::otpTtlMinutes * 60,
             ],
         ], 200);

@@ -9,6 +9,7 @@ import Modal from '../../components/ui/Modal.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { fetchAccounts, updateAccount } from '../../services/accounts.js'
 import { updateCredentials, updateBackupCredentials } from '../../services/auth.js'
+import RecoveryCodeCard from '../../components/ui/RecoveryCodeCard.jsx'
 import { first, empCateg, empFullName } from '../../components/admin/schema.js'
 import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
 
@@ -805,6 +806,8 @@ export default function AdminAccount({ embedded = false }) {
             </section>
           </div>
         )}
+
+        {!viewingOther && <RecoveryCodeCard className="mt-4" />}
 
         {/* Sign-out shortcut - FLOW-EMP_LOGOUT-01/02: the confirmation
             dialog comes before the session is terminated. Hidden while

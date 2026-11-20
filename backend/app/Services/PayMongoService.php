@@ -313,6 +313,40 @@ class PayMongoService
         return false;
     }
 
+    /**
+     * Total centavos actually collected on a session or payment resource,
+     * or null when the payload carries no amounts to check.
+     */
+    public static function paidAmount(array $payload): ?int
+    {
+        if ($payload === []) {
+            return null;
+        }
+
+        $attributes = $payload['attributes'] ?? $payload;
+        if (! is_array($attributes)) {
+            return null;
+        }
+
+        $payments = is_array($attributes['payments'] ?? null) ? $attributes['payments'] : [];
+        if ($payments === [] && isset($attributes['amount'])) {
+            // A `payment.paid` webhook sends the payment resource itself.
+            $payments = [['attributes' => $attributes]];
+        }
+
+        $total = null;
+        foreach ($payments as $payment) {
+            $paymentAttrs = is_array($payment) ? ($payment['attributes'] ?? $payment) : [];
+            $status = strtolower((string) ($paymentAttrs['status'] ?? ''));
+            if (! in_array($status, ['paid', 'succeeded'], true) || ! isset($paymentAttrs['amount'])) {
+                continue;
+            }
+            $total = (int) ($total ?? 0) + (int) $paymentAttrs['amount'];
+        }
+
+        return $total;
+    }
+
     /** The methods this account is allowed to charge. */
     private function paymentMethodTypes(): array
     {

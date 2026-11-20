@@ -6,6 +6,7 @@ import { updateCredentials } from '../services/auth.js'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import Button from '../components/ui/Button.jsx'
 import OtpVerifyModal from '../components/ui/OtpVerifyModal.jsx'
+import RecoveryCodeCard from '../components/ui/RecoveryCodeCard.jsx'
 import { passwordProblem, PASSWORD_HINT } from '../utils/passwordRules.js'
 
 function PasswordField({ label, name, value, onChange, placeholder }) {
@@ -126,6 +127,8 @@ function ChangePassword() {
               </p>
             </div>
           </form>
+
+          <RecoveryCodeCard className="mt-6" />
         </div>
       </div>
 
