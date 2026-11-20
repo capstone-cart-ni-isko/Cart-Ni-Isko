@@ -6,7 +6,7 @@ import { useWishlist } from '../../hooks/useWishlist.js'
 import PriceTag from './PriceTag.jsx'
 import LoginPromptModal from './LoginPromptModal.jsx'
 import { ShirtIcon } from './Icons.jsx'
-import { getImageUrl } from '../../utils/imageUtils.js'
+import { getImageUrl, handleProductImageError } from '../../utils/imageUtils.js'
 
 /** Compact units-sold label: 8 -> "8 sold", 1240 -> "1.2k sold". */
 function formatSold(value) {
@@ -70,6 +70,7 @@ function ProductCard({ product }) {
             <img
               src={resolvedImage}
               alt={product.name}
+              onError={handleProductImageError}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             />
           ) : (

@@ -1448,24 +1448,49 @@ class UserAPI extends Controller
             $college = $guest ? null : (trim((string) $json->input('cust_college')) ?: null);
             $dept    = $guest ? null : (trim((string) $json->input('cust_dept')) ?: null);
 
-            if ($email !== '' && Customer::where('cust_email', $email)->exists()) {
+            // BUG-05: a signup that never finished verification must not lock
+            // its email/phone. Only a verified account blocks a new signup; an
+            // unfinished one is taken over by the new attempt.
+            $byEmail = $email !== '' ? Customer::where('cust_email', $email)->first() : null;
+            $byPhone = Customer::where('cust_phone', $phone)->first();
+
+            if ($byEmail && ! $this->isPendingSignup($byEmail)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'That email address is already registered.'
                 ], 409);
             }
 
-            if (Customer::where('cust_phone', $phone)->exists()) {
+            if ($byPhone && ! $this->isPendingSignup($byPhone)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'That phone number is already registered.'
                 ], 409);
             }
 
+            if ($byEmail && $byPhone && (int) $byEmail->cust_id !== (int) $byPhone->cust_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This email and phone number belong to two different unfinished signups. Use a different phone number or contact the store.'
+                ], 409);
+            }
+
             try {
-                $customer = Customer::create(
-                    $this->signupAttributes($json, $email, $phone, $password, $guest, $categ, $college, $dept)
-                );
+                $attributes = $this->signupAttributes($json, $email, $phone, $password, $guest, $categ, $college, $dept);
+                $existing = $byEmail ?: $byPhone;
+
+                if ($existing) {
+                    unset($attributes['cust_id']);
+                    $existing->forceFill($attributes)->save();
+                    $customer = $existing;
+                    Cache::forget('otp:cool:cust:' . (int) $customer->cust_id . ':signup');
+                } else {
+                    $customer = Customer::create($attributes);
+                }
+
+                if (Schema::hasColumn('customer', 'cust_unverified')) {
+                    $customer->forceFill(['cust_unverified' => now()])->save();
+                }
 
                 [$code, $error] = $this->issueOtpCode($customer, 'signup');
 
@@ -1501,6 +1526,15 @@ class UserAPI extends Controller
                     'error' => $e->getMessage()
                 ], 500);
             }
+        }
+
+        private function isPendingSignup(Customer $customer): bool
+        {
+            if (Schema::hasColumn('customer', 'cust_unverified')) {
+                return $customer->cust_unverified !== null;
+            }
+
+            return (bool) Cache::get($this->signupPendingKey((int) $customer->cust_id));
         }
 
         private function signupAttributes(
@@ -2081,7 +2115,7 @@ class UserAPI extends Controller
         'cust_bday' => 'sometimes|nullable|date',
         'cust_address' => 'sometimes|nullable|string|max:4000',
         'cust_callcode' => 'sometimes|regex:/^\+?[0-9]{1,4}$/',
-        'cust_phone' => 'sometimes|nullable|regex:/^[0-9]{10,11}$/',
+        'cust_phone' => ['sometimes', 'nullable', 'regex:/^(09[0-9]{9}|\+?639[0-9]{9}|9[0-9]{9})$/'],
         'cust_email' => 'sometimes|nullable|email:rfc',
         'cust_college' => 'sometimes|nullable|string|max:120',
         'cust_dept' => 'sometimes|nullable|string|max:120',
@@ -2102,7 +2136,7 @@ class UserAPI extends Controller
         'emp_surname' => 'sometimes|string|max:100',
         'emp_pronoun' => 'sometimes|string|max:50',
         'emp_callcode' => 'sometimes|regex:/^\+?[0-9]{1,4}$/',
-        'emp_phone' => 'sometimes|nullable|regex:/^[0-9]{10,11}$/',
+        'emp_phone' => ['sometimes', 'nullable', 'regex:/^(09[0-9]{9}|\+?639[0-9]{9}|9[0-9]{9})$/'],
         'emp_email' => 'sometimes|nullable|email:rfc',
         'emp_avatar' => 'sometimes|nullable|string',
         'emp_backup_phone' => 'sometimes|nullable|string|max:40',
@@ -2725,11 +2759,12 @@ class UserAPI extends Controller
             if ($givname !== null) $payload['cust_givname'] = trim((string) $givname);
             if ($surname !== null) $payload['cust_surname'] = trim((string) $surname);
         } elseif ($json->has('cust_nickname')) {
-            $full = trim((string) $json->input('cust_nickname'));
+            $full = trim((string) preg_replace('/\s+/', ' ', (string) $json->input('cust_nickname')));
             if (str_contains($full, ' ')) {
-                [$givname, $surname] = explode(' ', $full, 2);
-                $payload['cust_givname'] = trim($givname);
-                $payload['cust_surname'] = trim($surname);
+                // Last word = surname, so a two-word given name stays together.
+                $space = strrpos($full, ' ');
+                $payload['cust_givname'] = trim(substr($full, 0, $space));
+                $payload['cust_surname'] = trim(substr($full, $space + 1));
             } else {
                 $payload['cust_surname'] = $full;
                 $payload['cust_givname'] = '';
@@ -2927,12 +2962,7 @@ class UserAPI extends Controller
 
     private function normalizePhone(string $phone): string
     {
-        $cleaned = preg_replace('/[^0-9]/', '', $phone);
-        if (strlen((string) $cleaned) >= 12 && strpos((string) $cleaned, '63') === 0) {
-            $cleaned = '0' . substr((string) $cleaned, 2);
-        }
-
-        return (string) $cleaned;
+        return DatabaseAPI::normalizePhMobile((string) preg_replace('/[^0-9]/', '', $phone));
     }
 
     private function combineBackupPhone($callcode, $phone): ?string

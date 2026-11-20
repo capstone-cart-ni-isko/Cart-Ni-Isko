@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import { updateAccount } from '../services/accounts.js'
 import { uploadImage } from '../services/upload.js'
+import { isPhMobile, normalizePhMobile, PH_MOBILE_MESSAGE } from '../utils/phone.js'
 
 const selectStyle = {
   backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
@@ -133,7 +134,7 @@ function AccountInfo() {
         // REQ-CUST_PROF-01: the stored email is never changed by a profile
         // save, so it travels only to keep the read-only field round-tripping.
         cust_email: form.email,
-        cust_phone: form.phone,
+        cust_phone: normalizePhMobile(form.phone),
         cust_campus: form.campus && form.campus !== 'N/A' ? form.campus : null,
         cust_college: form.college && form.college !== 'N/A' ? form.college : null,
         cust_dept: form.course && form.course !== 'N/A' ? form.course : null,
@@ -154,8 +155,8 @@ function AccountInfo() {
         fullName: `${form.givname.trim()} ${form.surname.trim()}`.trim(),
         email: form.email,
         cust_email: form.email,
-        phone: form.phone,
-        cust_phone: form.phone,
+        phone: normalizePhMobile(form.phone),
+        cust_phone: normalizePhMobile(form.phone),
         yearLevel: form.yearLevel,
         campus: form.campus,
         cust_campus: form.campus,
@@ -207,7 +208,7 @@ function AccountInfo() {
   const fieldErrors = {
     givname: form.givname.trim() ? '' : 'First name is required.',
     surname: form.surname.trim() ? '' : 'Last name is required.',
-    phone: /^[0-9]{10,11}$/.test(form.phone) ? '' : 'Enter a 10- or 11-digit phone number.',
+    phone: isPhMobile(form.phone) ? '' : PH_MOBILE_MESSAGE,
     pronoun: form.pronoun.length > 50 ? 'Keep pronouns to 50 characters.' : '',
   }
   const hasErrors = Object.values(fieldErrors).some(Boolean)

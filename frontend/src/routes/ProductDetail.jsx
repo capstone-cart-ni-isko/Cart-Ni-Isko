@@ -17,7 +17,7 @@ import ProductAccordion from '../components/ui/ProductAccordion.jsx'
 import ProductReviews from '../components/ui/ProductReviews.jsx'
 import { fetchCatalog, fetchProduct } from '../services/products.js'
 import { ShirtIcon, CalendarIcon, StoreIcon, RefreshCwIcon } from '../components/ui/Icons.jsx'
-import { getImageUrl } from '../utils/imageUtils.js'
+import { getImageUrl, handleProductImageError } from '../utils/imageUtils.js'
 
 function firstInStockVariation(product, preferredColor, preferredSize) {
   const stockFor = (color, size) => {
@@ -482,6 +482,7 @@ function ProductDetail() {
                   key={activeImage}
                   src={getImageUrl(activeImage)}
                   alt={`${product.name} - ${selectedColor?.name || ''}`}
+                  onError={handleProductImageError}
                   className="w-full h-full object-contain p-4 md:p-8 transition-transform duration-300 group-hover:scale-105"
                 />
               ) : (

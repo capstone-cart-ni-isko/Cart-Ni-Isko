@@ -105,7 +105,9 @@ class SecurityAPI extends Controller
                     return response()->json(['success' => false, 'message' => 'Account disabled'], 403);
                 }
 
-                $pendingSignup = Cache::get($this->signupPendingKey((int) $customer->cust_id));
+                $pendingSignup = Schema::hasColumn('customer', 'cust_unverified')
+                    ? $customer->cust_unverified !== null
+                    : (bool) Cache::get($this->signupPendingKey((int) $customer->cust_id));
 
                 $anchor = $customer->cust_last_logout ?: $customer->cust_created;
                 $staleLogin = $anchor !== null && Carbon::parse($anchor)->addDays(15)->isPast();
@@ -924,6 +926,9 @@ class SecurityAPI extends Controller
 
         if ($purpose === 'signup' && ! $isEmployee) {
             Cache::forget($this->signupPendingKey((int) $user->cust_id));
+            if (Schema::hasColumn('customer', 'cust_unverified')) {
+                $user->forceFill(['cust_unverified' => null])->save();
+            }
         }
 
         // DOMAIN 17 / DOMAIN 18: only a signup and a stale login redeem the

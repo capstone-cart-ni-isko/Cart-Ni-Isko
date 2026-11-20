@@ -850,6 +850,9 @@ class OrdersAPI extends Controller
                     'preorder_items'   => $preorderBagIds,
                     'estimate_available' => $preorderBagIds === [],
                     'dispatch_details' => $dispatchDetails,
+                    // BUG-02: a sk_test_ key only accepts PayMongo's test
+                    // cards, so real cards are declined. Let the page say so.
+                    'payment_test_mode' => str_starts_with((string) config('services.paymongo.secret_key'), 'sk_test_'),
                 ],
             ], 200);
 
@@ -928,7 +931,7 @@ class OrdersAPI extends Controller
             $gate = $this->otpGate($json, 'checkout');
             if ($gate) return $gate;
 
-            $returnBase = rtrim((string) config('services.frontend_url'), '/');
+            $returnBase = $this->frontendReturnBase($json);
 
             $result = $this->placeOrder($json, $custId, $dispatchType, $speed,
                 function (Order $order, float $due, float $fee = 0.0) use ($returnBase, $dispatchType) {
@@ -1113,7 +1116,7 @@ class OrdersAPI extends Controller
                 ];
             }
 
-            $returnBase = rtrim((string) config('services.frontend_url'), '/');
+            $returnBase = $this->frontendReturnBase($json);
             $session = (new PayMongoService())->createCheckoutSession(
                 $lines,
                 'order:' . $order->ord_id,
@@ -5455,7 +5458,7 @@ class OrdersAPI extends Controller
             ], 200);
         }
 
-        $returnBase = rtrim((string) config('services.frontend_url', 'http://localhost:5173'), '/');
+        $returnBase = $this->frontendReturnBase($json);
         $paymongo   = new PayMongoService();
 
         $session = $paymongo->createCheckoutSession(

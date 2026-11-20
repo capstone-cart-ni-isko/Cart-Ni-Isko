@@ -632,6 +632,28 @@ abstract class Controller
         return null;
     }
 
+    /**
+     * BUG-02: where PayMongo sends the browser back. The sign-in lives in
+     * the browser per domain, so a shopper who paid from one of the allowed
+     * frontends (e.g. the vercel.app address) must return to that same one -
+     * sending them to FRONTEND_URL signed them out and the payment looked
+     * failed. Only an origin on the CORS allow-list is trusted.
+     */
+    protected function frontendReturnBase(Request $json): string
+    {
+        $origin = rtrim((string) $json->headers->get('Origin', ''), '/');
+        $allowed = array_map(
+            static fn ($o) => rtrim((string) $o, '/'),
+            (array) config('cors.allowed_origins', [])
+        );
+
+        if ($origin !== '' && in_array($origin, $allowed, true)) {
+            return $origin;
+        }
+
+        return rtrim((string) config('services.frontend_url', 'http://localhost:5173'), '/');
+    }
+
     protected function settingValue(string $key, $default = null)
     {
         return SystemSettings::get($key, $default);

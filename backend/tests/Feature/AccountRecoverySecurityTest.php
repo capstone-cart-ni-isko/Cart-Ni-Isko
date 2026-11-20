@@ -167,4 +167,47 @@ class AccountRecoverySecurityTest extends TestCase
         $this->assertArrayNotHasKey('cust_backup_answer', $array);
         $this->assertArrayNotHasKey('cust_password', $array);
     }
+
+    // ==========================================
+    // BUG-05 / SEC-01 (user evaluation)
+    // ==========================================
+
+    private function signup(array $overrides = [])
+    {
+        return $this->postJson('/api/auth/cust_signup', array_merge([
+            'phone'    => '09171234567',
+            'password' => 'Password123!',
+            'givname'  => 'Juan Carlos',
+            'surname'  => 'Dela Cruz',
+            'email'    => 'retry@example.com',
+            'type'     => 'guest',
+        ], $overrides));
+    }
+
+    public function test_an_unfinished_signup_does_not_lock_the_email()
+    {
+        $first = $this->signup()->assertStatus(201);
+
+        // The person never entered the code and tries again, this time
+        // with a different phone number.
+        $second = $this->signup(['phone' => '09181234567'])->assertStatus(201);
+
+        $this->assertSame($first->json('data.cust_id'), $second->json('data.cust_id'));
+        $this->assertSame(1, Customer::where('cust_email', 'retry@example.com')->count());
+        $this->assertSame('09181234567', Customer::where('cust_email', 'retry@example.com')->value('cust_phone'));
+    }
+
+    public function test_a_verified_account_still_blocks_a_duplicate_signup()
+    {
+        $this->makeCustomer(['cust_email' => 'taken@example.com']);
+
+        $this->signup(['email' => 'taken@example.com'])->assertStatus(409);
+    }
+
+    public function test_signup_requires_a_philippine_mobile_number()
+    {
+        $this->signup(['phone' => '1234567890'])->assertStatus(400);
+        $this->signup(['phone' => '0917123456'])->assertStatus(400);
+        $this->signup(['phone' => '+63 917 123 4567'])->assertStatus(201);
+    }
 }

@@ -441,7 +441,8 @@ class DatabaseAPI extends Controller
 
         if (! $json->filled('givname') && $json->filled('nickname')) {
             $full = trim(preg_replace('/\s+/', ' ', (string) $json->input('nickname')));
-            $space = strpos($full, ' ');
+            // Last word = surname, so a two-word given name stays together.
+            $space = strrpos($full, ' ');
             $json->merge([
                 'givname' => $space === false ? $full : substr($full, 0, $space),
                 'surname' => $space === false ? $full : substr($full, $space + 1),
@@ -648,19 +649,15 @@ class DatabaseAPI extends Controller
     {
         if ($json->has('phone')) {
             $cleaned = preg_replace('/[^0-9]/', '', (string)$json->input('phone'));
-            if (strlen($cleaned) >= 12 && strpos($cleaned, '63') === 0) {
-                $cleaned = '0' . substr($cleaned, 2);
-            }
-            if ($cleaned === '0000000000') {
-                return $this->fail('Phone number is reserved.', 422);
-            }
+            $cleaned = self::normalizePhMobile($cleaned);
             $json->merge(['phone' => $cleaned]);
         }
 
+        // SEC-01: a Philippine mobile number - 09XXXXXXXXX (or +63 9XX...).
         return $this->validateFields($json, [
-            'phone' => 'nullable|regex:/^[0-9]{10,11}$/'
+            'phone' => ['nullable', 'regex:' . self::PH_MOBILE_REGEX],
         ], [
-            'phone.regex' => 'Phone number must be 10 to 11 digits.'
+            'phone.regex' => self::PH_MOBILE_MESSAGE,
         ]);
     }
 
@@ -668,17 +665,31 @@ class DatabaseAPI extends Controller
     {
         if ($json->has('backupphone')) {
             $cleaned = preg_replace('/[^0-9]/', '', (string)$json->input('backupphone'));
-            if (strlen($cleaned) >= 12 && strpos($cleaned, '63') === 0) {
-                $cleaned = '0' . substr($cleaned, 2);
-            }
+            $cleaned = self::normalizePhMobile($cleaned);
             $json->merge(['backupphone' => $cleaned]);
         }
 
         return $this->validateFields($json, [
-            'backupphone' => 'nullable|regex:/^[0-9]{10,11}$/'
+            'backupphone' => ['nullable', 'regex:' . self::PH_MOBILE_REGEX],
         ], [
-            'backupphone.regex' => 'Backup phone number must be 10 to 11 digits.'
+            'backupphone.regex' => 'Backup phone: ' . lcfirst(self::PH_MOBILE_MESSAGE),
         ]);
+    }
+
+    public const PH_MOBILE_REGEX = '/^09[0-9]{9}$/';
+    public const PH_MOBILE_MESSAGE = 'Enter a valid Philippine mobile number (09XXXXXXXXX).';
+
+    /** 639XXXXXXXXX / 9XXXXXXXXX / 09XXXXXXXXX -> 09XXXXXXXXX (digits only in). */
+    public static function normalizePhMobile(string $digits): string
+    {
+        if (strlen($digits) === 12 && str_starts_with($digits, '639')) {
+            return '0' . substr($digits, 2);
+        }
+        if (strlen($digits) === 10 && str_starts_with($digits, '9')) {
+            return '0' . $digits;
+        }
+
+        return $digits;
     }
 
     /** The shared password standard as a validation rule (see EmployeePassword). */

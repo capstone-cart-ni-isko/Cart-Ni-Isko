@@ -31,9 +31,10 @@ function isGuestRole(details) {
  * word is the surname (the backend does the same on its side).
  */
 function splitFullName(fullName) {
-  const text = String(fullName || '').trim().replace(/\s+/, ' ')
+  const text = String(fullName || '').trim().replace(/\s+/g, ' ')
   if (!text) return { givname: '', surname: '' }
-  const space = text.indexOf(' ')
+  // The LAST word is the surname, so a two-word given name stays together.
+  const space = text.lastIndexOf(' ')
   if (space === -1) return { givname: '', surname: text }
   return { givname: text.slice(0, space), surname: text.slice(space + 1) }
 }

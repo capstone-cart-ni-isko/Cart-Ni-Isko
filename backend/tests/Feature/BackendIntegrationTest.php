@@ -409,7 +409,7 @@ class BackendIntegrationTest extends TestCase
         ]);
         $badPhone->assertStatus(400)
                  ->assertJson(['success' => false]);
-        $this->assertStringContainsString('10 to 11 digits', $badPhone->json('message'));
+        $this->assertStringContainsString('Philippine mobile number', $badPhone->json('message'));
 
         // Cleanup (rolled back anyway, but keeps the fixture rows tidy).
         Customer::where('cust_id', $buenoRow->cust_id)->delete();

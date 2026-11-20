@@ -37,6 +37,8 @@ const NotificationPreferences = lazy(() => import('./routes/NotificationPreferen
 const BackupContacts = lazy(() => import('./routes/BackupContacts.jsx'))
 const AboutSettings = lazy(() => import('./routes/AboutSettings.jsx'))
 const AboutUs = lazy(() => import('./routes/AboutUs.jsx'))
+const HelpCenter = lazy(() => import('./routes/HelpCenter.jsx'))
+const TermsPrivacy = lazy(() => import('./routes/TermsPrivacy.jsx'))
 const CheckoutPlaceholder = lazy(() => import('./routes/CheckoutPlaceholder.jsx'))
 const Appointments = lazy(() => import('./routes/Appointments.jsx'))
 const BookAppointment = lazy(() => import('./routes/BookAppointment.jsx'))
@@ -148,6 +150,8 @@ function App() {
                 <Route path="/search" element={<Search />} />
                 <Route path="/product/:id" element={<ProductDetail />} />
                 <Route path="/about" element={<AboutUs />} />
+                <Route path="/help" element={<HelpCenter />} />
+                <Route path="/terms" element={<TermsPrivacy />} />
                 {/* New-schema catalog URL: /catalog/[prod_categ]/[prod_tag] */}
                 <Route path="/catalog/:categ/:tag" element={<ProductDetail />} />
 

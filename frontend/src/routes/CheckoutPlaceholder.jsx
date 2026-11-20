@@ -1067,6 +1067,16 @@ function CheckoutPlaceholder() {
                   </div>
 
                   {/* Payment Explanation & Text Hierarchy */}
+                  {serverPreview?.payment_test_mode && (
+                    <div
+                      role="note"
+                      className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-2xs text-amber-900 leading-relaxed"
+                    >
+                      <strong>Test mode:</strong> payments run in PayMongo&apos;s sandbox, so real cards are declined.
+                      Use the test card <span className="font-mono">4343 4343 4343 4345</span> (any future expiry, any CVC).
+                    </div>
+                  )}
+
                   <div className="space-y-2 text-xs text-gray-700">
                     <p className="font-semibold text-gray-900 text-xs flex items-center gap-1.5">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-emerald-600 shrink-0">

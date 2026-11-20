@@ -15,19 +15,15 @@ function DesktopFooter() {
               Your official source for Bicol University merchandise and apparel. Wear your pride.
             </p>
             <div className="flex gap-1.5 pt-0.5">
-              <a
-                href="https://facebook.com"
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                to="/about"
                 className="w-6 h-6 rounded-md border border-slate-200 dark:border-[var(--line)] bg-slate-50 dark:bg-[var(--surface-3)] flex items-center justify-center text-slate-600 dark:text-[var(--muted)] hover:text-brand-orange hover:border-brand-orange transition-colors"
-                title="Website"
+                title="About Tindahan ni Isko"
               >
                 <GlobeIcon className="w-3 h-3" />
-              </a>
+              </Link>
               <a
                 href="mailto:support@tindahanniisko.com"
-                target="_blank"
-                rel="noreferrer"
                 className="w-6 h-6 rounded-md border border-slate-200 dark:border-[var(--line)] bg-slate-50 dark:bg-[var(--surface-3)] flex items-center justify-center text-slate-600 dark:text-[var(--muted)] hover:text-brand-orange hover:border-brand-orange transition-colors"
                 title="Email"
               >
@@ -41,13 +37,13 @@ function DesktopFooter() {
             <h4 className="text-[11px] font-semibold text-gray-900 dark:text-[var(--ink)] uppercase tracking-wider mb-1.5">SUPPORT</h4>
             <ul className="space-y-1">
               <li>
-                <span className="text-[11px] text-gray-500 dark:text-[var(--muted)] font-medium">FAQ &amp; Size Guide</span>
+                <Link to="/help#faq" className="text-[11px] text-gray-500 dark:text-[var(--muted)] hover:text-brand-orange transition-colors font-medium">FAQ &amp; Size Guide</Link>
               </li>
               <li>
-                <span className="text-[11px] text-gray-500 dark:text-[var(--muted)] font-medium">Shipping, Pickups &amp; Returns</span>
+                <Link to="/help#shipping" className="text-[11px] text-gray-500 dark:text-[var(--muted)] hover:text-brand-orange transition-colors font-medium">Shipping, Pickups &amp; Returns</Link>
               </li>
               <li>
-                <span className="text-[11px] text-gray-500 dark:text-[var(--muted)] font-medium">Contact Support</span>
+                <Link to="/help#contact" className="text-[11px] text-gray-500 dark:text-[var(--muted)] hover:text-brand-orange transition-colors font-medium">Contact Support</Link>
               </li>
             </ul>
           </div>
@@ -62,7 +58,7 @@ function DesktopFooter() {
                 </Link>
               </li>
               <li>
-                <span className="text-[11px] text-gray-500 dark:text-[var(--muted)] font-medium">Terms &amp; Privacy</span>
+                <Link to="/terms" className="text-[11px] text-gray-500 dark:text-[var(--muted)] hover:text-brand-orange transition-colors font-medium">Terms &amp; Privacy</Link>
               </li>
             </ul>
           </div>

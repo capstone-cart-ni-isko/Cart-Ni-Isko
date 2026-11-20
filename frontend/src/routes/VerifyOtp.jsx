@@ -23,7 +23,23 @@ function VerifyOtp() {
   const { verifyOtpChallenge } = useAuth()
   const { showToast } = useToast()
 
-  const state = location.state || {}
+  // BUG-05: the challenge is also kept for this tab in sessionStorage, so a
+  // refresh does not throw the customer out of an unfinished signup.
+  const state = (() => {
+    if (location.state?.challenge) {
+      try {
+        sessionStorage.setItem('isko_otp_challenge', JSON.stringify(location.state))
+      } catch {
+        // Storage can be unavailable - the in-memory state still works.
+      }
+      return location.state
+    }
+    try {
+      return JSON.parse(sessionStorage.getItem('isko_otp_challenge')) || {}
+    } catch {
+      return {}
+    }
+  })()
   const challenge = state.challenge || ''
   const purpose = state.purpose || 'login'
   const phone = state.phone || 'your registered number'
@@ -85,6 +101,12 @@ function VerifyOtp() {
     }
 
     setServerError('')
+    try {
+      sessionStorage.removeItem('isko_otp_challenge')
+      if (purpose === 'signup') localStorage.removeItem('isko_signup_progress')
+    } catch {
+      // Nothing to clean up when storage is unavailable.
+    }
     showToast(
       purpose === 'signup'
         ? 'Phone number verified. Your account is ready!'

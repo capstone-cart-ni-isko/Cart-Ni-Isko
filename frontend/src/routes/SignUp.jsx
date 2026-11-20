@@ -7,6 +7,7 @@ import Button from '../components/ui/Button.jsx'
 import TermsModal from '../components/ui/TermsModal.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import { passwordProblem, PASSWORD_HINT } from '../utils/passwordRules.js'
+import { isPhMobile, normalizePhMobile, PH_MOBILE_MESSAGE } from '../utils/phone.js'
 import brandLogo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 
 const selectStyle = {
@@ -120,11 +121,10 @@ function SignUp() {
   const firstNameError = form.firstName.trim() ? '' : 'Given name is required.'
   const lastNameError = form.lastName.trim() ? '' : 'Surname is required.'
 
-  const phoneDigits = form.phone.replace(/\D/g, '')
   const phoneError = !form.phone.trim()
     ? 'Phone number is required.'
-    : phoneDigits.length < 10 || phoneDigits.length > 11
-      ? 'Enter a valid phone number (10 to 11 digits).'
+    : !isPhMobile(form.phone)
+      ? PH_MOBILE_MESSAGE
       : ''
 
   const emailValue = form.email.trim()
@@ -212,6 +212,7 @@ function SignUp() {
     setIsSubmitting(true)
     const registrationDetails = {
       ...form,
+      phone: normalizePhMobile(form.phone),
       role: isBueño ? form.role : 'Guest',
       password,
     }
@@ -231,7 +232,10 @@ function SignUp() {
       return
     }
 
-    localStorage.removeItem('isko_signup_progress')
+    // The saved form is kept until the phone code is verified (VerifyOtp
+    // clears it), so a failed or abandoned verification can be retried
+    // without retyping everything (BUG-05).
+    if (!result.requiresOtp) localStorage.removeItem('isko_signup_progress')
 
     if (result.requiresOtp) {
       showToast('A verification code was sent to your notification inbox.')
@@ -543,6 +547,9 @@ function SignUp() {
                   </label>
                   <input
                     type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    maxLength={16}
                     placeholder="09123456789"
                     value={form.phone}
                     onChange={(e) => updateForm({ phone: e.target.value })}

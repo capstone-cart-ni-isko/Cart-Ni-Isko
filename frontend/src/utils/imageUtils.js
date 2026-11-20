@@ -12,6 +12,11 @@ import unnamed10 from '../assets/Images/unnamed (10).png'
 import unnamed11 from '../assets/Images/unnamed (11).png'
 import unnamed12 from '../assets/Images/unnamed (12).png'
 import unnamedJpg from '../assets/Images/unnamed.jpg'
+// BUG-01: category fallbacks that were referenced by path but never bundled,
+// so the deployed build requested a /src/... file that does not exist.
+import totebag from '../assets/Images/totebag.png'
+import keychain from '../assets/Images/keychain.png'
+import lanyard from '../assets/Images/lanyard.png'
 
 import brandShirt from '../assets/Branding/Copy of shirt.png'
 import brandJacket from '../assets/Branding/Copy of jacket.png'
@@ -35,6 +40,9 @@ const imageMap = {
   '/src/assets/Images/unnamed (11).png': unnamed11,
   '/src/assets/Images/unnamed (12).png': unnamed12,
   '/src/assets/Images/unnamed.jpg': unnamedJpg,
+  '/src/assets/Images/totebag.png': totebag,
+  '/src/assets/Images/keychain.png': keychain,
+  '/src/assets/Images/lanyard.png': lanyard,
 
   // Branding images
   '/src/assets/Branding/Copy of shirt.png': brandShirt,
@@ -43,6 +51,17 @@ const imageMap = {
   '/src/assets/Branding/Copy of lanyard.png': brandLanyard,
   '/src/assets/Branding/Copy of badge.png': brandBadge,
   '/src/assets/Branding/Copy of store.png': brandStore,
+}
+
+/** Shown when a product image fails to load (onError), never a broken icon. */
+export const PRODUCT_IMAGE_FALLBACK = brandStore
+
+/** onError handler for product <img> tags: swap to the fallback once. */
+export function handleProductImageError(event) {
+  const img = event.currentTarget
+  if (img.dataset.fallback === '1') return
+  img.dataset.fallback = '1'
+  img.src = PRODUCT_IMAGE_FALLBACK
 }
 
 export function getImageUrl(path) {

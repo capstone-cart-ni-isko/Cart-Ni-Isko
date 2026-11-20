@@ -213,7 +213,12 @@ export function AuthProvider({ children }) {
       .filter(Boolean)
       .join(' ')
     const fullName = composed || account?.cust_nickname || extras.fullName || 'User'
-    const [firstName = '', ...rest] = fullName.split(' ')
+    // Older single-line names: the last word is the surname, every word
+    // before it is the given name ("Juan Carlos Dela Cruz" is ambiguous,
+    // but this keeps a two-word given name together).
+    const words = fullName.split(/\s+/).filter(Boolean)
+    const firstName = account?.cust_givname || (words.length > 1 ? words.slice(0, -1).join(' ') : '')
+    const rest = account?.cust_surname ? [account.cust_surname] : words.slice(-1)
     const shaped = {
       ...DEFAULT_USER,
       ...extras,
@@ -299,6 +304,10 @@ export function AuthProvider({ children }) {
       'User'
     const result = await signUpUser({
       ...details,
+      // BUG-04: send the two form fields as they were typed. Re-splitting
+      // the joined name moved a second given name into the surname.
+      givname: String(details.firstName || '').trim(),
+      surname: String(details.lastName || '').trim(),
       fullName,
       role: details.role || 'Student',
     })
