@@ -325,7 +325,16 @@ export function AdminProvider({ children }) {
         return { success: false, error: 'Invalid order id.' }
       }
       try {
-        await updateOrder(ordId, { ord_status: String(newStatus || '').trim().toUpperCase() })
+        const res = await updateOrder(ordId, { ord_status: String(newStatus || '').trim().toUpperCase() })
+        // Show the saved status at once instead of after the whole order list
+        // has been read again (seconds on the live server); the reload below
+        // still runs and brings in anything else the change touched.
+        const saved = String(res?.data?.ord_status || newStatus || '').trim().toLowerCase()
+        if (saved) {
+          setOrders((prev) => prev.map((row) => (
+            Number(row?.ord_id) === ordId ? { ...row, ord_status: saved, status: saved } : row
+          )))
+        }
         refreshOrders()
         return { success: true }
       } catch (e) {

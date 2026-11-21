@@ -79,23 +79,28 @@ final class IdAllocator
      */
     public static function next(string $table, string $pk): int
     {
-        // Nothing was ever allocated: the numbering starts at 1.
-        $max = DB::table($table)->max($pk);
+        // MAX, MIN and COUNT in ONE statement: every insert in the app comes
+        // through here (access logs on every request included), and each
+        // separate statement was another round trip to the database.
+        $stats = DB::table($table)
+            ->selectRaw('MAX(' . $pk . ') as mx, MIN(' . $pk . ') as mn, COUNT(' . $pk . ') as cnt')
+            ->first();
 
-        if ($max === null) {
+        // Nothing was ever allocated: the numbering starts at 1.
+        if ($stats === null || $stats->mx === null) {
             return 1;
         }
 
-        $max = (int) $max;
+        $max = (int) $stats->mx;
 
         // Keys under the lowest surviving row are vacant too.
-        if ((int) DB::table($table)->min($pk) > 1) {
+        if ((int) $stats->mn > 1) {
             return 1;
         }
 
         // min === 1 and one row per key means the table is a packed 1..max:
         // no hole to fill, so the numbering simply moves past the ceiling.
-        if ((int) DB::table($table)->count($pk) === $max) {
+        if ((int) $stats->cnt === $max) {
             return $max + 1;
         }
 
