@@ -778,6 +778,41 @@ class OnlineDeliveryCourierTest extends TestCase
             ->assertStatus(503);
     }
 
+    /**
+     * No courier configured (the live setup): staff move the order to In
+     * Transit by hand, which stamps deliver_pickedup - the start of the
+     * order screen's simulated rider trip - and exposes the drop-off pin.
+     */
+    public function test_marking_in_transit_by_hand_stamps_the_pickup_time()
+    {
+        $customer = $this->makeCustomer();
+        $admin    = $this->makeEmployee(['emp_type' => 'ADMIN']);
+        $product  = $this->makeProduct();
+        $secret   = $this->fakePayMongo();
+        $this->unconfigureCourier();
+
+        [$order] = $this->checkoutDelivery($customer, $product);
+        $this->payThroughWebhook($order, $secret);
+        $this->markReady($order);
+
+        $delivery = Delivery::where('ord_id', $order->ord_id)->firstOrFail();
+        $this->assertNull($delivery->deliver_pickedup);
+
+        $this->json('PUT', '/api/orders/update', [
+            'ord_id'     => $order->ord_id,
+            'ord_status' => 'DELIVERING',
+        ], $this->headers($admin))->assertStatus(200);
+
+        $this->assertSame('delivering', $order->fresh()->ord_status);
+        $this->assertNotNull($delivery->fresh()->deliver_pickedup);
+
+        $row = collect($this->json('GET', '/api/cart/display', [], $this->headers($customer))->json('data'))
+            ->firstWhere('ord_id', $order->ord_id);
+        $this->assertArrayHasKey('deliver_lat', $row);
+        $this->assertArrayHasKey('deliver_lng', $row);
+        $this->assertNotNull($row['deliver_pickedup']);
+    }
+
     public function test_staff_can_book_and_cancel_the_courier()
     {
         $customer = $this->makeCustomer();

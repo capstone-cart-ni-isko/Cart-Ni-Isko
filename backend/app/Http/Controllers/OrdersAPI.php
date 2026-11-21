@@ -238,6 +238,15 @@ class OrdersAPI extends Controller
                     ->update(['deliver_expect' => $deliverExpect]);
             }
 
+            // In Transit: stamp when the parcel left, the same as the
+            // Deliveries screen (tracking/update) and the courier webhook do.
+            // The order screen's rider map starts its trip from this time.
+            if ($status === 'delivering') {
+                Delivery::where('ord_id', $order->ord_id)
+                    ->whereNull('deliver_pickedup')
+                    ->update(['deliver_pickedup' => now()]);
+            }
+
             if ($status === 'cancelled') {
                 $this->closeDispatch($order);
 
