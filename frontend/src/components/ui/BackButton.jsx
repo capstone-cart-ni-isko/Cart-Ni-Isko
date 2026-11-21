@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { canGoBackInApp } from '../../utils/navigation.js'
 
 /**
  * Universal "Back" affordance for every step-by-step process and focused page.
@@ -22,7 +23,7 @@ export default function BackButton({
   const goBack = () => {
     if (onClick) return onClick()
     if (to) return navigate(to)
-    if (window.history.length > 1) return navigate(-1)
+    if (canGoBackInApp()) return navigate(-1)
     return navigate('/home')
   }
 

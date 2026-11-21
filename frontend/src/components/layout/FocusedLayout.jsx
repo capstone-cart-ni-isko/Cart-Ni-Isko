@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import BackButton from '../ui/BackButton.jsx'
+import { canGoBackInApp } from '../../utils/navigation.js'
 
 /**
  * FocusedLayout — Layout for focused customer pages (Settings, Order Details, Product Details, etc.)
@@ -45,7 +46,7 @@ function FocusedLayout({
 
   const handleBack = () => {
     if (onBack) return onBack()
-    if (window.history.length > 1) {
+    if (canGoBackInApp()) {
       navigate(-1)
       return
     }

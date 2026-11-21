@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth.js'
 import { formatPrice } from '../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { ShirtIcon } from '../components/ui/Icons.jsx'
+import { canGoBackInApp } from '../utils/navigation.js'
 
 /**
  * Focused Customer Search Page (following Rule 65 & Rule 68-70: focused page like Settings,
@@ -136,7 +137,7 @@ export default function CustomerSearch() {
 
   // Handle returning / leaving focused page
   const handleBack = () => {
-    if (window.history.length > 1) {
+    if (canGoBackInApp()) {
       navigate(-1)
     } else {
       navigate('/home')

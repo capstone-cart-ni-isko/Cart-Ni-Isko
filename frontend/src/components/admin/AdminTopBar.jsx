@@ -8,6 +8,7 @@ import { fetchSearchHistory, recordSearchQuery, clearSearchHistory } from '../..
 import BackButton from '../ui/BackButton.jsx'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import { empHomePath, empIsStaff } from './schema.js'
+import { canGoBackInApp } from '../../utils/navigation.js'
 
 /** The employee whose saved theme has already been applied this session.
     Module scope (not component state) so a route change cannot re-fetch it -
@@ -243,7 +244,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
       setSearchHovered(false)
       return
     }
-    if (window.history.length > 1) {
+    if (canGoBackInApp()) {
       navigate(-1)
     } else {
       navigate(homePath || '/admin/dashboard')

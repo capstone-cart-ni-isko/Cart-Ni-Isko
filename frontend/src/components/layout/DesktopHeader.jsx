@@ -14,6 +14,7 @@ import searchIcon from '../../assets/icons/common/search.svg'
 import notificationIcon from '../../assets/icons/common/notification.svg'
 import cartIcon from '../../assets/icons/navigation-bar/cart.svg'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
+import { canGoBackInApp } from '../../utils/navigation.js'
 
 /** Same geometry as the mobile ribbon's calendar glyph. */
 const CalendarIcon = ({ active }) => (
@@ -226,7 +227,7 @@ function DesktopHeader() {
       setSearchHovered(false)
       return
     }
-    if (window.history.length > 1) {
+    if (canGoBackInApp()) {
       navigate(-1)
     } else {
       navigate('/home')

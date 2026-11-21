@@ -6,6 +6,7 @@ import { useToast } from '../../hooks/useToast.js'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import { empIsStaff, empHomePath } from '../../components/admin/schema.js'
 import { scanQr } from '../../services/tracking.js'
+import { canGoBackInApp } from '../../utils/navigation.js'
 
 /**
  * FLOW-EMP_HOME-07 — the "QR" icon in the navigation ribbon opens the
@@ -24,7 +25,7 @@ export default function AdminQr() {
 
   /** Back button / Esc: return to where the employee came from, else home. */
   const handleBack = useCallback(() => {
-    if (window.history.length > 1) navigate(-1)
+    if (canGoBackInApp()) navigate(-1)
     else navigate(empHomePath(currentAdminUser), { replace: true })
   }, [navigate, currentAdminUser])
 

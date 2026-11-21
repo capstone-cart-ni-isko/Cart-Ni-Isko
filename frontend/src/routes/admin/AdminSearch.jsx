@@ -9,6 +9,7 @@ import { fetchSearchHistory, recordSearchQuery, clearSearchHistory } from '../..
 import { formatPrice } from '../../components/ui/PriceTag.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import { ShirtIcon } from '../../components/ui/Icons.jsx'
+import { canGoBackInApp } from '../../utils/navigation.js'
 
 /**
  * Focused Admin Search Page (following Rule 65 & Rule 68-70: focused page like Settings,
@@ -152,7 +153,7 @@ export default function AdminSearch() {
 
   // Handle returning / leaving focused page
   const handleBack = () => {
-    if (window.history.length > 1) {
+    if (canGoBackInApp()) {
       navigate(-1)
     } else {
       navigate('/admin/dashboard')

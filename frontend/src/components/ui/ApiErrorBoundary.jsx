@@ -2,6 +2,7 @@ import { Component } from 'react'
 import { activePortal, friendlyErrorMessage } from '../../services/api.js'
 import Button from './Button.jsx'
 import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import { canGoBackInApp } from '../../utils/navigation.js'
 
 /**
  * Explicit failure text for any API call. Rendered instead of leaving the user
@@ -68,7 +69,7 @@ export class ApiErrorBoundary extends Component {
     const exit = portalExit()
     // A real "back" only exists when this tab has somewhere to return to;
     // otherwise the portal home is the only offered way out.
-    const canGoBack = typeof window !== 'undefined' && window.history.length > 1
+    const canGoBack = canGoBackInApp()
 
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-6">

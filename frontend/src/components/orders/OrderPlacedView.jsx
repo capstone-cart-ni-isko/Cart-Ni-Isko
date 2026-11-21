@@ -4,6 +4,7 @@ import { getImageUrl } from '../../utils/imageUtils.js'
 import logo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import paymongoLogo from '../../assets/icons/brand/paymongo-logo.png'
 import { variationText } from '../../utils/variation.js'
+import { canGoBackInApp } from '../../utils/navigation.js'
 
 function formatDateTime(value, withTime = true) {
   if (!value) return null
@@ -41,8 +42,18 @@ function OrderPlacedView({ order, payRef, customerName, paymentMethod, confirmed
   // Clearing the saved receipt happens as the shopper leaves this screen, so
   // returning to /checkout later starts a fresh checkout instead of replaying
   // an old success page.
+  //
+  // After an online payment this screen is the first page of the site in the
+  // tab, right after PayMongo's receipt - and that receipt redirects back here
+  // a few seconds after it is shown. Leaving therefore slips /home in under
+  // the next page, so going back lands on the store, not on PayMongo.
   const leaveTo = (path) => {
     onDismiss?.()
+    if (!canGoBackInApp() && path !== '/home') {
+      navigate('/home', { replace: true })
+      navigate(path)
+      return
+    }
     navigate(path, { replace: true })
   }
   const items = Array.isArray(order?.items) ? order.items : []
