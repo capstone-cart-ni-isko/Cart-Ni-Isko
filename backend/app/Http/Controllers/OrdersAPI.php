@@ -717,6 +717,9 @@ class OrdersAPI extends Controller
             $payload['deliver_completed']  = $delivery->deliver_completed;
             $payload['deliver_notes']      = $delivery->deliver_notes;
             $payload['deliver_service']    = $delivery->deliver_service;
+            // Drop-off pin, for the rider map on the order screen.
+            $payload['deliver_lat']        = $delivery->deliver_lat;
+            $payload['deliver_lng']        = $delivery->deliver_lng;
             $payload['deliver_share_link'] = $delivery->shareUrl();
             $payload['deliver_last_event'] = $delivery->deliver_last_event;
 

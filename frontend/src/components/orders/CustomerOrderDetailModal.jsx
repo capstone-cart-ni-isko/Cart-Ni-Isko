@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import SimulatedRiderMap, { SIMULATION_ENABLED } from './SimulatedRiderMap.jsx'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Modal from '../ui/Modal.jsx'
@@ -572,6 +573,12 @@ export default function CustomerOrderDetailModal({
                 {isDelivery ? 'Delivery Tracking' : 'Pickup Claim Pass'}
               </h3>
             </div>
+
+            {/* Demo rider while no real courier is booked (see SimulatedRiderMap). */}
+            {isDelivery && SIMULATION_ENABLED && !courierTrackUrl
+              && ['IN TRANSIT', 'TO RECEIVE'].includes(status) && (
+              <SimulatedRiderMap raw={effectiveRaw} />
+            )}
 
             {showQr && qrPayload && (
               <div className="flex flex-col items-center gap-3.5 p-4 bg-[var(--surface)] border border-[var(--line)] rounded-xl text-center">

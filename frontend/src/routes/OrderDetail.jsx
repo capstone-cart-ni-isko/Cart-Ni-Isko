@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import SimulatedRiderMap, { SIMULATION_ENABLED } from '../components/orders/SimulatedRiderMap.jsx'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useToast } from '../hooks/useToast.js'
@@ -447,6 +448,12 @@ function OrderDetail() {
                   {isDelivery ? 'Delivery Tracking' : 'Pickup Claim Pass'}
                 </h3>
               </div>
+
+              {/* Demo rider while no real courier is booked (see SimulatedRiderMap). */}
+              {isDelivery && SIMULATION_ENABLED && !courierTrackUrl
+                && ['IN TRANSIT', 'TO RECEIVE'].includes(order.status) && (
+                <SimulatedRiderMap raw={order.raw} />
+              )}
 
               {showQr && qrPayload && (
                 <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
