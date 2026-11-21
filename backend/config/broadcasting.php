@@ -35,15 +35,19 @@ return [
             'key' => env('PUSHER_APP_KEY'),
             'secret' => env('PUSHER_APP_SECRET'),
             'app_id' => env('PUSHER_APP_ID'),
+            // Pusher Channels (hosted). With no host set, the Pusher client
+            // talks to api-<cluster>.pusher.com over HTTPS. Production uses
+            // this (BROADCAST_CONNECTION=pusher); local dev keeps Reverb.
             'options' => [
-                'cluster' => env('PUSHER_APP_CLUSTER'),
+                'cluster' => env('PUSHER_APP_CLUSTER', 'ap1'),
+                'useTLS' => true,
                 'encrypted' => true,
-                'host' => '127.0.0.1',
-                'port' => 6001,
-                'scheme' => 'http',
             ],
             'client_options' => [
-                // Guzzle client options...
+                // Same reasoning as Reverb below: a ping is best-effort, so a
+                // slow or unreachable Pusher must not pin a PHP worker.
+                'connect_timeout' => 1,
+                'timeout' => 2,
             ],
         ],
 
