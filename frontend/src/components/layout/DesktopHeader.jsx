@@ -15,6 +15,7 @@ import notificationIcon from '../../assets/icons/common/notification.svg'
 import cartIcon from '../../assets/icons/navigation-bar/cart.svg'
 import homeIcon from '../../assets/icons/navigation-bar/home.svg'
 import { canGoBackInApp } from '../../utils/navigation.js'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../../utils/visibleInterval.js'
 
 /** Same geometry as the mobile ribbon's calendar glyph. */
 const CalendarIcon = ({ active }) => (
@@ -91,12 +92,12 @@ function DesktopHeader() {
   useEffect(() => {
     refreshUnread()
     if (!custId) return undefined
-    const timer = setInterval(refreshUnread, 60000)
+    const stopPoll = setVisibleInterval(refreshUnread, BACKUP_POLL_MS)
     // Realtime pings (and reads on the Notifications page) refresh the badge
     // immediately, the same as the mobile ribbon and the admin top bar.
     window.addEventListener('notifications-changed', refreshUnread)
     return () => {
-      clearInterval(timer)
+      stopPoll()
       window.removeEventListener('notifications-changed', refreshUnread)
     }
   }, [custId, refreshUnread])

@@ -7,6 +7,7 @@ import { fetchShifts, setShiftUnavailable } from '../../services/shifts.js'
 import Modal from '../ui/Modal.jsx'
 import Button from '../ui/Button.jsx'
 import { empCanManageStore } from './schema.js'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../../utils/visibleInterval.js'
 
 /**
  * DOMAIN 7 / FLOW-EMP_SCHED-04 + REQ-SS-03 — the docked sidebar's
@@ -116,8 +117,7 @@ export default function ClockInOut() {
 
   useEffect(() => {
     if (!empId) return undefined
-    const timer = setInterval(load, 60000)
-    return () => clearInterval(timer)
+    return setVisibleInterval(load, BACKUP_POLL_MS)
   }, [empId, load])
 
   const { current, next, remaining } = useMemo(() => {

@@ -9,6 +9,7 @@ import BackButton from '../ui/BackButton.jsx'
 import brandLogo from '../../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import { empHomePath, empIsStaff } from './schema.js'
 import { canGoBackInApp } from '../../utils/navigation.js'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../../utils/visibleInterval.js'
 
 /** The employee whose saved theme has already been applied this session.
     Module scope (not component state) so a route change cannot re-fetch it -
@@ -97,11 +98,11 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
   useEffect(() => {
     refreshUnread()
     if (!empId) return undefined
-    const timer = setInterval(refreshUnread, 60000)
+    const stopPoll = setVisibleInterval(refreshUnread, BACKUP_POLL_MS)
     const onChanged = () => refreshUnread()
     window.addEventListener('notifications-changed', onChanged)
     return () => {
-      clearInterval(timer)
+      stopPoll()
       window.removeEventListener('notifications-changed', onChanged)
     }
   }, [empId, refreshUnread])

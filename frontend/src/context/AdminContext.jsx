@@ -9,6 +9,7 @@ import { addPosItem, removePosItem, checkoutPos } from '../services/pos.js'
 import { fetchAdminProducts, createAdminProduct, updateAdminProduct as updateAdminProductAPI, saveAdminVariant, removeAdminProduct as removeAdminProductAPI, unlistAdminProduct as unlistAdminProductAPI, sellAdminProduct as sellAdminProductAPI, setAdminProductPreorder as setAdminProductPreorderAPI } from '../services/adminProducts.js'
 import { buildAlerts } from '../services/dashboard.js'
 import { onApiChange } from '../services/realtime.js'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../utils/visibleInterval.js'
 
 export const AdminContext = createContext(null)
 
@@ -178,8 +179,8 @@ export function AdminProvider({ children }) {
   // shared list, so the interval lives here instead of one timer per page.
   useEffect(() => {
     if (!currentAdminUser) return undefined
-    const timer = setInterval(refreshOrders, 30000)
-    return () => clearInterval(timer)
+    // Live updates refresh the list at once; this is only the safety net.
+    return setVisibleInterval(refreshOrders, BACKUP_POLL_MS)
   }, [currentAdminUser, refreshOrders])
 
   // Realtime (DOMAIN 31 / REQ-SD-02). A write from any device - a customer

@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useApiChange } from '../../hooks/useApiChange.js'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../../utils/visibleInterval.js'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
@@ -27,7 +29,6 @@ import {
 import SalesOverview from '../../components/admin/SalesOverview.jsx'
 
 // SRS refresh cadence for staff analytics (REQ-SD-02)
-const REFRESH_MS = 30000
 
 /** % change of *customer* orders (active buyers) vs the previous window. */
 function customerTrend(rows, range, custom = null) {
@@ -100,9 +101,18 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     syncData()
-    const timer = setInterval(syncData, REFRESH_MS)
-    return () => clearInterval(timer)
+    return setVisibleInterval(syncData, BACKUP_POLL_MS)
   }, [syncData])
+
+  // Live updates: re-read the snapshot as soon as sales data changes
+  // (AdminContext already re-reads the order list itself).
+  const liveVersion = useApiChange(['orders', 'pos', 'checkout', 'products', 'delivery', 'tracking', 'appoint', 'reviews'])
+  useEffect(() => {
+    if (liveVersion === 0) return
+    fetchDashboardSnapshot()
+      .then((next) => setSnapshot(next))
+      .catch(() => {})
+  }, [liveVersion])
 
   const orders = useMemo(() => mapOrderRows(rawOrders), [rawOrders])
   const rangeOrders = useMemo(

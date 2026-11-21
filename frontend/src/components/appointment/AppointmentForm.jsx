@@ -9,6 +9,7 @@ import {
   fetchSlots,
   updateAppointment,
 } from '../../services/appointments.js'
+import { setVisibleInterval } from '../../utils/visibleInterval.js'
 
 /**
  * New-schema appointment kinds
@@ -192,8 +193,8 @@ export default function AppointmentForm({
     setSlot('')
     loadSlots()
     if (!date) return undefined
-    const timer = setInterval(loadSlots, 5000)
-    return () => clearInterval(timer)
+    // A booking by someone else pings `appoint` and re-reads at once.
+    return setVisibleInterval(loadSlots, 30000)
   }, [date, loadSlots, version])
 
   // Slots arrive as "YYYY-MM-DD HH:MM"; a bare "HH:MM" gets the picked date.

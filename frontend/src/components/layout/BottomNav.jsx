@@ -9,6 +9,7 @@ import homeIcon from '../../assets/icons/navigation-bar/home.svg'
 import cartIcon from '../../assets/icons/navigation-bar/cart.svg'
 import bellIcon from '../../assets/icons/common/notification.svg'
 import { MenuIcon } from '../ui/Icons.jsx'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../../utils/visibleInterval.js'
 
 /** Tints the flat SVG nav glyphs with the brand orange when active. */
 const ORANGE = 'invert(48%) sepia(79%) saturate(2476%) hue-rotate(346deg) brightness(100%) contrast(96%)'
@@ -78,11 +79,11 @@ function BottomNav() {
     }
     load()
     // Realtime pings refresh instantly; the timer is only a fallback.
-    const timer = setInterval(load, 15000)
+    const stopPoll = setVisibleInterval(load, BACKUP_POLL_MS)
     window.addEventListener('notifications-changed', load)
     return () => {
       alive = false
-      clearInterval(timer)
+      stopPoll()
       window.removeEventListener('notifications-changed', load)
     }
   }, [currentUser?.cust_id])

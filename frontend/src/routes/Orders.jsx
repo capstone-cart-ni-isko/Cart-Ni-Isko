@@ -429,7 +429,7 @@ function Orders() {
       if (!document.hidden) load({ silent: true })
     }
     const start = () => {
-      if (timer === null) timer = setInterval(tick, 10000)
+      if (timer === null) timer = setInterval(tick, 60000)
     }
     const stop = () => {
       if (timer !== null) {

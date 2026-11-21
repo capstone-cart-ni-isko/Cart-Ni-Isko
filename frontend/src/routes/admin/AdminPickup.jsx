@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { useApiChange } from '../../hooks/useApiChange.js'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../../utils/visibleInterval.js'
 import { Link } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import LoadingSpinner from '../../components/ui/LoadingSpinner.jsx'
@@ -570,7 +572,6 @@ function NoshowTab({ orders, onReschedule, onOpenOrder, busyId }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
 const TABS = ['Overview', 'Unscheduled', 'Scheduled', 'Completed', 'No-show']
-const REFRESH_MS = 30000 // REQ-SD-02: keep the queues fresh
 
 export default function AdminPickup() {
   const { orders: rawOrders = [], refreshOrders, updateOrderStatus, currentAdminUser } = useAdmin()
@@ -639,9 +640,15 @@ export default function AdminPickup() {
   useEffect(() => {
     refreshOrders()
     loadAux()
-    const timer = setInterval(loadAux, REFRESH_MS)
-    return () => clearInterval(timer)
+    return setVisibleInterval(loadAux, BACKUP_POLL_MS)
   }, [refreshOrders, loadAux])
+
+  // Live updates: a booking, reschedule, scan or account change re-reads the
+  // schedule at once (REQ-SD-02).
+  const liveVersion = useApiChange(['appoint', 'tracking', 'shifts', 'accounts'])
+  useEffect(() => {
+    if (liveVersion > 0) loadAux()
+  }, [liveVersion, loadAux])
 
   // Which CLAIMED orders are pickup orders (delivery claims own no pickup
   // track -> /tracking/create answers 404 and the row is excluded).

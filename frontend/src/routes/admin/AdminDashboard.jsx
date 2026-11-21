@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useApiChange } from '../../hooks/useApiChange.js'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../../utils/visibleInterval.js'
 import { useAdmin } from '../../hooks/useAdmin.js'
 import AdminLayout from '../../components/admin/AdminLayout.jsx'
 import SalesBarChart from '../../components/admin/SalesBarChart.jsx'
@@ -29,7 +31,6 @@ import {
 } from '../../services/dashboard.js'
 
 // SRS refresh cadence for the staff dashboard (REQ-SD-02)
-const REFRESH_MS = 30000
 const RANGES = ['Today', 'Week', 'Month']
 const RANGE_META = { Today: 'Today', Week: 'Last 7 days', Month: 'Last 30 days' }
 const OPEN_STATUSES = ['CLAIMED', 'CANCELLED', 'RETURNED', 'UNCLAIMED', 'REFUNDED']
@@ -93,9 +94,18 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     syncData()
-    const timer = setInterval(syncData, REFRESH_MS)
-    return () => clearInterval(timer)
+    return setVisibleInterval(syncData, BACKUP_POLL_MS)
   }, [syncData])
+
+  // Live updates: re-read the snapshot the moment a sale, order or stock
+  // change lands (AdminContext already re-reads the order list itself).
+  const liveVersion = useApiChange(['orders', 'pos', 'checkout', 'products', 'delivery', 'tracking', 'appoint', 'reviews'])
+  useEffect(() => {
+    if (liveVersion === 0) return
+    fetchDashboardSnapshot()
+      .then((next) => setSnapshot(next))
+      .catch(() => {})
+  }, [liveVersion])
 
   // Keeps the "Updated Xs ago" label honest between polls
   useEffect(() => {
