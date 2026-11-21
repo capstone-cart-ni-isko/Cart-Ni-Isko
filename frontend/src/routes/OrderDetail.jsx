@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import SimulatedRiderMap, { SIMULATION_ENABLED } from '../components/orders/SimulatedRiderMap.jsx'
+import SimulatedRiderMap from '../components/orders/SimulatedRiderMap.jsx'
+import { SIMULATION_ENABLED, simulationInProgress } from '../utils/riderSimulation.js'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useToast } from '../hooks/useToast.js'
@@ -295,6 +296,9 @@ function OrderDetail() {
      `received` (FLOW-ORD_CLAIM-08 - `load()` then re-reads both). */
   const handleConfirmReceipt = async () => {
     if (busy || !qrPayload) return
+    // Simulated rider still on the way: make sure before closing the trip.
+    if (!courierTrackUrl && simulationInProgress(order?.raw)
+      && !window.confirm("The rider hasn't arrived yet. Mark this order as received anyway?")) return
     setBusy(true)
     try {
       const res = await scanQr(qrPayload, 'customer')

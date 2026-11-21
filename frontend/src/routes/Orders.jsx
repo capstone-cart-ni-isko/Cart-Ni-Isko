@@ -302,7 +302,12 @@ function Orders() {
   const [claimTarget, setClaimTarget] = useState(null)
   const [pickupQrTarget, setPickupQrTarget] = useState(null)
   const [pickupQrDataUrl, setPickupQrDataUrl] = useState('')
-  const [selectedOrder, setSelectedOrder] = useState(null)
+  // The pop-up shows the LIVE row for the selected id, so it follows the list
+  // after every re-read (e.g. switching to Received after "I received").
+  const [selectedId, setSelectedId] = useState(null)
+  const selectedOrder = selectedId == null
+    ? null
+    : orders.find((o) => String(o.id) === String(selectedId)) ?? null
   // Claimed / received orders can have each of their items rated and reviewed.
   const [reviewTarget, setReviewTarget] = useState(null)
   const statusSeenRef = useRef(null)
@@ -796,7 +801,7 @@ function Orders() {
                     {order.status === 'READY TO SHIP' && !(Number(order.raw?.deliver_fee_charged) > 0) && (
                       <button
                         type="button"
-                        onClick={() => setSelectedOrder(order)}
+                        onClick={() => setSelectedId(order.id)}
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-orange text-white text-xs font-bold hover:bg-brand-orange-dark shadow-2xs transition-colors cursor-pointer"
                         title="Complete delivery details and pay delivery fee"
                       >
@@ -919,7 +924,7 @@ function Orders() {
                     <button
                       type="button"
                       disabled={busyId === order.id}
-                      onClick={() => setSelectedOrder(order)}
+                      onClick={() => setSelectedId(order.id)}
                       className="px-4 py-2 rounded-xl bg-brand-orange text-white text-xs font-semibold hover:bg-brand-orange-dark transition-all shadow-2xs hover:shadow-xs active:scale-98 flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
                     >
                       <span>View Order Details</span>
@@ -937,10 +942,10 @@ function Orders() {
         <CustomerOrderDetailModal
           order={selectedOrder}
           isOpen={Boolean(selectedOrder)}
-          onClose={() => setSelectedOrder(null)}
+          onClose={() => setSelectedId(null)}
           onOrderUpdated={() => load({ silent: true })}
           onReview={(target) => {
-            setSelectedOrder(null)
+            setSelectedId(null)
             setReviewTarget(target)
           }}
         />

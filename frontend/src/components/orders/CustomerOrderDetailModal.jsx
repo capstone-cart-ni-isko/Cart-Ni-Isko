@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import SimulatedRiderMap, { SIMULATION_ENABLED } from './SimulatedRiderMap.jsx'
+import SimulatedRiderMap from './SimulatedRiderMap.jsx'
+import { SIMULATION_ENABLED, simulationInProgress } from '../../utils/riderSimulation.js'
 import { Link } from 'react-router-dom'
 import QRCode from 'qrcode'
 import Modal from '../ui/Modal.jsx'
@@ -323,6 +324,9 @@ export default function CustomerOrderDetailModal({
 
   const handleConfirmReceipt = async () => {
     if (busy || !qrPayload) return
+    // Simulated rider still on the way: make sure before closing the trip.
+    if (!courierTrackUrl && simulationInProgress(effectiveRaw)
+      && !window.confirm("The rider hasn't arrived yet. Mark this order as received anyway?")) return
     setBusy(true)
     try {
       const res = await scanQr(qrPayload, 'customer')

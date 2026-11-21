@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Polyline, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { STORE, TRIP_MS } from '../../utils/riderSimulation.js'
 
 /*
     Demo rider for deliveries that have no real courier booking.
@@ -16,13 +17,6 @@ import 'leaflet/dist/leaflet.css'
     Turn it off with VITE_DELIVERY_SIMULATION=false.
 */
 
-export const SIMULATION_ENABLED = import.meta.env.VITE_DELIVERY_SIMULATION !== 'false'
-
-const STORE = {
-  lat: Number(import.meta.env.VITE_STORE_LAT) || 13.1440608,
-  lng: Number(import.meta.env.VITE_STORE_LNG) || 123.7228153,
-}
-const TRIP_MS = 3 * 60 * 1000
 
 const riderIcon = L.divIcon({
   className: '',
