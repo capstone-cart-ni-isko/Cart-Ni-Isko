@@ -297,7 +297,7 @@ class ProductsAPI extends Controller
             if ($value === '') {
                 return true;
             }
-            if (preg_match('#^data:image/(jpe?g|png);#i', $value)) {
+            if (preg_match('#^data:image/(jpe?g|png|webp);#i', $value)) {
                 return true;
             }
 
@@ -306,7 +306,8 @@ class ProductsAPI extends Controller
                 $path = $value;
             }
 
-            return (bool) preg_match('/\.(jpe?g|png)$/i', $path);
+            // WebP: uploads are re-encoded to it before going to storage.
+            return (bool) preg_match('/\.(jpe?g|png|webp)$/i', $path);
         }
 
         public static function publicPicture($value)
@@ -2970,8 +2971,35 @@ class ProductsAPI extends Controller
                 $extension = 'png';
             }
 
-            $filename = now()->format('Ymd_His') . '_' . substr(md5(uniqid('', true)), 0, 8)
-                . '.' . $extension;
+            $stem = now()->format('Ymd_His') . '_' . substr(md5(uniqid('', true)), 0, 8);
+            $filename = $stem . '.' . $extension;
+
+            // Supabase Storage first: the Render disk is wiped on every
+            // deploy, so a picture saved there disappears. The picture is
+            // shrunk (max 1200 px, WebP) before it is stored.
+            if (\App\Services\SupabaseStorage::configured()) {
+                [$bytes, $outExt, $outMime] = \App\Support\ImageShrinker::shrink(
+                    (string) $file->get(),
+                    $extension,
+                    $file->getMimeType() ?: 'image/' . $extension
+                );
+                $url = \App\Services\SupabaseStorage::put(
+                    $type . '/' . $stem . '.' . $outExt,
+                    $bytes,
+                    $outMime
+                );
+                if ($url !== null) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'File uploaded successfully',
+                        'data' => [
+                            'url'     => $url,
+                            'path'    => null,
+                            'storage' => 'supabase',
+                        ],
+                    ], 200);
+                }
+            }
 
             $path = false;
             try {

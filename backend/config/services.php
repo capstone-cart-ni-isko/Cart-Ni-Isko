@@ -2,6 +2,13 @@
 
 return [
 
+    // Public bucket for uploaded pictures (see App\Services\SupabaseStorage).
+    'supabase' => [
+        'url'    => env('SUPABASE_URL'),
+        'key'    => env('SUPABASE_SERVICE_KEY'),
+        'bucket' => env('SUPABASE_STORAGE_BUCKET', 'uploads'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Third Party Services

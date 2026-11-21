@@ -4,11 +4,15 @@ FROM php:8.2-cli
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     libzip-dev \
+    libpng-dev \
+    libjpeg62-turbo-dev \
+    libwebp-dev \
     zip \
     unzip \
     git \
     curl \
-    && docker-php-ext-install pdo pdo_pgsql pgsql \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install pdo pdo_pgsql pgsql gd \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Opcache: without it every request re-parses the whole framework, which alone
