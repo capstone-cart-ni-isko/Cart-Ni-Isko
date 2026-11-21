@@ -433,63 +433,34 @@ class OnlineDeliveryCourierTest extends TestCase
         $this->assertTrue($delivery->deliver_expect->between(now()->addMinutes(40), now()->addMinutes(46)));
     }
 
-    public function test_customer_can_switch_claiming_method_while_order_is_processing()
+    /**
+     * Rule 53 (d729fc4): the claiming method is settled at checkout and never
+     * switched afterwards - the endpoint always refuses and changes nothing.
+     */
+    public function test_claiming_method_is_locked_once_the_order_is_placed()
     {
         $customer = $this->makeCustomer();
-        $admin    = $this->makeEmployee(['emp_type' => 'ADMIN']);
         $product  = $this->makeProduct();
-        $secret   = $this->fakePayMongo();
+        $this->fakePayMongo();
         $this->fakeLalamove();
 
-        // 1. Initial checkout as delivery
         [$order] = $this->checkoutDelivery($customer, $product);
         $this->assertEquals('to pay', $order->fresh()->ord_status);
-        $this->assertNotNull(Delivery::where('ord_id', $order->ord_id)->first());
+        $claiming = $order->fresh()->ord_claiming;
 
-        // 2. Customer switches from delivery to pickup
         $futureSlot = now()->addDays(2)->format('Y-m-d') . ' 10:00';
-        $resPickup = $this->json('POST', '/api/orders/switch-claiming', [
-            'ord_id'        => $order->ord_id,
-            'claiming'      => 'pickup',
-            'appoint_start' => $futureSlot,
-        ], $this->headers($customer))->assertStatus(200);
-
-        $this->assertTrue($resPickup->json('success'));
-        $order->refresh();
-        $this->assertEquals('pickup', $order->ord_claiming);
-        $this->assertNull(Delivery::where('ord_id', $order->ord_id)->first());
-        $this->assertNotNull($order->pickup);
-
-        // 3. Customer switches back from pickup to delivery
-        $resDelivery = $this->json('POST', '/api/orders/switch-claiming', [
-            'ord_id'   => $order->ord_id,
-            'claiming' => 'deliver',
-        ], $this->headers($customer))->assertStatus(200);
-
-        $this->assertTrue($resDelivery->json('success'));
-        $order->refresh();
-        $this->assertEquals('deliver', $order->ord_claiming);
-        $this->assertNotNull(Delivery::where('ord_id', $order->ord_id)->first());
-        $this->assertNull(Pickup::where('ord_id', $order->ord_id)->first());
-
-        // 4. Switching is rejected once order moves away from processing.
-        // An unpaid order cannot be made Ready to Ship, so it is paid first.
-        $this->json('PUT', '/api/orders/update', [
-            'ord_id'     => $order->ord_id,
-            'ord_status' => 'to deliver',
-        ], $this->headers($admin))->assertStatus(422);
-        $this->payThroughWebhook($order, $secret);
-
-        $this->json('PUT', '/api/orders/update', [
-            'ord_id'     => $order->ord_id,
-            'ord_status' => 'to deliver',
-        ], $this->headers($admin))->assertStatus(200);
-
         $this->json('POST', '/api/orders/switch-claiming', [
             'ord_id'        => $order->ord_id,
             'claiming'      => 'pickup',
             'appoint_start' => $futureSlot,
-        ], $this->headers($customer))->assertStatus(422);
+        ], $this->headers($customer))
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'CLAIMING_LOCKED');
+
+        $order->refresh();
+        $this->assertSame($claiming, $order->ord_claiming);
+        $this->assertNotNull(Delivery::where('ord_id', $order->ord_id)->first());
+        $this->assertNull(Pickup::where('ord_id', $order->ord_id)->first());
     }
 
     // ==========================================
@@ -561,7 +532,8 @@ class OnlineDeliveryCourierTest extends TestCase
             ])->assertStatus(200);
         $this->assertSame('delivering', $order->fresh()->ord_status);
 
-        // Delivered: Claimed automatically, with the claim side effects.
+        // Delivered: Received automatically (d729fc4 - a delivery ends
+        // Received, never the pickup word Claimed), with the side effects.
         $this->courierStatus = 'COMPLETED';
         $this->withHeaders(['Content-Type' => 'application/json'])
             ->postJson('/api/delivery/webhook', [
@@ -570,7 +542,7 @@ class OnlineDeliveryCourierTest extends TestCase
             ])->assertStatus(200);
 
         $delivery->refresh();
-        $this->assertSame('claimed', $order->fresh()->ord_status);
+        $this->assertSame('received', $order->fresh()->ord_status);
         $this->assertTrue(
             \Illuminate\Support\Facades\DB::table('custnotif')
                 ->where('cust_id', $customer->cust_id)
@@ -781,8 +753,12 @@ class OnlineDeliveryCourierTest extends TestCase
             'Paymongo-Signature' => $this->payMongoSignature($raw, $secret),
         ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))->assertStatus(200);
 
-        // Paid, but LalaMove has no keys: the staff gets a clear 503, not a
-        // stack trace, and the order is untouched.
+        // Only a Ready to Ship order can be booked (d729fc4), so staff mark
+        // it ready first; with no courier keys that books nothing.
+        $this->markReady($order);
+
+        // Paid and ready, but LalaMove has no keys: the staff gets a clear
+        // 503, not a stack trace, and the order is untouched.
         $this->json('POST', '/api/delivery/book', ['ord_id' => $order->ord_id], $this->headers($staff))
             ->assertStatus(503)
             ->assertJsonPath('success', false);
@@ -824,6 +800,9 @@ class OnlineDeliveryCourierTest extends TestCase
             'Content-Type'       => 'application/json',
             'Paymongo-Signature' => $this->payMongoSignature($raw, $secret),
         ])->postJson('/api/checkout/payment/webhook', json_decode($raw, true))->assertStatus(200);
+
+        // Marking it Ready to Ship books the courier (d729fc4).
+        $this->markReady($order);
 
         // Booking an order that is already booked says so instead of
         // double-charging the wallet.

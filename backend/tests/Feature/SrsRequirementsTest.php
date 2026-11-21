@@ -781,9 +781,12 @@ class SrsRequirementsTest extends TestCase
         $order->refresh();
         $this->assertSame('processing', $order->ord_status);
         $this->assertEquals((float) $order->ord_amount, (float) $order->pay_received);
+        // Admins are alerted to the payment. The customer gets no second
+        // "payment confirmed" notice on top of the "order placed" one
+        // (removed on purpose in afb9886).
         $this->assertNotNull(
-            CustNotif::where('cust_id', $customer->cust_id)
-                ->where('custnotif_msg', 'like', '%Payment confirmed%')
+            EmpNotif::where('emp_id', $admin->emp_id)
+                ->where('empnotif_msg', 'like', '%Online payment received for order #' . $order->ord_id . '%')
                 ->first()
         );
 

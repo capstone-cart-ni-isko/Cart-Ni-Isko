@@ -417,7 +417,7 @@ class SystemAPI extends Controller
             $justUnavailable = $json->boolean(self::shiftUnavailableField)
                 && $shift->sched_disabled !== null
                 && ! $shift->isStaffed()
-                && ! $wasStaffed;
+                && $wasStaffed;
 
             if ($json->has('emp_id')) $shift->emp_id = (int) $json->input('emp_id');
 

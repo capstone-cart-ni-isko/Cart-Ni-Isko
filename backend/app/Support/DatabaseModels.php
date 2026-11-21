@@ -442,11 +442,27 @@ class Schedule extends Model
         }
     }
 
+    /**
+     * Blocks counted as PENDING REPLACEMENT - the same rule as
+     * SystemAPI::shiftStatus(): a block marked unavailable always counts,
+     * while an out-of-store employee's block only counts while it is in
+     * progress (their future blocks are still SCHEDULED).
+     *
+     * hasException() below deliberately keeps the wider rule (any block of an
+     * out-of-store employee): it decides whether the roster rebuild skips an
+     * employee, not what the slot grid shows as pending right now.
+     */
     protected static function blocked()
     {
-        return static::query()->where(function ($query) {
+        $now = now();
+
+        return static::query()->where(function ($query) use ($now) {
             $query->whereNotNull('sched_disabled')
-                ->orWhereNotIn('emp_id', static::availableEmployeeIds());
+                ->orWhere(function ($inProgress) use ($now) {
+                    $inProgress->whereNotIn('emp_id', static::availableEmployeeIds())
+                        ->where('sched_time_start', '<=', $now)
+                        ->where('sched_time_end', '>=', $now);
+                });
         });
     }
 
