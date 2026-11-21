@@ -837,10 +837,50 @@ class OrdersAPI extends Controller
             return;
         }
 
+        if (self::$payMethodMemo !== null) {
+            self::$payMethodMemo[$ordId] = $method;
+        }
+
         try {
             Cache::forever(self::payMethodCacheKey($ordId), $method);
         } catch (\Throwable $e) {
             Log::warning('Could not cache PayMongo method', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /** Pay methods read up front for a list of orders (see primePayMethods). */
+    private static ?array $payMethodMemo = null;
+
+    /**
+     * Reads the cached pay method of many orders in one cache call, so an
+     * order list does not make one cache round trip per order.
+     * Pass null to stop using the primed values.
+     */
+    public static function primePayMethods(?array $ordIds): void
+    {
+        if ($ordIds === null) {
+            self::$payMethodMemo = null;
+            return;
+        }
+
+        $keys = [];
+        foreach ($ordIds as $id) {
+            if ((int) $id > 0) {
+                $keys[self::payMethodCacheKey((int) $id)] = (int) $id;
+            }
+        }
+
+        self::$payMethodMemo = [];
+        if ($keys === []) {
+            return;
+        }
+
+        try {
+            foreach (Cache::many(array_keys($keys)) as $key => $method) {
+                self::$payMethodMemo[$keys[$key]] = $method !== null ? (string) $method : null;
+            }
+        } catch (\Throwable $e) {
+            self::$payMethodMemo = null;
         }
     }
 
@@ -849,6 +889,11 @@ class OrdersAPI extends Controller
         $ordId = (int) $ordId;
         if ($ordId <= 0) {
             return null;
+        }
+
+        if (self::$payMethodMemo !== null && array_key_exists($ordId, self::$payMethodMemo)) {
+            $method = self::$payMethodMemo[$ordId];
+            return $method !== null ? self::normalizePayMethod($method) : null;
         }
 
         try {

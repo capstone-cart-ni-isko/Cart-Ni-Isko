@@ -34,6 +34,22 @@ class UserAPI extends Controller
 
     private static ?array $counterColumns = null;
 
+    /**
+     * Set only while ordersPayload() builds a LIST of orders.
+     * - $paymentsByRef: every payment the list needs, read in one query, so a
+     *   list of N orders no longer pays N separate trips to the database.
+     * - $compactProducts: list rows leave out the product's full catalog
+     *   record (all variations, colour list, stock grid, rating breakdown,
+     *   description). No order screen reads those, and they were ~85% of the
+     *   response - about 2 MB for 150 orders.
+     */
+    private ?array $paymentsByRef = null;
+    private bool $compactProducts = false;
+
+    private const ORDER_LIST_PRODUCT_DROP = [
+        'variations', 'prod_colors', 'prod_stock_matrix', 'prod_rating_breakdown', 'prod_desc',
+    ];
+
     public function addOrder(Request $json)
     {
         try {
@@ -953,7 +969,32 @@ class UserAPI extends Controller
         }
         ProductsAPI::primePresentations($products);
 
-        return $orders->map(fn ($o) => $this->orderPayload($o))->values()->all();
+        $refs = $orders->pluck('pay_reference')->filter()->map(fn ($r) => (string) $r)->unique()->values()->all();
+        $this->paymentsByRef = [];
+        if ($refs !== []) {
+            foreach (Payment::whereIn('pay_ref', $refs)->orderBy('pay_id')->get() as $payment) {
+                $this->paymentsByRef[(string) $payment->pay_ref] ??= $payment;
+            }
+        }
+        $this->compactProducts = true;
+        OrdersAPI::primePayMethods($orders->pluck('ord_id')->all());
+
+        try {
+            return $orders->map(fn ($o) => $this->orderPayload($o))->values()->all();
+        } finally {
+            $this->paymentsByRef = null;
+            $this->compactProducts = false;
+            OrdersAPI::primePayMethods(null);
+        }
+    }
+
+    private function paymentForReference(string $reference): ?Payment
+    {
+        if ($this->paymentsByRef !== null) {
+            return $this->paymentsByRef[$reference] ?? null;
+        }
+
+        return Payment::where('pay_ref', $reference)->first();
     }
 
     protected function orderPayload(Order $order): array
@@ -998,7 +1039,7 @@ class UserAPI extends Controller
 
         $payment = $order->parcel?->payment
             ?? $order->pickup?->payment
-            ?? ($order->pay_reference ? Payment::where('pay_ref', (string) $order->pay_reference)->first() : null);
+            ?? ($order->pay_reference ? $this->paymentForReference((string) $order->pay_reference) : null);
 
         if ($payment) {
             $payload['pay_id']        = $payment->pay_id;
@@ -1085,6 +1126,9 @@ class UserAPI extends Controller
         $prodvar = $bag?->prodvar;
         $product = $prodvar?->product;
         $present = $product ? ProductsAPI::present($product) : null;
+        if ($present !== null && $this->compactProducts) {
+            $present = array_diff_key($present, array_flip(self::ORDER_LIST_PRODUCT_DROP));
+        }
 
         $qty  = $bag ? max(0, (int) $bag->bag_qty) : 0;
         $unit = $bag
