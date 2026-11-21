@@ -479,7 +479,10 @@ class DatabaseAPI extends Controller
             if ($emailCheck) return $emailCheck;
         }
 
-        return $this->validateAllFormats($json);
+        // Sign-in only compares the password with the stored one. The strength
+        // standard applies when a password is SET, not when an older account
+        // types its existing one - otherwise those accounts are locked out.
+        return $this->validateAllFormats($json, false);
     }
 
     public function otpChallengeStart(Request $json)
@@ -604,14 +607,14 @@ class DatabaseAPI extends Controller
         return null;
     }
 
-    protected function validateAllFormats(Request $json)
+    protected function validateAllFormats(Request $json, bool $checkPasswordStrength = true)
     {
         $checks = [
             $this->email($json),
             $this->backupEmail($json),
             $this->phone($json),
             $this->backupPhone($json),
-            $this->password($json),
+            $checkPasswordStrength ? $this->password($json) : null,
             $this->nickname($json),
             $this->birthday($json),
             $this->names($json),

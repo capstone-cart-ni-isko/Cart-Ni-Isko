@@ -155,6 +155,21 @@ class AccountRecoverySecurityTest extends TestCase
         ])->assertJsonPath('success', false);
     }
 
+    public function test_an_older_weak_password_still_signs_in()
+    {
+        $customer = $this->makeCustomer(['cust_password' => Hash::make('austin_123')]);
+
+        $this->postJson('/api/auth/cust_login', [
+            'phone'    => $customer->cust_phone,
+            'password' => 'austin_123',
+        ])->assertStatus(200)->assertJsonPath('success', true);
+
+        $this->postJson('/api/auth/cust_login', [
+            'phone'    => $customer->cust_phone,
+            'password' => 'wrong_123',
+        ])->assertStatus(401)->assertJsonPath('message', 'Invalid credentials');
+    }
+
     public function test_secret_columns_are_not_serialised()
     {
         $customer = $this->makeCustomer([
