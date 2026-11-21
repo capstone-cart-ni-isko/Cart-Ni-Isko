@@ -267,7 +267,11 @@ export function AuthProvider({ children }) {
       course: extras.course || account?.cust_course || account?.cust_dept || 'N/A',
       studentId: extras.studentId || 'N/A',
       // Real uploaded profile photo (URL served by the backend)
-      avatarImage: account?.cust_photo || account?.avatarImage || extras.avatarImage || '',
+      // The API stores and returns it as `cust_avatar`; when the row carries
+      // that column it is the truth (null = photo removed).
+      avatarImage: account && 'cust_avatar' in account
+        ? (account.cust_avatar || '')
+        : (account?.cust_photo || account?.avatarImage || extras.avatarImage || ''),
     }
 
     // The API answers carry the whole row, password hash included; the

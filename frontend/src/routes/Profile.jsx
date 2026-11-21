@@ -295,7 +295,7 @@ function Profile() {
             <div className="flex items-start justify-between gap-3 relative z-10">
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm">
-                  <Avatar name={fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} />
+                  <Avatar name={fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} src={currentUser?.avatarImage || currentUser?.cust_avatar || undefined} />
                 </div>
                 <div className="min-w-0 text-white">
                   <h1 className="text-lg font-semibold tracking-tight leading-tight truncate">{fullName}</h1>
@@ -452,7 +452,7 @@ function Profile() {
           {/* Left: Avatar + Info */}
           <div className="flex items-center gap-4 relative z-10">
             <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm border-2 border-white/40">
-              <Avatar name={fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} />
+              <Avatar name={fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} src={currentUser?.avatarImage || currentUser?.cust_avatar || undefined} />
             </div>
             <div className="text-white">
               <h1 className="text-xl md:text-2xl font-semibold tracking-tight leading-tight">{fullName}</h1>

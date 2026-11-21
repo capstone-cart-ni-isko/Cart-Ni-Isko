@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 
 /**
  * Shared avatar for both portals. A real photo (`src`) always wins; otherwise
@@ -40,17 +40,18 @@ const THEMES = {
 
 export default function Avatar({ name = '', src, size = 40, className = '', userId }) {
   const uid = useId().replace(/:/g, '')
+  // A photo that fails to load (e.g. a file lost when the server redeployed)
+  // falls back to the default avatar instead of leaving an empty circle.
+  const [failedSrc, setFailedSrc] = useState(null)
 
-  if (src) {
+  if (src && src !== failedSrc) {
     return (
       <img
         src={src}
         alt={name}
         className={`rounded-full object-cover shrink-0 ${className}`}
         style={{ width: size, height: size }}
-        onError={(e) => {
-          e.currentTarget.style.display = 'none'
-        }}
+        onError={() => setFailedSrc(src)}
       />
     )
   }
