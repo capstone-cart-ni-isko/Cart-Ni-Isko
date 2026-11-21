@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import SimulatedRiderMap from './SimulatedRiderMap.jsx'
 import { SIMULATION_ENABLED, simulationInProgress } from '../../utils/riderSimulation.js'
 import { Link } from 'react-router-dom'
@@ -10,13 +10,12 @@ import StatusBadge from '../ui/StatusBadge.jsx'
 import { formatPrice } from '../ui/PriceTag.jsx'
 import { getImageUrl } from '../../utils/imageUtils.js'
 import {
-  PackageIcon,
   ShirtIcon,
   TruckIcon,
   MapPinIcon,
   MessageSquareIcon,
 } from '../ui/Icons.jsx'
-import { fetchOrder, requestCancel, updateOrder, submitDeliveryDetails, confirmDeliveryFeePayment } from '../../services/orders.js'
+import { fetchOrder, requestCancel, updateOrder, submitDeliveryDetails } from '../../services/orders.js'
 import { getTrack, scanQr } from '../../services/tracking.js'
 import { parseDate, paymentSummary } from '../../services/dashboard.js'
 import { QrScanModal } from '../ui/QRScanner.jsx'
@@ -191,7 +190,7 @@ export default function CustomerOrderDetailModal({
     loadDetails()
   }, [isOpen, orderId, version, reloadTick, loadDetails])
 
-  const effectiveRaw = fullOrderData || order?.raw || {}
+  const effectiveRaw = useMemo(() => fullOrderData || order?.raw || {}, [fullOrderData, order?.raw])
   const reviewedAll = Boolean(effectiveRaw.reviewed_all ?? order?.reviewedAll)
   const status = order?.status || 'TO PROCESS'
   const isDelivery = order?.fulfillment?.method === 'Courier Delivery'
@@ -270,7 +269,11 @@ export default function CustomerOrderDetailModal({
   const [deliveryNotesInput, setDeliveryNotesInput] = useState('')
   const [deliverySpeedInput, setDeliverySpeedInput] = useState('standard')
 
+  // Seed the form from the saved order only while it is closed: once the
+  // customer is typing, a background re-read (any live update) must not
+  // overwrite what they entered.
   useEffect(() => {
+    if (showDeliveryForm) return
     if (effectiveRaw?.deliver_address) {
       setDeliveryAddrInput(effectiveRaw.deliver_address)
     } else if (currentUser?.address) {
@@ -286,7 +289,7 @@ export default function CustomerOrderDetailModal({
     } else if (currentUser?.phone) {
       setDeliveryPhoneInput(currentUser.phone)
     }
-  }, [effectiveRaw, currentUser])
+  }, [effectiveRaw, currentUser, showDeliveryForm])
 
   const handleSubmitDeliveryDetails = async (e) => {
     e?.preventDefault?.()
@@ -325,7 +328,7 @@ export default function CustomerOrderDetailModal({
   const handleConfirmReceipt = async () => {
     if (busy || !qrPayload) return
     // Simulated rider still on the way: make sure before closing the trip.
-    if (!courierTrackUrl && simulationInProgress(effectiveRaw)
+    if (!courier?.order_id && !courierTrackUrl && simulationInProgress(effectiveRaw)
       && !window.confirm("The rider hasn't arrived yet. Mark this order as received anyway?")) return
     setBusy(true)
     try {
@@ -579,7 +582,7 @@ export default function CustomerOrderDetailModal({
             </div>
 
             {/* Demo rider while no real courier is booked (see SimulatedRiderMap). */}
-            {isDelivery && SIMULATION_ENABLED && !courierTrackUrl
+            {isDelivery && SIMULATION_ENABLED && !courier?.order_id && !courierTrackUrl
               && ['IN TRANSIT', 'TO RECEIVE'].includes(status) && (
               <SimulatedRiderMap raw={effectiveRaw} />
             )}

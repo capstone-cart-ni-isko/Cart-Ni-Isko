@@ -297,7 +297,7 @@ function OrderDetail() {
   const handleConfirmReceipt = async () => {
     if (busy || !qrPayload) return
     // Simulated rider still on the way: make sure before closing the trip.
-    if (!courierTrackUrl && simulationInProgress(order?.raw)
+    if (!courier?.order_id && !courierTrackUrl && simulationInProgress(order?.raw)
       && !window.confirm("The rider hasn't arrived yet. Mark this order as received anyway?")) return
     setBusy(true)
     try {
@@ -454,7 +454,7 @@ function OrderDetail() {
               </div>
 
               {/* Demo rider while no real courier is booked (see SimulatedRiderMap). */}
-              {isDelivery && SIMULATION_ENABLED && !courierTrackUrl
+              {isDelivery && SIMULATION_ENABLED && !courier?.order_id && !courierTrackUrl
                 && ['IN TRANSIT', 'TO RECEIVE'].includes(order.status) && (
                 <SimulatedRiderMap raw={order.raw} />
               )}

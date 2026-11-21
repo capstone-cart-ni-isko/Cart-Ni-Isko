@@ -77,11 +77,14 @@ export default function SimulatedRiderMap({ raw }) {
     return Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0) ? { lat, lng } : null
   }, [raw?.deliver_lat, raw?.deliver_lng])
 
-  // Trip clock: when staff marked the order In Transit, else when first seen.
+  // Trip clock: when staff marked the order In Transit. An order without that
+  // stamp (set In Transit before it was recorded) counts as arrived - the
+  // same rule as simulationInProgress(), so the map and the "I received"
+  // check always agree and the trip never restarts on each open.
   const [firstSeen] = useState(() => Date.now())
   const startedAt = useMemo(() => {
     const t = Date.parse(raw?.deliver_pickedup || '')
-    return Number.isFinite(t) ? t : firstSeen
+    return Number.isFinite(t) ? t : firstSeen - TRIP_MS
   }, [raw?.deliver_pickedup, firstSeen])
 
   const [now, setNow] = useState(() => Date.now())
@@ -110,6 +113,10 @@ export default function SimulatedRiderMap({ raw }) {
     return () => { alive = false }
   }, [dest])
 
+  // Stable between the per-second ticks, so FitRoute only re-fits when the
+  // route itself changes and the customer can pan and zoom freely.
+  const path = useMemo(() => route || (dest ? [STORE, dest] : []), [route, dest])
+
   if (!dest) {
     return (
       <p className="text-xs text-gray-500">
@@ -118,7 +125,6 @@ export default function SimulatedRiderMap({ raw }) {
     )
   }
 
-  const path = route || [STORE, dest]
   const fraction = Math.min((now - startedAt) / TRIP_MS, 1)
   const rider = pointAlong(path, fraction)
   const minutesLeft = Math.max(0, Math.ceil((TRIP_MS - (now - startedAt)) / 60000))

@@ -23,6 +23,7 @@ import { canReviewOrder } from '../services/reviews.js'
 import { fetchOrders, requestCancel, confirmDeliveryFeePayment, resumePayment } from '../services/orders.js'
 import { parseDate } from '../services/dashboard.js'
 import { variationParts } from '../utils/variation.js'
+import { setVisibleInterval, BACKUP_POLL_MS } from '../utils/visibleInterval.js'
 
 const FULFILLMENT_OPTIONS = [
   { key: 'pickup', label: 'Pickup' },
@@ -417,11 +418,10 @@ function Orders() {
     }
   }, [showToast, load])
 
-  /* REQ-ORD_LIST-02: refresh the list every ~10s while the tab is visible.
-     The interval stops while the document is hidden and is re-armed (with an
-     immediate refresh) when the customer comes back. A realtime ping (a status
-     change made by staff on another device) re-runs this effect at once, so the
-     list moves without waiting for the poll. */
+  /* REQ-ORD_LIST-02: live updates (a status change made by staff on another
+     device) re-run this effect at once, so the list moves immediately. The
+     shared backup poll (every 2 minutes, paused while the tab is hidden,
+     refreshed on return) only covers a missed update. */
   const version = useApiChange(['orders', 'checkout', 'appoint', 'tracking', 'delivery', 'cart'])
 
   useEffect(() => {
@@ -429,33 +429,7 @@ function Orders() {
 
     if (!custId) return undefined
 
-    let timer = null
-    const tick = () => {
-      if (!document.hidden) load({ silent: true })
-    }
-    const start = () => {
-      if (timer === null) timer = setInterval(tick, 60000)
-    }
-    const stop = () => {
-      if (timer !== null) {
-        clearInterval(timer)
-        timer = null
-      }
-    }
-    const onVisibility = () => {
-      if (document.hidden) stop()
-      else {
-        start()
-        load({ silent: true })
-      }
-    }
-
-    start()
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      stop()
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
+    return setVisibleInterval(() => load({ silent: true }), BACKUP_POLL_MS)
   }, [custId, load, version])
 
   const fulfillmentOrders = useMemo(

@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
-    && docker-php-ext-install pdo pdo_pgsql pgsql gd \
+    && docker-php-ext-install pdo pdo_pgsql pgsql gd exif \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Opcache: without it every request re-parses the whole framework, which alone

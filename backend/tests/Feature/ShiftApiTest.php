@@ -1175,4 +1175,21 @@ class ShiftApiTest extends TestCase
 
         Carbon::setTestNow();
     }
+
+    public function test_pending_replacements_only_count_blocks_that_can_still_be_covered()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-05 12:00:00'));
+        $officer = $this->makeEmployee();
+
+        // Unavailable and already over: nobody can cover it any more.
+        $this->makeShift($officer, ['shift_date' => '2026-10-04', 'sched_disabled' => now()]);
+        $this->assertSame(0, Schedule::pendingReplacements());
+
+        // Unavailable and still ahead (and one in progress): both need cover.
+        $this->makeShift($officer, ['shift_date' => '2026-10-06', 'sched_disabled' => now()]);
+        $this->makeShift($officer, ['shift_date' => '2026-10-05', 'sched_disabled' => now()]);
+        $this->assertSame(2, Schedule::pendingReplacements());
+
+        Carbon::setTestNow();
+    }
 }

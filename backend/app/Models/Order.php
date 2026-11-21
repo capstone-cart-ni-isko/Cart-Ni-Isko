@@ -8,6 +8,19 @@ class Order extends Model
     protected $primaryKey = 'ord_id';
     public $timestamps = false;
 
+    /**
+     * Order ids are re-used (IdAllocator hands out the lowest free id after a
+     * delete or purge), so anything cached under the id belongs to the old
+     * order. A new order starts with that cache cleared - otherwise it would
+     * inherit the old order's payment method.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Order $order) {
+            \App\Http\Controllers\OrdersAPI::forgetPayMethodForOrder((int) $order->ord_id);
+        });
+    }
+
     protected $fillable = [
         'ord_id',
         'cust_id',

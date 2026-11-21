@@ -4,6 +4,7 @@ import { useAdmin } from '../../../hooks/useAdmin.js'
 import { uploadImage } from '../../../services/upload.js'
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL } from '../kit/ui.js'
 import { PRODUCT_CATEGORIES } from '../../../data/productCategories.js'
+import { IMAGE_ACCEPT, imageFileProblem } from '../../../utils/imageTypes.js'
 
 const EMPTY = {
   name: '',
@@ -29,6 +30,12 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
   const handlePhoto = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    const problem = imageFileProblem(file, 'Product images')
+    if (problem) {
+      setError(problem)
+      e.target.value = ''
+      return
+    }
     setUploading(true)
     setError('')
     try {
@@ -148,7 +155,7 @@ export default function AddProductDrawer({ isOpen, onClose, onCompleted }) {
         </div>
         <div>
           <label className={LABEL} htmlFor="np-photo">Photo (optional)</label>
-          <input id="np-photo" type="file" accept="image/*" onChange={handlePhoto} className="block w-full text-xs text-slate-600 file:mr-2 file:h-8 file:px-3 file:rounded-md file:border file:border-slate-200 file:bg-white file:text-xs file:font-medium" />
+          <input id="np-photo" type="file" accept={IMAGE_ACCEPT} onChange={handlePhoto} className="block w-full text-xs text-slate-600 file:mr-2 file:h-8 file:px-3 file:rounded-md file:border file:border-slate-200 file:bg-white file:text-xs file:font-medium" />
           {uploading && <p className="text-2xs text-slate-500 mt-1">Uploading…</p>}
           {form.photo && !uploading && (
             <img src={form.photo} alt="Product preview" className="mt-2 w-20 h-20 object-contain rounded-md border border-slate-200" />

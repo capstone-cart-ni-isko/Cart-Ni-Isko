@@ -2938,7 +2938,11 @@ class ProductsAPI extends Controller
             }
         }
 
-    private const imageRules = ['required', 'image', 'mimes:png,jpg,jpeg,gif,webp', 'max:2048'];
+    // One list for every picture the app takes (products, avatars, banners):
+    // PNG, JPEG or WebP up to 2 MB. GIF is not offered - uploads are
+    // re-encoded, which would drop the animation anyway. The frontend reads
+    // the same list from src/utils/imageTypes.js.
+    private const imageRules = ['required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'];
 
     public static function publicUrl(string $path): string
     {

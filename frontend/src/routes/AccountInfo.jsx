@@ -8,6 +8,7 @@ import { useToast } from '../hooks/useToast.js'
 import { updateAccount } from '../services/accounts.js'
 import { uploadImage } from '../services/upload.js'
 import { isPhMobile, normalizePhMobile, PH_MOBILE_MESSAGE } from '../utils/phone.js'
+import { IMAGE_ACCEPT, imageFileProblem } from '../utils/imageTypes.js'
 
 const selectStyle = {
   backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
@@ -70,12 +71,9 @@ function AccountInfo() {
   const handlePhotoChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'].includes(file.type)) {
-      setSaveState('Please upload a PNG, JPEG, GIF, or WebP image.')
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setSaveState('Image size exceeds the 10MB limit.')
+    const problem = imageFileProblem(file, 'Profile photos')
+    if (problem) {
+      setSaveState(problem)
       return
     }
     setSaveState('Uploading photo…')
@@ -250,7 +248,7 @@ function AccountInfo() {
               >
                 EDIT
               </button>
-              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/gif" className="hidden" onChange={handlePhotoChange} />
+              <input ref={fileInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handlePhotoChange} />
             </div>
           </div>
 

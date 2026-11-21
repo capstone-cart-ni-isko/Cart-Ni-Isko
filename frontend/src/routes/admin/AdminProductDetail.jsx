@@ -17,6 +17,7 @@ import { empIsStaff } from '../../components/admin/schema.js'
 import { PRODUCT_CATEGORIES } from '../../data/productCategories.js'
 import { CalendarIcon, ShirtIcon } from '../../components/ui/Icons.jsx'
 import SkeletonBlock from '../../components/ui/SkeletonBlock.jsx'
+import { IMAGE_ACCEPT, IMAGE_MIME_TYPES, MAX_IMAGE_BYTES } from '../../utils/imageTypes.js'
 
 /**
  * FLOW-MANAGE_INV-05 / FLOW-MANAGE_INV-08 / REQ-MANAGE_INV-06 / REQ-MANAGE_INV-07
@@ -37,9 +38,8 @@ import SkeletonBlock from '../../components/ui/SkeletonBlock.jsx'
  */
 
 /** REQ-ADD_PROD-07 / FLOW-ADD_PROD-03: JPG and PNG, at most 2 MB each. */
-const ACCEPTED_IMAGE_TYPES = 'image/png,image/jpeg'
-const ACCEPTED_IMAGE_MIME = ['image/png', 'image/jpeg']
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = IMAGE_ACCEPT
+const ACCEPTED_IMAGE_MIME = IMAGE_MIME_TYPES
 
 /** A product can variate along at most four axes at the same time. */
 const MAX_OPTION_AXES = 4
@@ -352,7 +352,7 @@ export default function AdminProductDetail() {
     e.target.value = ''
     if (!file) return
     if (!ACCEPTED_IMAGE_MIME.includes(file.type)) {
-      showToast('Product images must be PNG or JPEG files.', 'error')
+      showToast('Product images must be PNG, JPEG or WebP files.', 'error')
       return
     }
     if (file.size > MAX_IMAGE_BYTES) {
@@ -431,7 +431,7 @@ export default function AdminProductDetail() {
     e.target.value = ''
     if (!file) return
     if (!ACCEPTED_IMAGE_MIME.includes(file.type)) {
-      showToast('Product images must be PNG or JPEG files.', 'error')
+      showToast('Product images must be PNG, JPEG or WebP files.', 'error')
       return
     }
     if (file.size > MAX_IMAGE_BYTES) {

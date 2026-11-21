@@ -12,6 +12,7 @@ import { uploadImage } from '../../services/upload.js'
 import { empIsStaff } from '../../components/admin/schema.js'
 import OptionValuesInput from '../../components/admin/OptionValuesInput.jsx'
 import { normalizeProductCategory, PRODUCT_CATEGORIES } from '../../data/productCategories.js'
+import { IMAGE_ACCEPT, IMAGE_MIME_TYPES, MAX_IMAGE_BYTES } from '../../utils/imageTypes.js'
 
 /**
  * REQ-ADD_PROD-04: the product categories are a predefined, system-wide set.
@@ -31,9 +32,8 @@ import { normalizeProductCategory, PRODUCT_CATEGORIES } from '../../data/product
  * succeeded and the product was then rejected with 422 — the two checks now
  * agree on one list.
  */
-const ACCEPTED_IMAGE_TYPES = 'image/png,image/jpeg'
-const ACCEPTED_IMAGE_MIME = ['image/png', 'image/jpeg']
-const MAX_IMAGE_BYTES = 2 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = IMAGE_ACCEPT
+const ACCEPTED_IMAGE_MIME = IMAGE_MIME_TYPES
 
 /**
  * REQ-ADD_PROD-02/03 + "a product can variate by color and size, or color and
@@ -286,7 +286,7 @@ export default function AdminInventory() {
   // REQ-ADD_PROD-07: one shared guard for every upload the form makes.
   const assertImageAcceptable = (file) => {
     if (!ACCEPTED_IMAGE_MIME.includes(file.type)) {
-      showToast('Product images must be PNG or JPEG files.', 'error')
+      showToast('Product images must be PNG, JPEG or WebP files.', 'error')
       return false
     }
     if (file.size > MAX_IMAGE_BYTES) {

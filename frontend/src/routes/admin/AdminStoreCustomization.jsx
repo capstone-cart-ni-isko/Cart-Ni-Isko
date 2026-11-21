@@ -8,9 +8,10 @@ import { fetchSettings, updateSettings } from '../../services/settings.js'
 import { uploadImage } from '../../services/upload.js'
 import { DEFAULT_STORE_SLIDES, parseStoreSlides } from '../../data/storeSlides.js'
 import SkeletonBlock from '../../components/ui/SkeletonBlock.jsx'
+import { IMAGE_MIME_TYPES, MAX_IMAGE_BYTES } from '../../utils/imageTypes.js'
 
-const MAX_BANNER_BYTES = 2 * 1024 * 1024 // 2 MB (mirrors POST /uploads limit)
-const BANNER_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const MAX_BANNER_BYTES = MAX_IMAGE_BYTES
+const BANNER_MIME_TYPES = IMAGE_MIME_TYPES
 
 export default function AdminStoreCustomization({ embedded = false }) {
   const { currentAdminUser } = useAdmin() || {}

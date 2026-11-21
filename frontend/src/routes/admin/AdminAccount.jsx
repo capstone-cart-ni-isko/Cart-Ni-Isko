@@ -13,8 +13,9 @@ import RecoveryCodeCard from '../../components/ui/RecoveryCodeCard.jsx'
 import { first, empCateg, empFullName } from '../../components/admin/schema.js'
 import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
 import { FormSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
+import { IMAGE_ACCEPT, imageFileProblem } from '../../utils/imageTypes.js'
+import { uploadImage } from '../../services/upload.js'
 
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024 // 2 MB
 const PRONOUNS = ['they/them', 'he/him', 'she/her', 'other']
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -227,29 +228,27 @@ export default function AdminAccount({ embedded = false }) {
   const hasProfileError = Object.values(profileErrors).some(Boolean)
   const hasBackupError = Object.values(backupErrors).some(Boolean)
 
-  // Avatar upload: jpg/png only, <= 2 MB, stored as a base64 data URL
-  // in the emp_avatar column (no Supabase buckets exist).
-  const handleFileChange = (e) => {
+  // Avatar upload: the same upload as customer photos (PNG/JPEG/WebP,
+  // <= 2 MB, shrunk and kept in Supabase Storage). Only the picture's URL
+  // is saved on the employee row.
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
 
-    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-      showToast('Only JPG and PNG images are allowed for the avatar.', 'error')
-      return
-    }
-    if (file.size > MAX_AVATAR_BYTES) {
-      showToast('The avatar must be 2 MB or smaller.', 'error')
+    const problem = imageFileProblem(file, 'Avatars')
+    if (problem) {
+      showToast(problem, 'error')
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      setAvatarPreview(String(reader.result || ''))
-      showToast('Avatar selected. Click Save Profile to apply.', 'success')
+    try {
+      const url = await uploadImage(file, 'avatar')
+      setAvatarPreview(url)
+      showToast('Avatar uploaded. Click Save Profile to apply.', 'success')
+    } catch (err) {
+      showToast(err?.message || 'Could not upload the avatar.', 'error')
     }
-    reader.onerror = () => showToast('Could not read the selected image.', 'error')
-    reader.readAsDataURL(file)
-    e.target.value = ''
   }
 
   const handleRemoveAvatar = () => {
@@ -576,7 +575,7 @@ export default function AdminAccount({ embedded = false }) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/jpg"
+                accept={IMAGE_ACCEPT}
                 onChange={handleFileChange}
                 className="hidden"
               />

@@ -860,6 +860,20 @@ class OrdersAPI extends Controller
         }
     }
 
+    /** Drops the cached pay method of an order id (a re-used id starts clean). */
+    public static function forgetPayMethodForOrder(int $ordId): void
+    {
+        if ($ordId <= 0) {
+            return;
+        }
+
+        try {
+            Cache::forget(self::payMethodCacheKey($ordId));
+        } catch (\Throwable $e) {
+            // Cache unavailable: nothing to forget.
+        }
+    }
+
     /** Pay methods read up front for a list of orders (see primePayMethods). */
     private static ?array $payMethodMemo = null;
 

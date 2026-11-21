@@ -30,10 +30,24 @@ final class ImageShrinker
             return $original;
         }
 
+        // A phone photo is often stored sideways with an EXIF "Orientation"
+        // tag telling viewers how to turn it. Re-encoding drops that tag, so
+        // the turn is applied to the pixels first. Without the exif extension
+        // a JPEG is left as it is rather than risk a sideways picture.
+        $orientation = 1;
+        if (in_array($extension, ['jpg', 'jpeg'], true)) {
+            if (! function_exists('exif_read_data')) {
+                return $original;
+            }
+            $exif = @exif_read_data('data://image/jpeg;base64,' . base64_encode($bytes));
+            $orientation = (int) ($exif['Orientation'] ?? 1);
+        }
+
         $image = @imagecreatefromstring($bytes);
         if ($image === false) {
             return $original;
         }
+        $image = self::orient($image, $orientation);
 
         $ok = false;
         $webp = '';
@@ -72,5 +86,32 @@ final class ImageShrinker
         }
 
         return [$webp, 'webp', 'image/webp'];
+    }
+
+    /** Applies an EXIF orientation (1-8) to the pixels. */
+    private static function orient(\GdImage $image, int $orientation): \GdImage
+    {
+        if (in_array($orientation, [2, 4, 5, 7], true)) {
+            imageflip($image, IMG_FLIP_HORIZONTAL);
+        }
+
+        $angle = match ($orientation) {
+            3, 4 => 180,
+            6, 7 => 270,   // imagerotate turns counter-clockwise
+            5, 8 => 90,
+            default => 0,
+        };
+
+        if ($angle === 0) {
+            return $image;
+        }
+
+        $rotated = imagerotate($image, $angle, 0);
+        if ($rotated === false) {
+            return $image;
+        }
+        imagedestroy($image);
+
+        return $rotated;
     }
 }

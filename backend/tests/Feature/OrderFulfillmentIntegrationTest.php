@@ -324,4 +324,23 @@ class OrderFulfillmentIntegrationTest extends TestCase
         $this->assertSame('cancelled', $order->fresh()->ord_status);
         $this->assertSame(10, (int) $prodvar->fresh()->prodvar_stock);
     }
+
+    public function test_a_reused_order_id_does_not_inherit_the_old_pay_method()
+    {
+        $customer = $this->makeCustomer();
+
+        // An old order #4242 was paid by GCash, then purged; its id comes back.
+        \Illuminate\Support\Facades\Cache::forever('order_pay_method:4242', 'gcash');
+
+        $order = Order::create([
+            'ord_id'      => 4242,
+            'cust_id'     => $customer->getKey(),
+            'ord_created' => now(),
+            'ord_tag'     => 'ORD-REUSED1',
+            'ord_status'  => 'to pay',
+            'ord_rating'  => 0,
+        ]);
+
+        $this->assertNull(\App\Http\Controllers\OrdersAPI::cachedPayMethodForOrder($order->ord_id));
+    }
 }

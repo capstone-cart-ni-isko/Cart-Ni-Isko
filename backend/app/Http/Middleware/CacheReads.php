@@ -96,15 +96,38 @@ class CacheReads
                 return $response;
             }
 
-            // Not Cache::increment(): on the database store it is a silent
-            // no-op for a missing key, so the version never moved and reads
-            // stayed stale for the full TTL after every write.
-            $version = (int) Cache::get('api:version', 0) + 1;
-            Cache::forever('api:version', $version);
+            $version = $this->bumpVersion();
             $this->announce($request, $version);
         }
 
         return $response;
+    }
+
+    /**
+     * Moves the read-cache version on after a write.
+     *
+     * Not Cache::increment(): on the database store it is a silent no-op for
+     * a missing key, so the version never moved and reads stayed stale for
+     * the full TTL after every write. The read-and-write runs under a short
+     * lock instead, so two writes at the same moment cannot both store the
+     * same number (a read served between them would then stay cached under
+     * that number after the second write). If the lock cannot be had in time
+     * the bump still happens, just without that guarantee.
+     */
+    private function bumpVersion(): int
+    {
+        $bump = function (): int {
+            $version = (int) Cache::get('api:version', 0) + 1;
+            Cache::forever('api:version', $version);
+
+            return $version;
+        };
+
+        try {
+            return (int) Cache::lock('api:version:bump', 5)->block(2, $bump);
+        } catch (\Throwable $e) {
+            return $bump();
+        }
     }
 
     /** Is this a POST that only reads? (see READ_ONLY_POSTS) */

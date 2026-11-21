@@ -2995,7 +2995,7 @@ class UserAPI extends Controller
             if ($avatar !== '' && ! $this->avatarAllowed($avatar)) {
                 return [$payload, response()->json([
                     'success' => false,
-                    'message' => 'Profile photos must be a PNG, JPEG, GIF or WebP image.',
+                    'message' => 'Profile photos must be a PNG, JPEG or WebP image.',
                 ], 422)];
             }
             $payload['cust_avatar'] = $avatar !== '' ? $avatar : null;
@@ -3051,7 +3051,7 @@ class UserAPI extends Controller
                 if (! $this->avatarAllowed($avatar)) {
                     return [$payload, response()->json([
                         'success' => false,
-                        'message' => 'Profile avatars must be a PNG, JPEG, GIF or WebP image.',
+                        'message' => 'Profile avatars must be a PNG, JPEG or WebP image.',
                         'code' => 'AVATAR_FORMAT',
                     ], 422)];
                 }
