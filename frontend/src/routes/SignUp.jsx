@@ -50,6 +50,23 @@ const STEP_DESCRIPTIONS = {
   security: 'Set a password and review our terms to finish.',
 }
 
+const ERROR_FIELDS_BY_STEP = {
+  accountType: [],
+  personal: ['firstName', 'lastName', 'phone', 'email'],
+  affiliation: ['role', 'college', 'course'],
+  security: ['password', 'confirm', 'terms'],
+}
+
+/** Points a validation or server error back at the segment that owns it. */
+function segmentForSignupError(message) {
+  const text = String(message || '').toLowerCase()
+  if (/account type|bueño|bueno|guest/.test(text)) return 'accountType'
+  if (/college|department|program|categ/.test(text)) return 'affiliation'
+  if (/password|terms|privacy/.test(text)) return 'security'
+  if (/email|phone|mobile|given name|surname|name/.test(text)) return 'personal'
+  return null
+}
+
 function stepFromPath(pathname) {
   const normalized = pathname.replace(/\/+$/, '').toLowerCase()
   return PATH_TO_STEP[normalized] || 'accountType'
@@ -203,17 +220,6 @@ function SignUp() {
   const collegeError = isBueño && !form.college ? 'College or institute is required.' : ''
   const departmentError = isBueño && !form.course ? 'Department is required.' : ''
 
-  const hasErrors = isBueño
-    ? !!(
-        firstNameError || lastNameError || phoneError || emailError ||
-        passwordError || confirmError || !agreeToTerms ||
-        roleError || collegeError || departmentError
-      )
-    : !!(
-        firstNameError || lastNameError || phoneError || emailError ||
-        passwordError || confirmError || !agreeToTerms
-      )
-
   const fieldError = (field, value, message) =>
     message && (touched[field] || (value ?? '') !== '') ? (
       <p className="field-error">{message}</p>
@@ -262,7 +268,33 @@ function SignUp() {
     ]
     touchAll(fieldsToTouch)
 
-    if (hasErrors) return
+    // A user can land on Account Security from a saved URL with earlier
+    // segments incomplete. Send them back to the first segment that still
+    // has a problem instead of failing silently.
+    const invalidSegments = []
+    if (firstNameError || lastNameError || phoneError || emailError) {
+      invalidSegments.push({
+        key: 'personal',
+        message: 'Please check your personal information.',
+      })
+    }
+    if (isBueño && (roleError || collegeError || departmentError)) {
+      invalidSegments.push({
+        key: 'affiliation',
+        message: 'Please check your BUeño affiliation details.',
+      })
+    }
+    if (passwordError || confirmError || termsError) {
+      invalidSegments.push({
+        key: 'security',
+        message: 'Please check your password and terms.',
+      })
+    }
+    if (invalidSegments.length) {
+      showToast(invalidSegments[0].message, 'error')
+      goToStep(invalidSegments[0].key)
+      return
+    }
 
     setIsSubmitting(true)
     const registrationDetails = {
@@ -283,6 +315,11 @@ function SignUp() {
 
     if (result.error) {
       showToast(result.error, 'error')
+      const targetStep = segmentForSignupError(result.error)
+      if (targetStep && targetStep !== stepKey) {
+        touchAll(ERROR_FIELDS_BY_STEP[targetStep])
+        goToStep(targetStep)
+      }
       return
     }
 
@@ -547,9 +584,6 @@ function SignUp() {
         {stepKey === 'affiliation' && (
           <form onSubmit={(e) => { e.preventDefault(); handleContinueFromAffiliation() }} className="space-y-3" noValidate>
             <div>
-              <span className="field-label">
-                I am a... <span className="text-red-500">*</span>
-              </span>
               <div className="space-y-3">
                 {[
                   { value: 'Student', description: 'Currently enrolled in a degree program' },
@@ -669,7 +703,7 @@ function SignUp() {
                   id="signup-password"
                   type={showPass ? 'text' : 'password'}
                   autoComplete="new-password"
-                  placeholder={PASSWORD_HINT}
+                  placeholder="Enter password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onBlur={() => touch('password')}
@@ -687,6 +721,9 @@ function SignUp() {
                 </button>
               </div>
               {fieldError('password', password, passwordError)}
+              {!fieldError('password', password, passwordError) && (
+                <p className="field-hint">{PASSWORD_HINT}</p>
+              )}
             </div>
 
             <div>
