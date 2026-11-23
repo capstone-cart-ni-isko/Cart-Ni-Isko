@@ -3,18 +3,66 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import collegesData from '../data/colleges.json'
-import Button from '../components/ui/Button.jsx'
 import TermsModal from '../components/ui/TermsModal.jsx'
 import BackButton from '../components/ui/BackButton.jsx'
 import { passwordProblem, PASSWORD_HINT } from '../utils/passwordRules.js'
 import { isPhMobile, normalizePhMobile, PH_MOBILE_MESSAGE } from '../utils/phone.js'
 import brandLogo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
+import signInBackground from '../assets/Branding/Copy of Tindahan ni Isko BG with Elements.jpg'
 
 const selectStyle = {
   backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
   backgroundPosition: 'right 16px center',
   backgroundRepeat: 'no-repeat',
   backgroundSize: '18px',
+}
+
+const SIGNUP_PATHS = {
+  accountType: '/signup/role',
+  personal: '/signup/personal',
+  affiliation: '/signup/affiliation',
+  security: '/signup/security',
+}
+
+// The legacy /form and /details paths are kept so saved links and browser
+// history still open the Personal Information segment.
+const PATH_TO_STEP = {
+  '/signup': 'accountType',
+  '/signup/role': 'accountType',
+  '/signup/form': 'personal',
+  '/signup/details': 'personal',
+  '/signup/personal': 'personal',
+  '/signup/affiliation': 'affiliation',
+  '/signup/security': 'security',
+}
+
+const STEP_TITLES = {
+  accountType: 'Account Type',
+  personal: 'Personal Information',
+  affiliation: 'BUeño Affiliation',
+  security: 'Account Security',
+}
+
+const STEP_DESCRIPTIONS = {
+  accountType: 'Choose the account that fits you to continue with registration.',
+  personal: 'Tell us your name and how we can reach you.',
+  affiliation: 'Tell us about your affiliation with Bicol University.',
+  security: 'Set a password and review our terms to finish.',
+}
+
+function stepFromPath(pathname) {
+  const normalized = pathname.replace(/\/+$/, '').toLowerCase()
+  return PATH_TO_STEP[normalized] || 'accountType'
+}
+
+/** Matches the sign-in screen's instant feedback while the request is in flight. */
+function CreatingAccountSkeleton() {
+  return (
+    <span className="flex items-center justify-center gap-2" role="status" aria-live="polite">
+      <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+      Creating account…
+    </span>
+  )
 }
 
 function SignUp() {
@@ -35,23 +83,22 @@ function SignUp() {
     )
   }, [])
 
-  // Initial State from localStorage
+  // Initial state from localStorage. A full address is no longer collected at
+  // sign-up, so any address left over from an older saved draft is discarded.
   const [form, setForm] = useState(() => {
     const defaults = {
       custType: 'BUENO', // Default to BUeño
-      role: 'Student',   // Student | Faculty for BUeño; Guest for guest
+      role: 'Student', // Student | Faculty for BUeño; Guest for guest
       firstName: '',
       lastName: '',
       phone: '',
       email: '',
-      username: '',
-      address: '',
       college: '',
-      course: '',        // department
+      course: '', // department
     }
     let stored
     try {
-      stored = JSON.parse(localStorage.getItem('isko_signup_progress')) || {}
+      stored = JSON.parse(localStorage.getItem('isko_signup_progress') || 'null') || {}
     } catch {
       stored = {}
     }
@@ -60,14 +107,10 @@ function SignUp() {
       stored.custType = stored.role === 'Guest' ? 'GUEST' : 'BUENO'
     }
     if (stored.custType === 'GUEST') stored.role = 'Guest'
-    return { ...defaults, ...stored }
-  })
-
-  // Form Step: 0 = Selection of BUeño or Guest, 1 = Actual Signup Form
-  const [formStep, setFormStep] = useState(() => {
-    const path = location.pathname.toLowerCase()
-    if (path.includes('form') || path.includes('details')) return 1
-    return 0
+    const restored = { ...defaults, ...stored }
+    delete restored.address
+    delete restored.username
+    return restored
   })
 
   const [password, setPassword] = useState('')
@@ -81,13 +124,23 @@ function SignUp() {
   const isBueño = form.custType === 'BUENO'
   const BU_EMAIL_RE = /^[^\s@]+@bicol-u\.edu\.ph$/i
 
+  // The URL is the single source of truth for the current segment, so browser
+  // back/forward and saved links keep working across the segmented flow.
+  const stepKey = stepFromPath(location.pathname)
+  const stepKeys = isBueño
+    ? ['accountType', 'personal', 'affiliation', 'security']
+    : ['accountType', 'personal', 'security']
+  const stepNumber = stepKeys.indexOf(stepKey) + 1
+
   // Real-time touched fields for validation feedback (System Rules 66 / 67)
   const [touched, setTouched] = useState({})
   const touch = (field) => setTouched((prev) => ({ ...prev, [field]: true }))
   const touchAll = (fields) =>
     setTouched((prev) => {
       const next = { ...prev }
-      fields.forEach((field) => { next[field] = true })
+      fields.forEach((field) => {
+        next[field] = true
+      })
       return next
     })
 
@@ -100,15 +153,12 @@ function SignUp() {
     localStorage.setItem('isko_signup_progress', JSON.stringify(form))
   }, [form])
 
-  // Sync step with route path if navigated via browser history
+  // A guest has no affiliation segment to fill out.
   useEffect(() => {
-    const path = location.pathname.toLowerCase()
-    if (path.includes('form') || path.includes('details')) {
-      setFormStep(1)
-    } else {
-      setFormStep(0)
+    if (!isBueño && stepKey === 'affiliation') {
+      navigate(SIGNUP_PATHS.security, { replace: true })
     }
-  }, [location.pathname])
+  }, [isBueño, stepKey, navigate])
 
   // Dynamic department options based on selected college
   const availableDepartments = useMemo(() => {
@@ -150,7 +200,6 @@ function SignUp() {
   const roleError = isBueño && !['Student', 'Faculty'].includes(form.role)
     ? 'Please choose whether you are a student or faculty.'
     : ''
-  const addressError = isBueño && !form.address?.trim() ? 'Address is required.' : ''
   const collegeError = isBueño && !form.college ? 'College or institute is required.' : ''
   const departmentError = isBueño && !form.course ? 'Department is required.' : ''
 
@@ -158,7 +207,7 @@ function SignUp() {
     ? !!(
         firstNameError || lastNameError || phoneError || emailError ||
         passwordError || confirmError || !agreeToTerms ||
-        roleError || addressError || collegeError || departmentError
+        roleError || collegeError || departmentError
       )
     : !!(
         firstNameError || lastNameError || phoneError || emailError ||
@@ -167,30 +216,36 @@ function SignUp() {
 
   const fieldError = (field, value, message) =>
     message && (touched[field] || (value ?? '') !== '') ? (
-      <p className="text-red-500 text-[11px] font-semibold mt-1">{message}</p>
+      <p className="field-error">{message}</p>
     ) : null
 
   const handleTypeSelect = (type) => {
     if (type === 'GUEST') {
-      updateForm({ custType: 'GUEST', role: 'Guest', college: '', course: '', address: '' })
+      updateForm({ custType: 'GUEST', role: 'Guest', college: '', course: '' })
     } else {
       const validRole = ['Student', 'Faculty'].includes(form.role) ? form.role : 'Student'
       updateForm({ custType: 'BUENO', role: validRole })
     }
   }
 
-  const handleProceedToForm = () => {
-    setFormStep(1)
-    navigate('/signup/form')
+  const goToStep = (key) => navigate(SIGNUP_PATHS[key])
+
+  const handleBack = () => {
+    const index = stepKeys.indexOf(stepKey)
+    if (index > 0) goToStep(stepKeys[index - 1])
+    else navigate('/signin')
   }
 
-  const handleBackToTypeSelection = () => {
-    setFormStep(0)
-    navigate('/signup/role')
+  const handleContinueFromPersonal = () => {
+    touchAll(['firstName', 'lastName', 'phone', 'email'])
+    if (firstNameError || lastNameError || phoneError || emailError) return
+    goToStep(isBueño ? 'affiliation' : 'security')
   }
 
-  const handleBackToSignIn = () => {
-    navigate('/signin')
+  const handleContinueFromAffiliation = () => {
+    touchAll(['role', 'college', 'course'])
+    if (roleError || collegeError || departmentError) return
+    goToStep('security')
   }
 
   const handleSubmit = async (e) => {
@@ -203,7 +258,7 @@ function SignUp() {
       'password',
       'confirm',
       'terms',
-      ...(isBueño ? ['role', 'address', 'college', 'course'] : [])
+      ...(isBueño ? ['role', 'college', 'course'] : [])
     ]
     touchAll(fieldsToTouch)
 
@@ -221,7 +276,6 @@ function SignUp() {
       registrationDetails.college = ''
       registrationDetails.course = ''
       registrationDetails.yearLevel = ''
-      registrationDetails.address = ''
     }
 
     const result = await register(registrationDetails)
@@ -255,448 +309,461 @@ function SignUp() {
   }
 
   return (
-    // One page wrapper and one card: on a phone the card is the page (full
-    // width, no frame); from `sm` up it is a centred card at a fixed width.
-    <div className="min-h-dvh w-full bg-white dark:bg-[var(--surface)] sm:bg-slate-50 sm:dark:bg-[var(--surface-2)] flex justify-center sm:items-center sm:px-4 sm:py-10">
-      <div className="w-full sm:max-w-lg animate-fade-in">
-        {/* FORM 1: SELECTION OF BUeño OR GUEST (Separate form from the actual signup form) */}
-        {formStep === 0 && (
-          <div className="bg-white dark:bg-[var(--surface)] sm:rounded-3xl sm:shadow-xl px-5 py-6 sm:p-8 space-y-5">
-            <div className="flex justify-start">
-              {/* System Rule 69: Back button at top-left */}
-              <BackButton onClick={handleBackToSignIn} to="/signin" />
-            </div>
+    // Same branded backdrop and centered card as the sign-in screen. The
+    // wrapper grows with the card so no segment is clipped on small screens.
+    <div className="min-h-dvh w-full flex flex-col justify-center items-center p-4 pt-24 sm:pt-24 font-sans bg-sky-100 relative isolate">
+      <img src={signInBackground} alt="" className="absolute inset-0 h-full w-full object-cover object-center" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-300/10 via-white/5 to-orange-300/15 pointer-events-none" aria-hidden="true" />
+      <div className="absolute left-5 top-5 sm:left-8 sm:top-7 z-10 flex items-center gap-3 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-lg shadow-sky-950/10 backdrop-blur-md">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-sky-700 text-sm font-black tracking-tight text-white shadow-sm">BU</span>
+        <span className="leading-tight">
+          <span className="block text-xs font-extrabold tracking-wide text-slate-900 sm:text-sm">BICOL UNIVERSITY</span>
+          <span className="block text-[10px] font-semibold text-slate-600 sm:text-xs">University Student Council</span>
+        </span>
+      </div>
+      <div className="absolute right-5 top-6 z-10 hidden rounded-full border border-white/60 bg-white/65 px-4 py-2 text-[10px] font-extrabold tracking-[0.18em] text-sky-900 shadow-sm backdrop-blur-md sm:block">
+        OFFICIAL CAMPUS MERCH
+      </div>
 
-            <div className="space-y-3 text-center">
-              <img
-                src={brandLogo}
-                alt="Tindahan ni Isko"
-                className="h-16 w-auto object-contain mx-auto"
-              />
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-[var(--ink)] leading-tight">
-                  Tell Us Who You Are
-                </h1>
-                <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium mt-1.5 leading-relaxed">
-                  Choose whether you are a BUeño or a guest to continue with registration.
-                </p>
-              </div>
-            </div>
+      <div className="w-full max-w-md mx-auto bg-white dark:bg-[var(--surface)] rounded-3xl shadow-lg p-6 sm:p-7 space-y-3.5 relative z-10 animate-fade-in my-auto">
+        <div className="space-y-1.5 text-center">
+          <div className="inline-flex mb-3">
+            <img
+              src={brandLogo}
+              alt="Tindahan ni Isko"
+              className="h-16 w-auto object-contain drop-shadow-xs"
+            />
+          </div>
+        </div>
 
-            <div className="space-y-3 pt-2">
-              <button
-                type="button"
-                onClick={() => handleTypeSelect('BUENO')}
-                className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all cursor-pointer text-left ${
-                  isBueño
-                    ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-sm font-bold'
-                    : 'border-gray-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-gray-700 dark:text-[var(--ink)] hover:border-gray-300 font-medium'
-                }`}
-              >
-                <div>
-                  <span className="block text-base">BUeño</span>
-                  <span className="block text-xs font-normal text-gray-400 dark:text-[var(--muted)] mt-0.5">
-                    Current student or faculty of Bicol University
-                  </span>
-                </div>
-                {isBueño && (
-                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-xs flex items-center justify-center font-bold shrink-0">
-                    ✓
-                  </span>
-                )}
-              </button>
+        <div className="flex items-center justify-between gap-3">
+          <BackButton variant="text" label="Back" onClick={handleBack} />
+          <span className="text-[10px] font-extrabold tracking-[0.18em] text-sky-900 uppercase">
+            Step {stepNumber} of {stepKeys.length}
+          </span>
+        </div>
 
-              <button
-                type="button"
-                onClick={() => handleTypeSelect('GUEST')}
-                className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all cursor-pointer text-left ${
-                  !isBueño
-                    ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-sm font-bold'
-                    : 'border-gray-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-gray-700 dark:text-[var(--ink)] hover:border-gray-300 font-medium'
-                }`}
-              >
-                <div>
-                  <span className="block text-base">Guest</span>
-                  <span className="block text-xs font-normal text-gray-400 dark:text-[var(--muted)] mt-0.5">
-                    No university affiliation
-                  </span>
-                </div>
-                {!isBueño && (
-                  <span className="w-5 h-5 rounded-full bg-brand-orange text-white text-xs flex items-center justify-center font-bold shrink-0">
-                    ✓
-                  </span>
-                )}
-              </button>
-            </div>
+        <div className="flex gap-1.5" aria-hidden="true">
+          {stepKeys.map((key, index) => (
+            <span
+              key={key}
+              className={`h-1.5 flex-1 rounded-full transition-colors ${
+                index < stepNumber
+                  ? 'bg-brand-orange'
+                  : 'bg-slate-200 dark:bg-[var(--line)]'
+              }`}
+            />
+          ))}
+        </div>
 
-            <Button
+        <div className="space-y-1.5 text-center pt-1">
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-[var(--ink)]">
+            {STEP_TITLES[stepKey]}
+          </h1>
+          <p className="text-xs text-gray-500 dark:text-[var(--muted)] font-medium leading-relaxed">
+            {STEP_DESCRIPTIONS[stepKey]}
+          </p>
+        </div>
+
+        {/* SEGMENT 1: ACCOUNT TYPE */}
+        {stepKey === 'accountType' && (
+          <div className="space-y-3 pt-1">
+            <button
               type="button"
-              onClick={handleProceedToForm}
-              className="w-full h-12 rounded-xl font-semibold mt-4 shadow-md bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
+              onClick={() => handleTypeSelect('BUENO')}
+              aria-pressed={isBueño}
+              className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all cursor-pointer text-left ${
+                isBueño
+                  ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-sm font-bold'
+                  : 'border-gray-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-gray-700 dark:text-[var(--ink)] hover:border-gray-300 font-medium'
+              }`}
             >
-              Continue to Registration
-            </Button>
+              <div>
+                <span className="block text-base">BUeño</span>
+                <span className="block text-xs font-normal text-gray-400 dark:text-[var(--muted)] mt-0.5">
+                  Current student or faculty of Bicol University
+                </span>
+              </div>
+              {isBueño && (
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-orange">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                </span>
+              )}
+            </button>
 
-            <p className="text-center text-sm text-gray-500 dark:text-[var(--muted)] font-medium pt-2 border-t border-gray-100 dark:border-[var(--line)]">
+            <button
+              type="button"
+              onClick={() => handleTypeSelect('GUEST')}
+              aria-pressed={!isBueño}
+              className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all cursor-pointer text-left ${
+                !isBueño
+                  ? 'border-brand-orange bg-brand-orange/5 text-brand-orange shadow-sm font-bold'
+                  : 'border-gray-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-gray-700 dark:text-[var(--ink)] hover:border-gray-300 font-medium'
+              }`}
+            >
+              <div>
+                <span className="block text-base">Guest</span>
+                <span className="block text-xs font-normal text-gray-400 dark:text-[var(--muted)] mt-0.5">
+                  No university affiliation
+                </span>
+              </div>
+              {!isBueño && (
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-orange">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => goToStep('personal')}
+              className="btn btn--lg btn--block rounded-xl font-semibold shadow-xs transition-all btn--primary text-white cursor-pointer btn-press"
+            >
+              Continue
+            </button>
+
+            <p className="text-center text-xs text-gray-500 dark:text-[var(--muted)] font-medium pt-2">
               Already have an account?{' '}
-              <Link to="/signin" className="text-brand-orange font-semibold hover:underline">
+              <Link to="/signin" className="text-brand-orange font-bold hover:underline">
                 Sign In
               </Link>
             </p>
           </div>
         )}
 
-        {/* FORM 2: ACTUAL SIGNUP FORM (Different form from the BUeño/Guest selection) */}
-        {formStep === 1 && (
-          <div className="bg-white dark:bg-[var(--surface)] sm:rounded-3xl sm:shadow-xl px-5 py-6 sm:p-8 space-y-5">
-            <div className="flex items-center justify-between">
-              {/* System Rule 69: Back button at top-left returns to BUeño/Guest selection */}
-              <BackButton onClick={handleBackToTypeSelection} />
-              <button
-                type="button"
-                onClick={handleBackToTypeSelection}
-                className="text-xs font-semibold text-brand-orange hover:underline cursor-pointer"
-              >
-                Switch Account Type
-              </button>
+        {/* SEGMENT 2: PERSONAL INFORMATION */}
+        {stepKey === 'personal' && (
+          <form onSubmit={(e) => { e.preventDefault(); handleContinueFromPersonal() }} className="space-y-3" noValidate>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="signup-first-name" className="field-label">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="signup-first-name"
+                  type="text"
+                  autoComplete="given-name"
+                  placeholder="First Name"
+                  value={form.firstName}
+                  onChange={(e) => updateForm({ firstName: e.target.value })}
+                  onBlur={() => touch('firstName')}
+                  aria-invalid={touched.firstName && firstNameError ? 'true' : undefined}
+                  className={`field-input field-input--lg ${
+                    touched.firstName && firstNameError ? 'field-input--error' : ''
+                  }`}
+                />
+                {fieldError('firstName', form.firstName, firstNameError)}
+              </div>
+              <div>
+                <label htmlFor="signup-last-name" className="field-label">
+                  Last Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="signup-last-name"
+                  type="text"
+                  autoComplete="family-name"
+                  placeholder="Last Name"
+                  value={form.lastName}
+                  onChange={(e) => updateForm({ lastName: e.target.value })}
+                  onBlur={() => touch('lastName')}
+                  aria-invalid={touched.lastName && lastNameError ? 'true' : undefined}
+                  className={`field-input field-input--lg ${
+                    touched.lastName && lastNameError ? 'field-input--error' : ''
+                  }`}
+                />
+                {fieldError('lastName', form.lastName, lastNameError)}
+              </div>
             </div>
 
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-[var(--ink)] leading-tight">
-                Create {isBueño ? 'BUeño' : 'Guest'} Account
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-[var(--muted)] font-medium mt-1">
-                {isBueño
-                  ? 'Fill out your details and academic affiliation below.'
-                  : 'Fill out your basic details below to get started.'}
-              </p>
+              <label htmlFor="signup-phone" className="field-label">
+                Phone Number <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="signup-phone"
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                maxLength={16}
+                placeholder="09123456789"
+                value={form.phone}
+                onChange={(e) => updateForm({ phone: e.target.value })}
+                onBlur={() => touch('phone')}
+                aria-invalid={touched.phone && phoneError ? 'true' : undefined}
+                className={`field-input field-input--lg ${
+                  touched.phone && phoneError ? 'field-input--error' : ''
+                }`}
+              />
+              {fieldError('phone', form.phone, phoneError)}
+              {!fieldError('phone', form.phone, phoneError) && (
+                <p className="field-hint">
+                  We&apos;ll send a verification code to this phone number.
+                </p>
+              )}
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4.5" noValidate>
-              {/* ADDITIONAL FIELDS - EXCLUSIVE ONLY UPON SELECTION OF BUeño */}
-              {isBueño && (
-                <div className="space-y-4 p-4 bg-orange-50/40 dark:bg-[var(--tint-brand-bg)] border border-brand-orange/20 rounded-2xl animate-fade-in">
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-brand-orange">
-                    BUeño Affiliation Details
-                  </h2>
-
-                  {/* 1. Affiliation Category: Student or Faculty */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1.5">
-                      I am a... <span className="text-red-500">*</span>
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {['Student', 'Faculty'].map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => updateForm({ role: r })}
-                          className={`h-11 rounded-xl border text-xs font-semibold transition-all flex items-center justify-center cursor-pointer ${
-                            form.role === r
-                              ? 'bg-brand-blue border-brand-blue text-white shadow-sm'
-                              : 'border-gray-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-gray-700 dark:text-[var(--ink)] hover:border-gray-300'
-                          }`}
-                        >
-                          {r}
-                        </button>
-                      ))}
-                    </div>
-                    {fieldError('role', form.role, roleError)}
-                  </div>
-
-                  {/* 2. Complete Address */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                      Complete Address <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 123 Rizal St., Legazpi City, Albay"
-                      value={form.address}
-                      onChange={(e) => updateForm({ address: e.target.value })}
-                      onBlur={() => touch('address')}
-                      className={`w-full h-11 px-3.5 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] transition-all ${
-                        touched.address && addressError
-                          ? 'border-red-400 focus:ring-red-200'
-                          : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
-                      }`}
-                    />
-                    {fieldError('address', form.address, addressError)}
-                  </div>
-
-                  {/* 3. College Options (All latest list of colleges, institutes, and satellite campuses of Bicol University) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                      College / Institute / Satellite Campus <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={form.college}
-                      onChange={(e) => {
-                        updateForm({ college: e.target.value, course: '' })
-                      }}
-                      onBlur={() => touch('college')}
-                      className={`w-full h-11 px-3.5 border rounded-xl text-sm bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] focus:outline-none focus:ring-2 transition-all appearance-none cursor-pointer ${
-                        touched.college && collegeError
-                          ? 'border-red-400 focus:ring-red-200'
-                          : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
-                      }`}
-                      style={selectStyle}
-                    >
-                      <option value="">Select College, Institute, or Campus</option>
-                      {allColleges.map((col) => (
-                        <option key={col.id} value={col.name}>
-                          {col.name}
-                        </option>
-                      ))}
-                    </select>
-                    {fieldError('college', form.college, collegeError)}
-                  </div>
-
-                  {/* 4. Department Options (Automatically changes whenever college changes) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                      Department <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={form.course}
-                      onChange={(e) => updateForm({ course: e.target.value })}
-                      onBlur={() => touch('course')}
-                      disabled={!form.college}
-                      className={`w-full h-11 px-3.5 border rounded-xl text-sm bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] focus:outline-none focus:ring-2 transition-all appearance-none cursor-pointer disabled:opacity-50 ${
-                        touched.course && departmentError
-                          ? 'border-red-400 focus:ring-red-200'
-                          : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
-                      }`}
-                      style={selectStyle}
-                    >
-                      <option value="">
-                        {form.college ? 'Select Department' : 'Select a college first'}
-                      </option>
-                      {availableDepartments.map((dept, i) => (
-                        <option key={i} value={dept}>
-                          {dept}
-                        </option>
-                      ))}
-                    </select>
-                    {fieldError('course', form.course, departmentError)}
-                  </div>
-                </div>
+            <div>
+              <label htmlFor="signup-email" className="field-label">
+                Email Address <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="signup-email"
+                type="email"
+                autoComplete="email"
+                placeholder={isBueño ? 'user@bicol-u.edu.ph' : 'user@example.com'}
+                value={form.email}
+                onChange={(e) => updateForm({ email: e.target.value })}
+                onBlur={() => touch('email')}
+                aria-invalid={touched.email && emailError ? 'true' : undefined}
+                className={`field-input field-input--lg ${
+                  touched.email && emailError ? 'field-input--error' : ''
+                }`}
+              />
+              {fieldError('email', form.email, emailError)}
+              {isBueño && !fieldError('email', form.email, emailError) && (
+                <p className="field-hint">
+                  BUeños must use their official @bicol-u.edu.ph institutional email.
+                </p>
               )}
+            </div>
 
-              {/* BASIC DETAILS (Same for both BUeño and Guest) */}
-              <div className="space-y-4">
-                {/* Given Name & Surname */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                      First Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="First Name"
-                      value={form.firstName}
-                      onChange={(e) => updateForm({ firstName: e.target.value })}
-                      onBlur={() => touch('firstName')}
-                      className={`w-full h-11 px-3.5 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] transition-all ${
-                        touched.firstName && firstNameError
-                          ? 'border-red-400 focus:ring-red-200'
-                          : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
+            <button
+              type="submit"
+              className="btn btn--lg btn--block rounded-xl font-semibold shadow-xs transition-all btn--primary text-white cursor-pointer btn-press"
+            >
+              Continue
+            </button>
+
+            <p className="text-center text-xs text-gray-500 dark:text-[var(--muted)] font-medium pt-2">
+              Already have an account?{' '}
+              <Link to="/signin" className="text-brand-orange font-bold hover:underline">
+                Sign In
+              </Link>
+            </p>
+          </form>
+        )}
+
+        {/* SEGMENT 3: BUENO AFFILIATION (BUeño accounts only) */}
+        {stepKey === 'affiliation' && (
+          <form onSubmit={(e) => { e.preventDefault(); handleContinueFromAffiliation() }} className="space-y-3" noValidate>
+            <div>
+              <span className="field-label">
+                I am a... <span className="text-red-500">*</span>
+              </span>
+              <div className="space-y-3">
+                {[
+                  { value: 'Student', description: 'Currently enrolled in a degree program' },
+                  { value: 'Faculty', description: 'Teaching or academic staff member' },
+                ].map((role) => {
+                  const selected = form.role === role.value
+                  return (
+                    <button
+                      key={role.value}
+                      type="button"
+                      onClick={() => updateForm({ role: role.value })}
+                      aria-pressed={selected}
+                      className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all cursor-pointer text-left ${
+                        selected
+                          ? 'border-brand-blue bg-brand-blue/5 text-brand-blue shadow-sm font-bold'
+                          : 'border-gray-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface-2)] text-gray-700 dark:text-[var(--ink)] hover:border-gray-300 font-medium'
                       }`}
-                    />
-                    {fieldError('firstName', form.firstName, firstNameError)}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                      Last Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Last Name"
-                      value={form.lastName}
-                      onChange={(e) => updateForm({ lastName: e.target.value })}
-                      onBlur={() => touch('lastName')}
-                      className={`w-full h-11 px-3.5 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] transition-all ${
-                        touched.lastName && lastNameError
-                          ? 'border-red-400 focus:ring-red-200'
-                          : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
-                      }`}
-                    />
-                    {fieldError('lastName', form.lastName, lastNameError)}
-                  </div>
-                </div>
-
-                {/* Username - NOT required */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                    Username <span className="text-gray-400 dark:text-[var(--muted)] font-normal">(Optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter username (optional)"
-                    value={form.username}
-                    onChange={(e) => updateForm({ username: e.target.value })}
-                    onBlur={() => touch('username')}
-                    className="w-full h-11 px-3.5 border border-gray-200 dark:border-[var(--line)] rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] transition-all"
-                  />
-                </div>
-
-                {/* Phone Number */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                    Phone Number <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    autoComplete="tel"
-                    maxLength={16}
-                    placeholder="09123456789"
-                    value={form.phone}
-                    onChange={(e) => updateForm({ phone: e.target.value })}
-                    onBlur={() => touch('phone')}
-                    className={`w-full h-11 px-3.5 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] transition-all ${
-                      touched.phone && phoneError
-                        ? 'border-red-400 focus:ring-red-200'
-                        : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
-                    }`}
-                  />
-                  <p className="text-[11px] text-gray-400 dark:text-[var(--muted)] mt-1">
-                    We'll send a verification code to this phone number.
-                  </p>
-                  {fieldError('phone', form.phone, phoneError)}
-                </div>
-
-                {/* Email Address */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                    Email Address <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    placeholder={isBueño ? 'user@bicol-u.edu.ph' : 'user@example.com'}
-                    value={form.email}
-                    onChange={(e) => updateForm({ email: e.target.value })}
-                    onBlur={() => touch('email')}
-                    className={`w-full h-11 px-3.5 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] transition-all ${
-                      touched.email && emailError
-                        ? 'border-red-400 focus:ring-red-200'
-                        : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
-                    }`}
-                  />
-                  {isBueño && (
-                    <p className="text-[11px] text-gray-400 dark:text-[var(--muted)] mt-1">
-                      BUeños must use their official @bicol-u.edu.ph institutional email.
-                    </p>
-                  )}
-                  {fieldError('email', form.email, emailError)}
-                </div>
-
-                {/* Password & Confirm Password */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                      Password <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPass ? 'text' : 'password'}
-                        placeholder={PASSWORD_HINT}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onBlur={() => touch('password')}
-                        className={`w-full h-11 px-3.5 pr-12 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] transition-all ${
-                          touched.password && passwordError
-                            ? 'border-red-400 focus:ring-red-200'
-                            : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPass(!showPass)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 hover:text-brand-orange"
-                      >
-                        {showPass ? 'Hide' : 'Show'}
-                      </button>
-                    </div>
-                    {fieldError('password', password, passwordError)}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-[var(--ink)] mb-1">
-                      Confirm Password <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showConfirmPass ? 'text' : 'password'}
-                        placeholder="Confirm password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        onBlur={() => touch('confirm')}
-                        className={`w-full h-11 px-3.5 pr-12 border rounded-xl text-sm placeholder-gray-400 focus:outline-none focus:ring-2 bg-white dark:bg-[var(--surface)] text-gray-900 dark:text-[var(--ink)] transition-all ${
-                          touched.confirm && confirmError
-                            ? 'border-red-400 focus:ring-red-200'
-                            : 'border-gray-200 dark:border-[var(--line)] focus:ring-brand-orange/30'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPass(!showConfirmPass)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 hover:text-brand-orange"
-                      >
-                        {showConfirmPass ? 'Hide' : 'Show'}
-                      </button>
-                    </div>
-                    {fieldError('confirm', confirmPassword, confirmError)}
-                  </div>
-                </div>
-
-                {/* Terms and Privacy Checkbox */}
-                <div>
-                  <div className="flex items-start gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="agree-terms"
-                      checked={agreeToTerms}
-                      onChange={(e) => {
-                        setAgreeToTerms(e.target.checked)
-                        touch('terms')
-                      }}
-                      className="mt-0.5 rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
-                    />
-                    <label htmlFor="agree-terms" className="text-xs text-gray-500 dark:text-[var(--muted)] font-medium leading-tight cursor-pointer">
-                      I agree to the{' '}
-                      <button
-                        type="button"
-                        onClick={() => setShowTerms(true)}
-                        className="font-semibold text-brand-orange hover:underline cursor-pointer"
-                      >
-                        Terms and Privacy Policy
-                      </button>
-                      .
-                    </label>
-                  </div>
-                  {fieldError('terms', agreeToTerms ? 'yes' : '', termsError)}
-                </div>
+                    >
+                      <div>
+                        <span className="block text-base">{role.value}</span>
+                        <span className="block text-xs font-normal text-gray-400 dark:text-[var(--muted)] mt-0.5">
+                          {role.description}
+                        </span>
+                      </div>
+                      {selected && (
+                        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-blue">
+                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
+              {fieldError('role', form.role, roleError)}
+            </div>
 
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full h-12 rounded-xl font-semibold mt-4 shadow-md bg-brand-orange hover:bg-brand-orange-dark text-white cursor-pointer"
+            <div>
+              <label htmlFor="signup-college" className="field-label">
+                College / Institute / Satellite Campus <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="signup-college"
+                value={form.college}
+                onChange={(e) => {
+                  updateForm({ college: e.target.value, course: '' })
+                }}
+                onBlur={() => touch('college')}
+                aria-invalid={touched.college && collegeError ? 'true' : undefined}
+                className={`field-input field-input--lg appearance-none cursor-pointer pr-10 ${
+                  touched.college && collegeError ? 'field-input--error' : ''
+                }`}
+                style={selectStyle}
               >
-                {isSubmitting ? 'Creating account…' : 'Create Account'}
-              </Button>
+                <option value="">Select College, Institute, or Campus</option>
+                {allColleges.map((col) => (
+                  <option key={col.id} value={col.name}>
+                    {col.name}
+                  </option>
+                ))}
+              </select>
+              {fieldError('college', form.college, collegeError)}
+            </div>
 
-              {/* Sign In link */}
-              <p className="text-center text-sm text-gray-500 dark:text-[var(--muted)] font-medium pt-2 border-t border-gray-100 dark:border-[var(--line)]">
-                Already have an account?{' '}
-                <Link to="/signin" className="text-brand-orange font-semibold hover:underline">
-                  Sign In
-                </Link>
-              </p>
-            </form>
-          </div>
+            <div>
+              <label htmlFor="signup-department" className="field-label">
+                Department <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="signup-department"
+                value={form.course}
+                onChange={(e) => updateForm({ course: e.target.value })}
+                onBlur={() => touch('course')}
+                disabled={!form.college}
+                aria-invalid={touched.course && departmentError ? 'true' : undefined}
+                className={`field-input field-input--lg appearance-none cursor-pointer pr-10 disabled:opacity-50 ${
+                  touched.course && departmentError ? 'field-input--error' : ''
+                }`}
+                style={selectStyle}
+              >
+                <option value="">
+                  {form.college ? 'Select Department' : 'Select a college first'}
+                </option>
+                {availableDepartments.map((dept, i) => (
+                  <option key={i} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              {fieldError('course', form.course, departmentError)}
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn--lg btn--block rounded-xl font-semibold shadow-xs transition-all btn--primary text-white cursor-pointer btn-press"
+            >
+              Continue
+            </button>
+
+            <p className="text-center text-xs text-gray-500 dark:text-[var(--muted)] font-medium pt-2">
+              Already have an account?{' '}
+              <Link to="/signin" className="text-brand-orange font-bold hover:underline">
+                Sign In
+              </Link>
+            </p>
+          </form>
+        )}
+
+        {/* SEGMENT 4: ACCOUNT SECURITY */}
+        {stepKey === 'security' && (
+          <form onSubmit={handleSubmit} className="space-y-3" noValidate>
+            <div>
+              <label htmlFor="signup-password" className="field-label">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  id="signup-password"
+                  type={showPass ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder={PASSWORD_HINT}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => touch('password')}
+                  aria-invalid={touched.password && passwordError ? 'true' : undefined}
+                  className={`field-input field-input--lg pr-20 ${
+                    touched.password && passwordError ? 'field-input--error' : ''
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-500 hover:text-brand-orange transition-colors"
+                >
+                  {showPass ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {fieldError('password', password, passwordError)}
+            </div>
+
+            <div>
+              <label htmlFor="signup-confirm-password" className="field-label">
+                Confirm Password <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  id="signup-confirm-password"
+                  type={showConfirmPass ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onBlur={() => touch('confirm')}
+                  aria-invalid={touched.confirm && confirmError ? 'true' : undefined}
+                  className={`field-input field-input--lg pr-20 ${
+                    touched.confirm && confirmError ? 'field-input--error' : ''
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPass((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-500 hover:text-brand-orange transition-colors"
+                >
+                  {showConfirmPass ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {fieldError('confirm', confirmPassword, confirmError)}
+            </div>
+
+            <div className="pt-1">
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  id="agree-terms"
+                  checked={agreeToTerms}
+                  onChange={(e) => {
+                    setAgreeToTerms(e.target.checked)
+                    touch('terms')
+                  }}
+                  className="mt-0.5 rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
+                />
+                <label htmlFor="agree-terms" className="text-xs text-gray-500 dark:text-[var(--muted)] font-medium leading-tight cursor-pointer">
+                  I agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={() => setShowTerms(true)}
+                    className="font-semibold text-brand-orange hover:underline cursor-pointer"
+                  >
+                    Terms and Privacy Policy
+                  </button>
+                  .
+                </label>
+              </div>
+              {fieldError('terms', agreeToTerms ? 'yes' : '', termsError)}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`btn btn--lg btn--block rounded-xl font-semibold shadow-xs transition-all ${
+                !isSubmitting
+                  ? 'btn--primary text-white cursor-pointer btn-press'
+                  : 'btn--secondary cursor-not-allowed opacity-60'
+              }`}
+            >
+              {isSubmitting ? <CreatingAccountSkeleton /> : 'Create Account'}
+            </button>
+
+            <p className="text-center text-xs text-gray-500 dark:text-[var(--muted)] font-medium pt-2">
+              Already have an account?{' '}
+              <Link to="/signin" className="text-brand-orange font-bold hover:underline">
+                Sign In
+              </Link>
+            </p>
+          </form>
         )}
       </div>
 
