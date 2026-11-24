@@ -433,7 +433,7 @@ function AdminEnrollForm() {
               Create an employee account and assign their recurring weekly duty schedule.
             </p>
           </div>
-          <div className="flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white p-1.5 sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-start rounded-xl border border-slate-200 bg-white p-1.5 sm:self-auto">
             <a
               href="#staff-details"
               className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-orange-50 hover:text-brand-orange"

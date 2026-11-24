@@ -28,7 +28,7 @@ function CalendarGlyph() {
 }
 
 const TAB_CLASS =
-  'flex flex-1 min-w-0 flex-col items-center gap-0.5 px-0.5 py-1 rounded-lg transition-colors relative'
+  'flex flex-1 min-w-0 min-h-[2.75rem] flex-col items-center justify-center gap-0.5 px-0.5 py-1 rounded-lg transition-colors relative sm:min-h-0'
 
 /* The four ribbon destinations that are real routes; Menu is a drawer toggle. */
 const ROUTE_TABS = [

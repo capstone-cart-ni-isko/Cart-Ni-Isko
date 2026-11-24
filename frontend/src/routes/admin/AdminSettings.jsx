@@ -1098,7 +1098,7 @@ export default function AdminSettings() {
 
       {/* ── Sticky Bottom Bar (system panes only) ── */}
       {canManageStore && isSystemPane && (
-        <div className="fixed bottom-0 right-0 left-0 md:left-72 bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-md border-t border-slate-200 dark:border-[var(--line)] px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg">
+        <div className="fixed bottom-0 right-0 left-0 md:left-72 bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-md border-t border-slate-200 dark:border-[var(--line)] px-4 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2 sm:gap-4 z-20 shadow-lg safe-bottom">
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-slate-400' : hasUnsavedChanges ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
             <span className="text-xs font-semibold text-slate-600 dark:text-[var(--muted)]">

@@ -181,7 +181,7 @@ export default function AdminSearch() {
   return (
     <div className="admin-portal min-h-screen bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full font-sans antialiased text-gray-900 dark:text-[var(--ink)]">
       {/* ── Ribbon Bar (Domain 3 / Rule 69 / Rule 72): Search bar stays in the ribbon, Back button at top-left ── */}
-      <header className="sticky top-0 z-40 select-none bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 h-14 flex items-center gap-3 shadow-2xs">
+      <header className="sticky top-0 z-40 select-none bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 h-14 flex items-center gap-3 shadow-2xs safe-top">
         {/* Working Back button at top-left to exit the search page */}
         <BackButton onClick={handleBack} />
 

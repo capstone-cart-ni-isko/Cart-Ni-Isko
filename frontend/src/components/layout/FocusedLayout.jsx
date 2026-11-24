@@ -57,13 +57,13 @@ function FocusedLayout({
   return (
     <div className="min-h-screen bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full customer-desktop-scale text-gray-900 dark:text-[var(--ink)]">
       {isOffline && (
-        <div className="bg-amber-500 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[99999]">
+        <div className="bg-amber-500 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[99999] safe-top">
           You are currently offline. Browsing in cached mode.
         </div>
       )}
 
       {/* ── Focused Top Header Bar: Back button at top left (Rule 69) ── */}
-      <header className="sticky top-0 z-30 select-none bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-md border-b border-gray-200/80 dark:border-[var(--line)] w-full shadow-2xs">
+      <header className="sticky top-0 z-30 select-none bg-white/95 dark:bg-[var(--surface)]/95 backdrop-blur-md border-b border-gray-200/80 dark:border-[var(--line)] w-full shadow-2xs safe-top">
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <BackButton

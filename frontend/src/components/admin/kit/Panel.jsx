@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom'
   1024px everything stacks and the page scrolls normally.
 */
 export const ACTION_CLASS =
-  'inline-flex items-center gap-1 h-7 px-2 shrink-0 rounded-md text-xs font-medium text-isko-blue hover:text-isko-blue-dark hover:bg-isko-blue/10 transition-colors cursor-pointer'
+  'inline-flex min-h-11 items-center gap-1 h-7 px-2 shrink-0 rounded-md text-xs font-medium text-isko-blue hover:text-isko-blue-dark hover:bg-isko-blue/10 transition-colors cursor-pointer sm:min-h-0'
 
 export function Chevron({ className = 'w-3.5 h-3.5' }) {
   return (

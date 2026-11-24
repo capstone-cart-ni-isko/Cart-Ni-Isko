@@ -338,10 +338,10 @@ function Appointments() {
       {/* Same frame as the bag and checkout: the list on the left, the
           "Add Appointment" action kept in view on the right (lg). Below lg
           the action comes first, as before. */}
-      <div className="max-w-6xl mx-auto w-full px-4 md:px-0 py-4 md:py-2 pb-28 lg:pb-16 animate-fade-in space-y-4 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-6 lg:items-start">
+      <div className="max-w-6xl mx-auto w-full px-4 md:px-0 py-4 md:py-2 pb-28 lg:pb-16 animate-fade-in space-y-4 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6 lg:items-start">
         {/* The booking side: the action, and the form it opens right under it.
             Not sticky while the form is open - it is taller than the screen. */}
-        <aside className={`lg:col-start-2 lg:row-start-1 space-y-4 min-w-0 ${form ? '' : 'lg:sticky lg:top-6'}`}>
+        <aside className={`lg:col-start-2 lg:row-start-1 space-y-4 min-w-0 ${form ? '' : 'lg:sticky lg:top-20'}`}>
           {/* Top action: mounts <AppointmentForm/> */}
           <button
             type="button"

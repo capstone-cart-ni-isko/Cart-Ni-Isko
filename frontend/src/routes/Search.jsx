@@ -178,12 +178,12 @@ export default function CustomerSearch() {
   return (
     <div className="customer-portal min-h-screen bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full customer-desktop-scale font-sans antialiased text-gray-900 dark:text-[var(--ink)]">
       {isOffline && (
-        <div className="bg-amber-500 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[99999]">
+        <div className="bg-amber-500 text-white text-xs font-semibold py-2 px-4 text-center sticky top-0 z-[99999] safe-top">
           You are currently offline. Browsing in cached mode.
         </div>
       )}
       {/* ── Focused Header Bar (Rule 65 / Rule 68 / Rule 69 / Rule 72): Search bar stays in the ribbon, Back button at top-left ── */}
-      <header className="sticky top-0 z-40 select-none bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 h-14 flex items-center gap-3 shadow-2xs">
+      <header className="sticky top-0 z-40 select-none bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 h-14 flex items-center gap-3 shadow-2xs safe-top">
         {/* Working Back button at top-left (Rule 68, 69) */}
         <BackButton onClick={handleBack} />
 

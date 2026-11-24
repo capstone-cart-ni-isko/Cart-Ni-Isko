@@ -29,7 +29,7 @@ function OtpInput({ length = 6, value, onChange }) {
   }
 
   return (
-    <div className="flex gap-2 justify-center">
+    <div className="flex gap-1.5 justify-center sm:gap-2">
       {Array.from({ length }).map((_, i) => (
         <input
           key={i}

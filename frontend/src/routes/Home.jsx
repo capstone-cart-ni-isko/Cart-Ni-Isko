@@ -24,6 +24,31 @@ import keychainCategoryImg from '../assets/Images/keychain.png'
 
 import { PackageIcon } from '../components/ui/Icons.jsx'
 
+/* The visible indicator is a small dot, but the tappable area stays 44px so
+   carousel navigation works with a thumb. Used by both home layouts. */
+function CarouselDots({ count, activeIndex, onSelect, className = '' }) {
+  return (
+    <div className={`flex ${className}`}>
+      {Array.from({ length: count }).map((_, dotIdx) => (
+        <button
+          key={dotIdx}
+          type="button"
+          onClick={() => onSelect(dotIdx)}
+          aria-label={`Go to slide ${dotIdx + 1}`}
+          aria-current={dotIdx === activeIndex}
+          className="flex h-11 min-w-11 items-center justify-center"
+        >
+          <span
+            className={`block h-1.5 rounded-full transition-all duration-300 ${
+              dotIdx === activeIndex ? 'w-5 bg-brand-orange' : 'w-1.5 bg-white/40'
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  )
+}
+
 const categoryImages = {
   Shirts: shirtCategoryImg,
   Hoodies: hoodieCategoryImg,
@@ -186,7 +211,7 @@ function Home() {
           className="sticky top-0 z-30 w-screen max-w-none select-none"
           style={{ marginLeft: 'calc((100% - 100vw) / 2)' }}
         >
-          <header className={`relative z-40 flex items-center justify-center gap-3 border-b border-gray-100 bg-white/95 px-4 backdrop-blur-sm transition-all dark:border-[var(--line)] dark:bg-[var(--surface)]/95 ${searchFocused ? 'h-14' : 'h-10'}`}>
+          <header className={`safe-top relative z-40 flex items-center justify-center gap-3 border-b border-gray-100 bg-white/95 px-4 backdrop-blur-sm transition-all dark:border-[var(--line)] dark:bg-[var(--surface)]/95 ${searchFocused ? 'h-14' : 'h-10'}`}>
             {/* Logo centered or hidden when search focused */}
             {!searchFocused && (
               <img src={logo} alt="Tindahan ni Isko" className="absolute left-1/2 top-1/2 h-7 -translate-x-1/2 -translate-y-1/2 object-contain" />
@@ -244,7 +269,7 @@ function Home() {
           {/* ── FULL SCREEN BELOW RIBBON: List of previous searches (latest to oldest) ──
               Requirement: White background, rows not placed in any card or element */}
           {searchFocused && (
-            <div className="fixed inset-x-0 bottom-0 top-14 z-30 bg-white dark:bg-[var(--surface)] overflow-y-auto animate-fade-in select-none">
+            <div className="fixed inset-x-0 bottom-0 top-14 z-[115000] safe-bottom bg-white dark:bg-[var(--surface)] overflow-y-auto animate-fade-in select-none">
               <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-[var(--line)]">
                   <div className="flex items-center gap-2">
@@ -367,24 +392,19 @@ function Home() {
                     </h2>
                     <Link
                       to={slide.ctaLink}
-                      className="inline-flex items-center gap-1 h-9 px-4 bg-brand-orange text-white text-xs font-semibold rounded-md"
+                      className="inline-flex min-h-11 items-center gap-1 h-9 px-4 bg-brand-orange text-white text-xs font-semibold rounded-md sm:min-h-0"
                     >
                       <span>{slide.ctaText}</span>
                     </Link>
                   </div>
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
                     {/* Slide Indicators */}
-                    <div className="flex gap-1.5">
-                      {carouselSlides.map((_, dotIdx) => (
-                        <button
-                          key={dotIdx}
-                          onClick={() => setSlideIndex(dotIdx)}
-                          className={`h-1.5 rounded-full transition-all duration-300 ${
-                            dotIdx === activeSlideIndex ? 'w-4.5 bg-brand-orange' : 'w-1.5 bg-white/40'
-                          }`}
-                        />
-                      ))}
-                    </div>
+                    <CarouselDots
+                      count={carouselSlides.length}
+                      activeIndex={activeSlideIndex}
+                      onSelect={setSlideIndex}
+                      className="gap-1.5"
+                    />
                   </div>
                 </div>
               </div>
@@ -396,10 +416,10 @@ function Home() {
         <div className="px-4 pt-6 space-y-3">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-base font-semibold text-gray-900 dark:text-[var(--ink)] tracking-tight">Shop by Category</h2>
-            <div className="flex items-center gap-2">
-              <button type="button" aria-label="Previous categories" onClick={() => scrollRail(categoryMobileRef, -1)} className="h-8 w-8 rounded-full border border-slate-200 dark:border-[var(--line)] text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange transition-colors">‹</button>
-              <button type="button" aria-label="Next categories" onClick={() => scrollRail(categoryMobileRef, 1)} className="h-8 w-8 rounded-full border border-slate-200 dark:border-[var(--line)] text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange transition-colors">›</button>
-              <Link to="/shop" className="text-xs font-semibold text-brand-orange hover:underline">
+            <div className="flex shrink-0 items-center gap-1">
+              <button type="button" aria-label="Previous categories" onClick={() => scrollRail(categoryMobileRef, -1)} className="h-11 w-11 shrink-0 rounded-full border border-slate-200 dark:border-[var(--line)] text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange transition-colors sm:h-8 sm:w-8">‹</button>
+              <button type="button" aria-label="Next categories" onClick={() => scrollRail(categoryMobileRef, 1)} className="h-11 w-11 shrink-0 rounded-full border border-slate-200 dark:border-[var(--line)] text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange transition-colors sm:h-8 sm:w-8">›</button>
+              <Link to="/shop" className="inline-flex min-h-11 min-w-11 items-center justify-center text-xs font-semibold text-brand-orange hover:underline sm:min-h-0 sm:min-w-0">
                 See all
               </Link>
             </div>
@@ -431,7 +451,7 @@ function Home() {
         <div className="px-4 pt-6 space-y-4">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-base font-semibold text-gray-900 dark:text-[var(--ink)] tracking-wide">Featured Products</h2>
-            <Link to="/shop" className="text-xs font-semibold text-brand-orange hover:underline">
+            <Link to="/shop" className="inline-flex min-h-11 min-w-11 items-center justify-center text-xs font-semibold text-brand-orange hover:underline sm:min-h-0 sm:min-w-0">
               See all
             </Link>
           </div>
@@ -514,7 +534,7 @@ function Home() {
       {/* ────────────────── DESKTOP HOME PAGE LAYOUT ────────────────── */}
       <div className="hidden md:block pb-16">
         {/* 1. Wide Hero Banner - docked flush against ribbon with no gap */}
-        <div className="relative left-1/2 mb-12 w-screen -translate-x-1/2 -mt-6">
+        <div className="relative left-1/2 mb-12 w-[var(--app-client-width,100vw)] -translate-x-1/2 -mt-6">
           <div className="h-[360px] w-full bg-slate-900 overflow-hidden relative text-white lg:h-[440px]">
             {/* Slides container */}
             {carouselSlides.map((slide, idx) => (
@@ -562,16 +582,13 @@ function Home() {
             ))}
 
             {/* Slide indicators bottom center */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
-              {carouselSlides.map((_, dotIdx) => (
-                <button
-                  key={dotIdx}
-                  onClick={() => setSlideIndex(dotIdx)}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    dotIdx === activeSlideIndex ? 'w-5 bg-brand-orange' : 'w-1.5 bg-white/40 hover:bg-white'
-                  }`}
-                />
-              ))}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+              <CarouselDots
+                count={carouselSlides.length}
+                activeIndex={activeSlideIndex}
+                onSelect={setSlideIndex}
+                className="gap-2"
+              />
             </div>
           </div>
         </div>
@@ -584,10 +601,10 @@ function Home() {
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1">
-                <button type="button" aria-label="Previous categories" onClick={() => scrollRail(categoryDesktopRef, -1)} className="h-8 w-8 rounded-full border border-slate-200 dark:border-[var(--line)] text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange transition-colors">‹</button>
-                <button type="button" aria-label="Next categories" onClick={() => scrollRail(categoryDesktopRef, 1)} className="h-8 w-8 rounded-full border border-slate-200 dark:border-[var(--line)] text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange transition-colors">›</button>
+                <button type="button" aria-label="Previous categories" onClick={() => scrollRail(categoryDesktopRef, -1)} className="h-11 w-11 shrink-0 rounded-full border border-slate-200 dark:border-[var(--line)] text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange transition-colors sm:h-8 sm:w-8">‹</button>
+                <button type="button" aria-label="Next categories" onClick={() => scrollRail(categoryDesktopRef, 1)} className="h-11 w-11 shrink-0 rounded-full border border-slate-200 dark:border-[var(--line)] text-slate-600 dark:text-[var(--muted)] hover:border-brand-orange hover:text-brand-orange transition-colors sm:h-8 sm:w-8">›</button>
               </div>
-              <Link to="/shop" className="text-xs font-semibold text-brand-orange hover:underline flex items-center gap-1">
+              <Link to="/shop" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 text-xs font-semibold text-brand-orange hover:underline sm:min-h-0 sm:min-w-0">
                 Browse all
               </Link>
             </div>
@@ -621,7 +638,7 @@ function Home() {
             <div>
               <h2 className="text-xl font-semibold text-slate-900 dark:text-[var(--ink)] tracking-tight">Featured Products</h2>
             </div>
-            <Link to="/shop" className="text-xs font-semibold text-brand-orange hover:underline flex items-center gap-1">
+            <Link to="/shop" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 text-xs font-semibold text-brand-orange hover:underline sm:min-h-0 sm:min-w-0">
               See all
             </Link>
           </div>

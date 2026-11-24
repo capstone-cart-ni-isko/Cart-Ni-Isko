@@ -170,9 +170,9 @@ function VerifyOtp() {
   }
 
   return (
-    <div className="min-h-dvh bg-gray-50 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-dvh bg-gray-50 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-y-auto">
       {/* Centered OTP Card */}
-      <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-100 shadow-xl p-8 flex flex-col justify-between min-h-[580px] z-10 animate-fade-in">
+      <div className="w-full max-w-sm bg-white rounded-3xl border border-gray-100 shadow-xl p-5 py-8 sm:p-8 flex flex-col justify-between min-h-0 sm:min-h-[580px] z-10 animate-fade-in">
         <div>
           {/* Header row with back button */}
           <div className="flex items-center mb-6">

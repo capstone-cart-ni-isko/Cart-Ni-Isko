@@ -634,7 +634,7 @@ export default function AdminStoreCustomization({ embedded = false }) {
         </div>
 
         {/* Sticky Bottom Bar */}
-        <div className={`fixed bottom-0 right-0 ${embedded ? 'left-0 md:left-72' : 'left-0 md:left-60'} bg-white/95 backdrop-blur-md border-t border-gray-200 px-6 py-3.5 flex items-center justify-between gap-4 z-20 shadow-lg`}>
+        <div className={`fixed bottom-0 right-0 ${embedded ? 'left-0 md:left-72' : 'left-0 md:left-60'} bg-white/95 backdrop-blur-md border-t border-gray-200 px-4 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between gap-2 sm:gap-4 z-20 shadow-lg safe-bottom`}>
           <div className="flex items-center gap-2">
             <span
               className={`w-2 h-2 rounded-full ${

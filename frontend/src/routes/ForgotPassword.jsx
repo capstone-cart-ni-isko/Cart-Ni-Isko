@@ -320,7 +320,7 @@ function ForgotPassword() {
 
   // Dedicated Customer Storefront Recovery Layout (Mobile PWA & Desktop Web)
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[var(--surface-2)] flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+    <div className="min-h-dvh bg-gray-50 dark:bg-[var(--surface-2)] flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-y-auto font-sans">
       <div className="w-full max-w-md bg-white dark:bg-[var(--surface)] rounded-2xl border border-slate-200 dark:border-[var(--line)] shadow-sm p-6 sm:p-8 space-y-6 animate-fade-in relative">
         {/* Rule 69: Top-left back button */}
         <div className="flex justify-between items-center">

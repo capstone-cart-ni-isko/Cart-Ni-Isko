@@ -471,7 +471,7 @@ function SignUp() {
         {/* SEGMENT 2: PERSONAL INFORMATION */}
         {stepKey === 'personal' && (
           <form onSubmit={(e) => { e.preventDefault(); handleContinueFromPersonal() }} className="space-y-3" noValidate>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="signup-first-name" className="field-label">
                   First Name <span className="text-red-500">*</span>

@@ -50,7 +50,7 @@ export default function FulfillmentBars({ stages = [], activeKey = null, onSelec
               onClick={() => onSelect?.(stage)}
               aria-pressed={active}
               title={`Show ${stage.label} orders`}
-              className={`w-full flex-1 min-h-7 [@media(max-height:760px)]:min-h-6 grid grid-cols-[9rem_1fr] items-center gap-2 px-1.5 rounded-md text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-isko-orange ${
+              className={`touch-target w-full flex-1 min-h-7 [@media(max-height:760px)]:min-h-6 grid grid-cols-[9rem_1fr] items-center gap-2 px-1.5 rounded-md text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-isko-orange ${
                 active ? 'bg-isko-blue/10' : 'hover:bg-isko-blue/5'
               }`}
             >

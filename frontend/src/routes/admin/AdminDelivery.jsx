@@ -1159,7 +1159,7 @@ export default function AdminDelivery() {
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex items-center gap-0 border-b border-slate-200 mb-4">
+        <div className="flex items-center gap-0 border-b border-slate-200 mb-4 overflow-x-auto scrollbar-none">
           {TABS.map((tab) => (
             <button
               key={tab}

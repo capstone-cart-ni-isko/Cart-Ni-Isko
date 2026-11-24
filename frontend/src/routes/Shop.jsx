@@ -105,7 +105,7 @@ function Shop() {
     <AppShell>
       <div className="pb-28">
         {/* Sticky search header - hidden on desktop */}
-        <header className="bg-white border-b border-gray-50 px-4 py-3.5 flex items-center gap-3 sticky top-0 z-30 md:hidden">
+        <header className="bg-white border-b border-gray-50 px-4 py-3.5 flex items-center gap-3 sticky top-0 z-30 md:hidden safe-top">
           <button
             type="button"
             onClick={() => navigate('/home')}

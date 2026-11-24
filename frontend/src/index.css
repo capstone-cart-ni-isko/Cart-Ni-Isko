@@ -87,7 +87,14 @@ html.dark {
 }
 
 html {
-  font-size: 16px;
+  /* 100% keeps the user's browser font-size preference intact while still
+     resolving to 16px by default. clip prevents a single wide descendant
+     (wide table, full-bleed banner, nowrap toolbar) from creating a
+     page-level horizontal scrollbar; unlike hidden it does not create a new
+     scroll container, so position: sticky keeps working. */
+  font-size: 100%;
+  max-width: 100%;
+  overflow-x: clip;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -95,10 +102,24 @@ html {
 
 body {
   margin: 0;
+  max-width: 100%;
+  overflow-x: clip;
+  overflow-wrap: break-word;
   background: var(--surface-2);
   color: var(--ink);
   font-size: 0.9375rem;
   line-height: 1.65;
+}
+
+/* Flex and grid children default to min-content sizing, which is the usual
+   cause of "it fits on desktop but overflows at 320px". Zero the automatic
+   minimum in the base layer so explicit min-w-* utilities - which Tailwind
+   emits in the utilities layer - can still enlarge a touch target. An
+   unlayered rule here would outrank every utility and silently undo them. */
+@layer base {
+  :where(.flex, .grid, .inline-flex) > * {
+    min-width: 0;
+  }
 }
 
 .app-container.home-page-canvas {
@@ -166,9 +187,19 @@ html.dark .home-purpose-section {
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ── Safe Bottom ── */
+/* ── Safe area helpers ──
+   viewport-fit=cover is already set in index.html, so installed PWAs and
+   notched phones need the inset applied explicitly. Keep these additive:
+   components already provide their normal padding. */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-inline {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* ── Checkbox ── */
@@ -738,7 +769,11 @@ html.dark ::placeholder { color: var(--muted-2); }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  /* Keep dialogs clear of the notch/status bar in standalone PWA mode. */
+  padding: max(1rem, env(safe-area-inset-top, 0px))
+           max(1rem, env(safe-area-inset-right, 0px))
+           max(1rem, env(safe-area-inset-bottom, 0px))
+           max(1rem, env(safe-area-inset-left, 0px));
   background: rgb(15 23 42 / 55%);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -858,7 +893,15 @@ html.dark ::placeholder { color: var(--muted-2); }
 
 /* Long forms (filters, checkout, pickers) scroll inside the panel
    instead of growing past the viewport. */
-.modal-scroll { overflow-y: auto; max-height: min(72vh, 46rem); }
+.modal-scroll {
+  overflow-y: auto;
+  /* dvh tracks the visual viewport while the virtual keyboard is open; the
+     insets stop long sheets hiding behind the home indicator. */
+  max-height: min(
+    calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)),
+    46rem
+  );
+}
 
 .modal-head {
   display: flex;
@@ -943,7 +986,11 @@ html.dark ::placeholder { color: var(--muted-2); }
 .field-input--lg { height: 3rem; border-radius: var(--radius-sm); font-size: 0.9375rem; }
 /* One code box for every OTP screen: same height, same corner, same type. */
 .field-input--otp {
-  width: 3rem;
+  /* Fluid so six boxes still fit inside a 320px phone or a narrow dialog. */
+  flex: 1 1 2.75rem;
+  width: auto;
+  min-width: 0;
+  max-width: 3.5rem;
   height: 3.5rem;
   padding: 0;
   text-align: center;
@@ -1206,6 +1253,9 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
   z-index: 40;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* ── 6 · Catalog grid ───────────────────────────────────────
@@ -1218,6 +1268,8 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
 @media (min-width: 640px) { .grid-catalog { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 1024px) { .grid-catalog { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1280px) { .grid-catalog { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+/* 320px phones: one full-width card beats two cramped thumbnails. */
+@media (max-width: 22.5rem) { .grid-catalog { grid-template-columns: minmax(0, 1fr); } }
 
 /* ── 6a · Walk-in register board (desktop) ──────────────────
    FLOW-WALKIN-03: the search box and the category filters must read as
@@ -1258,4 +1310,37 @@ textarea.field-input { height: auto; padding: 0.5rem 0.75rem; resize: vertical; 
   min-height: 4.5rem;
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+/* ── Touch ergonomics ──────────────────────────────────────────
+   Mouse users keep the compact desktop density; on actual touch screens
+   the shared controls grow to the 44px guideline. Applied at component
+   level so it follows every instance across both portals. */
+@media (hover: none) and (pointer: coarse) {
+  /* Unlayered on purpose: compact height utilities (including short-viewport
+     variants) must still yield to the 44px touch guideline on real devices. */
+  .touch-target {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  .btn,
+  .field-input,
+  .stepper__btn,
+  .segmented__item,
+  .modal-close {
+    min-height: 2.75rem;
+  }
+  .stepper__btn,
+  .segmented__item,
+  .modal-close {
+    min-width: 2.75rem;
+  }
+  :where(input:not([type='checkbox']):not([type='radio']):not([type='file']), select, textarea) {
+    min-height: 2.75rem;
+  }
+  .filter-products-modal button[aria-label='Close filters'] {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+  .grid-catalog { gap: 1rem; }
 }

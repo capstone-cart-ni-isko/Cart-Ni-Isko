@@ -259,10 +259,10 @@ export default function Notifications() {
         backTo="/home"
       />
 
-      <div className="max-w-6xl mx-auto w-full px-4 md:px-0 py-4 md:py-2 pb-32 lg:pb-16 animate-fade-in lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-6 lg:items-start">
+      <div className="max-w-6xl mx-auto w-full px-4 md:px-0 py-4 md:py-2 pb-32 lg:pb-16 animate-fade-in lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6 lg:items-start">
         {/* Categories + Mark All as Read: a card on the right on wide
             screens, kept in view while the list scrolls. */}
-        <aside className="hidden lg:block lg:col-start-2 lg:row-start-1 lg:sticky lg:top-6 rounded-2xl border border-slate-200/80 bg-white shadow-2xs p-5 md:p-6 space-y-4">
+        <aside className="hidden lg:block lg:col-start-2 lg:row-start-1 lg:sticky lg:top-20 rounded-2xl border border-slate-200/80 bg-white shadow-2xs p-5 md:p-6 space-y-4">
           <h2 className="text-lg font-semibold text-gray-900">Categories</h2>
           <div role="tablist" aria-orientation="vertical" className="space-y-1">
             {tabs.map(({ label, count }) => {
@@ -298,7 +298,7 @@ export default function Notifications() {
             page itself, pinned while the list scrolls underneath. */}
         <nav
           aria-label="Notification categories"
-          className="lg:hidden sticky top-14 md:top-0 z-20 -mx-4 px-4 pt-3 bg-[#F8F9FA]/90 dark:bg-[var(--surface)]/90 backdrop-blur-sm"
+          className="lg:hidden sticky top-0 md:top-14 z-20 -mx-4 px-4 md:mx-0 md:px-0 pt-3 safe-top bg-[#F8F9FA]/90 dark:bg-[var(--surface)]/90 backdrop-blur-sm"
         >
           <div className="flex items-center justify-between gap-3 mb-2">
             <div

@@ -537,7 +537,7 @@ export default function AdminOrders() {
         </div>
 
         {/* Subtabs: Orders vs Refunds (returns and refunds handled here) */}
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto scrollbar-none">
           <button
             type="button"
             onClick={() => setAdminTab('orders')}

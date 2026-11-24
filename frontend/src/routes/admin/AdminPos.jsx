@@ -463,9 +463,9 @@ export default function AdminPos() {
               catalog column gives the search box and the category pills the
               full width; the pills sit on a non-wrapping rail, so the toolbar
               can never grow into a second row and eat the product grid. */}
-          <div className="flex flex-nowrap items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-gray-100/90 shadow-xs shrink-0 overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2 bg-white px-3 py-2 rounded-2xl border border-gray-100/90 shadow-xs shrink-0">
             {/* Search */}
-            <div className="relative min-w-0 flex-1 max-w-64 shrink-0">
+            <div className="relative min-w-0 flex-1 sm:max-w-64">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"

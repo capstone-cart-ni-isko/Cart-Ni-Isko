@@ -21,12 +21,13 @@ export default defineConfig({
       },
       manifest: {
         name: 'Tindahan ni Isko',
-        short_name: 'Tindahan ni Isko',
+        short_name: 'Tindahan',
         description: 'Wear the pride, carry the identity, and support the Iskolar ng Bayan',
         theme_color: '#F97316',
         background_color: '#FFFFFF',
         display: 'standalone',
-        orientation: 'portrait',
+        /* Tablets and landscape phones must not be locked to portrait. */
+        orientation: 'any',
         scope: '/',
         start_url: '/',
         icons: [

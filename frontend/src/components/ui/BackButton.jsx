@@ -50,7 +50,7 @@ export default function BackButton({
         type="button"
         onClick={goBack}
         aria-label={label || 'Back'}
-        className={`group inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-[var(--muted)] hover:text-slate-900 dark:hover:text-[var(--ink)] transition-colors duration-150 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded-md py-1 px-1.5 -ml-1.5 ${className}`}
+        className={`group inline-flex min-h-[2.75rem] min-w-[2.75rem] items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-[var(--muted)] hover:text-slate-900 dark:hover:text-[var(--ink)] transition-colors duration-150 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40 rounded-md py-1 px-1.5 -ml-1.5 sm:min-h-0 sm:min-w-0 ${className}`}
       >
         {traditionalArrow}
         {label && <span>{label}</span>}
@@ -65,7 +65,7 @@ export default function BackButton({
       type="button"
       onClick={goBack}
       aria-label={label || 'Back'}
-      className={`group inline-flex items-center gap-1.5 h-9 px-2 rounded-lg bg-transparent hover:bg-slate-100/80 dark:hover:bg-[var(--surface-2)] text-slate-600 dark:text-[var(--ink)] hover:text-slate-900 dark:hover:text-[var(--ink)] active:scale-95 transition-all duration-150 cursor-pointer select-none shrink-0 border-0 shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/50 ${className}`}
+      className={`group inline-flex min-h-[2.75rem] min-w-[2.75rem] items-center gap-1.5 h-9 px-2 rounded-lg bg-transparent hover:bg-slate-100/80 dark:hover:bg-[var(--surface-2)] text-slate-600 dark:text-[var(--ink)] hover:text-slate-900 dark:hover:text-[var(--ink)] active:scale-95 transition-all duration-150 cursor-pointer select-none shrink-0 border-0 shadow-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/50 sm:min-h-0 sm:min-w-0 ${className}`}
     >
       {traditionalArrow}
       {label && <span className="text-xs font-semibold tracking-tight whitespace-nowrap">{label}</span>}

@@ -19,7 +19,7 @@ import {
 /* The panel sits above the overlay, which sits above the page, and slides with
    a plain translateX transform so it is off-screen whenever it is closed. */
 const PANEL =
-  'fixed inset-y-0 right-0 z-[130000] w-72 max-w-[85vw] bg-white dark:bg-slate-900 border-l border-slate-200 p-4 flex flex-col gap-2 overflow-y-auto transition-transform duration-300 ease-out'
+  'fixed inset-y-0 right-0 z-[130000] w-72 max-w-[85vw] bg-white dark:bg-slate-900 border-l border-slate-200 p-4 safe-top safe-bottom flex flex-col gap-2 overflow-y-auto transition-transform duration-300 ease-out'
 const OVERLAY = 'fixed inset-0 z-[120000] bg-black/40 transition-opacity duration-300'
 
 const MenuContext = createContext(null)

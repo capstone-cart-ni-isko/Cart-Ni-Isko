@@ -470,13 +470,6 @@ function Profile() {
               <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
               <span>Edit Profile</span>
             </Link>
-            <Link
-              to="/settings"
-              className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs text-white hover:bg-white hover:text-gray-800 flex items-center justify-center shadow-2xs active:scale-95 transition-all"
-              title="Settings"
-            >
-              <SettingsIcon className="w-4.5 h-4.5" />
-            </Link>
           </div>
         </div>
 

@@ -191,7 +191,7 @@ function Cart() {
             </div>
           </div>
         ) : (
-          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-6 lg:items-start">
+          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6 lg:items-start">
             {/* Left Column: Selection Bar + Bag Items List */}
             <div className="min-w-0 space-y-4">
               {/* Mixed Items Guard Banner (Requirement 8 & 9) */}
@@ -416,7 +416,7 @@ function Cart() {
             </div>
 
             {/* Right Column: Order Summary (Requirement 5, 6, 7, 15) */}
-            <div className="mt-6 lg:mt-0 lg:sticky lg:top-6 min-w-0">
+            <div className="mt-6 lg:mt-0 lg:sticky lg:top-20 min-w-0">
               <div className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs p-5 md:p-6 space-y-5">
                 <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
                   <div className="w-11 h-11 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center shrink-0">

@@ -777,8 +777,10 @@ export default function AdminAppointments() {
                 </div>
               </div>
 
-              {/* Day Pillars */}
-              <div className="grid grid-cols-7 gap-1.5 pt-2">
+              {/* Day Pillars — scroll the rail instead of crushing seven
+                  columns into a 320px phone. */}
+              <div className="overflow-x-auto scrollbar-none pb-1">
+              <div className="grid min-w-[560px] grid-cols-7 gap-1.5 pt-2">
                 {weekDays.map((d) => {
                   const isSelected = sameDay(d.day, selectedDate)
                   return (
@@ -806,6 +808,7 @@ export default function AdminAppointments() {
                     </button>
                   )
                 })}
+              </div>
               </div>
 
               {/* Legend */}

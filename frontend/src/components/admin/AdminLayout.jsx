@@ -22,7 +22,7 @@ export default function AdminLayout({ children, className = '' }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <div className="admin-portal h-screen bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full font-sans antialiased text-gray-900 dark:text-[var(--ink)] overflow-hidden">
+    <div className="admin-portal h-dvh bg-[#F8F9FA] dark:bg-[var(--surface)] flex flex-col w-full font-sans antialiased text-gray-900 dark:text-[var(--ink)] overflow-hidden">
       {/* ── ROW 1 — the navigation ribbon, full page width (rule 72) ── */}
       <AdminTopBar onToggleMobileMenu={() => setMobileMenuOpen(true)} />
 
@@ -38,7 +38,7 @@ export default function AdminLayout({ children, className = '' }) {
             `p-3 sm:p-4 md:p-5` re-flowed the content edge on every breakpoint,
             so tables and card grids sat at a different offset depending on
             where they were viewed. */}
-        <main className={`flex-1 min-w-0 overflow-y-auto p-4 md:p-5 w-full mx-auto ${className}`}>
+        <main className={`flex-1 min-w-0 overflow-y-auto p-4 md:p-5 w-full mx-auto safe-bottom ${className}`}>
           {children}
         </main>
 
@@ -49,7 +49,7 @@ export default function AdminLayout({ children, className = '' }) {
               className="fixed inset-0 bg-black/50 backdrop-blur-xs"
               onClick={() => setMobileMenuOpen(false)}
             />
-            <div className="fixed inset-y-0 left-0 w-72 bg-white border-r border-slate-200 z-50 animate-slide-right">
+            <div className="fixed inset-y-0 left-0 w-72 max-w-[85vw] safe-top safe-bottom bg-white border-r border-slate-200 z-50 animate-slide-right">
               <AdminSidebar onCloseMobile={() => setMobileMenuOpen(false)} />
             </div>
           </div>

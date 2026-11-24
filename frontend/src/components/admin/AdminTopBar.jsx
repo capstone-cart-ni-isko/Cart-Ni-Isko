@@ -20,13 +20,13 @@ let themeHydratedFor = null
 /** One ribbon entry: hit area, active tint, hover chip and optional badge. */
 function RibbonIcon({ label, onClick, active, badge, children }) {
   return (
-    <div className="relative group flex items-center justify-center">
+    <div className="ribbon-icon relative group flex items-center justify-center">
       <button
         type="button"
         onClick={onClick}
         title={label}
         aria-label={label}
-        className={`p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[var(--surface-3)] transition-all relative flex items-center justify-center cursor-pointer ${
+        className={`p-2 min-h-[2.75rem] min-w-[2.75rem] sm:min-h-0 sm:min-w-0 rounded-lg hover:bg-slate-100 dark:hover:bg-[var(--surface-3)] transition-all relative flex items-center justify-center cursor-pointer ${
           active
             ? 'bg-orange-50 dark:bg-[var(--tint-brand-bg)] text-brand-orange'
             : 'text-[#757575] dark:text-[var(--muted)]'
@@ -39,7 +39,7 @@ function RibbonIcon({ label, onClick, active, badge, children }) {
           </span>
         )}
       </button>
-      <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-2xs font-medium rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
+      <span className="pointer-events-none absolute -bottom-7 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-slate-100 text-slate-800 border border-slate-200 text-2xs font-medium rounded-md opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-150 whitespace-nowrap z-50">
         {label}
       </span>
     </div>
@@ -263,7 +263,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
           When search bar is hovered OR clicked (active) OR search is sent:
           ribbon logo and ribbon icons disappear, search bar expands, back button shows.
           When hover ends (and not clicked/sent), everything goes back to before. */}
-      <div className="h-14 bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 flex items-center gap-3 relative z-40 transition-all duration-200 ease-out">
+      <div className="h-14 bg-white dark:bg-[var(--surface)] border-b border-gray-100 dark:border-[var(--line)] w-full px-4 md:px-6 flex items-center gap-3 relative z-40 transition-all duration-200 ease-out safe-top">
         {/* Back button: appears when search is hovered, clicked, or search is sent */}
         <div
           className={`shrink-0 overflow-hidden transition-all duration-200 ease-out flex items-center ${
@@ -276,13 +276,13 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
         {/* Small-screen menu opener: hidden when search is active or sent */}
         <div
           className={`md:hidden shrink-0 overflow-hidden transition-all duration-200 ease-out flex items-center ${
-            !isSearchActiveOrSent ? 'max-w-[40px] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
+            !isSearchActiveOrSent ? 'max-w-[44px] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
           }`}
         >
           <button
             type="button"
             onClick={onToggleMobileMenu}
-            className="p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer shrink-0"
+            className="p-2 -ml-2 min-h-[2.75rem] min-w-[2.75rem] sm:min-h-0 sm:min-w-0 rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer shrink-0"
             aria-label="Open menu"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-5 h-5">
@@ -295,7 +295,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
 
         {/* LEFT — brand logo (FLOW-EMP_HOME-02) (hidden when search is active or sent) */}
         <div
-          className={`shrink-0 overflow-hidden transition-all duration-200 ease-out flex items-center ${
+          className={`hidden sm:flex shrink-0 overflow-hidden transition-all duration-200 ease-out items-center ${
             !isSearchActiveOrSent ? 'max-w-[200px] opacity-100' : 'max-w-0 opacity-0 pointer-events-none'
           }`}
         >
@@ -310,7 +310,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
           onSubmit={submitSearch}
           onMouseEnter={handleMouseEnterSearch}
           onMouseLeave={handleMouseLeaveSearch}
-          className={`flex-1 relative min-w-0 transition-all duration-200 ease-out ${isSearchActiveOrSent ? 'w-full max-w-none' : 'max-w-lg mx-auto'}`}
+          className={`hidden sm:block flex-1 relative min-w-0 transition-all duration-200 ease-out ${isSearchActiveOrSent ? 'w-full max-w-none' : 'max-w-lg mx-auto'}`}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors duration-150">
             <circle cx="11" cy="11" r="8" />
@@ -346,7 +346,7 @@ export default function AdminTopBar({ onToggleMobileMenu }) {
             !isSearchActiveOrSent ? 'max-w-[320px] opacity-100 scale-100' : 'max-w-0 opacity-0 scale-95 pointer-events-none'
           }`}
         >
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
             {/* 1 — home (FLOW-EMP_HOME-06) */}
             <RibbonIcon label="Home" onClick={() => navigate(homePath)} active={isHome}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">

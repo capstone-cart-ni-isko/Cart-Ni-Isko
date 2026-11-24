@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate, Outlet } from 'react-router-dom'
 import { ToastProvider } from './context/ToastContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
@@ -118,6 +118,22 @@ function EntryRoute() {
 }
 
 function App() {
+  // 100vw includes the scrollbar gutter, so full-bleed sections shift a few
+  // pixels left on desktop. clientWidth is the real paintable viewport width;
+  // exposing it as a variable keeps those sections flush without hiding the
+  // scrollbar or hard-coding one browser's scrollbar size.
+  useEffect(() => {
+    const syncViewportWidth = () => {
+      document.documentElement.style.setProperty(
+        '--app-client-width',
+        `${document.documentElement.clientWidth}px`,
+      )
+    }
+    syncViewportWidth()
+    window.addEventListener('resize', syncViewportWidth)
+    return () => window.removeEventListener('resize', syncViewportWidth)
+  }, [])
+
   return (
     <ToastProvider>
       <ThemeProvider>

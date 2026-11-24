@@ -858,7 +858,7 @@ function CheckoutPlaceholder() {
 
         {/* Details on the left, a sticky order summary on the right (lg).
             Below lg everything stacks, the summary last. */}
-        <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-6 lg:items-start">
+        <div className="space-y-4 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6 lg:items-start">
           <div className="space-y-4 min-w-0">
             {/* Customer Details */}
             <section className={card}>
@@ -1213,7 +1213,7 @@ function CheckoutPlaceholder() {
           </div>
 
           {/* Order Summary */}
-          <aside className={`${card} min-w-0 lg:sticky lg:top-6 space-y-5`}>
+          <aside className={`${card} min-w-0 lg:sticky lg:top-20 space-y-5`}>
             <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
               <div className="w-11 h-11 rounded-full bg-orange-50 text-brand-orange flex items-center justify-center shrink-0">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">

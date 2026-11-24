@@ -422,7 +422,7 @@ function ProductDetail() {
         {/* Main Product Layout Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
           {/* ── Left Column: Product Image Gallery ── */}
-          <div className="lg:sticky lg:top-6 flex flex-col gap-3">
+          <div className="lg:sticky lg:top-20 flex flex-col gap-3">
             {/* Primary Image Viewport */}
             <div className="relative aspect-square w-full bg-gradient-to-br from-orange-50/70 via-gray-50 to-blue-50/50 rounded-3xl overflow-hidden border border-gray-100 flex items-center justify-center shadow-2xs group">
               {/* Status Badge Tag Over Main Image */}
@@ -449,7 +449,7 @@ function ProductDetail() {
                   <button
                     type="button"
                     onClick={handlePrevImage}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm border border-gray-200 flex items-center justify-center shadow-sm hover:bg-white active:scale-95 transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm border border-gray-200 flex items-center justify-center shadow-sm hover:bg-white active:scale-95 transition-all cursor-pointer opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     aria-label="Previous image"
                   >
                     <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -459,7 +459,7 @@ function ProductDetail() {
                   <button
                     type="button"
                     onClick={handleNextImage}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm border border-gray-200 flex items-center justify-center shadow-sm hover:bg-white active:scale-95 transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm border border-gray-200 flex items-center justify-center shadow-sm hover:bg-white active:scale-95 transition-all cursor-pointer opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                     aria-label="Next image"
                   >
                     <svg viewBox="0 0 24 24" className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
