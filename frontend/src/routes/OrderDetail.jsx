@@ -838,7 +838,7 @@ function OrderDetail() {
             </p>
             <p className="text-gray-500">Contact: {currentUser?.phone || currentUser?.email || '—'}</p>
             <p className="text-gray-500">
-              {[currentUser?.campus, currentUser?.college].filter(Boolean).join(' · ') || '—'}
+              {currentUser?.college && currentUser.college !== 'N/A' ? currentUser.college : '—'}
             </p>
             <p className="text-gray-500">{currentUser?.course || ''}</p>
           </div>

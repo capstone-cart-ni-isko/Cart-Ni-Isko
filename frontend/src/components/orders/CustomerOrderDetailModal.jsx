@@ -946,7 +946,7 @@ export default function CustomerOrderDetailModal({
           </p>
           <p className="text-[var(--muted)]">Contact: {currentUser?.phone || currentUser?.email || '—'}</p>
           <p className="text-[var(--muted)]">
-            {[currentUser?.campus, currentUser?.college].filter(Boolean).join(' · ') || '—'}
+            {currentUser?.college && currentUser.college !== 'N/A' ? currentUser.college : '—'}
           </p>
           <p className="text-[var(--muted)]">{currentUser?.course || ''}</p>
         </div>

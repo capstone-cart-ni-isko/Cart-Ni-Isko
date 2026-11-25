@@ -10,10 +10,14 @@ import { canGoBackInApp } from '../../utils/navigation.js'
  * Supports two variants:
  * - 'button' (default for focused pages): standardized pill/card button with border, subtle shadow, and active press animation.
  * - 'text': inline link-like back affordance with icon.
+ *
+ * `to` always goes to that route; otherwise it steps back through in-app
+ * history and, with none (page opened directly), goes to `fallbackTo`.
  */
 export default function BackButton({
   to = null,
   onClick = null,
+  fallbackTo = '/home',
   label = null,
   variant = 'button',
   className = '',
@@ -24,7 +28,7 @@ export default function BackButton({
     if (onClick) return onClick()
     if (to) return navigate(to)
     if (canGoBackInApp()) return navigate(-1)
-    return navigate('/home')
+    return navigate(fallbackTo || '/home')
   }
 
   // Traditional Arrow icon: stem + arrowhead (left pointing)

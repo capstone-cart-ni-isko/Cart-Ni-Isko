@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import FocusedLayout from '../components/layout/FocusedLayout.jsx'
 import collegesData from '../data/colleges.json'
 import Avatar from '../components/ui/Avatar.jsx'
+import Card from '../components/ui/Card.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 import { useToast } from '../hooks/useToast.js'
 import { updateAccount } from '../services/accounts.js'
@@ -20,11 +21,13 @@ const selectStyle = {
 // BUeño accounts are Student or Faculty only (cust_categ). A legacy value
 // (e.g. an old alumni account) still shows, but is never re-sent on save.
 const BUENO_CATEGORIES = ['student', 'faculty']
+const ALL_COLLEGES = collegesData.flatMap((campus) => campus.colleges || [])
+const COLLEGE_NAMES = ALL_COLLEGES.map((col) => col.name)
 const categoryLabel = (value) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value)
 
 /**
  * A stored value can legitimately be absent from the static list ('N/A',
- * combined '3rd Year - Block A', a campus not in colleges.json). Inject it so
+ * combined '3rd Year - Block A', a college not in colleges.json). Inject it so
  * the select shows what is actually saved instead of silently resetting.
  */
 function withValue(list, value) {
@@ -54,80 +57,77 @@ function AccountInfo() {
     email: currentUser?.cust_email || currentUser?.email || '',
     phone: currentUser?.cust_phone || currentUser?.phone || '',
     yearLevel: String(currentUser?.cust_categ || currentUser?.yearLevel || 'N/A').toLowerCase() === 'n/a' ? 'N/A' : String(currentUser?.cust_categ || currentUser?.yearLevel).toLowerCase(),
-    campus: currentUser?.campus || 'N/A',
     college: currentUser?.cust_college || currentUser?.college || 'N/A',
     course: currentUser?.cust_dept || currentUser?.course || 'N/A',
     pronoun: currentUser?.cust_pronoun || currentUser?.pronoun || '',
     birthday: currentUser?.cust_bday || currentUser?.birthday || '',
     callcode: currentUser?.cust_callcode || currentUser?.callcode || '+63',
   })
-  const [saveState, setSaveState] = useState('')
-  const [availableColleges, setAvailableColleges] = useState([])
-  const [availableDepartments, setAvailableDepartments] = useState([])
+  const [isSaving, setIsSaving] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  // Messages live next to what they describe (rule 67), never on the button.
+  const [photoNote, setPhotoNote] = useState(null) // { tone: 'info' | 'error', text }
+  const [saveError, setSaveError] = useState('')
+  const [submitted, setSubmitted] = useState(false)
   const [photo, setPhoto] = useState(currentUser?.avatarImage || '')
   const fileInputRef = useRef(null)
 
   // Handle profile photo selection → real file upload to backend storage
   const handlePhotoChange = async (e) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
     const problem = imageFileProblem(file, 'Profile photos')
     if (problem) {
-      setSaveState(problem)
+      setPhotoNote({ tone: 'error', text: problem })
       return
     }
-    setSaveState('Uploading photo…')
+    setIsUploading(true)
+    setPhotoNote({ tone: 'info', text: 'Uploading photo…' })
     try {
       const url = await uploadImage(file, 'avatar')
       setPhoto(url)
-      setSaveState('Photo uploaded — click Save Changes to apply.')
+      setPhotoNote({ tone: 'info', text: 'New photo ready. Save changes to apply it.' })
     } catch (err) {
-      setSaveState(err.message || 'Unable to upload photo.')
+      setPhotoNote({ tone: 'error', text: err.message || 'Unable to upload photo.' })
+    } finally {
+      setIsUploading(false)
     }
   }
 
-  useEffect(() => {
-    if (form.campus) {
-      const campusObj = collegesData.find((c) => c.name === form.campus)
-      setAvailableColleges(campusObj ? campusObj.colleges : [])
-    } else {
-      setAvailableColleges([])
-    }
-  }, [form.campus])
-
-  useEffect(() => {
-    if (form.college && availableColleges.length > 0) {
-      const collegeObj = availableColleges.find((col) => col.name === form.college)
-      setAvailableDepartments(collegeObj ? (collegeObj.departments || collegeObj.programs || []) : [])
-    } else {
-      setAvailableDepartments([])
-    }
-  }, [form.college, availableColleges])
+  // Campus is not part of the profile, so every Bicol University college is
+  // offered in one list (college names are unique across campuses), the same
+  // flattened list sign-up uses.
+  const departmentsOf = (collegeName) => {
+    const found = ALL_COLLEGES.find((col) => col.name === collegeName)
+    return found ? (found.departments || found.programs || []) : []
+  }
+  const availableDepartments = departmentsOf(form.college)
 
   function handleChange(e) {
     const { name, value } = e.target
     setForm((prev) => {
       const updated = { ...prev, [name]: value }
-      if (name === 'campus') {
-        updated.college = ''
-        updated.course = ''
-      } else if (name === 'college') {
+      if (name === 'college') {
         updated.course = ''
       }
       return updated
     })
-    setSaveState('')
+    setSaveError('')
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    setSubmitted(true)
+    if (hasErrors) return
     const customerId = currentUser?.cust_id
     if (!customerId) {
-      setSaveState('Unable to resolve your account.')
+      setSaveError('Unable to resolve your account. Please sign in again.')
       return
     }
 
-    setSaveState('Saving…')
+    setIsSaving(true)
+    setSaveError('')
     try {
       const response = await updateAccount('customer', customerId, {
         cust_givname: form.givname.trim(),
@@ -137,7 +137,6 @@ function AccountInfo() {
         cust_email: form.email,
         cust_phone: normalizePhMobile(form.phone),
         ...(!isGuest ? {
-          cust_campus: form.campus && form.campus !== 'N/A' ? form.campus : null,
           cust_college: form.college && form.college !== 'N/A' ? form.college : null,
           cust_dept: form.course && form.course !== 'N/A' ? form.course : null,
           ...(BUENO_CATEGORIES.includes(form.yearLevel) ? { cust_categ: form.yearLevel } : {}),
@@ -162,8 +161,6 @@ function AccountInfo() {
         cust_phone: normalizePhMobile(form.phone),
         ...(!isGuest ? {
           yearLevel: form.yearLevel,
-          campus: form.campus,
-          cust_campus: form.campus,
           college: form.college,
           cust_college: form.college,
           course: form.course,
@@ -192,20 +189,21 @@ function AccountInfo() {
               cust_surname: form.surname.trim(),
               ...(!isGuest ? {
                 yearLevel: form.yearLevel,
-                campus: form.campus,
                 college: form.college,
                 course: form.course,
               } : {}),
             }
           }))
         }
-      } catch {}
+      } catch { /* storage unavailable - the in-memory user is already updated */ }
 
-      setSaveState('Changes saved!')
       showToast('Profile updated successfully')
+      navigate('/profile', { replace: true })
     } catch (error) {
-      setSaveState(error.message || 'Unable to save changes.')
+      setSaveError(error.message || 'Unable to save changes.')
       showToast('Unable to save changes.', 'error')
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -217,317 +215,174 @@ function AccountInfo() {
     surname: form.surname.trim() ? '' : 'Last name is required.',
     phone: isPhMobile(form.phone) ? '' : PH_MOBILE_MESSAGE,
     pronoun: form.pronoun.length > 50 ? 'Keep pronouns to 50 characters.' : '',
+    // Sign-up requires both for a BUeño account; the profile keeps that rule.
+    college: !isGuest && (!form.college || form.college === 'N/A') ? 'Select your college.' : '',
+    course: !isGuest && (!form.course || form.course === 'N/A') ? 'Select your department / course.' : '',
   }
   const hasErrors = Object.values(fieldErrors).some(Boolean)
+  const quietUntilSubmit = ['college', 'course']
   const fieldError = (name) =>
-    fieldErrors[name] ? (
-      <p className="mt-1 text-[11px] font-semibold text-red-500">{fieldErrors[name]}</p>
+    fieldErrors[name] && (submitted || !quietUntilSubmit.includes(name)) ? (
+      <p className="field-error" role="alert">{fieldErrors[name]}</p>
     ) : null
 
-  /* ── Shared form field components ── */
-  const inputClasses = 'w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all placeholder-gray-400'
-  const labelClasses = 'block text-sm font-semibold text-gray-600 mb-1.5'
-  const selectClasses = 'w-full h-12 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-orange/30 cursor-pointer transition-all appearance-none'
+  /* ── Shared field primitives (index.css: .field-label / .field-input) ── */
+  const inputClasses = 'field-input field-input--lg'
+  const labelClasses = 'field-label'
+  const selectClasses = 'field-input field-input--lg pr-10 cursor-pointer appearance-none disabled:opacity-50 disabled:cursor-not-allowed'
+  const required = <span className="text-red-500">*</span>
+  const photoNoteLine = photoNote && (
+    <p
+      className={`mt-1 text-[11px] font-medium ${photoNote.tone === 'error' ? 'text-red-500' : 'text-slate-500'}`}
+      role={photoNote.tone === 'error' ? 'alert' : undefined}
+    >
+      {photoNote.text}
+    </p>
+  )
 
   return (
     <FocusedLayout title="Edit Profile" subtitle="Keep your personal information up to date" backTo="/profile" containerClassName="max-w-4xl">
-      {/* ── MOBILE LAYOUT ── */}
-      <div className="md:hidden pb-16 animate-fade-in">
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Avatar */}
-          <div className="flex flex-col items-center justify-center">
-            <div className="relative">
-              <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-md">
-                <Avatar name={fullName} size={96} className="w-full h-full" userId={currentUser?.cust_id} src={photo} />
-              </div>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 bg-brand-orange hover:bg-brand-orange-dark text-white text-[10px] font-semibold px-3 py-1 rounded-full shadow-md active:scale-95 transition-all"
-              >
-                EDIT
-              </button>
-              <input ref={fileInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handlePhotoChange} />
+      {/* One responsive form for phone and desktop: the same fields in the
+          same order, stacked on a phone and in two columns from md up. */}
+      <form onSubmit={handleSubmit} noValidate className="w-full pb-16 md:pb-6 space-y-4 animate-fade-in">
+        {/* Profile photo */}
+        <Card>
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 md:w-18 md:h-18 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-2xs shrink-0">
+              <Avatar name={fullName} size={72} className="w-full h-full" userId={currentUser?.cust_id} src={photo} />
             </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-slate-900 dark:text-[var(--ink)] truncate">{fullName}</p>
+              <p className="text-sm text-slate-500 dark:text-[var(--muted)] truncate">{form.email}</p>
+              {photoNoteLine}
+            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="btn btn--secondary shrink-0"
+            >
+              <PencilIcon className="w-3.5 h-3.5" />
+              <span>{isUploading ? 'Uploading…' : 'Edit Photo'}</span>
+            </button>
+            <input ref={fileInputRef} type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={handlePhotoChange} />
           </div>
+        </Card>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClasses}>First Name <span className="text-red-500">*</span></label>
-                <input name="givname" required maxLength={100} value={form.givname} onChange={handleChange} className={inputClasses} />
-                {fieldError('givname')}
-              </div>
-              <div>
-                <label className={labelClasses}>Last Name <span className="text-red-500">*</span></label>
-                <input name="surname" required maxLength={100} value={form.surname} onChange={handleChange} className={inputClasses} />
-                {fieldError('surname')}
-              </div>
+        {/* Personal information */}
+        <Card
+          title="Personal Information"
+          action={<p className="text-[11px] text-slate-400">{required} Required</p>}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <label htmlFor="acct-givname" className={labelClasses}>First Name {required}</label>
+              <input id="acct-givname" name="givname" required maxLength={100} value={form.givname} onChange={handleChange} aria-invalid={!!fieldErrors.givname} className={inputClasses} />
+              {fieldError('givname')}
             </div>
             <div>
-              <label className={labelClasses}>Email</label>
+              <label htmlFor="acct-surname" className={labelClasses}>Last Name {required}</label>
+              <input id="acct-surname" name="surname" required maxLength={100} value={form.surname} onChange={handleChange} aria-invalid={!!fieldErrors.surname} className={inputClasses} />
+              {fieldError('surname')}
+            </div>
+            <div>
+              <label htmlFor="acct-email" className={labelClasses}>Email</label>
               <input
+                id="acct-email"
                 name="email"
                 type="email"
                 value={form.email}
                 readOnly
                 aria-readonly="true"
-                className={`${inputClasses} bg-gray-50 text-gray-500 cursor-not-allowed`}
+                className={`${inputClasses} bg-slate-50 dark:bg-[var(--surface-2)] text-slate-500 cursor-not-allowed`}
               />
-              <p className="mt-1 text-[11px] font-medium text-gray-400">
-                Your sign-in email cannot be changed.
-              </p>
+              <p className="field-hint">Your sign-in email cannot be changed.</p>
             </div>
             <div>
-              <label className={labelClasses}>Phone <span className="text-red-500">*</span></label>
-              <input name="phone" type="tel" required value={form.phone} onChange={handleChange} className={inputClasses} />
+              <label htmlFor="acct-phone" className={labelClasses}>Phone {required}</label>
+              <input id="acct-phone" name="phone" type="tel" inputMode="tel" required placeholder="09XX XXX XXXX" value={form.phone} onChange={handleChange} aria-invalid={!!fieldErrors.phone} className={inputClasses} />
               {fieldError('phone')}
             </div>
-
-            {!isGuest && (
-              <>
-            {/* BUeño category */}
-            <div>
-              <label className={labelClasses}>Category</label>
-              <select name="yearLevel" value={form.yearLevel} onChange={handleChange} className={selectClasses} style={selectStyle}>
-                {withValue(BUENO_CATEGORIES, form.yearLevel).map((y) => <option key={y} value={y}>{categoryLabel(y)}</option>)}
-              </select>
-            </div>
-            {/* Campus */}
-            <div>
-              <label className={labelClasses}>Campus</label>
-              <select name="campus" value={form.campus} onChange={handleChange} className={selectClasses} style={selectStyle}>
-                <option value="">Select Campus</option>
-                {withValue(collegesData.map((c) => c.name), form.campus).map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </div>
-            {/* College */}
-            <div>
-              <label className={labelClasses}>College</label>
-              <select name="college" value={form.college} onChange={handleChange} disabled={!form.campus} className={`${selectClasses} disabled:opacity-50`} style={selectStyle}>
-                <option value="">Select College</option>
-                {withValue(availableColleges.map((col) => col.name), form.college).map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </div>
-            {/* Department / Course */}
-            <div>
-              <label className={labelClasses}>Department / Course</label>
-              <select name="course" value={form.course} onChange={handleChange} disabled={!form.college} className={`${selectClasses} disabled:opacity-50`} style={selectStyle}>
-                <option value="">Select Department / Course</option>
-                {withValue(availableDepartments, form.course).map((dept) => <option key={dept} value={dept}>{dept}</option>)}
-              </select>
-            </div>
-              </>
-            )}
           </div>
+        </Card>
 
-          {/* Additional Information Section */}
-          <div className="space-y-5">
-            <h2 className="text-base font-semibold text-gray-900">Additional Information</h2>
-            <div className="grid grid-cols-2 gap-3">
+        {/* Academic information (BUeño accounts) */}
+        {!isGuest && (
+          <Card title="Academic Information">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
               <div>
-                <label className={labelClasses}>Pronoun</label>
-                <input name="pronoun" value={form.pronoun} onChange={handleChange} className={inputClasses} />
-              </div>
-              <div>
-                <label className={labelClasses}>Birthday</label>
-                <input name="birthday" type="date" value={form.birthday} onChange={handleChange} className={inputClasses} />
+                <label htmlFor="acct-category" className={labelClasses}>Category {required}</label>
+                <select id="acct-category" name="yearLevel" value={form.yearLevel} onChange={handleChange} className={selectClasses} style={selectStyle}>
+                  {withValue(BUENO_CATEGORIES, form.yearLevel).map((y) => <option key={y} value={y}>{categoryLabel(y)}</option>)}
+                </select>
               </div>
               <div>
-                <label className={labelClasses}>Phone Code</label>
-                <input name="callcode" value={form.callcode} onChange={handleChange} className={inputClasses} />
+                <label htmlFor="acct-college" className={labelClasses}>College {required}</label>
+                <select id="acct-college" name="college" value={form.college} onChange={handleChange} className={selectClasses} style={selectStyle}>
+                  <option value="">Select College</option>
+                  {withValue(COLLEGE_NAMES, form.college).map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+                {fieldError('college')}
               </div>
-              <div className="col-span-2">
-                <label className={labelClasses}>Delivery Addresses</label>
-                <Link
-                  to="/settings/address"
-                  className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-xl text-sm font-semibold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
-                >
-                  Manage your addresses
-                  <span className="text-lg leading-none">›</span>
-                </Link>
-                <p className="mt-1 text-[11px] font-medium text-gray-400">
-                  Addresses are managed under Settings → Addresses.
-                </p>
+              <div className="sm:col-span-2">
+                <label htmlFor="acct-course" className={labelClasses}>Department / Course {required}</label>
+                <select id="acct-course" name="course" value={form.course} onChange={handleChange} disabled={!form.college} className={selectClasses} style={selectStyle}>
+                  <option value="">Select Department / Course</option>
+                  {withValue(availableDepartments, form.course).map((dept) => <option key={dept} value={dept}>{dept}</option>)}
+                </select>
+                {fieldError('course')}
               </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Additional information */}
+        <Card title="Additional Information">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+              <label htmlFor="acct-pronoun" className={labelClasses}>Pronoun</label>
+              <input id="acct-pronoun" name="pronoun" maxLength={50} placeholder="e.g. she/her" value={form.pronoun} onChange={handleChange} aria-invalid={!!fieldErrors.pronoun} className={inputClasses} />
+              {fieldError('pronoun')}
+            </div>
+            <div>
+              <label htmlFor="acct-birthday" className={labelClasses}>Birthday</label>
+              <input id="acct-birthday" name="birthday" type="date" value={form.birthday} onChange={handleChange} className={inputClasses} />
+            </div>
+            <div className="sm:col-span-2">
+              <span className={labelClasses}>Delivery Addresses</span>
+              <Link
+                to="/settings/address"
+                className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-[var(--radius-sm)] text-sm font-semibold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
+              >
+                Manage your addresses
+                <span className="text-lg leading-none" aria-hidden="true">›</span>
+              </Link>
+              <p className="field-hint">Delivery addresses and backup contacts are managed under Settings.</p>
             </div>
           </div>
+        </Card>
 
+        {/* Actions: full-width and stacked on a phone, right-aligned from md */}
+        {saveError && (
+          <p className="text-xs font-semibold text-red-500 text-center md:text-right" role="alert">{saveError}</p>
+        )}
+        <div className="flex flex-col-reverse gap-2.5 md:flex-row md:items-center md:justify-end md:gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => navigate('/profile')}
+            className="btn btn--secondary btn--lg w-full md:w-auto md:px-6"
+          >
+            Cancel
+          </button>
           <button
             type="submit"
-            disabled={saveState === 'Saving…' || hasErrors}
-            className="w-full h-12 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold rounded-xl shadow-md active:scale-[0.98] transition-all disabled:opacity-60"
+            disabled={isSaving || isUploading}
+            className="btn btn--primary btn--lg w-full md:w-auto md:px-6"
           >
-            {saveState || 'Save Changes'}
+            {isSaving ? 'Saving…' : 'Save Changes'}
           </button>
-        </form>
-      </div>
-
-      {/* ── DESKTOP LAYOUT ── */}
-      <div className="hidden md:block w-full space-y-5 py-1 animate-fade-in">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm">
-          <Link to="/settings" className="text-gray-400 hover:text-gray-600 transition-colors">Account Settings</Link>
-          <span className="text-gray-300">/</span>
-          <span className="text-gray-900 font-semibold">Edit Profile</span>
         </div>
-
-        {/* Page Title */}
-        <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Edit Profile</h1>
-            <p className="text-sm text-gray-400">Keep your personal information up to date.</p>
-          </div>
-        </div>
-
-        {/* Form Card */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-gray-100/90 shadow-xs overflow-hidden">
-          {/* Profile Photo Section */}
-          <div className="px-7 py-6 border-b border-gray-100 flex items-center gap-5">
-            <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-brand-orange/20 shadow-md shrink-0">
-              <Avatar name={fullName} size={64} className="w-full h-full" userId={currentUser?.cust_id} src={photo} />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold text-gray-900">{fullName}</h3>
-              <p className="text-sm text-gray-400 truncate">{form.email}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="ml-auto flex items-center gap-2 bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-sm active:scale-95 transition-all shrink-0"
-            >
-              <PencilIcon className="w-3.5 h-3.5" />
-              <span>Edit Photo</span>
-            </button>
-          </div>
-
-            {/* Personal Information Section */}
-            <div className="px-7 py-6 border-b border-gray-100 space-y-5">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-gray-900">Personal Information</h2>
-                <p className="text-xs text-gray-400"><span className="text-red-500">*</span> Fields marked with an asterisk are required.</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                <div>
-                  <label className={labelClasses}>First Name <span className="text-red-500">*</span></label>
-                  <input name="givname" required maxLength={100} value={form.givname} onChange={handleChange} className={inputClasses} />
-                  {fieldError('givname')}
-                </div>
-                <div>
-                  <label className={labelClasses}>Last Name <span className="text-red-500">*</span></label>
-                  <input name="surname" required maxLength={100} value={form.surname} onChange={handleChange} className={inputClasses} />
-                  {fieldError('surname')}
-                </div>
-                <div>
-                  <label className={labelClasses}>Email</label>
-                  <input
-                    name="email"
-                    type="email"
-                    value={form.email}
-                    readOnly
-                    aria-readonly="true"
-                    className={`${inputClasses} bg-gray-50 text-gray-500 cursor-not-allowed`}
-                  />
-                  <p className="mt-1 text-[11px] font-medium text-gray-400">
-                    Your sign-in email cannot be changed.
-                  </p>
-                </div>
-                <div>
-                  <label className={labelClasses}>Phone <span className="text-red-500">*</span></label>
-                  <input name="phone" type="tel" required value={form.phone} onChange={handleChange} className={inputClasses} />
-                  {fieldError('phone')}
-                </div>
-              </div>
-            </div>
-
-            {/* Additional Information Section */}
-            <div className="px-7 py-6 border-b border-gray-100 space-y-5">
-              <h2 className="text-base font-semibold text-gray-900">Additional Information</h2>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                <div>
-                  <label className={labelClasses}>Pronoun</label>
-                  <input name="pronoun" value={form.pronoun} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>Birthday</label>
-                  <input name="birthday" type="date" value={form.birthday} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>Phone Code</label>
-                  <input name="callcode" value={form.callcode} onChange={handleChange} className={inputClasses} />
-                </div>
-                <div>
-                  <label className={labelClasses}>Delivery Addresses</label>
-                  <Link
-                    to="/settings/address"
-                    className="flex items-center justify-between h-12 px-4 border border-dashed border-brand-orange/40 rounded-xl text-sm font-semibold text-brand-orange bg-brand-orange/5 hover:bg-brand-orange/10 transition-colors"
-                  >
-                    Manage your addresses
-                    <span className="text-lg leading-none">›</span>
-                  </Link>
-                </div>
-              </div>
-              <p className="text-[11px] font-medium text-gray-400">
-                Delivery addresses and backup contacts are managed under Settings.
-              </p>
-            </div>
-
-            {!isGuest && (
-              <div className="px-7 py-6 border-b border-gray-100 space-y-5">
-                <h2 className="text-base font-semibold text-gray-900">Academic Information</h2>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                  <div>
-                    <label className={labelClasses}>Category <span className="text-red-500">*</span></label>
-                    <select name="yearLevel" value={form.yearLevel} onChange={handleChange} className={selectClasses} style={selectStyle}>
-                      {withValue(BUENO_CATEGORIES, form.yearLevel).map((y) => <option key={y} value={y}>{categoryLabel(y)}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClasses}>Campus <span className="text-red-500">*</span></label>
-                    <select name="campus" value={form.campus} onChange={handleChange} className={selectClasses} style={selectStyle}>
-                      <option value="">Select Campus</option>
-                      {withValue(collegesData.map((c) => c.name), form.campus).map((name) => <option key={name} value={name}>{name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClasses}>College <span className="text-red-500">*</span></label>
-                    <select name="college" value={form.college} onChange={handleChange} disabled={!form.campus} className={`${selectClasses} disabled:opacity-50`} style={selectStyle}>
-                      <option value="">Select College</option>
-                      {withValue(availableColleges.map((col) => col.name), form.college).map((name) => <option key={name} value={name}>{name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClasses}>Department / Course <span className="text-red-500">*</span></label>
-                    <select name="course" value={form.course} onChange={handleChange} disabled={!form.college} className={`${selectClasses} disabled:opacity-50`} style={selectStyle}>
-                      <option value="">Select Department / Course</option>
-                      {withValue(availableDepartments, form.course).map((dept) => <option key={dept} value={dept}>{dept}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons - Rectangular */}
-            <div className="px-7 py-5 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => navigate('/profile')}
-                className="px-7 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50 active:scale-95 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saveState === 'Saving…' || hasErrors}
-                className="px-7 py-2.5 rounded-xl bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold text-sm shadow-sm active:scale-95 transition-all disabled:opacity-60"
-              >
-                {saveState || 'Save Changes'}
-              </button>
-            </div>
-          </form>
-        </div>
+      </form>
     </FocusedLayout>
   )
 }

@@ -1986,11 +1986,6 @@ class UserAPI extends Controller
             }
 
             $user = $json->user();
-            $fields = array_filter([
-                'backupcallcode' => $json->input('backupcallcode'),
-                'backupphone' => $json->input('backupphone'),
-                'backupemail' => $json->input('backupemail'),
-            ], static fn ($value) => $value !== null && $value !== '');
 
             if (! $user instanceof Customer && ! $user instanceof Employee) {
                 return response()->json(['success' => false, 'message' => 'Account is not supported.'], 403);
@@ -1998,22 +1993,42 @@ class UserAPI extends Controller
 
             $prefix = $user instanceof Employee ? 'emp' : 'cust';
 
+            // A key the request leaves out keeps the stored value; a key sent
+            // empty clears it. ConvertEmptyStringsToNull turns "" into null, so
+            // presence (exists), not the value, tells the two apart. Recovery
+            // runs on the recovery code, so clearing both contacts is safe.
             $updates = [];
 
-            if (isset($fields['backupphone'])) {
-                $updates[$prefix . '_backup_phone'] = $this->normalizeBackupPhone(
-                    (string) $fields['backupphone'],
-                    (string) ($fields['backupcallcode'] ?? '')
-                );
+            if ($json->exists('backupphone')) {
+                $phone = trim((string) $json->input('backupphone'));
+                $updates[$prefix . '_backup_phone'] = $phone === ''
+                    ? null
+                    : $this->normalizeBackupPhone($phone, trim((string) $json->input('backupcallcode')));
             }
 
-            if (isset($fields['backupemail'])) {
-                $updates[$prefix . '_backup_email'] = trim((string) $fields['backupemail']);
+            if ($json->exists('backupemail')) {
+                $email = mb_strtolower(trim((string) $json->input('backupemail')));
+                $updates[$prefix . '_backup_email'] = $email === '' ? null : $email;
             }
 
-            if ($updates !== []) {
-                $user->update($updates);
+            if ($updates === []) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No backup contact was supplied.',
+                ], 422);
             }
+
+            // REQ-CUST_SET-02 / FLOW-EMP_SET-03: every backup-contact change
+            // clears a one-time code first. The screens ask for it, and the
+            // server now insists on it too, so the endpoint cannot be called
+            // around the verification.
+            $gate = $this->otpGate($json, 'backup_contacts');
+            if ($gate) {
+                return $gate;
+            }
+
+            $user->update($updates);
+            $this->consumeOtp($json, 'backup_contacts');
 
             if ($user instanceof Employee) {
                 $this->logEmployee((int) $user->emp_id, 'edit',

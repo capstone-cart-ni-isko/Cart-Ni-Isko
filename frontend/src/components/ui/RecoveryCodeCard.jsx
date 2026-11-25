@@ -41,14 +41,14 @@ function RecoveryCodeCard({ className = '' }) {
 
   return (
     <section
-      className={`rounded-2xl border border-slate-200 dark:border-[var(--line)] bg-white dark:bg-[var(--surface)] p-5 space-y-3 ${className}`}
+      className={`rounded-2xl border border-slate-200/80 dark:border-[var(--line)] bg-white dark:bg-[var(--surface)] shadow-2xs p-4 md:p-5 space-y-3 ${className}`}
       aria-labelledby="recovery-code-title"
     >
       <div>
-        <h2 id="recovery-code-title" className="text-base font-semibold text-gray-900 dark:text-[var(--ink)]">
+        <h2 id="recovery-code-title" className="text-sm font-semibold text-slate-900 dark:text-[var(--ink)]">
           Recovery code
         </h2>
-        <p className="text-sm text-gray-500 dark:text-[var(--muted)] mt-1">
+        <p className="text-xs text-slate-500 dark:text-[var(--muted)] mt-0.5">
           If you forget your password, this code lets you reset it. It works once. Generating a new code replaces the old one.
         </p>
       </div>
@@ -56,7 +56,7 @@ function RecoveryCodeCard({ className = '' }) {
       {code ? (
         <div className="space-y-3">
           <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4 text-center">
-            <p className="font-mono text-xl font-bold tracking-widest text-gray-900 dark:text-[var(--ink)] select-all">{code}</p>
+            <p className="font-mono text-xl font-bold tracking-widest text-slate-900 dark:text-[var(--ink)] select-all">{code}</p>
             <p className="text-xs text-amber-800 dark:text-amber-200 mt-2">
               Save it somewhere safe now. It will not be shown again.
             </p>

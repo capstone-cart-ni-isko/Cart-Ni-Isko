@@ -1004,7 +1004,7 @@ export default function AdminSettings() {
                       type="button"
                       onClick={addClosedDate}
                       disabled={!newClosedDate || Boolean(closedDateError)}
-                      className="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                      className="btn btn--primary"
                     >
                       Add closed day
                     </button>

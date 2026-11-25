@@ -7,12 +7,13 @@ import { dispatchModeOf, fetchOrders, orderFilterBucket } from '../services/orde
 import { fetchMyAccount } from '../services/accounts.js'
 import { fetchNotifications, unreadCount } from '../services/notifications.js'
 import Avatar from '../components/ui/Avatar.jsx'
-import logo from '../assets/icons/brand/Tindahan ni Isko Logo (Transparent).svg'
 import notificationIcon from '../assets/icons/common/notification.svg'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import ViewAllLink from '../components/ui/ViewAllLink.jsx'
+import Card from '../components/ui/Card.jsx'
+import SignOutRow from '../components/ui/SignOutRow.jsx'
 
-import { SettingsIcon, LogOutIcon } from '../components/ui/Icons.jsx'
+import { SettingsIcon } from '../components/ui/Icons.jsx'
 
 const IN_PROGRESS_STATUSES = new Set([
   'preparing',
@@ -35,13 +36,39 @@ function PencilIcon({ className = 'w-4 h-4' }) {
   )
 }
 
+/** Icon-only edit shortcut in a card's heading row. */
+function EditLink({ to, label }) {
+  return (
+    <Link
+      to={to}
+      aria-label={label}
+      title={label}
+      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-[var(--surface-2)] transition-colors"
+    >
+      <PencilIcon className="w-3.5 h-3.5" />
+    </Link>
+  )
+}
+
+/** One label/value pair; an empty value reads as an em dash. */
+function DetailItem({ label, value, className = '', breakAll = false }) {
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <dt className="text-xs font-medium text-slate-500 dark:text-[var(--muted)]">{label}</dt>
+      <dd className={`mt-0.5 text-sm font-semibold text-slate-900 dark:text-[var(--ink)] leading-snug ${breakAll ? 'break-all' : ''}`}>
+        {value || '—'}
+      </dd>
+    </div>
+  )
+}
+
 function OrderStatusOverview({ overview }) {
   const statuses = [
     {
       key: 'in_progress',
       label: 'In Progress',
       count: overview.inProgress,
-      iconColor: 'bg-blue-100 text-[#2563EB]',
+      iconColor: 'bg-blue-100 text-blue-600',
       cardColor: 'bg-blue-50/60 border-blue-100/70 hover:bg-blue-50',
     },
     {
@@ -68,16 +95,12 @@ function OrderStatusOverview({ overview }) {
   ]
 
   return (
-    <section className="rounded-2xl border border-gray-100/90 bg-white p-4 shadow-xs">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-gray-900">Quick Order Statuses</h2>
-          <p className="mt-0.5 text-[10px] font-medium text-gray-400">Active and recent purchases</p>
-        </div>
-        <ViewAllLink to="/orders">View all</ViewAllLink>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2.5 pt-1 sm:grid-cols-4">
+    <Card
+      title="Quick Order Statuses"
+      subtitle="Active and recent purchases"
+      action={<ViewAllLink to="/orders">View all</ViewAllLink>}
+    >
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         {statuses.map(({ key, label, count, iconColor, cardColor }) => (
           <Link
             key={key}
@@ -88,13 +111,13 @@ function OrderStatusOverview({ overview }) {
               <PipelineIcon id={key} className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <p className="text-lg font-semibold leading-none text-gray-900">{count}</p>
-              <p className="mt-0.5 truncate text-[11px] font-semibold text-gray-500">{label}</p>
+              <p className="text-lg font-semibold leading-none text-slate-900">{count}</p>
+              <p className="mt-0.5 truncate text-[11px] font-semibold text-slate-500">{label}</p>
             </div>
           </Link>
         ))}
       </div>
-    </section>
+    </Card>
   )
 }
 
@@ -112,10 +135,9 @@ function PipelineIcon({ id, className = 'w-5 h-5' }) {
     ),
     for_pickup: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <path d="M1 3h15v13H1z" />
-        <path d="M16 8h4l3 3v5h-7V8z" />
-        <circle cx="5.5" cy="18.5" r="2.5" />
-        <circle cx="18.5" cy="18.5" r="2.5" />
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+        <path d="M3 6h18" />
+        <path d="M16 10a4 4 0 0 1-8 0" />
       </svg>
     ),
     for_delivery: (
@@ -158,10 +180,6 @@ function Profile() {
 
   const givname = baseUser.cust_givname || baseUser.givname || ''
   const surname = baseUser.cust_surname || baseUser.surname || ''
-  const yearLevel = baseUser.cust_categ || baseUser.yearLevel || ''
-  const course = baseUser.cust_dept || baseUser.course || ''
-  const campus = baseUser.campus || ''
-  const college = baseUser.cust_college || baseUser.college || ''
   const fullName = givname || surname ? `${givname} ${surname}`.trim() : (baseUser.fullName || 'User')
   const custId = currentUser?.cust_id ?? currentUser?.id ?? null
 
@@ -214,6 +232,16 @@ function Profile() {
   const pronoun = account?.cust_pronoun || baseUser.cust_pronoun || ''
   const birthday = account?.cust_birthday || account?.cust_bday || baseUser.cust_bday || ''
   const addresses = Array.isArray(account?.cust_addresses) ? account.cust_addresses : []
+  // Academic details: the fresh account row first (it is what Edit Profile
+  // saved), then the session copy. 'N/A' is the session's "unset" filler.
+  const known = (...values) => {
+    const hit = values.find((v) => v && String(v).trim() && String(v).trim().toUpperCase() !== 'N/A')
+    return hit ? String(hit).trim() : ''
+  }
+  const categoryRaw = known(account?.cust_categ, baseUser.cust_categ, baseUser.yearLevel)
+  const category = categoryRaw ? categoryRaw.charAt(0).toUpperCase() + categoryRaw.slice(1).toLowerCase() : ''
+  const college = known(account?.cust_college, baseUser.cust_college, baseUser.college)
+  const course = known(account?.cust_dept, baseUser.cust_dept, baseUser.course)
 
   const formatBirthday = (value) => {
     if (!value) return ''
@@ -254,25 +282,27 @@ function Profile() {
   }, [orders])
 
   const rightAction = (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       <Link
         to="/notifications"
-        className="relative p-1.5 text-gray-700 dark:text-[var(--ink)] hover:text-brand-orange transition-colors"
+        className="relative w-9 h-9 rounded-lg flex items-center justify-center text-slate-600 dark:text-[var(--ink)] hover:bg-slate-100 dark:hover:bg-[var(--surface-2)] transition-colors"
         aria-label="Notifications"
+        title="Notifications"
       >
         <img src={notificationIcon} alt="" className="w-5 h-5" />
         {unreadNotifications > 0 && (
-          <span className="absolute top-0 right-0 bg-[#FF6A00] text-white text-2xs font-semibold min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white dark:border-[var(--surface)]">
+          <span className="absolute top-0.5 right-0.5 bg-brand-orange text-white text-2xs font-semibold min-w-4 h-4 px-1 rounded-full flex items-center justify-center border-2 border-white dark:border-[var(--surface)]">
             {unreadNotifications > 99 ? '99+' : unreadNotifications}
           </span>
         )}
       </Link>
       <Link
         to="/settings"
-        className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-[var(--surface-2)] text-gray-700 dark:text-[var(--ink)] hover:text-brand-orange flex items-center justify-center transition-colors shadow-2xs"
+        className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-600 dark:text-[var(--ink)] hover:bg-slate-100 dark:hover:bg-[var(--surface-2)] transition-colors"
         title="Settings"
+        aria-label="Settings"
       >
-        <SettingsIcon className="w-4 h-4" />
+        <SettingsIcon className="w-5 h-5" />
       </Link>
     </div>
   )
@@ -285,292 +315,88 @@ function Profile() {
       containerClassName="max-w-6xl"
       rightAction={rightAction}
     >
-      {/* ── MOBILE LAYOUT (matching Image 2) ── */}
-      <div className="md:hidden pb-16 bg-[#F8F9FA] dark:bg-[var(--surface)] min-h-dvh">
-        <div className="space-y-4">
-          {/* Orange Banner - Mobile Redesign */}
-          <div className="rounded-3xl p-5 text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33] space-y-4">
-
-            {/* Avatar + Info Header with Settings Icon */}
-            <div className="flex items-start justify-between gap-3 relative z-10">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm">
-                  <Avatar name={fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} src={currentUser?.avatarImage || currentUser?.cust_avatar || undefined} />
-                </div>
-                <div className="min-w-0 text-white">
-                  <h1 className="text-lg font-semibold tracking-tight leading-tight truncate">{fullName}</h1>
-                  <p className="text-white/90 text-xs font-normal mt-0.5 truncate">{email}</p>
-                  {!isGuest && <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>}
-                </div>
-              </div>
-            </div>
-
-            {/* Action Bar: Edit Profile - Rectangular */}
-            <div className="relative z-10 pt-1">
-              <Link
-                to="/account"
-                className="flex items-center justify-center gap-2 bg-white text-gray-800 font-semibold text-xs py-2.5 px-4 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-98 transition-all w-full"
-              >
-                <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
-                <span>Edit Profile</span>
-              </Link>
-            </div>
-          </div>
-
-         
-
-          <OrderStatusOverview overview={overview} />
-
-          {!isGuest && (
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold text-gray-900">About Me</h2>
-                </div>
-                <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                  <PencilIcon className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-              <p className="text-sm text-gray-600 leading-relaxed font-normal">{college}{course ? ` – ${course}` : ''}</p>
-              <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100">
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Year Level</p>
-                  <p className="text-sm font-semibold text-gray-900">{yearLevel}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Campus</p>
-                  <p className="text-sm font-semibold text-gray-900">{campus}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Course</p>
-                  <p className="text-sm font-semibold text-gray-900 leading-snug">{course}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-0.5">College</p>
-                  <p className="text-sm font-semibold text-gray-900 leading-snug">{college}</p>
-                </div>
-              </div>
-            </div>
-          )}
-          {/* 4. Contact Information */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-gray-900">Contact Information</h3>
-              </div>
-              <Link to="/account" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                <PencilIcon className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs font-semibold text-gray-500">Email Address</p>
-                <p className="text-sm font-semibold text-gray-900 mt-0.5 break-all">{email}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500">Phone</p>
-                <p className="text-sm font-semibold text-gray-900 mt-0.5">{profilePhone || '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500">Pronoun</p>
-                <p className="text-sm font-semibold text-gray-900 mt-0.5">{pronoun || '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500">Birthday</p>
-                <p className="text-sm font-semibold text-gray-900 mt-0.5">
-                  {formatBirthday(birthday) || '—'}
-                </p>
-              </div>
-            </div>
-            <div className="pt-3 border-t border-gray-100">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-500">Delivery Addresses</p>
-                <Link to="/settings/address" className="text-xs font-semibold text-brand-orange">
-                  Manage
-                </Link>
-              </div>
-              {addresses.length === 0 ? (
-                <p className="text-sm text-gray-400 mt-1">No saved addresses yet.</p>
-              ) : (
-                <ul className="mt-1.5 space-y-1.5">
-                  {addresses.map((entry) => (
-                    <li
-                      key={entry}
-                      className="text-sm font-medium text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2"
-                    >
-                      {entry}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-
-          {/* 6. Account Security */}
-          <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-gray-900">Account Security</h3>
-              </div>
-              <Link to="/settings/change-password" className="w-7 h-7 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                <PencilIcon className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-            <p className="text-sm text-gray-500">Keep your account secure</p>
-            <div>
-              <Link
-                to="/settings/change-password"
-                className="inline-block bg-[#EFF6FF] text-[#2563EB] hover:bg-blue-100 font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors"
-              >
-                Change Password
-              </Link>
-            </div>
-          </div>
-
-          {/* 7. Log Out — opens the shared confirmation (FLOW-CUST_LOGOUT-01/02) */}
-          <button
-            type="button"
-            onClick={() => setShowLogoutConfirm(true)}
-            className="w-full flex items-center justify-between px-5 py-4 bg-white rounded-3xl border border-gray-100 shadow-xs hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3.5">
-              <LogOutIcon className="w-5 h-5 text-red-500" />
-              <p className="text-sm font-semibold text-red-600">Log Out</p>
-            </div>
-            <span className="text-red-300 text-xl font-medium">›</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ── DESKTOP LAYOUT ── */}
-      <div className="hidden md:block w-full max-w-6xl mx-auto py-2 animate-fade-in space-y-3.5">
-        {/* Top Banner - Sleek compact style */}
-        <div className="rounded-2xl py-6 px-6 flex items-center justify-between text-white relative overflow-hidden shadow-xs bg-gradient-to-r from-[#FF7A1A] via-[#FF6600] to-[#FF8C33]">
-
-
-          {/* Left: Avatar + Info */}
-          <div className="flex items-center gap-4 relative z-10">
+      {/* One responsive layout for phone and desktop, so the two can no
+          longer drift apart: cards stack on a phone and spread into columns
+          from md up. Every section is the shared <Card>. */}
+      <div className="w-full pb-16 md:pb-6 animate-fade-in space-y-4">
+        {/* Identity banner */}
+        <section className="rounded-2xl p-5 md:px-6 md:py-6 text-white relative overflow-hidden shadow-2xs bg-gradient-to-r from-brand-orange via-brand-orange to-orange-400 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3.5 md:gap-4 min-w-0">
             <div className="w-14 h-14 rounded-full overflow-hidden shrink-0 shadow-sm border-2 border-white/40">
               <Avatar name={fullName} size={56} className="w-full h-full" userId={currentUser?.cust_id} src={currentUser?.avatarImage || currentUser?.cust_avatar || undefined} />
             </div>
-            <div className="text-white">
-              <h1 className="text-xl md:text-2xl font-semibold tracking-tight leading-tight">{fullName}</h1>
-              <p className="text-white/90 text-xs font-normal mt-0.5">{email}</p>
-              {!isGuest && <p className="text-white/80 text-[11px] font-normal mt-0.5">{college}</p>}
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-2xl font-semibold tracking-tight leading-tight truncate">{fullName}</h1>
+              {email && <p className="text-white/90 text-xs mt-0.5 truncate">{email}</p>}
+              {!isGuest && college && <p className="text-white/80 text-[11px] mt-0.5 truncate">{college}</p>}
             </div>
           </div>
+          <Link
+            to="/account"
+            className="btn btn--lg md:h-9 md:text-[13px] w-full md:w-auto shrink-0 bg-white text-slate-800 hover:bg-slate-50 shadow-2xs"
+          >
+            <PencilIcon className="w-3.5 h-3.5 text-slate-500" />
+            <span>Edit Profile</span>
+          </Link>
+        </section>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2.5 relative z-10">
-            <Link
-              to="/account"
-              className="flex items-center gap-1.5 bg-white text-gray-800 font-semibold text-xs px-4 py-2 rounded-xl shadow-2xs hover:bg-gray-50 active:scale-95 transition-all"
-            >
-              <PencilIcon className="w-3.5 h-3.5 text-gray-500" />
-              <span>Edit Profile</span>
-            </Link>
-          </div>
-        </div>
+        <OrderStatusOverview overview={overview} />
 
-        {/* Main content (sidebar now comes from AccountLayout) */}
-        <div className="w-full">
-          <div className="space-y-3.5">
+        {!isGuest && (
+          <Card title="About Me" action={<EditLink to="/account" label="Edit academic details" />}>
+            <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3">
+              <DetailItem label="Category" value={category} />
+              <DetailItem label="Course" value={course} />
+              <DetailItem label="College" value={college} className="col-span-2 md:col-span-1" />
+            </dl>
+          </Card>
+        )}
 
-            <OrderStatusOverview overview={overview} />
+        <Card title="Contact Information" action={<EditLink to="/account" label="Edit contact information" />}>
+          <dl className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3">
+            <DetailItem label="Email" value={email} breakAll />
+            <DetailItem label="Phone" value={profilePhone} />
+            <DetailItem label="Pronoun" value={pronoun} />
+            <DetailItem label="Birthday" value={formatBirthday(birthday)} />
+          </dl>
 
-            {!isGuest && (
-              <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-semibold text-gray-900">About Me</h2>
-                  </div>
-                  <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                    <PencilIcon className="w-3 h-3" />
-                  </Link>
-                </div>
-
-                <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-normal">
-                  {college} {course && `– ${course}`}
-                </p>
-
-                <div className="grid grid-cols-4 gap-3 pt-3 border-t border-gray-100 text-xs">
-                  <div>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Year Level</p>
-                    <p className="font-semibold text-gray-900 mt-0.5">{yearLevel}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Course</p>
-                    <p className="font-semibold text-gray-900 mt-0.5 truncate">{course}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase">Campus</p>
-                    <p className="font-semibold text-gray-900 mt-0.5">{campus}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase">College</p>
-                    <p className="font-semibold text-gray-900 mt-0.5 truncate">{college}</p>
-                  </div>
-                </div>
-              </div>
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-[var(--line)]">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-slate-500 dark:text-[var(--muted)]">Delivery Addresses</p>
+              <Link to="/settings/address" className="text-xs font-semibold text-brand-orange hover:underline">
+                Manage
+              </Link>
+            </div>
+            {addresses.length === 0 ? (
+              <p className="text-sm text-slate-400 mt-1">No saved addresses yet.</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {addresses.map((entry, index) => (
+                  <li
+                    key={`${index}-${entry}`}
+                    className="text-sm font-medium text-slate-700 dark:text-[var(--ink-2)] bg-slate-50 dark:bg-[var(--surface-2)] border border-slate-100 dark:border-[var(--line)] rounded-lg px-3 py-2"
+                  >
+                    {entry}
+                  </li>
+                ))}
+              </ul>
             )}
-
-            {/* 3. Contact Information Card */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-100/90 shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-semibold text-gray-900">Contact Information</h2>
-
-                </div>
-                <Link to="/account" className="w-7 h-7 rounded-lg border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-700">
-                  <PencilIcon className="w-3 h-3" />
-                </Link>
-              </div>
-
-              <div className="grid grid-cols-4 gap-3 text-xs">
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Email</p>
-                  <p className="font-semibold text-gray-900 mt-0.5 break-all">{email || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Phone</p>
-                  <p className="font-semibold text-gray-900 mt-0.5">{profilePhone || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Pronoun</p>
-                  <p className="font-semibold text-gray-900 mt-0.5">{pronoun || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Birthday</p>
-                  <p className="font-semibold text-gray-900 mt-0.5">{formatBirthday(birthday) || '—'}</p>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-gray-100">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase">Delivery Addresses</p>
-                  <Link to="/settings/address" className="text-[11px] font-semibold text-brand-orange">
-                    Manage
-                  </Link>
-                </div>
-                {addresses.length === 0 ? (
-                  <p className="text-xs text-gray-400 mt-1">No saved addresses yet.</p>
-                ) : (
-                  <ul className="mt-1.5 space-y-1.5">
-                    {addresses.map((entry) => (
-                      <li
-                        key={entry}
-                        className="text-xs font-medium text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2"
-                      >
-                        {entry}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-
           </div>
+        </Card>
+
+        {/* Account Security + Log Out - the same pair the employee profile
+            ends with, on phone and desktop alike. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card
+            title="Account Security"
+            subtitle="Keep your account secure"
+            action={
+              <Link to="/settings/change-password" className="btn btn--secondary">
+                Change Password
+              </Link>
+            }
+          />
+          <SignOutRow onClick={() => setShowLogoutConfirm(true)} hint="Sign out of this device" />
         </div>
       </div>
 

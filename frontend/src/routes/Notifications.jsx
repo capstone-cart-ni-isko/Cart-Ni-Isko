@@ -6,7 +6,6 @@ import AppShell from '../components/layout/AppShell.jsx'
 import PageHeader from '../components/ui/PageHeader.jsx'
 import SkeletonBlock from '../components/ui/SkeletonBlock.jsx'
 import Modal from '../components/ui/Modal.jsx'
-import { HelpIcon } from '../components/ui/Icons.jsx'
 import NotificationCard, { inferNotificationDetails, NotifIcon } from '../components/ui/NotificationCard.jsx'
 import {
   fetchNotifications,

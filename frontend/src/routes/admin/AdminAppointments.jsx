@@ -747,7 +747,7 @@ export default function AdminAppointments() {
                 <button
                   type="button"
                   onClick={openSuspend}
-                  className="border border-slate-800 text-white bg-slate-800 hover:bg-slate-900 font-bold text-xs h-8 px-3 rounded-md whitespace-nowrap cursor-pointer transition-colors"
+                  className="btn btn--secondary"
                 >
                   Suspend day
                 </button>

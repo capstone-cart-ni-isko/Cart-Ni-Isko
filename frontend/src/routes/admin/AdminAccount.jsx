@@ -10,31 +10,39 @@ import Button from '../../components/ui/Button.jsx'
 import { fetchAccounts, updateAccount } from '../../services/accounts.js'
 import { updateCredentials, updateBackupCredentials } from '../../services/auth.js'
 import RecoveryCodeCard from '../../components/ui/RecoveryCodeCard.jsx'
+import Card from '../../components/ui/Card.jsx'
+import SignOutRow from '../../components/ui/SignOutRow.jsx'
 import { first, empCateg, empFullName } from '../../components/admin/schema.js'
 import { passwordProblem, PASSWORD_HINT } from '../../utils/passwordRules.js'
 import { FormSkeleton } from '../../components/admin/kit/AdminSkeleton.jsx'
 import { IMAGE_ACCEPT, imageFileProblem } from '../../utils/imageTypes.js'
 import { uploadImage } from '../../services/upload.js'
+import { isPhMobile, PH_MOBILE_MESSAGE } from '../../utils/phone.js'
 
 const PRONOUNS = ['they/them', 'he/him', 'she/her', 'other']
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** Digits in the E.164 range, optionally written with +, spaces, dashes or
-    parentheses. An empty value is allowed - the phone fields are optional. */
+/** The backend only stores Philippine mobile numbers (09XXXXXXXXX, +63 9XX
+    XXX XXXX, ...), so the form checks the same rule instead of letting an
+    out-of-range number fail later as a generic save error. Empty is allowed -
+    the phone fields are optional. */
 function isValidPhone(value) {
   const text = String(value || '').trim()
-  if (!text) return true
-  if (!/^[+\d][\d\s().-]*$/.test(text)) return false
-  const digits = text.replace(/\D/g, '')
-  return digits.length >= 7 && digits.length <= 15
+  return !text || isPhMobile(text)
+}
+
+/** A stored pronoun outside the preset list still shows (and is kept on
+    save) instead of the select silently displaying the first option. */
+function pronounOptions(current) {
+  return current && !PRONOUNS.includes(current) ? [current, ...PRONOUNS] : PRONOUNS
 }
 
 /** Rule 67 - the message for a field sits directly beneath that field. */
 function FieldError({ message }) {
   if (!message) return null
   return (
-    <p className="text-2xs font-medium text-rose-600 mt-1" role="alert">
+    <p className="field-error" role="alert">
       {message}
     </p>
   )
@@ -104,6 +112,9 @@ export default function AdminAccount({ embedded = false }) {
   const [backupPhone, setBackupPhone] = useState('')
   const [backupEmail, setBackupEmail] = useState('')
   const [isSavingBackup, setIsSavingBackup] = useState(false)
+  // What the server holds, so Save knows whether anything changed and an
+  // emptied field can be sent as "remove this contact".
+  const [savedBackup, setSavedBackup] = useState({ phone: '', email: '' })
 
   // REQ-CUST_SET-02's admin-side twin: every sensitive change clears a
   // six-digit code first. Customers get it on the phone channel; employees
@@ -146,6 +157,10 @@ export default function AdminAccount({ embedded = false }) {
           setAvatarPreview(String(first(found, 'emp_avatar', 'emp_photo') || ''))
           setBackupPhone(String(first(found, 'emp_backupphone') || ''))
           setBackupEmail(String(first(found, 'emp_backupemail') || ''))
+          setSavedBackup({
+            phone: String(first(found, 'emp_backupphone') || ''),
+            email: String(first(found, 'emp_backupemail') || ''),
+          })
         } else if (viewingOther) {
           // FLOW-EMP_LIST-06: never fall back to the signed-in employee's
           // own record when the requested id has no row.
@@ -161,6 +176,10 @@ export default function AdminAccount({ embedded = false }) {
           setAvatarPreview(currentAdminUser?.avatarImage || '')
           setBackupPhone(String(currentAdminUser?.backupPhone || ''))
           setBackupEmail(String(currentAdminUser?.backupEmail || ''))
+          setSavedBackup({
+            phone: String(currentAdminUser?.backupPhone || ''),
+            email: String(currentAdminUser?.backupEmail || ''),
+          })
         }
         setIsLoadingRecord(false)
       })
@@ -178,9 +197,14 @@ export default function AdminAccount({ embedded = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empParam])
 
-  // REQ-EMP_PROF-01 — regular staff may not edit their email address.
-  const isRegularStaff = empCateg(record || currentAdminUser || {}) === 'staff'
-  const isEmailEditable = !isRegularStaff
+  // REQ-EMP_PROF-01 — regular staff may not edit their own email address.
+  // A super admin editing another employee's record may (the backend lets any
+  // admin-level actor change an email).
+  const isRegularStaff = !viewingOther && empCateg(record || currentAdminUser || {}) === 'staff'
+  const isEmailEditable = viewingOther ? isSuperAdmin : !isRegularStaff
+  // Another employee's record opens only for a super admin; everyone else
+  // gets the restricted notice (the backend refuses their edits too).
+  const isRestricted = viewingOther && !isSuperAdmin
 
   // DOMAIN 2 / REQ-EMP_ENROLL-03: Super admin password standard (min 16 chars, upper, lower, digit, symbol)
   const isSuperAdminUser = isSuperAdmin || ['super admin', 'superadmin', 'super_admin'].includes(String(empCateg(record || currentAdminUser || {})).toLowerCase())
@@ -196,7 +220,7 @@ export default function AdminAccount({ embedded = false }) {
     givenName: givenName.trim() ? '' : 'Provide a given name.',
     surname: surname.trim() ? '' : 'Provide a surname.',
     email: EMAIL_RE.test(email.trim()) ? '' : 'Provide a valid email address.',
-    phone: isValidPhone(phone) ? '' : 'Use a valid phone number, e.g. +63 912 345 6789.',
+    phone: isValidPhone(phone) ? '' : PH_MOBILE_MESSAGE,
   }
   const passwordErrors = {
     currentPassword: currentPassword ? '' : 'Enter your current password.',
@@ -210,7 +234,7 @@ export default function AdminAccount({ embedded = false }) {
   const backupErrors = {
     backupPhone: isValidPhone(backupPhone)
       ? ''
-      : 'Use a valid phone number, e.g. +63 912 345 6789.',
+      : PH_MOBILE_MESSAGE,
     backupEmail:
       !backupEmail.trim() || EMAIL_RE.test(backupEmail.trim())
         ? ''
@@ -227,6 +251,9 @@ export default function AdminAccount({ embedded = false }) {
     touched[name] || String(raw ?? '').trim() !== '' ? group[name] : ''
   const hasProfileError = Object.values(profileErrors).some(Boolean)
   const hasBackupError = Object.values(backupErrors).some(Boolean)
+  const isBackupDirty =
+    backupPhone.trim() !== savedBackup.phone.trim() ||
+    backupEmail.trim() !== savedBackup.email.trim()
 
   // Avatar upload: the same upload as customer photos (PNG/JPEG/WebP,
   // <= 2 MB, shrunk and kept in Supabase Storage). Only the picture's URL
@@ -245,7 +272,7 @@ export default function AdminAccount({ embedded = false }) {
     try {
       const url = await uploadImage(file, 'avatar')
       setAvatarPreview(url)
-      showToast('Avatar uploaded. Click Save Profile to apply.', 'success')
+      showToast('Avatar uploaded. Click Save profile to apply.', 'success')
     } catch (err) {
       showToast(err?.message || 'Could not upload the avatar.', 'error')
     }
@@ -253,7 +280,7 @@ export default function AdminAccount({ embedded = false }) {
 
   const handleRemoveAvatar = () => {
     setAvatarPreview('')
-    showToast('Avatar removed. Click Save Profile to apply.', 'info')
+    showToast('Avatar removed. Click Save profile to apply.', 'info')
   }
 
   // Save profile → PUT /accounts/update
@@ -332,7 +359,17 @@ export default function AdminAccount({ embedded = false }) {
     }
   }
 
+  const isDirty = record
+    ? givenName !== String(first(record, 'emp_givname') || '') ||
+      surname !== String(first(record, 'emp_surname') || '') ||
+      email !== String(first(record, 'emp_email') || '') ||
+      phone !== String(first(record, 'emp_phone') || '') ||
+      pronoun !== String(first(record, 'emp_pronoun') || 'they/them') ||
+      avatarPreview !== String(first(record, 'emp_avatar', 'emp_photo') || '')
+    : true
+
   const handleCancel = () => {
+    if (!isDirty) return
     if (record) {
       setGivenName(String(first(record, 'emp_givname') || ''))
       setSurname(String(first(record, 'emp_surname') || ''))
@@ -414,7 +451,7 @@ export default function AdminAccount({ embedded = false }) {
   // FLOW-EMP_SET-03 - backup contact information used for account recovery.
   const handleSaveBackup = async () => {
     touchAll(['backupPhone', 'backupEmail'])
-    if (hasBackupError) return
+    if (hasBackupError || !isBackupDirty) return
 
     // REQ-CUST_SET-02 / FLOW-EMP_SET-03: the emailed code comes first.
     setPendingAction('backup')
@@ -428,11 +465,11 @@ export default function AdminAccount({ embedded = false }) {
     const cleanEmail = backupEmail.trim()
 
     setIsSavingBackup(true)
-    // Empty fields are simply left out: AuthAPI::backupCredentials keeps the
-    // stored value for anything the request does not carry.
+    // Only the fields that changed travel. A changed field sent empty tells
+    // the server to remove that contact; one left out keeps its stored value.
     const payload = { backupcallcode: '+63' }
-    if (cleanPhone) payload.backupphone = cleanPhone
-    if (cleanEmail) payload.backupemail = cleanEmail
+    if (cleanPhone !== savedBackup.phone.trim()) payload.backupphone = cleanPhone
+    if (cleanEmail !== savedBackup.email.trim()) payload.backupemail = cleanEmail
     const { error } = await updateBackupCredentials(payload)
     setIsSavingBackup(false)
 
@@ -440,7 +477,10 @@ export default function AdminAccount({ embedded = false }) {
       showToast(error, 'error')
       return
     }
-    showToast('Backup contacts updated.', 'success')
+    setSavedBackup({ phone: cleanPhone, email: cleanEmail })
+    const removed =
+      ('backupphone' in payload && !cleanPhone) || ('backupemail' in payload && !cleanEmail)
+    showToast(removed ? 'Backup contacts updated. Removed contacts were cleared.' : 'Backup contacts updated.', 'success')
   }
 
   /** Hands the queued action to the server once its code has cleared. */
@@ -466,364 +506,348 @@ export default function AdminAccount({ embedded = false }) {
 
   return (
     <Wrapper>
-      <div className="max-w-4xl mx-auto space-y-5">
+      <div className="max-w-4xl mx-auto space-y-4">
         {/* Header - FLOW-EMP_LIST-06: while another employee's record is
             open, name it and link back to the staff directory. Embedded in
             the Settings shell the section header is already on screen, so
             this one is hidden to keep the page title from showing twice. */}
         {(!embedded || viewingOther) && (
           <div>
-          {viewingOther ? (
-            <>
-              <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">
-                Employee profile
-              </h1>
-              <p className="text-sm text-slate-500 font-normal mt-1">
-                {viewingName}
-              </p>
+            <h1 className="page-title text-slate-900 dark:text-[var(--ink)]">Employee Profile</h1>
+            <p className="text-sm text-slate-500 dark:text-[var(--muted)] mt-1">
+              {viewingOther ? viewingName : 'Your staff identity and how you appear across the portal.'}
+            </p>
+            {viewingOther && (
               <Link
                 to="/admin/staff"
                 className="inline-flex items-center gap-1 text-xs font-semibold text-brand-orange hover:underline mt-2"
               >
                 <span aria-hidden="true">←</span> Back to staff directory
               </Link>
-            </>
-          ) : (
-            <>
-              <h1 className="page-title text-gray-900 dark:text-[var(--ink)]">
-                Employee Profile
-              </h1>
-              <p className="text-sm text-slate-500 font-normal mt-1">
-                Your staff identity and how you appear across the portal.
-              </p>
-            </>
-          )}
+            )}
           </div>
         )}
 
         {isLoadingRecord ? (
           <FormSkeleton sections={2} fields={4} className="mx-auto max-w-4xl" />
-        ) : viewingOther ? (
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-8 text-center space-y-3">
-            <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6">
+        ) : isRestricted ? (
+          <Card className="text-center py-8 md:py-8">
+            <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-[var(--surface-2)] flex items-center justify-center text-slate-500">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-6 h-6" aria-hidden="true">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
             </div>
-            <p className="text-sm font-bold text-slate-900">Personal Details Restricted</p>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              In accordance with privacy and security policies, employees' personal details cannot be viewed or edited by administrators.
+            <p className="mt-3 text-sm font-semibold text-slate-900 dark:text-[var(--ink)]">Personal Details Restricted</p>
+            <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+              In accordance with privacy and security policies, only super admins can view or edit another employee's personal details.
             </p>
-            <Link
-              to="/admin/staff"
-              className="inline-block text-xs font-semibold text-brand-orange hover:underline pt-2"
-            >
+            <Link to="/admin/staff" className="btn btn--secondary mt-4">
               Back to staff directory
             </Link>
-          </div>
+          </Card>
         ) : recordNotFound ? (
           /* FLOW-EMP_LIST-06 - an unknown `?emp=` id is reported, never
              silently swapped for the signed-in employee's own record. */
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-8 text-center space-y-2">
-            <p className="text-sm font-bold text-slate-900">Employee not found</p>
-            <p className="text-xs text-slate-500">
+          <Card className="text-center py-8 md:py-8">
+            <p className="text-sm font-semibold text-slate-900 dark:text-[var(--ink)]">Employee not found</p>
+            <p className="mt-1 text-xs text-slate-500">
               No employee record matches <span className="font-mono font-semibold">#{empParam}</span>.
               It may have been removed.
             </p>
-            <Link
-              to="/admin/staff"
-              className="inline-block text-xs font-semibold text-brand-orange hover:underline"
-            >
+            <Link to="/admin/staff" className="btn btn--secondary mt-4">
               Back to staff directory
             </Link>
-          </div>
+          </Card>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {/* Identity card */}
-            <section className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 flex flex-col items-center text-center space-y-3">
-              <Avatar
-                src={avatarPreview}
-                name={empFullName(record || {}) || currentAdminUser?.name || 'Employee'}
-                size={88}
-                className="border border-slate-200"
-                userId={record?.emp_id ?? currentAdminUser?.id}
-              />
-              <div>
-                <p className="text-base font-bold text-slate-900">
-                  {empFullName(record || {}) || `${givenName} ${surname}`.trim() || '—'}
-                </p>
-                <p className="text-xs text-slate-400">{email || '—'}</p>
-              </div>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-orange-50 text-brand-orange border border-orange-200/60">
-                {CATEGORY_LABEL[category] || 'Staff'}
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-2xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                ID: {record?.emp_id ?? currentAdminUser?.id ?? '—'}
-              </span>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-2xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 text-slate-500">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
-                <span>Change avatar</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={IMAGE_ACCEPT}
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <p className="text-2xs text-slate-400">JPG or PNG · max 2 MB</p>
-            </section>
-
-            {/* Editable fields */}
-            <section className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-slate-900">Profile details</h2>
-                {avatarPreview && (
-                  <button
-                    type="button"
-                    onClick={handleRemoveAvatar}
-                    className="text-2xs font-semibold text-rose-600 hover:underline cursor-pointer"
-                  >
-                    Remove avatar
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Identity card */}
+              <Card className="flex flex-col items-center text-center gap-3">
+                <Avatar
+                  src={avatarPreview}
+                  name={empFullName(record || {}) || currentAdminUser?.name || 'Employee'}
+                  size={88}
+                  className="border border-slate-200"
+                  userId={record?.emp_id ?? currentAdminUser?.id}
+                />
+                <div className="min-w-0 max-w-full">
+                  <p className="text-base font-semibold text-slate-900 dark:text-[var(--ink)] truncate">
+                    {empFullName(record || {}) || `${givenName} ${surname}`.trim() || '—'}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">{email || '—'}</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-50 text-brand-orange border border-orange-200/60">
+                    {CATEGORY_LABEL[category] || 'Staff'}
+                  </span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                    ID: {record?.emp_id ?? currentAdminUser?.id ?? '—'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="btn btn--secondary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5" aria-hidden="true">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    <span>Change avatar</span>
                   </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
-                    Given name <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={givenName}
-                    onChange={(e) => setGivenName(e.target.value)}
-                    onBlur={() => touch('givenName')}
-                    aria-invalid={!!liveError(profileErrors, 'givenName', givenName)}
-                    placeholder="e.g. Juan"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
-                  />
-                  <FieldError message={liveError(profileErrors, 'givenName', givenName)} />
-                </div>
-                <div>
-                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
-                    Surname <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={surname}
-                    onChange={(e) => setSurname(e.target.value)}
-                    onBlur={() => touch('surname')}
-                    aria-invalid={!!liveError(profileErrors, 'surname', surname)}
-                    placeholder="e.g. Dela Cruz"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
-                  />
-                  <FieldError message={liveError(profileErrors, 'surname', surname)} />
-                </div>
-                <div>
-                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
-                    Email address <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => isEmailEditable && setEmail(e.target.value)}
-                    onBlur={() => touch('email')}
-                    disabled={!isEmailEditable}
-                    aria-invalid={!!liveError(profileErrors, 'email', email)}
-                    placeholder="name@bicol-u.edu.ph"
-                    title={isEmailEditable ? undefined : 'Regular staff cannot change their email address'}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                  />
-                  {isRegularStaff ? (
-                    <p className="text-2xs text-slate-400 mt-1">
-                      Locked — regular staff cannot change their email address.
-                    </p>
-                  ) : (
-                    <FieldError message={liveError(profileErrors, 'email', email)} />
+                  {avatarPreview && (
+                    <button type="button" onClick={handleRemoveAvatar} className="btn btn--ghost text-red-600 hover:text-red-700">
+                      Remove
+                    </button>
                   )}
                 </div>
-                <div>
-                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
-                    Phone number
-                  </label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    onBlur={() => touch('phone')}
-                    aria-invalid={!!liveError(profileErrors, 'phone', phone)}
-                    placeholder="+63 912 345 6789"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all"
-                  />
-                  <FieldError message={liveError(profileErrors, 'phone', phone)} />
-                </div>
-                <div>
-                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
-                    Employee category
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={CATEGORY_LABEL[category] || category}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-500 cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-2xs font-semibold text-slate-700 mb-1">
-                    Pronoun
-                  </label>
-                  <select
-                    value={pronoun}
-                    onChange={(e) => setPronoun(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange transition-all cursor-pointer"
-                  >
-                    {PRONOUNS.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+                <input ref={fileInputRef} type="file" accept={IMAGE_ACCEPT} onChange={handleFileChange} className="hidden" />
+                <p className="field-hint !mt-0">PNG, JPEG or WebP · max 2 MB</p>
+              </Card>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                {/* REQ-EMP_LIST-01 / rule 36 - another employee's profile is
-                    read-only unless the viewer is a super admin. */}
-                {viewingOther && !isSuperAdmin ? (
-                  <p className="text-2xs font-medium text-slate-500">
-                    Only super admins can edit another employee's profile.
-                  </p>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleCancel}
-                      className="h-9 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold hover:bg-slate-200 cursor-pointer transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSave}
-                      disabled={isSaving}
-                      className="h-9 px-4 rounded-xl bg-[#F97316] hover:bg-[#EA580C] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      {isSaving ? 'Saving…' : 'Save profile'}
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {/* Password change is self-scoped - hidden while another
-                  employee's profile is open (FLOW-EMP_LIST-06). */}
-              {!viewingOther && (
-                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+              {/* Editable fields */}
+              <Card
+                className="lg:col-span-2"
+                title="Profile Details"
+                action={<p className="text-[11px] text-slate-400"><span className="text-red-500">*</span> Required</p>}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
                   <div>
-                    <p className="text-xs font-semibold text-slate-900">Password</p>
-                    <p className="text-2xs text-slate-400">Last changed keeps your account secure.</p>
+                    <label htmlFor="emp-given" className="field-label">
+                      Given name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="emp-given"
+                      type="text"
+                      required
+                      value={givenName}
+                      onChange={(e) => setGivenName(e.target.value)}
+                      onBlur={() => touch('givenName')}
+                      aria-invalid={!!liveError(profileErrors, 'givenName', givenName)}
+                      placeholder="e.g. Juan"
+                      className="field-input"
+                    />
+                    <FieldError message={liveError(profileErrors, 'givenName', givenName)} />
                   </div>
+                  <div>
+                    <label htmlFor="emp-surname" className="field-label">
+                      Surname <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="emp-surname"
+                      type="text"
+                      required
+                      value={surname}
+                      onChange={(e) => setSurname(e.target.value)}
+                      onBlur={() => touch('surname')}
+                      aria-invalid={!!liveError(profileErrors, 'surname', surname)}
+                      placeholder="e.g. Dela Cruz"
+                      className="field-input"
+                    />
+                    <FieldError message={liveError(profileErrors, 'surname', surname)} />
+                  </div>
+                  <div>
+                    <label htmlFor="emp-email" className="field-label">
+                      Email address <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="emp-email"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => isEmailEditable && setEmail(e.target.value)}
+                      onBlur={() => touch('email')}
+                      disabled={!isEmailEditable}
+                      aria-invalid={!!liveError(profileErrors, 'email', email)}
+                      placeholder="name@bicol-u.edu.ph"
+                      title={isEmailEditable ? undefined : 'Regular staff cannot change their email address'}
+                      className="field-input disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
+                    />
+                    {isRegularStaff ? (
+                      <p className="field-hint">Locked — regular staff cannot change their email address.</p>
+                    ) : (
+                      <FieldError message={liveError(profileErrors, 'email', email)} />
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="emp-phone" className="field-label">Phone number</label>
+                    <input
+                      id="emp-phone"
+                      type="tel"
+                      inputMode="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      onBlur={() => touch('phone')}
+                      aria-invalid={!!liveError(profileErrors, 'phone', phone)}
+                      placeholder="09XX XXX XXXX"
+                      className="field-input"
+                    />
+                    <FieldError message={liveError(profileErrors, 'phone', phone)} />
+                  </div>
+                  <div>
+                    <label htmlFor="emp-category" className="field-label">Employee category</label>
+                    <input
+                      id="emp-category"
+                      type="text"
+                      readOnly
+                      value={CATEGORY_LABEL[category] || category}
+                      className="field-input bg-slate-50 dark:bg-[var(--surface-2)] text-slate-500 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="emp-pronoun" className="field-label">Pronoun</label>
+                    <select
+                      id="emp-pronoun"
+                      value={pronoun}
+                      onChange={(e) => setPronoun(e.target.value)}
+                      className="field-input cursor-pointer"
+                    >
+                      {pronounOptions(pronoun).map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 mt-5 pt-4 border-t border-slate-100 dark:border-[var(--line)]">
                   <button
                     type="button"
-                    onClick={() => setShowPasswordModal(true)}
-                    className="h-8 px-3 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                    onClick={handleCancel}
+                    disabled={!isDirty || isSaving}
+                    className="btn btn--secondary"
                   >
-                    Change password
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={isSaving || !isDirty}
+                    className="btn btn--primary"
+                  >
+                    {isSaving ? 'Saving…' : 'Save profile'}
                   </button>
                 </div>
-              )}
+              </Card>
+            </div>
 
-              {/* FLOW-EMP_SET-03 - backup contacts for account recovery.
-                  Self-scoped, so hidden while viewing another employee. */}
-              {!viewingOther && (
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 space-y-3">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-900">Backup contacts</p>
-                    <p className="text-2xs text-slate-400">
-                      Used to reach you if you lose access to your account.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Self-scoped blocks - hidden while another employee's profile
+                is open (FLOW-EMP_LIST-06). */}
+            {!viewingOther && (
+              <>
+                {/* FLOW-EMP_SET-03 - backup contacts for account recovery. */}
+                <Card title="Backup Contacts" subtitle="Used to reach you if you lose access to your account.">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
                     <div>
-                      <label className="block text-2xs font-semibold text-slate-700 mb-1">
-                        Backup phone number
-                      </label>
+                      <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="emp-backup-phone" className="field-label">Backup phone number</label>
+                        {savedBackup.phone && backupPhone && (
+                          <button
+                            type="button"
+                            onClick={() => setBackupPhone('')}
+                            className="mb-1.5 text-xs font-semibold text-red-600 hover:underline cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                       <input
+                        id="emp-backup-phone"
                         type="tel"
+                        inputMode="tel"
                         value={backupPhone}
                         onChange={(e) => setBackupPhone(e.target.value)}
                         onBlur={() => touch('backupPhone')}
                         aria-invalid={!!liveError(backupErrors, 'backupPhone', backupPhone)}
-                        placeholder="+63 912 345 6789"
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
+                        placeholder="09XX XXX XXXX"
+                        className="field-input"
                       />
                       <FieldError message={liveError(backupErrors, 'backupPhone', backupPhone)} />
+                      {savedBackup.phone && !backupPhone && (
+                        <p className="field-hint">Will be removed when you save.</p>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-2xs font-semibold text-slate-700 mb-1">
-                        Backup email address
-                      </label>
+                      <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="emp-backup-email" className="field-label">Backup email address</label>
+                        {savedBackup.email && backupEmail && (
+                          <button
+                            type="button"
+                            onClick={() => setBackupEmail('')}
+                            className="mb-1.5 text-xs font-semibold text-red-600 hover:underline cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                       <input
+                        id="emp-backup-email"
                         type="email"
                         value={backupEmail}
                         onChange={(e) => setBackupEmail(e.target.value)}
                         onBlur={() => touch('backupEmail')}
                         aria-invalid={!!liveError(backupErrors, 'backupEmail', backupEmail)}
                         placeholder="backup@bicol-u.edu.ph"
-                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-brand-orange focus:ring-1 focus:ring-brand-orange"
+                        className="field-input"
                       />
                       <FieldError message={liveError(backupErrors, 'backupEmail', backupEmail)} />
+                      {savedBackup.email && !backupEmail && (
+                        <p className="field-hint">Will be removed when you save.</p>
+                      )}
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-end gap-2 mt-5 pt-4 border-t border-slate-100 dark:border-[var(--line)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBackupPhone(savedBackup.phone)
+                        setBackupEmail(savedBackup.email)
+                      }}
+                      disabled={!isBackupDirty || isSavingBackup}
+                      className="btn btn--secondary"
+                    >
+                      Cancel
+                    </button>
                     <button
                       type="button"
                       onClick={handleSaveBackup}
-                      disabled={isSavingBackup}
-                      className="h-8 px-3 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer transition-colors disabled:opacity-50"
+                      disabled={isSavingBackup || !isBackupDirty}
+                      className="btn btn--primary"
                     >
                       {isSavingBackup ? 'Saving…' : 'Save backup contacts'}
                     </button>
                   </div>
+                </Card>
+
+                <RecoveryCodeCard />
+
+                {/* Account Security + Log Out - the same pair the customer
+                    profile ends with (FLOW-EMP_LOGOUT-01/02: the dialog asks
+                    before the session ends). */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card
+                    title="Account Security"
+                    subtitle="Change your password regularly to keep your account secure."
+                    action={
+                      <button type="button" onClick={() => setShowPasswordModal(true)} className="btn btn--secondary">
+                        Change Password
+                      </button>
+                    }
+                  />
+                  <SignOutRow
+                    onClick={() => setConfirmLogout(true)}
+                    hint="Sign out of the admin portal on this device"
+                  />
                 </div>
-              )}
-            </section>
-          </div>
-        )}
-
-        {!viewingOther && <RecoveryCodeCard className="mt-4" />}
-
-        {/* Sign-out shortcut - FLOW-EMP_LOGOUT-01/02: the confirmation
-            dialog comes before the session is terminated. Hidden while
-            another employee's profile is open (FLOW-EMP_LIST-06). */}
-        {!viewingOther && (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setConfirmLogout(true)}
-              className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
-            >
-              Sign out of the admin portal
-            </button>
-          </div>
+              </>
+            )}
+          </>
         )}
 
         {confirmLogout && (
           <Modal
             isOpen={confirmLogout}
             onClose={() => setConfirmLogout(false)}
-            title="Sign out of the admin portal?"
+            title="Log Out?"
             footer={
               <>
                 <Button variant="secondary" onClick={() => setConfirmLogout(false)} className="px-3.5">
@@ -837,12 +861,12 @@ export default function AdminAccount({ embedded = false }) {
                   }}
                   className="px-3.5"
                 >
-                  Sign out
+                  Log Out
                 </Button>
               </>
             }
           >
-            <p className="text-sm text-gray-600">Your session ends immediately on all devices.</p>
+            <p className="text-sm text-slate-600 dark:text-[var(--ink-2)]">You will be signed out of the admin portal on this device.</p>
           </Modal>
         )}
       </div>

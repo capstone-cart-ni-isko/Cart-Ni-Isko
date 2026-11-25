@@ -334,7 +334,11 @@ function Appointments() {
 
   return (
     <AppShell>
-      <PageHeader title="My Appointments" backTo="/home" />
+      <PageHeader
+        title="My Appointments"
+        subtitle="Your pickup schedule and store visits. Arrive at the campus store at your designated slot."
+        backTo="/home"
+      />
       {/* Same frame as the bag and checkout: the list on the left, the
           "Add Appointment" action kept in view on the right (lg). Below lg
           the action comes first, as before. */}
@@ -381,10 +385,7 @@ function Appointments() {
         <div className="lg:col-start-1 lg:row-start-1 space-y-4 min-w-0">
           {/* Filter row: the list follows the selected appointment status. */}
           <div className="rounded-2xl border border-slate-200/80 bg-white shadow-2xs p-5 md:p-6">
-            <h1 className="text-lg font-semibold text-slate-900 tracking-tight">My Appointments</h1>
-            <p className="text-sm text-slate-500 leading-relaxed mt-1 mb-4">
-              Your pickup schedule and store visits. Arrive at the campus store at your designated slot.
-            </p>
+            <h2 className="text-sm font-semibold text-slate-900 mb-3">Filter by status</h2>
             <div className="flex gap-2 overflow-x-auto scrollbar-none">
               {FILTERS.map(({ id, label }) => (
                 <button

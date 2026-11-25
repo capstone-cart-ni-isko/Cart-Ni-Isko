@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import AppShell from '../components/layout/AppShell.jsx'
 import ProductCard from '../components/ui/ProductCard.jsx'
 import SkeletonGrid from '../components/ui/SkeletonGrid.jsx'
 import FiltersModal from '../components/ui/FiltersModal.jsx'
 import { useCatalog } from '../hooks/useCatalog.js'
 import ServerErrorNotice from '../components/ui/ServerErrorNotice.jsx'
-import backIcon from '../assets/icons/common/back.svg'
+import BackButton from '../components/ui/BackButton.jsx'
 import searchIcon from '../assets/icons/common/search.svg'
 import { normalizeProductCategory, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_FILTERS } from '../data/productCategories.js'
 
 function Shop() {
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { products: productsData, loading, error, reload } = useCatalog()
   const legacyCategories = [...new Set(productsData
@@ -106,13 +105,7 @@ function Shop() {
       <div className="pb-28">
         {/* Sticky search header - hidden on desktop */}
         <header className="bg-white border-b border-gray-50 px-4 py-3.5 flex items-center gap-3 sticky top-0 z-30 md:hidden safe-top">
-          <button
-            type="button"
-            onClick={() => navigate('/home')}
-            className="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center shrink-0"
-          >
-            <img src={backIcon} alt="Back" className="w-5 h-5" />
-          </button>
+          <BackButton className="-ml-2" fallbackTo="/home" />
 
           {/* Search Input bar */}
           <div className="flex-1 relative">

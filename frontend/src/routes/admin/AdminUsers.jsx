@@ -631,6 +631,17 @@ export default function AdminUsers() {
                         <td className="py-3 px-5 text-right whitespace-nowrap">
                           {canManageEmployee(emp) && !emp.deleted && (
                             <div className="inline-flex items-center justify-end gap-2">
+                              {/* REQ-EMP_LIST-01 - a super admin opens and edits
+                                  another employee's profile (FLOW-EMP_LIST-06). */}
+                              {canManageSuperAdmins && String(emp.emp_id) !== String(currentAdminUser?.emp_id || currentAdminUser?.id) && (
+                                <Link
+                                  to={`/admin/account?emp=${emp.emp_id}`}
+                                  title="View and edit this employee's profile"
+                                  className="h-7 px-2.5 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white font-medium transition-colors text-xs whitespace-nowrap text-slate-700 hover:bg-slate-50"
+                                >
+                                  Edit profile
+                                </Link>
+                              )}
                               {emp.status === 'active' ? (
                                 <button
                                   type="button"

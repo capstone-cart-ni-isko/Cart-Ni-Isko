@@ -10,7 +10,7 @@ import { formatPrice } from '../components/ui/PriceTag.jsx'
 import Button from '../components/ui/Button.jsx'
 import ConfirmModal from '../components/ui/ConfirmModal.jsx'
 import LoginPromptModal from '../components/ui/LoginPromptModal.jsx'
-import { CartIcon, ShirtIcon, AlertTriangleIcon, TruckIcon } from '../components/ui/Icons.jsx'
+import { CartIcon, ShirtIcon, AlertTriangleIcon } from '../components/ui/Icons.jsx'
 import { getImageUrl } from '../utils/imageUtils.js'
 import { variationParts } from '../utils/variation.js'
 
